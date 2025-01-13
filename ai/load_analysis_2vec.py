@@ -1,18 +1,15 @@
 import os
 import sys
-import json
 import re
 import time
 import uuid
 import glob
 import logging
-from urllib.parse import urlparse
 from openai import OpenAI
 import qdrant_client
 from qdrant_client.http import models as rest
-import pandas as pd
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
+from datetime import datetime
 import tiktoken  # For counting tokens
 
 # ------------------------------

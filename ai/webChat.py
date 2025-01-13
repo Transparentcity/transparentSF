@@ -1,13 +1,9 @@
 import os
-import re
 import json
 import qdrant_client
-from qdrant_client.http import models as rest
 from openai import OpenAI
 import openai
-from urllib.parse import urljoin
 from swarm import Swarm, Agent
-import time
 from tools.anomaly_detection import anomaly_detection
 import pandas as pd
 from dotenv import load_dotenv
@@ -19,7 +15,7 @@ from tools.retirementdata import read_csv_with_encoding
 from tools.genGhostPost import generate_ghost_post
 from pathlib import Path
 # Import FastAPI and related modules
-from fastapi import FastAPI, Request, Cookie, Depends
+from fastapi import FastAPI, Request, Cookie
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates

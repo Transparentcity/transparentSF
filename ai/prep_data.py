@@ -7,7 +7,6 @@ from urllib.parse import urlparse  # For parsing URLs
 from openai import OpenAI  # Ensure this import matches your OpenAI library
 import qdrant_client
 from qdrant_client.http import models as rest
-import pandas as pd
 from dotenv import load_dotenv
 from datetime import datetime
 

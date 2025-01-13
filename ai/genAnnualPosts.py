@@ -1,12 +1,9 @@
 from webChat import (
     journalist_agent,
-    function_mapping,
-    context_variables,
     combined_df,
     combined_notes,
-    Swarm,
 )
-import json
+from swarm import Swarm
 from pathlib import Path
 import logging
 import sys
