@@ -13,7 +13,7 @@ TransparentSF is a web-based application that provides interactive visualization
 
 ## Technology Stack
 
-- **Backend**: Python, Node.js
+- **Backend**: Python
 - **Vector Database**: Qdrant
 - **Content Management**: Ghost CMS
 - **APIs**:  
@@ -24,8 +24,10 @@ TransparentSF is a web-based application that provides interactive visualization
 
 **Prerequisites:**  
 - Python3 with `pip`  
-- Node.js
-- Docker (for Qdrant)  
+- Docker (for Qdrant) 
+- OpenAI API key
+- Ghost admin API key (optional)
+  - Publishing ghost blogs
 
 **Steps:**
 
@@ -42,12 +44,7 @@ TransparentSF is a web-based application that provides interactive visualization
    cd ..
    ```
 
-3. **Install Node.js dependencies:**
-   ```bash
-   npm install
-   ```
-
-4. **Set up environment variables:**  
+3. **Set up environment variables:**  
    Create a `.env` file in the project root with the following variables:
    ```env
    OPENAI_API_KEY=your_openai_api_key
@@ -67,7 +64,7 @@ TransparentSF is a web-based application that provides interactive visualization
    cd ai
    python backend.py
    ```
-   Visit the provided URL to start the analysis process. Note that this can take anywhere from a few minutes to several hours depending on your configuration in `backend.py`.
+   Visit the provided URL with the path `/backend` (http://0.0.0.0:8000/backend) to start the analysis process. Note that this can take anywhere from a few minutes to several hours depending on your configuration in `backend.py`.
 
 3. **Load Analysis Results to Vector Database:**
    Once the analysis is complete and the output folder is generated:
@@ -75,16 +72,11 @@ TransparentSF is a web-based application that provides interactive visualization
    python vector_loader.py
    ```   
 
-4. **Set up Ghost Bridge (for publishing):**
-   ```bash
-   node ghostbridge.js
-   ```
-
-5. **Start the Chat Interface:**
+4. **Start the Chat Interface:**
    ```bash
    python webChat.py
    ```
-   Visit the provided URL to access the interactive chat interface.
+   Visit the provided URL (http://0.0.0.0:8001/) to access the interactive chat interface.
 
 ## Project Structure
 
@@ -93,7 +85,7 @@ TransparentSF is a web-based application that provides interactive visualization
   - `webChat.py`: Interactive chat interface
   - `load_analysis_2_vec.py`: Vector database loader
 - `/output`: Generated analysis results
-- `ghostbridge.js`: Ghost CMS integration
+- (deprecated) `ghostbridge.js`: Ghost CMS integration
 
 ## Contributing
 
