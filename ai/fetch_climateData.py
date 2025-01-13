@@ -9,7 +9,8 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 import logging
 from tools.anomaly_detection import custom_parse_date
-import datetime 
+import datetime
+import shutil
 
 # Configure logging
 logging.basicConfig(

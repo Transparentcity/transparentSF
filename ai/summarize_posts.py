@@ -1,8 +1,7 @@
 from pathlib import Path
 import logging
 import sys
-from webChat import Swarm
-from swarm import Agent
+from swarm import Swarm, Agent
 
 # Configure Logging
 logging.basicConfig(

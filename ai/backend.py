@@ -11,7 +11,7 @@ from datetime import datetime
 import pytz
 import subprocess  # ADDED
 
-from ai_dataprep import process_single_file, create_analysis_map  # Ensure these imports are correct
+from ai_dataprep import process_single_file  # Ensure these imports are correct
 from annual_analysis import export_for_endpoint  # Ensure this import is correct
 import logging
 

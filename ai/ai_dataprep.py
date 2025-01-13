@@ -1,17 +1,12 @@
 import os
 import json
 import re
-import time
-from urllib.parse import urlparse
-from openai import OpenAI
-import pandas as pd
 from dotenv import load_dotenv
 from datetime import datetime
 from dateutil.parser import parse as parse_date
 import pytz  # Add this for timezone handling
 from swarm import Swarm, Agent
 from dateutil.parser import parse as parse_date
-from tools.data_fetcher import set_dataset
 
 # Set key variables 
 # Load environment variables

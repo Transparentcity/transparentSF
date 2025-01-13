@@ -2,13 +2,10 @@ import os
 import json
 from tools.data_fetcher import set_dataset
 from tools.genChart import generate_time_series_chart
-from collections import Counter
 from tools.anomaly_detection import anomaly_detection
 import datetime
-import logging
 from swarm import Swarm, Agent
 from urllib.parse import quote
-from ai.vector_loader import load_vectors
 
 # ------------------------------
 # Initialization
