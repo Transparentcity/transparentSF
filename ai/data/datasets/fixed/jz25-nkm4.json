@@ -72,15 +72,18 @@
         "summary"
     ],
     "CategoryFields": [],
-    "LocationFields": [],
     "DateFields": [
         "month"
     ],
+    "LocationFields": [],
     "periodic": true,
-    "item_noun": "311 Cases by Channel",
     "district_level": false,
+    "whom_it_may_interest": "City Managers, Customer Service Executives, Public Service Analysts, Policy Makers, and Citizens interested in understanding how residents interact with city services through different channels.",
+    "data_validated": true,
+    "item_noun": "311 service requests",
     "queries": {
-        "Monthly": "SELECT date_trunc_ym(month) AS month, sum(mobile) AS mobile, sum(web) AS web, sum(phone) AS phone, sum(twitter) AS twitter, sum(summary) AS summary WHERE month >= start_date GROUP BY month",
-        "Yearly": "SELECT date_trunc_y(month) AS year, sum(mobile) AS mobile, sum(web) AS web, sum(phone) AS phone, sum(twitter) AS twitter, sum(summary) AS summary WHERE year >= start_date GROUP BY year"
-    }
+        "Monthly": "SELECT month, SUM(mobile) AS mobile, SUM(web) AS web, SUM(phone) AS phone, SUM(twitter) AS twitter, SUM(summary) AS summary WHERE month >= start_date GROUP BY month ORDER BY month",
+        "Yearly": "SELECT date_trunc_y(month) AS year, SUM(mobile) AS mobile, SUM(web) AS web, SUM(phone) AS phone, SUM(twitter) AS twitter, SUM(summary) AS summary WHERE date_trunc_y(month) >= start_date GROUP BY year ORDER BY year"
+    },
+    "filename": "jz25-nkm4.json"
 }
