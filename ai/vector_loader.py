@@ -257,18 +257,37 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
     # Create or recreate collection
     recreate_collection(collection_name, vector_size)
 
-    # Process each JSON file
-    article_list = [f for f in os.listdir(datasets_folder) if f.endswith('.json')]
-    if not article_list:
-        logger.warning(f"No JSON files found in {datasets_folder}")
+    # Get paths for both directories
+    fixed_folder = os.path.join(datasets_folder, 'fixed')
+    original_folder = os.path.dirname(datasets_folder)  # Parent directory of 'fixed'
+
+    # Get list of fixed files (without path)
+    fixed_files = set()
+    if os.path.exists(fixed_folder):
+        fixed_files = {f for f in os.listdir(fixed_folder) if f.endswith('.json')}
+
+    # Get list of all original files that don't have a fixed version
+    original_files = []
+    if os.path.exists(original_folder):
+        original_files = [f for f in os.listdir(original_folder) 
+                         if f.endswith('.json') and f not in fixed_files]
+
+    # Process fixed files first
+    all_files_to_process = [(os.path.join(fixed_folder, f), True) for f in fixed_files]
+    # Then add original files that don't have fixed versions
+    all_files_to_process.extend([(os.path.join(original_folder, f), False) for f in original_files])
+
+    if not all_files_to_process:
+        logger.warning(f"No JSON files found to process")
         return False
 
-    logger.info(f"Found {len(article_list)} JSON files to process for SFPublicData")
+    logger.info(f"Found {len(all_files_to_process)} JSON files to process for SFPublicData")
     points_to_upsert = []
 
-    for idx, filename in enumerate(article_list, start=1):
-        article_path = os.path.join(datasets_folder, filename)
-        logger.info(f"Processing file {idx}/{len(article_list)}: {filename}")
+    for idx, (article_path, is_fixed) in enumerate(all_files_to_process, start=1):
+        filename = os.path.basename(article_path)
+        source_type = "fixed" if is_fixed else "original"
+        logger.info(f"Processing {source_type} file {idx}/{len(all_files_to_process)}: {filename}")
 
         try:
             with open(article_path, 'r', encoding='utf-8') as f:
@@ -277,8 +296,8 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
             logger.error(f"Error reading {filename}: {e}")
             continue
 
-        # Extract and format data
-        title = data.get('title', 'Untitled')
+        # Extract data with safe defaults
+        title = data.get('title', '')
         description = data.get('description', '')
         page_text = data.get('page_text', '')
         columns = data.get('columns', [])
@@ -287,12 +306,40 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
         queries = data.get('queries', [])
         report_category = data.get('report_category', '')
         publishing_department = data.get('publishing_department', '')
-        last_updated_date = data.get('last_updated_date', '')
+        last_updated_date = data.get('rows_updated_at', '')
         periodic = data.get('periodic', '')
         district_level = data.get('district_level', '')
-        # Format text for embedding
-        columns_formatted = format_columns(columns)
-        combined_text = f"Title: {title}\nURL: {url}\nEndpoint: {endpoint}\nDescription: {description}\nContent: {page_text}\nColumns: {columns_formatted}\nReport Category: {report_category}\nPublishing Department: {publishing_department}\nLast Updated: {last_updated_date}\nPeriodic: {periodic}\nDistrict Level: {district_level}\nQueries: {queries}"
+        category = data.get('category', '')
+
+        # Format text for embedding, only including non-empty fields
+        combined_text_parts = []
+        if title:
+            combined_text_parts.append(f"Title: {title}")
+        if url:
+            combined_text_parts.append(f"URL: {url}")
+        if endpoint:
+            combined_text_parts.append(f"Endpoint: {endpoint}")
+        if description:
+            combined_text_parts.append(f"Description: {description}")
+        if page_text:
+            combined_text_parts.append(f"Content: {page_text}")
+        if columns:
+            columns_formatted = format_columns(columns)
+            combined_text_parts.append(f"Columns: {columns_formatted}")
+        if report_category:
+            combined_text_parts.append(f"Report Category: {report_category}")
+        if publishing_department:
+            combined_text_parts.append(f"Publishing Department: {publishing_department}")
+        if last_updated_date:
+            combined_text_parts.append(f"Last Updated: {last_updated_date}")
+        if periodic:
+            combined_text_parts.append(f"Periodic: {periodic}")
+        if district_level:
+            combined_text_parts.append(f"District Level: {district_level}")
+        if queries:
+            combined_text_parts.append(f"Queries: {queries}")
+
+        combined_text = "\n".join(combined_text_parts)
 
         # Generate embedding
         embedding = get_embedding(combined_text)
@@ -300,7 +347,7 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
             logger.error(f"Failed to generate embedding for article '{title}'. Skipping.")
             continue
 
-        # Prepare payload
+        # Prepare payload with safe defaults
         payload = {
             'title': title,
             'description': description,
@@ -308,10 +355,14 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
             'endpoint': endpoint,
             'columns': serialize_columns(columns),
             'column_names': [col.get('name', '').lower() for col in columns],
-            'category': data.get('category', '').lower(),
-            'publishing_department': str(data.get('publishing_department', '')).lower(),
-            'last_updated_date': convert_to_timestamp(data.get('rows_updated_at', ''))
+            'category': category.lower() if category else '',
+            'publishing_department': str(publishing_department).lower() if publishing_department else '',
+            'last_updated_date': convert_to_timestamp(last_updated_date) if last_updated_date else None,
+            'queries': queries
         }
+
+        # Remove None values from payload
+        payload = {k: v for k, v in payload.items() if v is not None}
 
         point = rest.PointStruct(
             id=str(uuid.uuid4()),

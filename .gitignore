@@ -18,3 +18,4 @@ __pycache__
 .pytest_cache
 .DS_Store
 app_debug.log
+node_modules
