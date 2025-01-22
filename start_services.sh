@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Function to wait for a service to be ready
@@ -28,26 +27,29 @@ pkill -f webChat.py
 
 cd ai
 
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
 # Start Qdrant and wait for it
 echo "Starting Qdrant..."
-qdrant > qdrant.log 2>&1 &
+qdrant > logs/qdrant.log 2>&1 &
 wait_for_service "http://0.0.0.0:6333/healthz" "Qdrant"
 
-# Initialize vector database if needed
-if [ ! -f .qdrant-initialized ]; then
-    echo "Initializing vector database..."
-    python vector_loader.py
-    touch .qdrant-initialized
-fi
+# # Initialize vector database if needed
+# if [ ! -f .qdrant-initialized ]; then
+#     echo "Initializing vector database..."
+#     python vector_loader.py
+#     touch .qdrant-initialized
+# fi
 
 # Start backend and wait for it
 echo "Starting backend..."
-python backend.py > backend.log 2>&1 &
+python backend.py > logs/backend.log 2>&1 &
 wait_for_service "http://0.0.0.0:8000/backend" "Backend"
 
 # Start frontend and wait for it
 echo "Starting frontend..."
-python webChat.py > webChat.log 2>&1 &
+python webChat.py > logs/webChat.log 2>&1 &
 wait_for_service "http://0.0.0.0:8001/" "Frontend"
 
 # Keep script running to maintain processes
