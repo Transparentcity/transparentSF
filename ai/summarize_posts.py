@@ -5,7 +5,7 @@ from swarm import Swarm, Agent
 
 # Configure Logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
@@ -24,7 +24,8 @@ def create_document_summary(content: str, max_tokens: int = 1000) -> str:
     summarization_agent = Agent(
         model="gpt-4",
         name="Summarizer",
-        instructions="""You are an expert data analyst who creates concise, structured summaries of data analysis documents.
+        instructions="""You are an expert data analyst who creates concise, structured summaries of data analysis documents.  
+        The idea is to give an AI an index of what data is where and a bit about the trends and anomalies.
 
         For each document, extract and organize the key information into this format:
         FILENAME: <extract from first line>
@@ -40,7 +41,7 @@ def create_document_summary(content: str, max_tokens: int = 1000) -> str:
         """,
         functions=[],
         context_variables={},
-        debug=True
+        debug=False
     )
 
     summarization_prompt = "Please analyze and summarize the following data analysis document:"

@@ -102,10 +102,29 @@ def load_and_combine_notes():
     logger.info("Finished loading and combining notes")
     print(f"First 100 characters:\n{combined_text[:100]}")
     print(f"Total length: {len(combined_text)} characters ({len(combined_text.split())} tokens)")
-    
+    combined_text = ''
     return combined_text
 
 combined_notes=load_and_combine_notes() 
+
+def load_and_combine_climate_data():
+    data_folder = 'data/climate'
+    vera_file = os.path.join(data_folder, 'vcus-2025.csv')
+    
+    # Load the CSV file with detected encoding
+    try:
+        vera_df = pd.read_csv(vera_file)
+        logger = logging.getLogger(__name__)
+        logger.info(f"Successfully loaded climate data from {vera_file}")
+        logger.info(f"DataFrame shape: {vera_df.shape}")
+        return vera_df
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error loading climate data: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
+
+# Load the climate data
+combined_df = {"dataset": pd.DataFrame()}
 
 context_variables = {
     "dataset": combined_df,  # Store the actual DataFrame here
@@ -204,7 +223,7 @@ analyst_agent = Agent(
     # functions=[get_notes, query_docs, transfer_to_journalist_agent],
     functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, transfer_to_journalist_agent],
     context_variables=context_variables,
-    debug=False,
+    debug=True,
 )
 
 def update_agent_instructions_with_columns(columns):
@@ -639,8 +658,8 @@ journalist_agent = Agent(
         Use Transfer_to_analyst_agent() ONLY if asked to by the user.
 
         """,
-    # functions=[get_notes, query_docs, transfer_to_analyst_agent, generate_ghost_post],  
-    functions=[query_docs,  get_notes, generate_ghost_post, transfer_to_analyst_agent],  
+    functions=[get_notes, query_docs, transfer_to_analyst_agent, generate_ghost_post],  
+    # functions=[query_docs, generate_ghost_post, transfer_to_analyst_agent],  
     context_variables=context_variables,
     debug=True,
 )
@@ -671,8 +690,14 @@ combined_df = {"dataset": load_data(context_variables)}
 def process_and_print_streaming_response(response):
     content = ""
     last_sender = ""
+    MAX_BUFFER_SIZE = 1024 * 1024  # 1MB limit
 
     for chunk in response:
+        # Reset buffer if it gets too large
+        if len(content) > MAX_BUFFER_SIZE:
+            content = ""
+            logger.warning("Content buffer exceeded maximum size, clearing buffer")
+
         if "sender" in chunk:
             last_sender = chunk["sender"]
 
@@ -691,12 +716,43 @@ def process_and_print_streaming_response(response):
                     continue
                 print(f"\033[94m{last_sender}: \033[95m{name}\033[0m()")
 
+                function_to_call = function_mapping.get(name)
+                if function_to_call:
+                    try:
+                        result = function_to_call(**json.loads(f["arguments"]))
+                        
+                        # Add logging for chart generation results
+                        if name == "generate_time_series_chart":
+                            logger.debug(f"Chart generation result type: {type(result)}")
+                            if isinstance(result, tuple):
+                                markdown_content, _ = result  # Ignore the HTML content
+                                logger.info(f"Chart generated successfully. Markdown length: {len(markdown_content)}")
+                                
+                                # Only store and send the markdown content
+                                content = ""  # Clear the buffer after processing
+                                return markdown_content  # Return just the markdown portion
+                            else:
+                                logger.debug(f"Unexpected result format: {result}")
+                        
+                        content = ""  # Clear the buffer after processing
+                        return result
+                    except Exception as e:
+                        logger.error(f"Error processing tool call {name}: {e}")
+                        content = ""  # Clear the buffer on error
+                        return None
+
         if "delim" in chunk and chunk["delim"] == "end" and content:
             print()  # End of response message
-            content = ""
+            content = ""  # Clear the buffer
 
         if "response" in chunk:
+            content = ""  # Clear the buffer
             return chunk["response"]
+
+    # Clear any remaining content at the end
+    content = ""
+    return None
+
 def pretty_print_messages(messages) -> None:
     for message in messages:
         if message["role"] != "assistant":
@@ -763,26 +819,21 @@ def summarize_conversation(messages):
     return summary
 
 async def generate_response(user_input, session_data):
+    logger.info("Starting generate_response")
     messages = session_data["messages"]
     agent = session_data["agent"]
     context_variables = session_data.get("context_variables") or {}
 
+    # Log initial state
+    logger.info(f"Current agent: {agent.name}")
+    logger.info(f"Number of messages in history: {len(messages)}")
+
     # Append user message
     messages.append({"role": "user", "content": user_input})
-
-    # Truncate messages to the last MAX_HISTORY
-    if len(messages) > MAX_HISTORY:
-        messages = messages[-MAX_HISTORY:]
-        session_data["messages"] = messages  # Update the session with truncated messages
-
-    # Optionally, summarize if exceeding a certain threshold
-    if len(messages) > SUMMARY_INTERVAL:
-        summary = summarize_conversation(messages[:-5])  # Summarize all but the last 5 messages
-        messages = messages[-5:]  # Keep the last 5 messages
-        messages.insert(0, {"role": "system", "content": summary})  # Add summary at the beginning
-        session_data["messages"] = messages  # Update the session with summarized messages
+    logger.info(f"User input: {user_input}")
 
     # Run the agent
+    logger.info("Starting agent.run")
     response_generator = swarm_client.run(
         agent=agent,
         messages=messages,
@@ -790,100 +841,132 @@ async def generate_response(user_input, session_data):
         stream=True,
         debug=False,
     )
+    logger.info("Agent.run initialized")
 
     # Initialize assistant message
     assistant_message = {"role": "assistant", "content": "", "sender": agent.name}
-
-    # Buffer for incomplete tool call arguments
     incomplete_tool_call = None
     current_function_name = None
 
-    for chunk in response_generator:
-        # Handle content
-        if "content" in chunk and chunk["content"] is not None:
-            content_piece = chunk["content"]
-            assistant_message["content"] += content_piece
+    try:
+        for chunk in response_generator:
+            logger.debug(f"Received chunk: {chunk}")
 
-            # Send content as a JSON message to the client
-            message = {
-                "type": "content",
-                "sender": assistant_message["sender"],
-                "content": content_piece
-            }
-            yield json.dumps(message) + "\n"
+            # Handle content
+            if "content" in chunk and chunk["content"] is not None:
+                logger.debug(f"Processing content chunk: {chunk['content'][:100]}...")  # First 100 chars
+                content_piece = chunk["content"]
+                assistant_message["content"] += content_piece
+                message = {
+                    "type": "content",
+                    "sender": assistant_message["sender"],
+                    "content": content_piece
+                }
+                yield json.dumps(message) + "\n"
 
-        # Handle tool calls
-        if "tool_calls" in chunk and chunk["tool_calls"] is not None:
-            for tool_call in chunk["tool_calls"]:
-                function_info = tool_call.get("function")
-                if not function_info:
-                    continue  # Skip if function info is missing
+            # Handle tool calls
+            if "tool_calls" in chunk and chunk["tool_calls"] is not None:
+                logger.info("Processing tool calls")
+                for tool_call in chunk["tool_calls"]:
+                    function_info = tool_call.get("function")
+                    if not function_info:
+                        continue
 
-                # Update current_function_name if 'name' is provided
-                if function_info.get("name"):
-                    current_function_name = function_info["name"]
+                    if function_info.get("name"):
+                        current_function_name = function_info["name"]
+                        logger.info(f"Processing tool call: {current_function_name}")
 
-                # If we don't have a function name yet, skip processing
-                if not current_function_name:
-                    continue  # Cannot process without a function name
+                    if not current_function_name:
+                        continue
 
-                arguments_fragment = function_info.get("arguments", "")
+                    arguments_fragment = function_info.get("arguments", "")
+                    logger.debug(f"Received arguments fragment: {arguments_fragment}")
 
-                # Initialize or append to incomplete tool call
-                if incomplete_tool_call is None or incomplete_tool_call["function_name"] != current_function_name:
-                    incomplete_tool_call = {
-                        "type": "tool_call",
-                        "sender": assistant_message["sender"],
-                        "function_name": current_function_name,
-                        "arguments": ""
-                    }
+                    if incomplete_tool_call is None or incomplete_tool_call["function_name"] != current_function_name:
+                        incomplete_tool_call = {
+                            "type": "tool_call",
+                            "sender": assistant_message["sender"],
+                            "function_name": current_function_name,
+                            "arguments": ""
+                        }
 
-                incomplete_tool_call["arguments"] += arguments_fragment
+                    incomplete_tool_call["arguments"] += arguments_fragment
 
-                # Try parsing the arguments
-                try:
-                    arguments_json = json.loads(incomplete_tool_call["arguments"])
-                    incomplete_tool_call["arguments"] = arguments_json
+                    try:
+                        arguments_json = json.loads(incomplete_tool_call["arguments"])
+                        logger.info(f"Complete tool call received for {current_function_name}")
+                        logger.debug(f"Arguments: {arguments_json}")
 
-                    # Send the complete tool call to the client
-                    message = json.dumps(incomplete_tool_call) + "\n"
-                    yield message
+                        incomplete_tool_call["arguments"] = arguments_json
+                        message = json.dumps(incomplete_tool_call) + "\n"
+                        yield message
 
-                    # Log the tool call
-                    print(f"Sent tool_call message: {incomplete_tool_call}")
-                    logger.debug(f"Processing tool call: {current_function_name}, Arguments fragment: {arguments_fragment}")
+                        # Process the function call
+                        function_to_call = function_mapping.get(current_function_name)
+                        if function_to_call:
+                            logger.info(f"Executing function: {current_function_name}")
+                            function_args = incomplete_tool_call["arguments"]
+                            if not isinstance(function_args, dict):
+                                function_args = {}
+                            
+                            if current_function_name == "generate_time_series_chart":
+                                logger.info(f"Calling generate_time_series_chart with args: {function_args}")
+                                # Create a clean copy of context without the dataset
+                                chart_context = {
+                                    key: value 
+                                    for key, value in context_variables.items() 
+                                    if key == 'dataset'  # Only keep the dataset
+                                }
+                                result = function_to_call(chart_context, **function_args)
+                                
+                                if isinstance(result, tuple):
+                                    markdown_content, _ = result  # Ignore the HTML content completely
+                                    logger.info(f"Chart generated successfully. Markdown length: {len(markdown_content)}")
+                                    
+                                    # Only store and send the markdown content
+                                    assistant_message["content"] += f"\n{markdown_content}\n"
+                                    yield json.dumps({
+                                        "type": "content",
+                                        "sender": assistant_message["sender"],
+                                        "content": markdown_content
+                                    }) + "\n"
+                                else:
+                                    logger.warning(f"Unexpected chart result format: {type(result)}")
+                                    yield json.dumps({
+                                        "type": "content",
+                                        "sender": assistant_message["sender"],
+                                        "content": str(result)
+                                    }) + "\n"
+                            else:
+                                logger.info(f"Executing {current_function_name}")
+                                result = function_to_call(context_variables, **function_args)
+                                logger.info(f"Function result: {result}")
+                                
+                                # Handle agent transfer
+                                if isinstance(result, Agent):
+                                    session_data["agent"] = result
+                                    assistant_message["sender"] = session_data["agent"].name
+                                    logger.info(f"Agent transferred to {session_data['agent'].name}")
 
-                    # Process the function call
-                    function_to_call = function_mapping.get(current_function_name)
-                    if function_to_call:
-                        # Call the function with the arguments
-                        function_args = incomplete_tool_call["arguments"]
-                        if not isinstance(function_args, dict):
-                            function_args = {}
-                        result = function_to_call(context_variables, **function_args)
+                            session_data["context_variables"] = context_variables
 
-                        # If the function returns an Agent, update session_data["agent"]
-                        if isinstance(result, Agent):
-                            session_data["agent"] = result
-                            assistant_message["sender"] = session_data["agent"].name
-                            print(f"Agent transferred to {session_data['agent'].name}")
+                        incomplete_tool_call = None
+                        current_function_name = None
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Incomplete JSON received: {e}")
+                        pass
 
-                        # Ensure the context variables are updated in the session data
-                        session_data["context_variables"] = context_variables
+            # Handle end of message
+            if "delim" in chunk and chunk["delim"] == "end":
+                logger.info("End of message reached")
+                messages.append(assistant_message)
+                assistant_message = {"role": "assistant", "content": "", "sender": session_data["agent"].name}
 
-                    # Reset the incomplete tool call and current function name
-                    incomplete_tool_call = None
-                    current_function_name = None
-                except json.JSONDecodeError:
-                    # Incomplete JSON, wait for more data
-                    pass
+    except Exception as e:
+        logger.error(f"Error in generate_response: {e}", exc_info=True)
+        raise
 
-        # Handle end of message
-        if "delim" in chunk and chunk["delim"] == "end":
-            # Assistant message is complete
-            messages.append(assistant_message)
-            # Reset assistant message
-            assistant_message = {"role": "assistant", "content": "", "sender": session_data["agent"].name}
+    logger.info("generate_response completed")
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):

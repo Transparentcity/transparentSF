@@ -171,7 +171,8 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir):
                         aggregation_period='year',
                         max_legend_items=10,
                         filter_conditions=current_filter_conditions,
-                        show_average_line=True
+                        show_average_line=True,
+                        return_html=True
                     )
                     # Ensure we're adding strings, not tuples or dicts
                     if isinstance(chart_result, tuple):
@@ -197,7 +198,8 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir):
                         max_legend_items=10,
                         group_field=cat_field,
                         filter_conditions=current_filter_conditions,
-                        show_average_line=False
+                        show_average_line=False,
+                        return_html=True
                     )
                     if isinstance(chart_result, tuple):
                         markdown_content, html_content = chart_result

@@ -26,7 +26,8 @@ def generate_time_series_chart(
     null_group_label: str = 'NA',
     show_average_line: bool = False,
     y_axis_min: float = 0,  # Ensure default is 0
-    y_axis_max: float = None
+    y_axis_max: float = None,
+    return_html: bool = False  # New parameter
 ) -> str:
     try:
         logging.info("Full context_variables: %s", context_variables)
@@ -672,10 +673,12 @@ function toggleDataTable(tableId) {{
 </style>
 '''
 
-            logging.debug("Markdown content created with chart ID: %s", chart_id)
+            logging.info("Markdown content created with chart ID: %s", markdown_content)
 
-            return markdown_content, html_content
-
+            if return_html:
+                return markdown_content, html_content
+            else:
+                return markdown_content
 
         except Exception as e:
             logging.error("Failed to generate or save chart: %s", e)

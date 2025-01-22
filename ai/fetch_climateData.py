@@ -230,7 +230,7 @@ def main():
     # download_puro_data()
     # download_gsm_data()
     data_folder = 'data/climate'
-    vera_file = os.path.join(data_folder, 'vcusNov19.csv')
+    vera_file = os.path.join(data_folder, 'vcus-2025.csv')
 
     # Load and clean the CSV files
     load_and_clean_csv(vera_file)
