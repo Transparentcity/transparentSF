@@ -312,37 +312,143 @@
                 height: 100%;
                 border: none;
             }
+
+            #loginForm {
+                max-width: 300px;
+                margin: 100px auto;
+                padding: 20px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                text-align: center;
+            }
+            .input-group {
+                margin: 10px 0;
+            }
+            .input-group input {
+                width: 100%;
+                padding: 8px;
+                margin: 5px 0;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            .btn {
+                padding: 8px 20px;
+                background-color: #007bff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .btn:hover {
+                background-color: #0056b3;
+            }
+            #logout {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+            }
+
+            /* Add new overlay styles */
+            .overlay {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.9);
+                z-index: 2000;
+                overflow: auto;
+            }
+
+            .overlay-content {
+                position: relative;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .overlay-header {
+                padding: 15px;
+                background-color: #2d2d2d;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            .close-overlay {
+                background: none;
+                border: none;
+                color: #ffffff;
+                font-size: 24px;
+                cursor: pointer;
+                padding: 5px 15px;
+            }
+
+            .overlay iframe {
+                flex: 1;
+                width: 100%;
+                border: none;
+                background: #ffffff;
+            }
         </style>
     </head>
     <body>
-        <div class="main">
-            <div class="chat">
-                <h1>Transparent SF Agent Chat</h1>
-                <div id="chat-container">
-                    <div id="response-area"></div>
-                    <div
-                        id="loading"
-                        style="display: none; padding: 10px; text-align: center"
-                    >
-                        AI is thinking...
-                    </div>
-                    <div id="input-container">
-                        <input
-                            type="text"
-                            id="userInput"
-                            placeholder="Type your message..."
-                            autocomplete="off"
-                        />
-                        <button id="submit-button">Send</button>
+        <div id="loginForm">
+            <h2>Login Required</h2>
+            <form onsubmit="return checkLogin(event)">
+                <div class="input-group">
+                    <input type="text" id="username" placeholder="Username" required>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="Password" required>
+                </div>
+                <button type="submit" class="btn">Login</button>
+            </form>
+        </div>
+
+        <div id="chatInterface" style="display: none;">
+            <button id="logout" class="btn" onclick="logout()">Logout</button>
+            <div class="main">
+                <div class="chat">
+                    <h1>Transparent SF Agent Chat</h1>
+                    <div id="chat-container">
+                        <div id="response-area"></div>
+                        <div
+                            id="loading"
+                            style="display: none; padding: 10px; text-align: center"
+                        >
+                            AI is thinking...
+                        </div>
+                        <div id="input-container">
+                            <input
+                                type="text"
+                                id="userInput"
+                                placeholder="Type your message..."
+                                autocomplete="off"
+                            />
+                            <button id="submit-button">Send</button>
+                        </div>
                     </div>
                 </div>
+                <div class="divider"></div>
+                <div class="canvas-container">
+                    <iframe
+                        name="canvasTarget"
+                        style="width: 100%; height: 100%; border: none"
+                    ></iframe>
+                </div>
             </div>
-            <div class="divider"></div>
-            <div class="canvas-container">
-                <iframe
-                    name="canvasTarget"
-                    style="width: 100%; height: 100%; border: none"
-                ></iframe>
+        </div>
+
+        <!-- Add overlay markup -->
+        <div id="mobileOverlay" class="overlay">
+            <div class="overlay-content">
+                <div class="overlay-header">
+                    <button class="close-overlay" onclick="closeMobileOverlay()">×</button>
+                </div>
+                <iframe id="overlayFrame" name="overlayFrame"></iframe>
             </div>
         </div>
 
@@ -670,12 +776,106 @@
             function modifyLinksToOpenInFrame(element, frameId) {
                 const links = element.getElementsByTagName("a");
                 for (let link of links) {
-                    link.setAttribute("target", frameId);
+                    if (window.innerWidth <= 767) {
+                        link.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            openMobileOverlay(this.href);
+                        });
+                    } else {
+                        link.setAttribute("target", frameId);
+                    }
                 }
             }
 
-            // Remove duplicate renderContentSegments function to avoid conflicts
-            // The second definition of renderContentSegments has been integrated above.
+            function openMobileOverlay(url) {
+                const overlay = document.getElementById('mobileOverlay');
+                const frame = document.getElementById('overlayFrame');
+                frame.src = url;
+                overlay.style.display = 'block';
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeMobileOverlay() {
+                const overlay = document.getElementById('mobileOverlay');
+                const frame = document.getElementById('overlayFrame');
+                overlay.style.display = 'none';
+                frame.src = '';
+                document.body.style.overflow = 'auto';
+            }
+
+            // Update link handling when window is resized
+            window.addEventListener('resize', function() {
+                const responseArea = document.getElementById('response-area');
+                const links = responseArea.getElementsByTagName('a');
+                
+                for (let link of links) {
+                    if (window.innerWidth <= 767) {
+                        link.removeAttribute('target');
+                        // Ensure click handler is added
+                        link.onclick = function(e) {
+                            e.preventDefault();
+                            openMobileOverlay(this.href);
+                        };
+                    } else {
+                        link.setAttribute('target', 'canvasTarget');
+                        link.onclick = null;
+                    }
+                }
+            });
+
+            // Check login status when page loads
+            document.addEventListener('DOMContentLoaded', function() {
+                checkLoginStatus();
+            });
+
+            function checkLoginStatus() {
+                const isLoggedIn = sessionStorage.getItem('isLoggedIn');
+                if (isLoggedIn) {
+                    showChat();
+                } else {
+                    showLogin();
+                }
+            }
+
+            function showChat() {
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('chatInterface').style.display = 'block';
+            }
+
+            function showLogin() {
+                document.getElementById('loginForm').style.display = 'block';
+                document.getElementById('chatInterface').style.display = 'none';
+            }
+
+            function checkLogin(event) {
+                event.preventDefault();
+                
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value.trim();
+                
+                // Simple hash of the credentials (not secure but better than plaintext in source)
+                const validUsername = btoa('demo');
+                const validPassword = btoa('demo99');
+                
+                if (btoa(username) === validUsername && btoa(password) === validPassword) {
+                    sessionStorage.setItem('isLoggedIn', 'true');
+                    showChat();
+                } else {
+                    alert('Invalid credentials. Please try again.');
+                    document.getElementById('password').value = '';
+                }
+                return false;
+            }
+
+            function logout() {
+                sessionStorage.removeItem('isLoggedIn');
+                showLogin();
+                document.getElementById('username').value = '';
+                document.getElementById('password').value = '';
+            }
+
+            // Prevent access to chat interface through console
+            setInterval(checkLoginStatus, 1000);
         </script>
     </body>
 </html>

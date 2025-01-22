@@ -102,7 +102,6 @@ def load_and_combine_notes():
     logger.info("Finished loading and combining notes")
     print(f"First 100 characters:\n{combined_text[:100]}")
     print(f"Total length: {len(combined_text)} characters ({len(combined_text.split())} tokens)")
-    combined_text = ''
     return combined_text
 
 combined_notes=load_and_combine_notes() 
@@ -200,11 +199,11 @@ def transfer_to_analyst_agent(context_variables, *args, **kwargs):
     """
     return analyst_agent
 
-def transfer_to_journalist_agent(context_variables, *args, **kwargs):
+def transfer_to_researcher_agent(context_variables, *args, **kwargs):
     """
     Transfers the conversation to the Data Agent.
     """
-    return journalist_agent
+    return Researcher_agent
 
 # Define the anomaly finder agent
 analyst_agent = Agent(
@@ -214,14 +213,14 @@ analyst_agent = Agent(
     **Function Usage:**
 
     - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in. always pass the context_variables and the collection name is allways "SFPublicData"
-    - Use the `transfer_to_journalist_agent` function (without any parameters) to transfer to the journalist agent. 
+    - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
     - Use `set_dataset(endpoint, query)` Query and endpoint are required parameters . to set the dataset after the user selects one. The `endpoint` is the dataset identifier (e.g., `'abcd-1234.json'`), and `query` is the SoQL query string.  There are often valid soql querties in your docs for each endpoint to show you how to format your queries.  
         Here's an example call: 
         Here are some examples of valid soql queries:
 
     """,
-    # functions=[get_notes, query_docs, transfer_to_journalist_agent],
-    functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, transfer_to_journalist_agent],
+    # functions=[get_notes, query_docs, transfer_to_researcher_agent],
+    functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, transfer_to_researcher_agent],
     context_variables=context_variables,
     debug=True,
 )
@@ -553,7 +552,7 @@ def update_agent_instructions_with_columns(columns):
     - Use the `get_dataset` function (without any parameters) to access the dataset.
     - Use the `set_columns` function (without any parameters) to set columns from a dataset the user wants to query
     - Use the `get_data_summary` function (without any parameters) to get a statistical summary of the data.
-    - Use the `transfer_to_journalist_agent` function (without any parameters) to transfer to the journalist agent. 
+    - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
     - Use the `anomaly_detection` function to perform anomaly detection on the dataset. When calling this function, ensure you correctly pass values for the following parameters:
     - `group_field`: Specify the column name by which you want to group the data. Use the result of `get_columns` to decide which column is suitable for grouping (e.g., `'Category'`).
     - `filter_conditions`: Pass in a list of conditions to filter the data. Use this to narrow down the dataset for specific analysis. The format is a list of dictionaries with `'field'`, `'operator'`, and `'value'` keys.
@@ -628,9 +627,9 @@ def load_and_combine_climate_data():
 
 
 
-journalist_agent = Agent(
+Researcher_agent = Agent(
     model=AGENT_MODEL,
-    name="Journalist",
+    name="Researcher",
      instructions="""
        You are a reporter for anomalous SF. You investigate, discover, research and report on notable trends in city data that others might be overlooking. You job is to use your Query_docs function to find some interesting trends to research more carefully. You want to bring attention to details in the City data that illustrate broader trends that other might be covering in the medita. Your mission is to bring objective data into the conversation. So for example instead of reporting on an overall decline in property crime in SF, which is by itself quite notable, you might instead illustrate it through the more relatable detail that auto theft which had been quite high is down by more than 40% from its 2 year average. Then you might choose that anomaly for some further research to determine where its down, or which types are down, etc. Your style is crystal clear, sometimes pithy but always factual and to-the-point. You always share the "ehat" and never speculate on the "why". No value language that might equate a drop in crime for example as being a "good" thing when it might be a data error. Your team has assembled analysis of dozens of key city databases in Public Safety, City Management and Ethics, Health, Housing, Drugs, Homelessness, etc. 
        
@@ -778,7 +777,7 @@ def pretty_print_messages(messages) -> None:
 
 function_mapping = {
     'transfer_to_analyst_agent': transfer_to_analyst_agent,
-    'transfer_to_journalist_agent': transfer_to_journalist_agent,
+    'transfer_to_researcher_agent': transfer_to_researcher_agent,
     'get_dataset': get_dataset,
     'get_notes': get_notes,
     'get_columns': get_columns,
@@ -802,7 +801,7 @@ def get_session(session_id: str = Cookie(None)):
         new_session_id = str(uuid.uuid4())
         sessions[new_session_id] = {
             "messages": [],
-            "agent": journalist_agent,  # Start with journalist
+            "agent": Researcher_agent,  # Start with researcher
             "context_variables": {"dataset": combined_df["dataset"],"notes": combined_notes}  # Initialize context_variables
         }
         return sessions[new_session_id]
@@ -983,7 +982,7 @@ async def chat(request: Request, session_id: str = Cookie(None)):
         session_id = str(uuid.uuid4())
         sessions[session_id] = {
             "messages": [],
-            "agent": journalist_agent,  # Start with analyst
+            "agent": Researcher_agent,  # Start with analyst
             "context_variables": {"dataset": combined_df["dataset"],"notes": combined_notes}
         }
 

@@ -22,7 +22,7 @@ def create_document_summary(content: str, max_tokens: int = 1000) -> str:
     """
     # Create summarization agent with system message
     summarization_agent = Agent(
-        model="gpt-4",
+        model="gpt-4o",
         name="Summarizer",
         instructions="""You are an expert data analyst who creates concise, structured summaries of data analysis documents.  
         The idea is to give an AI an index of what data is where and a bit about the trends and anomalies.
@@ -73,6 +73,7 @@ def process_output_summaries():
     """
     Process all markdown files in the generated_posts directory,
     create summaries, and save them as text files.
+    Only processes files that don't already have a summary file.
     """
     output_dir = Path("output")
     
@@ -81,9 +82,19 @@ def process_output_summaries():
         logging.warning("Output directory does not exist. No files to process.")
         return
     
+    md_files = list(output_dir.glob("*.md"))
+    logging.info(f"Found {len(md_files)} markdown files to check")
+    
     # Process each markdown file
-    for md_file in output_dir.glob("*.md"):
-        logging.info(f"Processing {md_file.name}")
+    for md_file in md_files:
+        logging.info(f"Checking file: {md_file.name}")
+        # Check if summary already exists
+        summary_file = output_dir / f"{md_file.stem}_summary.txt"
+        if summary_file.exists():
+            logging.info(f"Summary already exists for {md_file.name}, skipping...")
+            continue
+            
+        logging.info(f"Generating summary for: {md_file.name}")
         
         try:
             # Read the markdown content
@@ -92,15 +103,12 @@ def process_output_summaries():
             # Generate summary
             summary = create_document_summary(content)
             
-            # Create summary file path (same name but .txt extension)
-            summary_file = output_dir / f"{md_file.stem}_summary.txt"
-            
             # Save summary
             summary_file.write_text(summary, encoding='utf-8')
-            logging.info(f"Summary saved to {summary_file.name}")
+            logging.info(f"✓ Successfully saved summary to {summary_file.name}")
             
         except Exception as e:
-            logging.error(f"Error processing {md_file.name}: {str(e)}")
+            logging.error(f"❌ Error processing {md_file.name}: {str(e)}")
 
 if __name__ == "__main__":
     process_output_summaries() 
