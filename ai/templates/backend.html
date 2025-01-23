@@ -267,6 +267,70 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+
+        .file-link {
+            color: #0066cc;
+            text-decoration: none;
+            margin: 0 5px;
+        }
+        
+        .file-link:hover {
+            text-decoration: underline;
+        }
+        
+        .folder-links {
+            margin-bottom: 5px;
+        }
+        
+        /* Remove any custom styling for different file types */
+        .file-link.html,
+        .file-link.md,
+        .file-link.txt {
+            background-color: transparent;
+            color: #0066cc;
+        }
+
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #f9f9f9;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 1;
+            padding: 12px 16px;
+        }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        .file-link {
+            color: #0066cc;
+            text-decoration: none;
+            display: block;
+            padding: 2px 0;
+        }
+
+        .file-link:hover {
+            text-decoration: underline;
+        }
+
+        .folder-links {
+            margin-bottom: 8px;
+        }
+
+        .item-noun-cell {
+            width: 200px;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -286,15 +350,13 @@
                 <table>
                     <thead>
                         <tr>
-                            
                             <th>Check</th>
                             <th>Category</th>
-                            <th>Item Noun</th>
+                            <th class="item-noun-cell">Title</th>
                             <th>Filename</th>
                             <th>Last Run</th>
                             <th>Actions</th>
                             <th>Outputs</th>
-                            
                         </tr>
                     </thead>
                     <tbody>
@@ -305,7 +367,7 @@
                                 <input type="checkbox" class="row-check"/>
                             </td>
                             <td>{{ dataset.report_category if dataset.has_fixed else dataset.category }}</td>
-                            <td>{{ dataset.item_noun }}</td>
+                            <td class="item-noun-cell">{{ dataset.title }}</td>
                             <td>
                                 <a href="#" class="json-link" data-filename="{{ dataset.json_path }}" style="color: #0066cc; text-decoration: none;">
                                     {{ dataset.filename }}
@@ -374,94 +436,154 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // Function to update output links for a row
+            async function updateRowOutputLinks(row) {
+                const endpoint = row.getAttribute('data-endpoint');
+                console.log('Updating links for endpoint:', endpoint);
+                
+                try {
+                    const resp = await fetch(`/backend/get-updated-links/${encodeURIComponent(endpoint)}`);
+                    console.log('Response status:', resp.status);
+                    
+                    if (!resp.ok) {
+                        console.error('Error fetching links:', resp.status);
+                        return;
+                    }
+                    
+                    const data = await resp.json();
+                    console.log('Received data:', data);
+                    
+                    // Get the links cell
+                    const linksCell = row.querySelector('.output-links');
+                    if (!linksCell) {
+                        console.error('Links cell not found');
+                        return;
+                    }
+                    
+                    // Clear existing links
+                    linksCell.innerHTML = '';
+                    
+                    // Add new links if we have any
+                    if (data.links && Object.keys(data.links).length > 0) {
+                        // Create dropdown container
+                        const dropdown = document.createElement('div');
+                        dropdown.className = 'dropdown';
+                        
+                        // Create dropdown trigger
+                        const trigger = document.createElement('span');
+                        trigger.textContent = 'View Results ▼';
+                        trigger.style.color = '#0066cc';
+                        trigger.style.cursor = 'pointer';
+                        dropdown.appendChild(trigger);
+                        
+                        // Create dropdown content
+                        const content = document.createElement('div');
+                        content.className = 'dropdown-content';
+                        
+                        // Sort folders by date (assuming folder names contain dates)
+                        const sortedFolders = Object.entries(data.links).sort((a, b) => {
+                            // Extract dates from folder names if they exist
+                            const dateA = a[0].match(/\d{4}-\d{2}-\d{2}/);
+                            const dateB = b[0].match(/\d{4}-\d{2}-\d{2}/);
+                            if (dateA && dateB) {
+                                return new Date(dateB[0]) - new Date(dateA[0]);
+                            }
+                            return b[0].localeCompare(a[0]);
+                        });
+
+                        for (const [folder, files] of sortedFolders) {
+                            const folderDiv = document.createElement('div');
+                            folderDiv.className = 'folder-links';
+                            
+                            // Add folder name if it's not the root
+                            if (folder !== '.') {
+                                const folderName = document.createElement('div');
+                                folderName.textContent = folder;
+                                folderName.style.fontWeight = 'bold';
+                                folderName.style.marginBottom = '4px';
+                                folderDiv.appendChild(folderName);
+                            }
+                            
+                            // Add links for each file type
+                            for (const [type, url] of Object.entries(files)) {
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.target = '_blank';
+                                link.className = 'file-link';
+                                link.textContent = type.toUpperCase();
+                                folderDiv.appendChild(link);
+                            }
+                            
+                            content.appendChild(folderDiv);
+                        }
+                        
+                        dropdown.appendChild(content);
+                        linksCell.appendChild(dropdown);
+                    } else {
+                        linksCell.textContent = 'No output files';
+                    }
+                    
+                } catch (error) {
+                    console.error('Error updating links:', error);
+                }
+            }
+
+            // Add click handlers for the action buttons
+            document.querySelectorAll('.action-button').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const row = e.target.closest('tr');
+                    const button = e.target;
+                    
+                    // Disable the button and show loading state
+                    button.disabled = true;
+                    const originalText = button.textContent;
+                    button.textContent = 'Processing...';
+                    
+                    const isAnalyze = button.classList.contains('analyze-button');
+                    const value = isAnalyze ? 
+                        button.getAttribute('data-endpoint') : 
+                        button.getAttribute('data-filename');
+                    
+                    try {
+                        const url = isAnalyze ? 
+                            `/backend/run_analysis/${encodeURIComponent(value)}` : 
+                            `/backend/prep-data/${encodeURIComponent(value)}`;
+                        
+                        console.log('Fetching:', url);
+                        const response = await fetch(url);
+                        console.log('Response:', response);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        // Update the output links after successful processing
+                        if (row) {
+                            await updateRowOutputLinks(row);
+                        }
+                        
+                    } catch (error) {
+                        console.error('Error:', error);
+                        alert('Error processing request: ' + error.message);
+                    } finally {
+                        // Reset button state
+                        button.disabled = false;
+                        button.textContent = originalText;
+                    }
+                });
+            });
+
+            // Update output links for all rows on page load
+            document.querySelectorAll('tr[data-endpoint]').forEach(row => {
+                updateRowOutputLinks(row);
+            });
+
             // Create a spinner element
             function createSpinner() {
                 const spinner = document.createElement('div');
                 spinner.classList.add('spinner');
                 return spinner;
-            }
-
-            // Update a row's output links after an operation finishes
-            async function updateRowOutputLinks(row) {
-                const endpoint = row.getAttribute('data-endpoint');
-                try {
-                    const resp = await fetch(`/get-updated-links/${encodeURIComponent(endpoint)}`);
-                    if (!resp.ok) return;
-                    const data = await resp.json();
-                    const links = data.links || {};
-                    
-                    const outputCell = row.querySelector('.output-links');
-                    outputCell.innerHTML = '';  // Clear old links
-
-                    if (Object.keys(links).length === 0) {
-                        outputCell.textContent = 'N/A';
-                    } else if (Object.keys(links).length > 1) {
-                        // Create dropdown for multiple versions
-                        const select = document.createElement('select');
-                        select.className = 'version-select';
-                        select.onchange = () => window.open(select.value, '_blank');
-                        
-                        const defaultOption = document.createElement('option');
-                        defaultOption.value = '';
-                        defaultOption.textContent = 'Select version...';
-                        select.appendChild(defaultOption);
-
-                        for (const [folder, folderLinks] of Object.entries(links)) {
-                            const optgroup = document.createElement('optgroup');
-                            optgroup.label = folder;
-
-                            if (folderLinks.html) {
-                                const opt = document.createElement('option');
-                                opt.value = folderLinks.html;
-                                opt.textContent = 'HTML';
-                                optgroup.appendChild(opt);
-                            }
-                            if (folderLinks.md) {
-                                const opt = document.createElement('option');
-                                opt.value = folderLinks.md;
-                                opt.textContent = 'Markdown';
-                                optgroup.appendChild(opt);
-                            }
-                            if (folderLinks.txt) {
-                                const opt = document.createElement('option');
-                                opt.value = folderLinks.txt;
-                                opt.textContent = 'Log';
-                                optgroup.appendChild(opt);
-                            }
-
-                            select.appendChild(optgroup);
-                        }
-                        outputCell.appendChild(select);
-                    } else {
-                        // Single version - show direct links
-                        const folderLinks = Object.values(links)[0];
-                        if (folderLinks.html) {
-                            const aHtml = document.createElement('a');
-                            aHtml.href = folderLinks.html;
-                            aHtml.target = '_blank';
-                            aHtml.textContent = 'HTML';
-                            outputCell.appendChild(aHtml);
-                            outputCell.appendChild(document.createTextNode(' '));
-                        }
-                        if (folderLinks.md) {
-                            const aMd = document.createElement('a');
-                            aMd.href = folderLinks.md;
-                            aMd.target = '_blank';
-                            aMd.textContent = 'Markdown';
-                            outputCell.appendChild(aMd);
-                            outputCell.appendChild(document.createTextNode(' '));
-                        }
-                        if (folderLinks.txt) {
-                            const aTxt = document.createElement('a');
-                            aTxt.href = folderLinks.txt;
-                            aTxt.target = '_blank';
-                            aTxt.textContent = 'Log';
-                            outputCell.appendChild(aTxt);
-                        }
-                    }
-                } catch (err) {
-                    console.error('Failed to update row output links:', err);
-                }
             }
 
             // Common handler to call either /prep-data or /run_analysis
@@ -474,9 +596,9 @@
 
                 let url = '';
                 if (action === 'prep-data') {
-                    url = `/prep-data/${encodeURIComponent(filename)}`;
+                    url = `/backend/prep-data/${encodeURIComponent(filename)}`;
                 } else if (action === 'run_analysis') {
-                    url = `/run_analysis/${encodeURIComponent(endpoint)}`;
+                    url = `/backend/run_analysis/${encodeURIComponent(endpoint)}`;
                 } else {
                     console.error('Unknown action:', action);
                     return;
@@ -568,7 +690,7 @@
                 reloadDBBtn.disabled = true;
                 
                 try {
-                    const resp = await fetch('/reload_vector_db');
+                    const resp = await fetch('/backend/reload_vector_db');
                     const data = await resp.json();
                     if (data.status === 'success') {
                         alert('Vector DB reloaded successfully!');
@@ -592,7 +714,7 @@
                 summarizePostsBtn.disabled = true;
                 
                 try {
-                    const resp = await fetch('/summarize_posts');
+                    const resp = await fetch('/backend/summarize_posts');
                     const data = await resp.json();
                     if (data.status === 'success') {
                         alert('Posts summarized successfully!');
@@ -635,8 +757,8 @@
                     
                     try {
                         const url = isEndpoint ? 
-                            `/endpoint-json/${encodeURIComponent(value)}` : 
-                            `/dataset-json/${encodeURIComponent(value)}`;
+                            `/backend/endpoint-json/${encodeURIComponent(value)}` : 
+                            `/backend/dataset-json/${encodeURIComponent(value)}`;
                         const response = await fetch(url);
                         const data = await response.json();
                         jsonContent.textContent = JSON.stringify(data, null, 2);

@@ -529,16 +529,30 @@
         }
     ],
     "publishing_department": "GSA - City Administrator's Office",
-    "rows_updated_at": "2024-12-22T07:33:18Z",
-    "item_noun": "daily station exit record",
+    "rows_updated_at": "2025-01-01T07:33:22Z",
     "usefulness": 3,
     "report_category": "Transportation",
-    "periodic": "yes",
+    "NumericFields": [
+        "total_exits"
+    ],
+    "CategoryFields": [
+        "day_of_week",
+        "fiscal_year",
+        "fiscal_quarter",
+        "calendar_month"
+    ],
+    "DateFields": [
+        "month"
+    ],
+    "LocationFields": [],
+    "periodic": true,
     "district_level": false,
-    "whom_it_may_interest": "Urban planners, public transport authorities, researchers studying urban mobility patterns.",
-    "data_validated": true,
+    "whom_it_may_interest": "Transportation Planners, City Officials, Researchers interested in public transit usage patterns, BART operational staff, and Policy Makers focused on urban mobility",
+    "data_validated": false,
+    "item_noun": "BART station exits",
     "queries": {
-        "Monthly": "SELECT date_trunc_ym(data_as_of) AS month, SUM(total) AS total_exits, fy, qtr, day_of_week WHERE data_as_of >= '2022-09-01' GROUP BY month, fy, qtr, day_of_week ORDER BY month, fy, qtr, day_of_week",
-        "Yearly": "SELECT date_trunc_y(data_as_of) AS year, SUM(total) AS total_exits, fy, qtr, day_of_week WHERE data_as_of >= '2022-09-01' GROUP BY year, fy, qtr, day_of_week ORDER BY month, fy, qtr, day_of_week"
-    }
+        "Monthly": "SELECT date_trunc_ym(date) AS month, SUM(total) AS total_exits, month, day_of_week, fy AS fiscal_year, qtr AS fiscal_quarter, month AS calendar_month WHERE date >= start_date GROUP BY month, day_of_week, fiscal_year, fiscal_quarter, calendar_month ORDER BY month",
+        "Yearly": "SELECT date_trunc_y(date) AS year, SUM(total) AS total_exits, fy AS fiscal_year, qtr AS fiscal_quarter WHERE date >= start_date GROUP BY year, fiscal_year, fiscal_quarter ORDER BY year"
+    },
+    "filename": "m2xz-p7ja.json"
 }

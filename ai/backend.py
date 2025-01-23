@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
@@ -27,20 +27,22 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+router = APIRouter()
+templates = None  # Will be set by main.py
 
 # Define the absolute path to the output directory
-script_dir = os.path.dirname(os.path.abspath(__file__))
-output_dir = os.path.join(script_dir, 'output')
+script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the /ai directory
+output_dir = os.path.join(script_dir, 'output')  # /ai/output
 
-# Ensure the output directory exists
-os.makedirs(output_dir, exist_ok=True)
-logger.debug(f"Ensured that output directory exists at '{output_dir}'")
+logger.debug(f"Script directory: {script_dir}")
+logger.debug(f"Output directory: {output_dir}")
 
-# Mount the output directory to serve static files
-app.mount("/output", StaticFiles(directory=output_dir), name="output")
-logger.info(f"Mounted '/output' to serve static files from '{output_dir}'")
+
+def set_templates(t):
+    """Set the templates instance for this router"""
+    global templates
+    templates = t
+    logger.debug("Templates set in backend router")
 
 
 def find_output_files_for_endpoint(endpoint: str, output_dir: str):
@@ -48,9 +50,19 @@ def find_output_files_for_endpoint(endpoint: str, output_dir: str):
     logger.debug(f"Searching for files matching endpoint '{endpoint}' in directory: {output_dir}")
     output_files = {}
     
+    # Remove .json extension if present
+    endpoint = endpoint.replace('.json', '')
+    logger.debug(f"Cleaned endpoint: {endpoint}")
+    
+    if not os.path.exists(output_dir):
+        logger.error(f"Output directory does not exist: {output_dir}")
+        return output_files
+        
+    # Log all files in output directory
+    logger.debug("Full output directory contents:")
     for root, dirs, files in os.walk(output_dir):
-        logger.debug(f"Scanning directory: {root}")
-        logger.debug(f"Found files: {files}")
+        #logger.debug(f"Directory: {root}")
+        #logger.debug(f"Files: {files}")
         
         matching_files = {}
         latest_timestamp = 0
@@ -59,32 +71,29 @@ def find_output_files_for_endpoint(endpoint: str, output_dir: str):
         for file in files:
             if endpoint in file:
                 file_path = os.path.join(root, file)
-                logger.debug(f"Found matching file: {file_path}")
                 file_timestamp = os.path.getmtime(file_path)
-                logger.debug(f"File timestamp: {datetime.fromtimestamp(file_timestamp)}")
                 
                 if file.endswith('.html'):
                     if 'html' not in matching_files or file_timestamp > latest_timestamp:
                         matching_files['html'] = file_path
                         latest_timestamp = file_timestamp
-                        logger.debug(f"Updated latest HTML file: {file_path}")
                 elif file.endswith('.md'):
                     if 'md' not in matching_files or file_timestamp > latest_timestamp:
                         matching_files['md'] = file_path
                         latest_timestamp = file_timestamp
-                        logger.debug(f"Updated latest MD file: {file_path}")
                 elif file.endswith('_assistant_reply.txt'):
                     if 'txt' not in matching_files or file_timestamp > latest_timestamp:
                         matching_files['txt'] = file_path
                         latest_timestamp = file_timestamp
-                        logger.debug(f"Updated latest TXT file: {file_path}")
         
         if matching_files:
             rel_path = os.path.relpath(root, output_dir)
             output_files[rel_path] = matching_files
             logger.debug(f"Added matching files for path {rel_path}: {matching_files}")
+     #   else:
+            # logger.debug(f"No matching files found in directory {root}")
 
-    logger.debug(f"Final output files found: {json.dumps(output_files, indent=2)}")
+    # logger.debug(f"Final output files found: {json.dumps(output_files, indent=2)}")
     return output_files
 
 
@@ -98,6 +107,7 @@ def get_output_file_url(file_path: str, output_dir: str):
     try:
         relative_path = os.path.relpath(file_path, output_dir)
         url_path = "/output/" + "/".join(quote(part) for part in relative_path.split(os.sep))
+        logger.debug(f"Converted file path '{file_path}' to URL '{url_path}'")
         return url_path
     except Exception as e:
         logger.error(f"Error converting file path to URL: {str(e)}")
@@ -120,129 +130,76 @@ def load_and_sort_json():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     raw_datasets_dir = os.path.join(current_dir, 'data', 'datasets')
     fixed_datasets_dir = os.path.join(current_dir, 'data', 'datasets', 'fixed')
-    logger.debug(f"Looking for datasets in: {raw_datasets_dir} and {fixed_datasets_dir}")
+    output_dir = os.path.join(current_dir, 'output')
+    
+    logger.debug(f"Loading datasets from: {raw_datasets_dir} and {fixed_datasets_dir}")
 
     if not os.path.exists(raw_datasets_dir):
-        logger.error(f"Raw datasets directory '{raw_datasets_dir}' does not exist.")
+        logger.error(f"Raw datasets directory not found: {raw_datasets_dir}")
         return datasets
 
     # First, get list of all raw dataset files
-    raw_files = [f for f in os.listdir(raw_datasets_dir) 
-                 if f.endswith('.json') and f != 'analysis_map.json']
+    try:
+        raw_files = [f for f in os.listdir(raw_datasets_dir) 
+                    if f.endswith('.json') and f != 'analysis_map.json']
+        logger.debug(f"Found raw files: {raw_files}")
+    except Exception as e:
+        logger.error(f"Error listing raw datasets directory: {e}")
+        return datasets
 
+    # Process each file
     for filename in raw_files:
         try:
-            # Check if fixed version exists first
-            fixed_file_path = os.path.join(fixed_datasets_dir, filename)
-            has_fixed = os.path.exists(fixed_file_path)
+            # Check if there's a fixed version
+            has_fixed = os.path.exists(os.path.join(fixed_datasets_dir, filename))
+            file_path = os.path.join(fixed_datasets_dir if has_fixed else raw_datasets_dir, filename)
             
-            # Set the json_path without 'data' prefix
-            json_path = os.path.join('datasets', 'fixed' if has_fixed else '', filename)
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Get the last run time by checking output files
+            last_run = None
+            endpoint = filename.replace('.json', '')
+            for root, _, files in os.walk(output_dir):
+                for file in files:
+                    if endpoint in file:
+                        file_path = os.path.join(root, file)
+                        file_time = os.path.getmtime(file_path)
+                        if last_run is None or file_time > last_run:
+                            last_run = file_time
+
+            # Check if any output files exist for this dataset
+            has_output = last_run is not None
             
             dataset_info = {
                 'filename': filename,
-                'category': 'N/A',
-                'report_category': None,
-                'periodic': 'No',
-                'endpoint': 'N/A',
-                'item_noun': 'N/A',
-                'rows_updated_at': 'N/A',
-                'rows_updated_dt': None,
+                'json_path': os.path.join('data', 'datasets', 'fixed' if has_fixed else '', filename),
+                'category': data.get('category', 'Uncategorized'),
+                'report_category': data.get('report_category', data.get('category', 'Uncategorized')),
+                'item_noun': data.get('item_noun', 'items'),
+                'title': data.get('title', 'Untitled'),
                 'has_fixed': has_fixed,
-                'json_path': json_path
+                'endpoint': filename,
+                'last_run': last_run,
+                'last_run_str': datetime.fromtimestamp(last_run).strftime('%Y-%m-%d %H:%M:%S') if last_run else 'Never',
+                'has_output': has_output
             }
-
-            # First read metadata from raw file
-            raw_file_path = os.path.join(raw_datasets_dir, filename)
-            with open(raw_file_path, 'r') as file:
-                raw_data = json.load(file)
-                if isinstance(raw_data, dict):
-                    # Get title and truncate it for item_noun
-                    title = raw_data.get('title', 'N/A')
-                    dataset_info['item_noun'] = (title[:37] + '...') if len(title) > 60 else title
-                    
-                    # Extract just the endpoint identifier from the URL, keeping .json
-                    endpoint = raw_data.get('endpoint', 'N/A')
-                    if endpoint != 'N/A' and '/' in endpoint:
-                        # Extract just the endpoint ID from the full URL, keeping .json
-                        endpoint = endpoint.split('/')[-1]
-                    
-                    dataset_info.update({
-                        'category': raw_data.get('category', 'N/A'),
-                        'endpoint': endpoint,
-                    })
-                    
-                    periodic = raw_data.get('periodic', False)
-                    if isinstance(periodic, str):
-                        periodic = periodic.lower() == "yes"
-                    dataset_info['periodic'] = "Yes" if periodic else "No"
-
-                    rows_updated_at_str = raw_data.get('rows_updated_at', 'N/A')
-                    if rows_updated_at_str != 'N/A':
-                        try:
-                            dt_parsed = datetime.strptime(rows_updated_at_str, '%Y-%m-%dT%H:%M:%SZ')
-                            dataset_info['rows_updated_dt'] = dt_parsed
-                            dataset_info['rows_updated_at'] = dt_parsed.strftime('%y.%m.%d')
-                        except ValueError:
-                            pass
-
-            # If fixed version exists, override metadata with fixed version
-            if os.path.exists(fixed_file_path):
-                dataset_info['has_fixed'] = True
-                
-                with open(fixed_file_path, 'r') as file:
-                    fixed_data = json.load(file)
-                    if isinstance(fixed_data, dict):
-                        # For fixed files, use report_category instead of category
-                        dataset_info['report_category'] = fixed_data.get('report_category', 'N/A')
-                        
-                        # Update other metadata
-                        dataset_info.update({
-                            'endpoint': fixed_data.get('endpoint', dataset_info['endpoint']),
-                        })
-                        
-                        # Get title from fixed file and truncate it
-                        title = fixed_data.get('title', dataset_info['item_noun'])
-                        dataset_info['item_noun'] = (title[:57] + '...') if len(title) > 60 else title
-                        
-                        periodic = fixed_data.get('periodic', False)
-                        if isinstance(periodic, str):
-                            periodic = periodic.lower() == "yes"
-                        dataset_info['periodic'] = "Yes" if periodic else "No"
-
-                        rows_updated_at_str = fixed_data.get('rows_updated_at', dataset_info['rows_updated_at'])
-                        if rows_updated_at_str != 'N/A':
-                            try:
-                                dt_parsed = datetime.strptime(rows_updated_at_str, '%Y-%m-%dT%H:%M:%SZ')
-                                dataset_info['rows_updated_dt'] = dt_parsed
-                                dataset_info['rows_updated_at'] = dt_parsed.strftime('%y.%m.%d')
-                            except ValueError:
-                                pass
-
-                        # Extract just the endpoint identifier from the URL for fixed files too
-                        endpoint = fixed_data.get('endpoint', dataset_info['endpoint'])
-                        if endpoint != 'N/A' and '/' in endpoint:
-                            endpoint = endpoint.split('/')[-1]  # Keep .json extension
-                        dataset_info['endpoint'] = endpoint
-
             datasets.append(dataset_info)
-
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in file '{filename}': {e}")
+            
         except Exception as e:
-            logger.exception(f"Error loading dataset '{filename}': {e}")
+            logger.error(f"Error processing file {filename}: {e}")
+            continue
 
-    # Sort datasets: items with report_category first, then remaining items by category
-    datasets.sort(
-        key=lambda x: (
-            x['report_category'] is None,  # False (has report_category) comes before True (no report_category)
-            x['report_category'] if x['report_category'] is not None else '',  # Sort by report_category if it exists
-            x['category'] if x['report_category'] is None else '',  # Sort by category for items without report_category
-            x['rows_updated_dt'] if x['rows_updated_dt'] else datetime.min
-        )
-    )
+    # Sort datasets:
+    # 1. Has output files (True before False)
+    # 2. Category
+    # 3. Last run time (most recent first)
+    datasets.sort(key=lambda x: (
+        not x['has_output'],  # False sorts after True
+        x['report_category'] if x['has_fixed'] else x['category'],
+        -(x['last_run'] or 0)  # Use 0 for None values, negative for descending order
+    ))
 
-    logger.info(f"Total datasets loaded: {len(datasets)}")
     return datasets
 
 
@@ -261,78 +218,32 @@ def get_md_file_date(output_files):
     return latest_date
 
 
-@app.get("/backend")
-async def backend(request: Request):
-    logger.info("Received request for /backend endpoint")
-    datasets_info = load_and_sort_json()
-    logger.debug(f"Loaded {len(datasets_info)} datasets")
+@router.get("/")
+async def backend_root(request: Request):
+    """Serve the backend interface."""
+    logger.debug("Backend root route called")
+    if templates is None:
+        logger.error("Templates not initialized in backend router")
+        raise RuntimeError("Templates not initialized")
+    
+    # Load datasets here
+    try:
+        datasets = load_and_sort_json()
+        logger.debug(f"Loaded {len(datasets)} datasets")
+    except Exception as e:
+        logger.error(f"Error loading datasets: {e}")
+        datasets = []
 
-    # Build output links for each dataset and check for MD/HTML files
-    for dataset in datasets_info:
-        endpoint = dataset['endpoint']
-        output_files = find_output_files_for_endpoint(endpoint, output_dir)
-        
-        # Build URLs - handle the nested structure
-        links = {}
-        has_analysis = False
-        for folder, files in output_files.items():
-            folder_links = {}
-            for file_type, file_path in files.items():
-                if isinstance(file_path, str):
-                    url = get_output_file_url(file_path, output_dir)
-                    if url:
-                        folder_links[file_type] = url
-                        if file_type in ['md', 'html']:
-                            has_analysis = True
-            if folder_links:
-                links[folder] = folder_links
-        
-        dataset['output_links'] = links
-        dataset['has_analysis'] = has_analysis
-        
-        # Get last run date from MD/HTML files if they exist
-        if has_analysis:
-            last_run_date = get_md_file_date(output_files)
-            if last_run_date:
-                dataset['last_run_date'] = last_run_date
-                dataset['last_run_str'] = last_run_date.strftime('%y.%m.%d')
-            else:
-                dataset['last_run_date'] = None
-                dataset['last_run_str'] = 'N/A'
-        else:
-            dataset['last_run_date'] = None
-            dataset['last_run_str'] = 'N/A'
-
-    # Sort datasets with the new priority
-    datasets_info.sort(
-        key=lambda d: (
-            not d['has_analysis'],  # True (has analysis) comes first
-            not d['has_fixed'],     # Then by fixed status
-            d['report_category'] is None,  # Then by report category presence
-            d['report_category'] if d['report_category'] is not None else '',
-            d['category'] if d['report_category'] is None else '',
-            d['last_run_date'] if d['last_run_date'] else datetime.min
-        )
-    )
-
-    # Add sidebar_buttons to the template context
-    sidebar_buttons = [
-        {"id": "analyze-checked-btn", "text": "Analyze Checked"},
-        {"id": "reload-vector-db-btn", "text": "Reload Vector DB"},
-        {"id": "summarize-posts-btn", "text": "Summarize Posts"}
-    ]
-
-    logger.info("Rendering 'backend.html' template with dataset information")
-    return templates.TemplateResponse('backend.html', {
-        "request": request, 
-        "datasets": datasets_info,
-        "sidebar_buttons": sidebar_buttons
+    logger.debug("Serving backend.html template")
+    return templates.TemplateResponse("backend.html", {
+        "request": request,
+        "datasets": datasets
     })
 
 
-@app.get("/prep-data/{filename}")
+@router.get("/prep-data/{filename}")
 async def prep_data(filename: str):
-    logger.info(f"Received request to prep data for file: '{filename}'")
+    logger.debug(f"Prep data called for filename: {filename}")
     current_dir = os.path.dirname(__file__)
     datasets_folder = os.path.join(current_dir, 'data', 'datasets')
     output_folder = os.path.join(current_dir, 'data', 'datasets/fixed')
@@ -366,10 +277,10 @@ async def prep_data(filename: str):
         return JSONResponse({'status': 'error', 'message': str(e)})
 
 
-@app.get("/run_analysis/{endpoint}")
+@router.get("/run_analysis/{endpoint}")
 async def run_analysis(endpoint: str):
     """Run analysis for a given endpoint."""
-    logger.info(f"Received request to run analysis for endpoint: '{endpoint}'")
+    logger.debug(f"Run analysis called for endpoint: {endpoint}")
     
     # Remove .json extension if present
     endpoint = endpoint.replace('.json', '')
@@ -398,15 +309,32 @@ async def run_analysis(endpoint: str):
         return JSONResponse({'status': 'error', 'message': str(e)})
 
 
-@app.get("/get-updated-links/{endpoint}")
+@router.get("/get-updated-links/{endpoint}")
 async def get_updated_links(endpoint: str):
-    """
-    Returns the updated output links for a single endpoint.
-    """
-    logger.debug(f"Getting updated links for endpoint: {endpoint}")
-    # Remove .json extension if present to match how files are stored
-    endpoint = endpoint.replace('.json', '')
-    logger.debug(f"Cleaned endpoint: {endpoint}")
+    """Returns the updated output links for a single endpoint."""
+    logger.debug(f"Get updated links called for endpoint: {endpoint}")
+    
+    # Get the absolute path to the output directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.join(script_dir, 'output')
+    logger.debug(f"Looking for files in output directory: {output_dir}")
+    
+    # Verify directory exists and is accessible
+    if not os.path.exists(output_dir):
+        logger.error(f"Output directory does not exist: {output_dir}")
+        return JSONResponse({'links': {}, 'message': 'Output directory not found'})
+    
+    if not os.path.isdir(output_dir):
+        logger.error(f"Output path exists but is not a directory: {output_dir}")
+        return JSONResponse({'links': {}, 'message': 'Invalid output directory'})
+    
+    try:
+        # List directory contents
+        dir_contents = os.listdir(output_dir)
+        logger.debug(f"Output directory contents: {dir_contents}")
+    except Exception as e:
+        logger.error(f"Error reading output directory: {str(e)}")
+        return JSONResponse({'links': {}, 'message': f'Error reading output directory: {str(e)}'})
     
     output_files = find_output_files_for_endpoint(endpoint, output_dir)
     logger.debug(f"Found output files: {json.dumps(output_files, indent=2)}")
@@ -415,11 +343,10 @@ async def get_updated_links(endpoint: str):
     for folder, files in output_files.items():
         folder_links = {}
         for file_type, file_path in files.items():
-            if isinstance(file_path, str):
-                url = get_output_file_url(file_path, output_dir)
-                if url:
-                    folder_links[file_type] = url
-                    logger.debug(f"Added URL for {file_type}: {url}")
+            url = get_output_file_url(file_path, output_dir)
+            if url:
+                folder_links[file_type] = url
+                logger.debug(f"Added URL for {file_type}: {url}")
         if folder_links:
             links[folder] = folder_links
     
@@ -428,11 +355,12 @@ async def get_updated_links(endpoint: str):
 
 
 # --- ADDED: Route to reload vector DB
-@app.get("/reload_vector_db")
+@router.get("/reload_vector_db")
 async def reload_vector_db():
     """
     Reload the vector DB by running the script load_analysis2vec.py with no params.
     """
+    logger.debug("Reload vector DB called")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         script_path = os.path.join(script_dir, "vector_loader.py")
@@ -456,9 +384,10 @@ async def reload_vector_db():
         return JSONResponse({"status": "error", "message": str(e)})
 
 
-@app.get("/dataset-json/{filename:path}")
+@router.get("/dataset-json/{filename:path}")
 async def get_dataset_json(filename: str):
     """Serve the JSON file for a dataset."""
+    logger.debug(f"Get dataset JSON called for filename: {filename}")
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Remove any leading '../' from the filename for security
@@ -478,9 +407,10 @@ async def get_dataset_json(filename: str):
     )
 
 
-@app.get("/endpoint-json/{endpoint}")
+@router.get("/endpoint-json/{endpoint}")
 async def get_endpoint_json(endpoint: str):
     """Serve the JSON file for an endpoint's analysis results."""
+    logger.debug(f"Get endpoint JSON called for endpoint: {endpoint}")
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         results_dir = os.path.join(current_dir, 'output')  # Changed from analysis_map/individual_results
@@ -514,11 +444,12 @@ async def get_endpoint_json(endpoint: str):
 
 
 # Add new endpoint for summarizing posts
-@app.get("/summarize_posts")
+@router.get("/summarize_posts")
 async def summarize_posts():
     """
     Run the summarize posts script.
     """
+    logger.debug("Summarize posts called")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         script_path = os.path.join(script_dir, "summarize_posts.py")
@@ -540,9 +471,3 @@ async def summarize_posts():
     except Exception as e:
         logger.exception(f"Error summarizing posts: {str(e)}")
         return JSONResponse({"status": "error", "message": str(e)})
-
-
-if __name__ == '__main__':
-    import uvicorn
-    logger.info("Starting FastAPI application")
-    uvicorn.run(app, host="0.0.0.0", port=8000)

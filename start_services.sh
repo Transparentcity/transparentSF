@@ -22,8 +22,8 @@ wait_for_service() {
 
 # Kill existing processes
 pkill -f qdrant
-pkill -f backend.py
-pkill -f webChat.py
+pkill -f main.py
+
 
 cd ai
 
@@ -43,14 +43,13 @@ wait_for_service "http://0.0.0.0:6333/healthz" "Qdrant"
 # fi
 
 # Start backend and wait for it
-echo "Starting backend..."
-python backend.py > logs/backend.log 2>&1 &
+echo "Starting Main..."
+python main.py > logs/main.log 2>&1 &
 wait_for_service "http://0.0.0.0:8000/backend" "Backend"
 
 # Start frontend and wait for it
-echo "Starting frontend..."
-python webChat.py > logs/webChat.log 2>&1 &
-wait_for_service "http://0.0.0.0:8001/" "Frontend"
+echo "Checking frontend..."
+wait_for_service "http://0.0.0.0:80010" "Frontend"
 
 # Keep script running to maintain processes
 wait

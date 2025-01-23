@@ -15,7 +15,7 @@ from tools.retirementdata import read_csv_with_encoding
 from tools.genGhostPost import generate_ghost_post
 from pathlib import Path
 # Import FastAPI and related modules
-from fastapi import FastAPI, Request, Cookie
+from fastapi import APIRouter, Request, Cookie
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -32,14 +32,14 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     raise ValueError("OpenAI API key not found in environment variables.")
 
-# Initialize FastAPI app
-app = FastAPI()
+# Initialize APIRouter
+router = APIRouter()
 
 # Serve static files and templates
 # Create static directory if it doesn't exist
 if not os.path.exists("static"):
     os.makedirs("static")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+router.mount("/static", StaticFiles(directory="static"), name="static")
 # Mount the static directory
 templates = Jinja2Templates(directory="templates")
 
@@ -632,7 +632,7 @@ Researcher_agent = Agent(
     name="Researcher",
      instructions="""
         Role: You are a reporter for Anomalous SF, focusing on overlooked trends in city data.
-        Purpose: Use query_docs() to find objective details—avoid speculating on causes or using value terms (like “good” or “bad”). Report the “what,” not the “why.”
+        Purpose: Use query_docs() to find objective details—avoid speculating on causes or using value terms (like "good" or "bad"). Report the "what," not the "why."
         Examples: Instead of just saying property crime is down, highlight specifics (e.g., auto theft down 40% from a 2-year average).
         Data Categories: Public Safety, City Management and Ethics, Health, Housing, Drugs, Homelessness, etc.
         Deliverables:
@@ -961,42 +961,35 @@ async def generate_response(user_input, session_data):
 
     logger.info("generate_response completed")
 
-@app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
-@app.post("/api/chat")
+@router.post("/api/chat")
 async def chat(request: Request, session_id: str = Cookie(None)):
-    data = await request.json()
-    user_input = data.get("query")
+    logger.debug("Chat endpoint called")
+    try:
+        data = await request.json()
+        user_input = data.get("query")
+        logger.debug(f"Received query: {user_input}")
 
-    # Retrieve or create session data
-    if session_id is None or session_id not in sessions:
-        # Create new session
-        session_id = str(uuid.uuid4())
-        sessions[session_id] = {
-            "messages": [],
-            "agent": Researcher_agent,  # Start with analyst
-            "context_variables": {"dataset": combined_df["dataset"],"notes": combined_notes}
-        }
+        # Get or create session data
+        if session_id is None or session_id not in sessions:
+            session_id = str(uuid.uuid4())
+            sessions[session_id] = {
+                "messages": [],
+                "agent": Researcher_agent,
+                "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
+            }
 
-    session_data = sessions[session_id]
+        session_data = sessions[session_id]
 
-    # Create StreamingResponse
-    response = StreamingResponse(
-        generate_response(user_input, session_data),
-        media_type="text/plain"
-    )
+        # Create StreamingResponse
+        response = StreamingResponse(
+            generate_response(user_input, session_data),
+            media_type="text/plain"
+        )
 
-    # Set the session_id as a cookie
-    response.set_cookie(key="session_id", value=session_id)
+        # Set the session_id as a cookie
+        response.set_cookie(key="session_id", value=session_id)
 
-    return response
-
-# ------------------------------------
-# Run the App with Uvicorn
-# ------------------------------------
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("webChat:app", host="0.0.0.0", port=8001, reload=True)
+        return response
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+        raise
