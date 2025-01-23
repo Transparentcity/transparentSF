@@ -276,6 +276,7 @@
             <h2>Actions</h2>
             <button id="analyze-checked-btn">Analyze Checked</button>
             <button id="reload-vector-db-btn">Reload Vector DB</button>
+            <button id="summarize-posts-btn">Summarize Posts</button>
         </div>
 
         <!-- Main content area -->
@@ -580,6 +581,30 @@
                     // Remove loading state
                     reloadDBBtn.classList.remove('loading');
                     reloadDBBtn.disabled = false;
+                }
+            });
+
+            // *** SUMMARIZE POSTS BUTTON LOGIC ***
+            const summarizePostsBtn = document.getElementById('summarize-posts-btn');
+            summarizePostsBtn.addEventListener('click', async () => {
+                // Add loading state
+                summarizePostsBtn.classList.add('loading');
+                summarizePostsBtn.disabled = true;
+                
+                try {
+                    const resp = await fetch('/summarize_posts');
+                    const data = await resp.json();
+                    if (data.status === 'success') {
+                        alert('Posts summarized successfully!');
+                    } else {
+                        alert('Error summarizing posts: ' + data.message);
+                    }
+                } catch (error) {
+                    alert('Failed to summarize posts: ' + error.message);
+                } finally {
+                    // Remove loading state
+                    summarizePostsBtn.classList.remove('loading');
+                    summarizePostsBtn.disabled = false;
                 }
             });
 

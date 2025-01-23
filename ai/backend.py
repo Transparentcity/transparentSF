@@ -44,30 +44,47 @@ logger.info(f"Mounted '/output' to serve static files from '{output_dir}'")
 
 
 def find_output_files_for_endpoint(endpoint: str, output_dir: str):
-    """
-    Search the output directory and its subdirectories for files matching the endpoint.
-    Returns a dict with keys being subfolder paths and values being dicts of file types.
-    """
+    """Search the output directory for files matching the endpoint."""
+    logger.debug(f"Searching for files matching endpoint '{endpoint}' in directory: {output_dir}")
     output_files = {}
-    logger.debug(f"Searching for output files for endpoint: '{endpoint}' in '{output_dir}'")
     
     for root, dirs, files in os.walk(output_dir):
+        logger.debug(f"Scanning directory: {root}")
+        logger.debug(f"Found files: {files}")
+        
         matching_files = {}
+        latest_timestamp = 0
+        
+        # Find the most recent file of each type
         for file in files:
             if endpoint in file:
-                logger.debug(f"Found file matching endpoint: '{file}' in '{root}'")
+                file_path = os.path.join(root, file)
+                logger.debug(f"Found matching file: {file_path}")
+                file_timestamp = os.path.getmtime(file_path)
+                logger.debug(f"File timestamp: {datetime.fromtimestamp(file_timestamp)}")
+                
                 if file.endswith('.html'):
-                    matching_files['html'] = os.path.join(root, file)
+                    if 'html' not in matching_files or file_timestamp > latest_timestamp:
+                        matching_files['html'] = file_path
+                        latest_timestamp = file_timestamp
+                        logger.debug(f"Updated latest HTML file: {file_path}")
                 elif file.endswith('.md'):
-                    matching_files['md'] = os.path.join(root, file)
+                    if 'md' not in matching_files or file_timestamp > latest_timestamp:
+                        matching_files['md'] = file_path
+                        latest_timestamp = file_timestamp
+                        logger.debug(f"Updated latest MD file: {file_path}")
                 elif file.endswith('_assistant_reply.txt'):
-                    matching_files['txt'] = os.path.join(root, file)
+                    if 'txt' not in matching_files or file_timestamp > latest_timestamp:
+                        matching_files['txt'] = file_path
+                        latest_timestamp = file_timestamp
+                        logger.debug(f"Updated latest TXT file: {file_path}")
         
         if matching_files:
-            # Use the relative path from output_dir as the key
             rel_path = os.path.relpath(root, output_dir)
             output_files[rel_path] = matching_files
+            logger.debug(f"Added matching files for path {rel_path}: {matching_files}")
 
+    logger.debug(f"Final output files found: {json.dumps(output_files, indent=2)}")
     return output_files
 
 
@@ -301,7 +318,8 @@ async def backend(request: Request):
     # Add sidebar_buttons to the template context
     sidebar_buttons = [
         {"id": "analyze-checked-btn", "text": "Analyze Checked"},
-        {"id": "reload-vector-db-btn", "text": "Reload Vector DB"}
+        {"id": "reload-vector-db-btn", "text": "Reload Vector DB"},
+        {"id": "summarize-posts-btn", "text": "Summarize Posts"}
     ]
 
     logger.info("Rendering 'backend.html' template with dataset information")
@@ -383,13 +401,16 @@ async def run_analysis(endpoint: str):
 @app.get("/get-updated-links/{endpoint}")
 async def get_updated_links(endpoint: str):
     """
-    Returns the updated output links for a single endpoint. Helps the front-end
-    refresh the row's output links after an operation.
+    Returns the updated output links for a single endpoint.
     """
+    logger.debug(f"Getting updated links for endpoint: {endpoint}")
     # Remove .json extension if present to match how files are stored
     endpoint = endpoint.replace('.json', '')
+    logger.debug(f"Cleaned endpoint: {endpoint}")
     
     output_files = find_output_files_for_endpoint(endpoint, output_dir)
+    logger.debug(f"Found output files: {json.dumps(output_files, indent=2)}")
+    
     links = {}
     for folder, files in output_files.items():
         folder_links = {}
@@ -398,8 +419,11 @@ async def get_updated_links(endpoint: str):
                 url = get_output_file_url(file_path, output_dir)
                 if url:
                     folder_links[file_type] = url
+                    logger.debug(f"Added URL for {file_type}: {url}")
         if folder_links:
             links[folder] = folder_links
+    
+    logger.debug(f"Returning links: {json.dumps(links, indent=2)}")
     return JSONResponse({'links': links})
 
 
@@ -487,6 +511,35 @@ async def get_endpoint_json(endpoint: str):
     except Exception as e:
         logger.exception(f"Error serving endpoint JSON for '{endpoint}': {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Add new endpoint for summarizing posts
+@app.get("/summarize_posts")
+async def summarize_posts():
+    """
+    Run the summarize posts script.
+    """
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(script_dir, "summarize_posts.py")
+        result = subprocess.run(["python", script_path], capture_output=True, text=True)
+        if result.returncode == 0:
+            logger.info("Posts summarized successfully.")
+            return JSONResponse({
+                "status": "success",
+                "message": "Posts summarized successfully.",
+                "output": result.stdout
+            })
+        else:
+            logger.error(f"Failed to summarize posts: {result.stderr}")
+            return JSONResponse({
+                "status": "error",
+                "message": "Failed to summarize posts.",
+                "output": result.stderr
+            })
+    except Exception as e:
+        logger.exception(f"Error summarizing posts: {str(e)}")
+        return JSONResponse({"status": "error", "message": str(e)})
 
 
 if __name__ == '__main__':
