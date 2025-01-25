@@ -993,3 +993,16 @@ async def chat(request: Request, session_id: str = Cookie(None)):
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
         raise
+
+@router.post("/api/reset")
+async def reset_conversation(session_id: str = Cookie(None)):
+    """Reset the conversation state for the current session."""
+    if session_id and session_id in sessions:
+        # Reinitialize the session with default values
+        sessions[session_id] = {
+            "messages": [],
+            "agent": Researcher_agent,  # Reset to default agent
+            "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
+        }
+        return {"status": "success"}
+    return {"status": "error", "message": "No active session found"}

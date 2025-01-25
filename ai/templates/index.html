@@ -46,6 +46,7 @@
                 font-size: 2em;
                 margin-bottom: 20px;
                 text-align: center;
+                position: relative; /* Add this to position the new chat button */
             }
 
             #chat-container {
@@ -392,6 +393,20 @@
                 border: none;
                 background: #ffffff;
             }
+
+            /* Add new chat button styles */
+            #newChatButton {
+                position: absolute;
+                left: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                background: none;
+                border: none;
+                font-size: 1.5em;
+                cursor: pointer;
+                padding: 5px 10px;
+                color: #999;
+            }
         </style>
     </head>
     <body>
@@ -412,7 +427,10 @@
             <button id="logout" class="btn" onclick="logout()">Logout</button>
             <div class="main">
                 <div class="chat">
-                    <h1>Transparent SF Agent Chat</h1>
+                    <h1>
+                        <button id="newChatButton" title="Start new chat">+</button>
+                        Transparent SF Agent Chat
+                    </h1>
                     <div id="chat-container">
                         <div id="response-area"></div>
                         <div
@@ -876,6 +894,24 @@
 
             // Prevent access to chat interface through console
             setInterval(checkLoginStatus, 1000);
+
+            // Update the new chat button click handler
+            document.getElementById('newChatButton').addEventListener('click', async function() {
+                responseArea.innerHTML = ''; // Clear all messages
+                currentAIMessage = null; // Reset current AI message
+                
+                // Call the server to reset the conversation
+                try {
+                    await fetch('/chat/api/reset', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                } catch (error) {
+                    console.error('Failed to reset conversation:', error);
+                }
+            });
         </script>
     </body>
 </html>

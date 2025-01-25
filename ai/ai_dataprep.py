@@ -7,6 +7,7 @@ from dateutil.parser import parse as parse_date
 import pytz  # Add this for timezone handling
 from swarm import Swarm, Agent
 from dateutil.parser import parse as parse_date
+import traceback
 
 # Set key variables 
 # Load environment variables
@@ -90,164 +91,82 @@ def process_single_file(filename, datasets_folder, output_folder, threshold_date
     """
     Process a single file from the datasets folder.
     """
-    individual_results_dir = os.path.join(output_folder)
-    os.makedirs(individual_results_dir, exist_ok=True)
-
-    article_path = os.path.join(datasets_folder, filename)
-    print(f"\nProcessing file: {filename}")
-
-    # Load JSON data to extract 'endpoint' before determining the result filename
     try:
-        with open(article_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        print(f"JSON decode error in file {filename}: {e}")
-        error_log.append({'filename': filename, 'error': str(e)})
-        return
-    except Exception as e:
-        print(f"Error reading file {filename}: {e}")
-        error_log.append({'filename': filename, 'error': str(e)})
-        return
+        individual_results_dir = os.path.join(output_folder)
+        os.makedirs(individual_results_dir, exist_ok=True)
 
-    # Extract 'endpoint' field
-    endpoint = data.get('endpoint', None)
-    if not endpoint:
-        print(f"'endpoint' field missing in file {filename}. Skipping file.")
-        error_log.append({'filename': filename, 'error': "'endpoint' field missing."})
-        return
+        article_path = os.path.join(datasets_folder, filename)
+        print(f"\nProcessing file: {filename}")
 
-    # Sanitize the 'endpoint' to create a safe filename
-    sanitized_endpoint = sanitize_filename(endpoint)
-    if not sanitized_endpoint:
-        print(f"Sanitized 'endpoint' is empty for file {filename}. Skipping file.")
-        error_log.append({'filename': filename, 'error': "Sanitized 'endpoint' is empty."})
-        return
-
-    # Define the result filename based on the sanitized 'endpoint'
-    result_filename = f"{sanitized_endpoint}.json"
-    result_path = os.path.join(individual_results_dir, result_filename)
-
-    if os.path.exists(result_path):
+        # Load JSON data to extract 'endpoint' before determining the result filename
         try:
-            os.remove(result_path)
-        except OSError as e:
-            print(f"Error removing existing file {result_path}: {e}")
+            with open(article_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            error_msg = f"JSON decode error in input file {filename}: {str(e)}"
+            print(error_msg)
+            error_log.append({'filename': filename, 'error': error_msg, 'phase': 'input_file_reading'})
+            return
+        except Exception as e:
+            error_msg = f"Error reading input file {filename}: {str(e)}"
+            print(error_msg)
+            error_log.append({'filename': filename, 'error': error_msg, 'phase': 'input_file_reading'})
             return
 
-    # Continue processing the file as before
-    # Check 'rows_updated_at' and threshold
-    rows_updated_at = data.get("rows_updated_at", None)
+        # Extract 'endpoint' field
+        endpoint = data.get('endpoint', None)
+        if not endpoint:
+            print(f"'endpoint' field missing in file {filename}. Skipping file.")
+            error_log.append({'filename': filename, 'error': "'endpoint' field missing."})
+            return
 
-    try:
-        updated_at_date = parse_date(rows_updated_at)
-        if updated_at_date.tzinfo is None:
-            updated_at_date = updated_at_date.replace(tzinfo=pytz.UTC)
+        # Sanitize the 'endpoint' to create a safe filename
+        sanitized_endpoint = sanitize_filename(endpoint)
+        if not sanitized_endpoint:
+            print(f"Sanitized 'endpoint' is empty for file {filename}. Skipping file.")
+            error_log.append({'filename': filename, 'error': "Sanitized 'endpoint' is empty."})
+            return
 
-        # if updated_at_date <= threshold_date:
-        #     print(f"File '{filename}' skipped: 'rows_updated_at' is not after {threshold_date}.")
-        #     return
-    except Exception as e:
-        print(f"Error parsing 'rows_updated_at' for file '{filename}': {e}")
-        error_log.append({'filename': filename, 'error': str(e)})
-        return
+        # Define the result filename based on the sanitized 'endpoint'
+        result_filename = f"{sanitized_endpoint}.json"
+        result_path = os.path.join(individual_results_dir, result_filename)
 
-    # Extract dataset details
-    title = data.get('title', 'Untitled')
-    description = data.get('description', '')
-    columns = [{
-        'fieldName': col['fieldName'],
-        'description': col.get('description', ''),
-        'dataTypeName': col.get('dataTypeName', '')
-    } for col in data.get('columns', []) if 'fieldName' in col]
-    columns_formatted = format_columns(columns)
+        if os.path.exists(result_path):
+            try:
+                os.remove(result_path)
+            except OSError as e:
+                print(f"Error removing existing file {result_path}: {e}")
+                return
 
-    # Prepare AI prompt
-    user_message = f"""
-    Here is the dataset information:
-    Title: {title}
-    Endpoint: {endpoint}
-    Description:
-    {description}
-    Columns:
-    {columns_formatted}
-    """
-    # Construct the prompt
-    system_message = """
-          You are an AI assistant that generates working API queries and categorizes datasets for analysis.  We are looking to find anomalous trends within the dataset.  Trends are spoting by comparing sums or averages over time by category.  So we are looking for data that updates reugularrly, has at least one time series variable and at least one numeric variable.  Often with city datasets, the numeric variable we need is actually just a count of the number of items by month (like for police or fire reports).
+        # Continue processing the file as before
+        # Check 'rows_updated_at' and threshold
+        rows_updated_at = data.get("rows_updated_at", None)
 
-            Your task is:
+        try:
+            updated_at_date = parse_date(rows_updated_at)
+            if updated_at_date.tzinfo is None:
+                updated_at_date = updated_at_date.replace(tzinfo=pytz.UTC)
 
-            - Given dataset information (title, description, columns), generate a set of working API queries, one for monthly analysis, one for annaul with an endpoint and query that will work.
-              The field name syou will select and return are the ones that are the output of the query, not the input, so if you use a date_field called _added_date, but select it as a trunc_ym(_added_date) as month, then you would use the fieldname month. 
-              Whenever selecting fields always take the value of the fieldName key, NOT the name key.
-              Construct a SoQL query that selects the following:
-              Date Fields = at least one date field.  Choose the one that is most likely to be of use to an analyst looking at patterns in San Francisco.  In many cases there won't be a date field per-se, but rather a text field like "year" or "taxyear", etc.  If so, those are perfectly good date fields.  If you can't decide, you can take a few different date fields.  Data should be aggregated and grouped by month by default, but if the date fiels if obviosuly for a year, then use year.   Make sure the field name you return matches the one you names in the query.  In the query, if you queried for date_trunc_ym(report_datetime) AS month, then use the name Month here, not date_trunc_ym(report_datetime).
-              Numeric Fields You also need at least one numeric field, use sum() to aggregate when grouping.  If you can't see an interesting numeric field, then use count(*) in the query and call that field 'item_count'. If you do that be sure to add 'item_count' to the numericFields you return.
-              Category Fields It should alse include a few category fields that will allow you to breakdown the data into useful groups.  Prefer fields that have names as opposed to ids if you see both. 
-              Where clause - Include a where clause that filters for only data from "start_date" forward.  We will swap that out with the actual start date when we run the query.
-              
-              Location Fields - If there are fields that indicate locations like supervisor district, neighborhood, zip code, etc, include them in this list of location fields and include them in the query. 
-              
-              Remember to use _ characters instead of spaces in field names
-              
-              Remember to use column functions like date_trunc_y() or date_trunc_ym() for date grouping.
-              
-                    A SELECT clause with the desired columns.
-                    A WHERE clause with exact dates and specified conditions.
-                    GROUP BY, ORDER BY clauses as needed.
-                    THERE SHOULD NEVER BE A FROM clause in the query.
-                    Validate that all columns used in the query exist in the dataset's schema.
-                    Make sure the query is properly URL-encoded when needed.
+            # if updated_at_date <= threshold_date:
+            #     print(f"File '{filename}' skipped: 'rows_updated_at' is not after {threshold_date}.")
+            #     return
+        except Exception as e:
+            print(f"Error parsing 'rows_updated_at' for file '{filename}': {e}")
+            error_log.append({'filename': filename, 'error': str(e)})
+            return
 
-                    
-            - report_category: Categorize the dataset into one of the following categories: Safety, Health, Economy, Housing, Education, Transportation, Other.
-            - usefulness: Estimate the usefullness on a scale of 1-3 (1=least useful, 3=most useful) for an monthly analysis of trends happening in San Francisco.
-            - periodic: Boolean: yes if this is the kind of data with constant new entries like police reports, or is it a lookup table like a list of departments or a rarely changing stock, like stop sign locations or wireless cariiers.  
-            - item_noun - Rows in this table are what?  In the example abovethey are Police Incident Reports. 
-            - district_level: Boolean: yes if this is the kind of data with constant new entries like police reports, or is it a lookup table like a list of departments or a rarely changing stock, like stop sign locations or wireless cariiers.  
-            - whom_it_may_interest: Explain who would be interested in this data and why.
-            - data_validated: Boolean: yes if the data has been validated by the city, no if it is raw data.
-            - queries: A dictionary with two keys, 'Monthly' and 'Yearly', each with a SoQL query as the value.
+        # Extract dataset details
+        title = data.get('title', 'Untitled')
+        description = data.get('description', '')
+        columns = [{
+            'fieldName': col['fieldName'],
+            'description': col.get('description', ''),
+            'dataTypeName': col.get('dataTypeName', '')
+        } for col in data.get('columns', []) if 'fieldName' in col]
+        columns_formatted = format_columns(columns)
 
-            Please provide the output in JSON format, with keys 'DateFields' 'NumericFields' 'CategoryFields' 'LocationFields' 'endpoint', 'query',  'report_category',  'usefulness', 'periodic', 'district_level', 'item_noun', 'whom_it_may_interest'.  The 'DateFields', 'NumericFields', and 'CategoryFields' keys should contain lists of OUTPUT field names, meaning the ones that the query will return. 
-            The 'endpoint' and 'query' keys should contain the API endpoint and the SoQL query, respectively.  The 'report_category' key should contain the category name.  The 'usefulness' key should contain the usefulness estimate.
-
-            Ensure that the query is a valid SoQL query, and that the endpoint is correct (the dataset identifier).
-            Remember no from clause. 
-            
-            Here's an example: 
-            {"usefulness": 3,
-            "report_category": "Safety",
-            "NumericFields": [
-                "incident_count"
-            ],
-            "CategoryFields": [
-                "grouped_category",
-                "Incident_Category",
-                "Incident_Subcategory",
-                "Police_District",
-                "supervisor_district"
-            ],
-            "DateFields": [
-                "month"
-            ],
-            "LocationFields": [
-                "supervisor_district"
-            ],
-            "periodic": true,
-            "district_level": true,
-            "whom_it_may_interest": "Data Analysts, Public Safety Officials, Policy Makers, Researchers studying crime patterns and public safety trends, and Citizens concerned with neighborhood safety",
-            "data_validated": true,
-            "item_noun": "police incident reports",
-            "queries": {
-                "Monthly": "SELECT Incident_Category, Incident_Subcategory, supervisor_district, CASE WHEN Incident_Category IN ('Assault', 'Homicide', 'Rape', 'Robbery', 'Human Trafficking (A), Commercial Sex Acts', 'Human Trafficking, Commercial Sex Acts', 'Human Trafficking (B), Involuntary Servitude', 'Offences Against The Family And Children', 'Weapons Carrying Etc', 'Weapons Offense', 'Weapons Offence') THEN 'Violent Crime' WHEN Incident_Category IN ('Arson', 'Burglary', 'Forgery And Counterfeiting', 'Fraud', 'Larceny Theft', 'Motor Vehicle Theft', 'Motor Vehicle Theft?', 'Stolen Property', 'Vandalism', 'Embezzlement', 'Recovered Vehicle', 'Vehicle Impounded', 'Vehicle Misplaced') THEN 'Property Crime' WHEN Incident_Category IN ('Drug Offense', 'Drug Violation') THEN 'Drug Crimes' ELSE 'Other Crimes' END AS grouped_category, Report_Type_Description, Police_District, date_trunc_ym(Report_Datetime) AS month, COUNT(*) AS incident_count WHERE Report_Datetime >= start_date GROUP BY supervisor_district, grouped_category, Report_Type_Description, Police_District, Incident_Category, Incident_Subcategory, month ORDER BY month, grouped_category",
-                "Yearly": "SELECT Incident_Category, Incident_Subcategory, supervisor_district, CASE WHEN Incident_Category IN ('Assault', 'Homicide', 'Rape', 'Robbery', 'Human Trafficking (A), Commercial Sex Acts', 'Human Trafficking, Commercial Sex Acts', 'Human Trafficking (B), Involuntary Servitude', 'Offences Against The Family And Children', 'Weapons Carrying Etc', 'Weapons Offense', 'Weapons Offence') THEN 'Violent Crime' WHEN Incident_Category IN ('Arson', 'Burglary', 'Forgery And Counterfeiting', 'Fraud', 'Larceny Theft', 'Motor Vehicle Theft', 'Motor Vehicle Theft?', 'Stolen Property', 'Vandalism', 'Embezzlement', 'Recovered Vehicle', 'Vehicle Impounded', 'Vehicle Misplaced') THEN 'Property Crime' WHEN Incident_Category IN ('Drug Offense', 'Drug Violation') THEN 'Drug Crimes' ELSE 'Other Crimes' END AS grouped_category, Report_Type_Description, Police_District, date_trunc_y(Report_Datetime) AS year, COUNT(*) AS incident_count WHERE Report_Datetime >= start_date GROUP BY supervisor_district, grouped_category, Report_Type_Description, Police_District, Incident_Category, Incident_Subcategory, year ORDER BY year, grouped_category"
-            }
-            }
-            
-            Ensure the output is strictly formatted as valid JSON.  No operators or additioonal characters, Do not include any additional text or explanations outside the JSON block.
-        """
-    user_message = f"""
+        # Prepare AI prompt
+        user_message = f"""
         Here is the dataset information:
         Title: {title}
         Endpoint: {endpoint}
@@ -256,52 +175,177 @@ def process_single_file(filename, datasets_folder, output_folder, threshold_date
         Columns:
         {columns_formatted}
         """
-    # Define the analyst agent
-    analyst_agent = Agent(
-        model=GPT_MODEL,
-        name="Analyst",
-        instructions=system_message,
-        functions=[],
-        debug=True,
-    )
+        # Construct the prompt
+        system_message = """
+              You are an AI assistant that generates working API queries and categorizes datasets for analysis. We are looking to find anomalous trends within the dataset. Trends are spotted by comparing sums or averages over time by category. So we are looking for data that updates regularly, has at least one time series variable and at least one numeric variable. Often with city datasets, the numeric variable we need is actually just a count of the number of items by month (like for police or fire reports).
 
-    messages = [{"role": "user", "content": user_message}]
-    response = client.run(agent=analyst_agent, messages=messages)
-    assistant_reply = response.messages[-1]["content"]
+                Your task is:
 
-    # Extract and validate JSON
-    json_match = re.search(r'\{.*\}', assistant_reply, re.DOTALL)
-    if not json_match:
-        print(f"No JSON content found in the assistant's reply for '{title}'.")
+                - Given dataset information (title, description, columns), generate a set of working API queries, one for monthly analysis, one for annual with an endpoint and query that will work.
+                  
+                  IMPORTANT QUERY SYNTAX RULES:
+                  - Never use type casting with :: syntax
+                  - For numeric conversions, use to_number() function instead
+                  - Date functions available: date_trunc_y(), date_trunc_ym(), date_trunc_ymd()
+                  - Aggregation functions available: sum(), avg(), min(), max(), count()
+                  - Never include a FROM clause
+                  - Always include proper WHERE clause with start_date
+                  - Use proper field names from fieldName property only
+                  
+                  The field names you will select and return are the ones that are the output of the query, not the input, so if you use a date_field called _added_date, but select it as a trunc_ym(_added_date) as month, then you would use the fieldname month.
+                  
+                  Required query components:
+                  - Date Fields: At least one date field, aggregated by month or year
+                  - Numeric Fields: At least one numeric field using sum() or count(*)
+                  - Category Fields: Include useful grouping fields (prefer names over IDs)
+                  - Location Fields: Include geographic/district fields when available
+                  - Where clause: Filter for data from "start_date" forward
+                  
+                - report_category: Categorize the dataset into one of the following categories: Safety, Health, Economy, Housing, Education, Transportation, Other.
+                - usefulness: Estimate the usefullness on a scale of 1-3 (1=least useful, 3=most useful) for an monthly analysis of trends happening in San Francisco.
+                - periodic: Boolean: yes if this is the kind of data with constant new entries like police reports, or is it a lookup table like a list of departments or a rarely changing stock, like stop sign locations or wireless cariiers.  
+                - item_noun - Rows in this table are what?  In the example abovethey are Police Incident Reports. 
+                - district_level: Boolean: yes if this is the kind of data with constant new entries like police reports, or is it a lookup table like a list of departments or a rarely changing stock, like stop sign locations or wireless cariiers.  
+                - whom_it_may_interest: Explain who would be interested in this data and why.
+                - data_validated: Boolean: yes if the data has been validated by the city, no if it is raw data.
+                - queries: A dictionary with two keys, 'Monthly' and 'Yearly', each with a SoQL query as the value.
+
+                Please provide the output in JSON format, with keys 'DateFields' 'NumericFields' 'CategoryFields' 'LocationFields' 'endpoint', 'query',  'report_category',  'usefulness', 'periodic', 'district_level', 'item_noun', 'whom_it_may_interest'.  The 'DateFields', 'NumericFields', and 'CategoryFields' keys should contain lists of OUTPUT field names, meaning the ones that the query will return. 
+                The 'endpoint' and 'query' keys should contain the API endpoint and the SoQL query, respectively.  The 'report_category' key should contain the category name.  The 'usefulness' key should contain the usefulness estimate.
+
+                Ensure that the query is a valid SoQL query, and that the endpoint is correct (the dataset identifier).
+                Remember no from clause. 
+                
+                Here's an example: 
+                {"usefulness": 3,
+                "report_category": "Safety",
+                "NumericFields": [
+                    "incident_count"
+                ],
+                "CategoryFields": [
+                    "grouped_category",
+                    "Incident_Category",
+                    "Incident_Subcategory",
+                    "Police_District",
+                    "supervisor_district"
+                ],
+                "DateFields": [
+                    "month"
+                ],
+                "LocationFields": [
+                    "supervisor_district"
+                ],
+                "periodic": true,
+                "district_level": true,
+                "whom_it_may_interest": "Data Analysts, Public Safety Officials, Policy Makers, Researchers studying crime patterns and public safety trends, and Citizens concerned with neighborhood safety",
+                "data_validated": true,
+                "item_noun": "police incident reports",
+                "queries": {
+                    "Monthly": "SELECT Incident_Category, Incident_Subcategory, supervisor_district, CASE WHEN Incident_Category IN ('Assault', 'Homicide', 'Rape', 'Robbery', 'Human Trafficking (A), Commercial Sex Acts', 'Human Trafficking, Commercial Sex Acts', 'Human Trafficking (B), Involuntary Servitude', 'Offences Against The Family And Children', 'Weapons Carrying Etc', 'Weapons Offense', 'Weapons Offence') THEN 'Violent Crime' WHEN Incident_Category IN ('Arson', 'Burglary', 'Forgery And Counterfeiting', 'Fraud', 'Larceny Theft', 'Motor Vehicle Theft', 'Motor Vehicle Theft?', 'Stolen Property', 'Vandalism', 'Embezzlement', 'Recovered Vehicle', 'Vehicle Impounded', 'Vehicle Misplaced') THEN 'Property Crime' WHEN Incident_Category IN ('Drug Offense', 'Drug Violation') THEN 'Drug Crimes' ELSE 'Other Crimes' END AS grouped_category, Report_Type_Description, Police_District, date_trunc_ym(Report_Datetime) AS month, COUNT(*) AS incident_count WHERE Report_Datetime >= start_date GROUP BY supervisor_district, grouped_category, Report_Type_Description, Police_District, Incident_Category, Incident_Subcategory, month ORDER BY month, grouped_category",
+                    "Yearly": "SELECT Incident_Category, Incident_Subcategory, supervisor_district, CASE WHEN Incident_Category IN ('Assault', 'Homicide', 'Rape', 'Robbery', 'Human Trafficking (A), Commercial Sex Acts', 'Human Trafficking, Commercial Sex Acts', 'Human Trafficking (B), Involuntary Servitude', 'Offences Against The Family And Children', 'Weapons Carrying Etc', 'Weapons Offense', 'Weapons Offence') THEN 'Violent Crime' WHEN Incident_Category IN ('Arson', 'Burglary', 'Forgery And Counterfeiting', 'Fraud', 'Larceny Theft', 'Motor Vehicle Theft', 'Motor Vehicle Theft?', 'Stolen Property', 'Vandalism', 'Embezzlement', 'Recovered Vehicle', 'Vehicle Impounded', 'Vehicle Misplaced') THEN 'Property Crime' WHEN Incident_Category IN ('Drug Offense', 'Drug Violation') THEN 'Drug Crimes' ELSE 'Other Crimes' END AS grouped_category, Report_Type_Description, Police_District, date_trunc_y(Report_Datetime) AS year, COUNT(*) AS incident_count WHERE Report_Datetime >= start_date GROUP BY supervisor_district, grouped_category, Report_Type_Description, Police_District, Incident_Category, Incident_Subcategory, year ORDER BY year, grouped_category"
+                }
+                }
+                
+                Ensure the output is strictly formatted as valid JSON.  No operators or additioonal characters, Do not include any additional text or explanations outside the JSON block.
+            """
+        user_message = f"""
+            Here is the dataset information:
+            Title: {title}
+            Endpoint: {endpoint}
+            Description:
+            {description}
+            Columns:
+            {columns_formatted}
+            """
+        # Define the analyst agent
+        analyst_agent = Agent(
+            model=GPT_MODEL,
+            name="Analyst",
+            instructions=system_message,
+            functions=[],
+            debug=True,
+        )
+
+        messages = [{"role": "user", "content": user_message}]
+        try:
+            response = client.run(agent=analyst_agent, messages=messages)
+            assistant_reply = response.messages[-1]["content"]
+        except Exception as e:
+            error_msg = f"Error getting AI response: {str(e)}"
+            print(error_msg)
+            error_log.append({
+                'filename': filename,
+                'error': error_msg,
+                'phase': 'ai_response'
+            })
+            return
+
+        # Extract and validate JSON with better error handling
+        json_match = re.search(r'\{.*\}', assistant_reply, re.DOTALL)
+        if not json_match:
+            error_msg = f"No JSON content found in the assistant's reply for '{title}'"
+            print(error_msg)
+            error_log.append({
+                'filename': filename,
+                'title': title,
+                'error': error_msg,
+                'phase': 'json_extraction',
+                'assistant_reply': assistant_reply
+            })
+            return
+
+        try:
+            json_content = json_match.group()
+            # Clean up any unquoted boolean values
+            json_content = re.sub(r':\s*(yes|no|true|false)\s*([,}])', 
+                                lambda m: ': ' + 
+                                ('true' if m.group(1).lower() in ('yes', 'true') else 'false') + 
+                                m.group(2), 
+                                json_content, 
+                                flags=re.IGNORECASE)
+            
+            result = json.loads(json_content)
+            result['filename'] = filename
+            result['title'] = title
+
+            # Combine with original file data
+            with open(article_path, 'r', encoding='utf-8') as f:
+                original_data = json.load(f)
+            
+            # Merge original data with new results
+            # result takes precedence in case of duplicate keys
+            combined_result = {**original_data, **result}
+
+            # Ensure boolean values are properly formatted
+            for key in ['periodic', 'district_level', 'data_validated']:
+                if key in combined_result:
+                    if isinstance(combined_result[key], str):
+                        combined_result[key] = combined_result[key].lower() in ('yes', 'true')
+
+            with open(result_path, 'w', encoding='utf-8') as f:
+                json.dump(combined_result, f, indent=4)
+
+            print(f"Successfully processed and saved '{title}' to {result_path}")
+        except json.JSONDecodeError as e:
+            error_msg = f"Invalid JSON in assistant's reply: {str(e)}\nJSON content: {json_content[:100]}..."
+            print(error_msg)
+            error_log.append({
+                'filename': filename,
+                'error': error_msg,
+                'phase': 'json_parsing',
+                'assistant_reply': assistant_reply
+            })
+            return
+
+    except Exception as e:
+        error_msg = f"Unexpected error processing file '{filename}': {str(e)}"
+        print(error_msg)
         error_log.append({
             'filename': filename,
-            'title': title,
-            'error': "No JSON content found in the assistant's reply.",
-            'assistant_reply': assistant_reply
+            'error': error_msg,
+            'phase': 'general',
+            'traceback': traceback.format_exc()
         })
-        return
-
-    try:
-        json_content = json_match.group()
-        result = json.loads(json_content)
-        result['filename'] = filename
-        result['title'] = title
-
-        # Combine with original file data
-        with open(article_path, 'r', encoding='utf-8') as f:
-            original_data = json.load(f)
-        
-        # Merge original data with new results
-        # result takes precedence in case of duplicate keys
-        combined_result = {**original_data, **result}
-
-        with open(result_path, 'w', encoding='utf-8') as f:
-            json.dump(combined_result, f, indent=4)
-
-        print(f"Successfully processed and saved '{title}' to {result_path}")
-    except Exception as e:
-        print(f"Error processing file '{filename}': {e}")
-        error_log.append({'filename': filename, 'error': str(e)})
 
 
 def main(filename=None):

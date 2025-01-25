@@ -391,10 +391,10 @@ async def get_dataset_json(filename: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Remove any leading '../' from the filename for security
-    clean_filename = filename.replace('../', '')
+    clean_filename = filename.lstrip('.').lstrip('/')
     
-    # Add 'data' to the path here instead of expecting it in the URL
-    file_path = os.path.join(current_dir, 'data', clean_filename)
+    # Try the exact path first
+    file_path = os.path.join(current_dir, clean_filename)
     
     if not os.path.exists(file_path):
         logger.error(f"JSON file not found: {file_path}")
