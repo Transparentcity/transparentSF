@@ -80,17 +80,15 @@
     ],
     "publishing_department": "DataSF",
     "rows_updated_at": "2025-01-01T12:40:02Z",
-    "usefulness": 3,
+    "usefulness": 2,
     "report_category": "Economy",
     "NumericFields": [
-        "total_access_count"
+        "interaction_count"
     ],
     "CategoryFields": [
         "access_type",
         "asset_type",
-        "department",
-        "derived",
-        "provenance"
+        "department"
     ],
     "DateFields": [
         "month"
@@ -98,12 +96,12 @@
     "LocationFields": [],
     "periodic": true,
     "district_level": false,
-    "whom_it_may_interest": "Data Analysts, City Officials, Dataset Curators, Open Data Advocates, and Researchers interested in public dataset engagement and usage trends.",
+    "whom_it_may_interest": "Open Data Analysts, City Officials, IT Department, Researchers studying internet engagement and dataset popularity, Community Leaders looking to understand the usage of public data portals",
     "data_validated": true,
     "item_noun": "dataset access records",
     "queries": {
-        "Monthly": "SELECT access_type, asset_type, department, derived, provenance, date_trunc_ym(event_time) AS month, SUM(cast(access_count as integer)) AS total_access_count WHERE event_time >= start_date GROUP BY month, access_type, asset_type, department, derived, provenance ORDER BY month",
-        "Yearly": "SELECT access_type, asset_type, department, derived, provenance, date_trunc_y(event_time) AS year, SUM(cast(access_count as integer)) AS total_access_count WHERE event_time >= start_date GROUP BY year, access_type, asset_type, department, derived, provenance ORDER BY year"
+        "Monthly": "SELECT date_trunc_ym(event_time) AS month, access_type, asset_type, department, SUM(to_number(access_count)) AS interaction_count WHERE event_time >= start_date GROUP BY month, access_type, asset_type, department ORDER BY month, access_type, asset_type",
+        "Yearly": "SELECT date_trunc_y(event_time) AS year, access_type, asset_type, department, SUM(to_number(access_count)) AS interaction_count WHERE event_time >= start_date GROUP BY year, access_type, asset_type, department ORDER BY year, access_type, asset_type"
     },
     "filename": "su99-qvi4.json"
 }

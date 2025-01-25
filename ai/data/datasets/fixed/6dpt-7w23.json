@@ -128,13 +128,12 @@
     "usefulness": 2,
     "report_category": "Economy",
     "NumericFields": [
-       "mid_year_progress_pct",
-       "full_year_progress_pct"
-        
+      "target",
+      "full_year_result",
+      "full_year_progress_pct"
     ],
     "CategoryFields": [
-        "measure_title",
-        "measure_data_type"
+        "measure_title"
     ],
     "DateFields": [
         "year"
@@ -146,8 +145,8 @@
     "data_validated": true,
     "item_noun": "performance metrics",
     "queries": {
-        "Monthly": "SELECT measure_data_type , measure_title, (fiscal_year, 3, 4) AS year, target, mid_year_result, mid_year_projection, full_year_result, (mid_year_result * 200.0 / NULLIF(target, 0)) AS mid_year_progress_pct, (full_year_result * 100.0 / NULLIF(target, 0)) AS full_year_progress_pct WHERE fiscal_year >= start_date GROUP BY measure_data_type, measure_title, year, target, mid_year_result, mid_year_projection, full_year_result ORDER BY measure_data_type, measure_title, year",
-        "Yearly": "SELECT measure_data_type ,  measure_title, SUBSTRING(fiscal_year, 3, 4) AS year, target, mid_year_result, mid_year_projection, full_year_result, (mid_year_result * 200.0 / NULLIF(target, 0)) AS mid_year_progress_pct, (full_year_result * 100.0 / NULLIF(target, 0)) AS full_year_progress_pct WHERE fiscal_year >= start_date GROUP BY measure_data_type, measure_title, year, target, mid_year_result, mid_year_projection, full_year_result ORDER BY measure_data_type, measure_title, year"
+        "Monthly": "SELECT measure_description, measure_methodology, measure_data_type, measure_title, SUBSTRING(fiscal_year, 3, 4) AS year, target, mid_year_result, mid_year_projection, full_year_result, (mid_year_result * 200.0 / NULLIF(target, 0)) AS mid_year_progress_pct, (full_year_result * 100.0 / NULLIF(target, 0)) AS full_year_progress_pct WHERE fiscal_year >= start_date and measure_data_type = 'Numeric' GROUP BY measure_description, measure_methodology, measure_data_type, measure_title, year, target, mid_year_result, mid_year_projection, full_year_result ORDER BY measure_description, measure_title, year",
+        "Yearly": "SELECT measure_description, measure_methodology, measure_data_type, measure_title, SUBSTRING(fiscal_year, 3, 4) AS year, target, mid_year_result, mid_year_projection, full_year_result, (mid_year_result * 200.0 / NULLIF(target, 0)) AS mid_year_progress_pct, (full_year_result * 100.0 / NULLIF(target, 0)) AS full_year_progress_pct WHERE fiscal_year >= start_date and measure_data_type = 'Numeric' GROUP BY measure_description, measure_methodology, measure_data_type, measure_title, year, target, mid_year_result, mid_year_projection, full_year_result ORDER BY measure_description, measure_title, year"
     },
     "filename": "6dpt-7w23.json"
 }

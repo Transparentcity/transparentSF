@@ -290,8 +290,10 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir):
             # Save HTML file to the appropriate folder
             html_filename = os.path.join(current_output_folder, f"{sanitized_title}.html")
             os.makedirs(os.path.dirname(html_filename), exist_ok=True)
-            if os.path.exists(html_filename):
-                os.remove(html_filename)
+            # Also remove the summary file if it exists
+            summary_filename = os.path.join(current_output_folder, f"{sanitized_title}_summary.txt")
+            if os.path.exists(summary_filename):
+                os.remove(summary_filename)
             with open(html_filename, 'w', encoding='utf-8') as f:
                 f.write(full_html_content)
 
