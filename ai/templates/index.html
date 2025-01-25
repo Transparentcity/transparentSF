@@ -182,19 +182,25 @@
                     width: 100%;
                     border-right: none;
                     background-color: #1a1a1a;
-                    padding: 0; /* Removed padding to make chat 100% wide */
+                    padding: 0;
+                    display: flex;  /* Add flex display */
+                    flex-direction: column;  /* Stack children vertically */
                 }
 
                 .chat h1 {
-                    /* Reduce header font size for mobile */
-                    font-size: 1.4em; /* Decreased from 1.8em to 1.6em */
+                    font-size: 1.2em;  /* Reduced from 1.4em */
                     color: #ffffff;
-                    margin: 15px; /* Adjusted margin to compensate for removed padding */
+                    margin: 10px;  /* Reduced margin */
                     text-align: center;
+                    position: sticky;  /* Make header sticky */
+                    top: 0;  /* Stick to top */
+                    background-color: #1a1a1a;  /* Match background */
+                    z-index: 1001;  /* Ensure it stays above content */
+                    padding: 5px 0;  /* Add some padding */
                 }
 
                 body {
-                    font-size: 18px; /* Ensure base font size is 18px */
+                    font-size: 16px;  /* Reduced from 18px */
                     background-color: #1a1a1a;
                     color: #ffffff;
                 }
@@ -211,12 +217,10 @@
                     padding: 10px; /* Reduced padding to save space */
                 }
 
-                /* Reduce font size for messages on mobile */
+                /* Adjust message sizes */
                 .message {
-                    padding: 7px; /* Reduced padding to 1px on both sides */
-                    margin: 4px 0; /* Reduced margin */
-                    border-radius: 15px; /* Slightly less rounded corners */
-                    line-height: 1.2; /* Added line height */
+                    font-size: 0.95em;  /* Reduced from 1.1em */
+                    padding: 6px;  /* Slightly reduced padding */
                 }
 
                 .user-message {
