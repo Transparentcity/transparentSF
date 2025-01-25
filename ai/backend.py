@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 import pytz
 import subprocess  # ADDED
+import glob
 
 from ai_dataprep import process_single_file  # Ensure these imports are correct
 from annual_analysis import export_for_endpoint  # Ensure this import is correct
@@ -81,7 +82,7 @@ def find_output_files_for_endpoint(endpoint: str, output_dir: str):
                     if 'md' not in matching_files or file_timestamp > latest_timestamp:
                         matching_files['md'] = file_path
                         latest_timestamp = file_timestamp
-                elif file.endswith('_assistant_reply.txt'):
+                elif file.endswith('_summary.txt'):
                     if 'txt' not in matching_files or file_timestamp > latest_timestamp:
                         matching_files['txt'] = file_path
                         latest_timestamp = file_timestamp
@@ -287,9 +288,13 @@ async def run_analysis(endpoint: str):
     
     error_log = []
     try:
+        # Create logs directory if it doesn't exist
+        logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
+        os.makedirs(logs_dir, exist_ok=True)
+        
         logger.debug(f"Attempting to run export_for_endpoint with endpoint: {endpoint}")
         export_for_endpoint(endpoint, output_folder=output_dir,
-                          log_file_path=os.path.join(output_dir, 'processing_log.txt'))
+                          log_file_path=os.path.join(logs_dir, 'processing_log.txt'))
         
         if error_log:
             logger.warning(f"Analysis completed with warnings for endpoint '{endpoint}': {error_log}")
@@ -470,4 +475,81 @@ async def summarize_posts():
             })
     except Exception as e:
         logger.exception(f"Error summarizing posts: {str(e)}")
+        return JSONResponse({"status": "error", "message": str(e)})
+
+
+def count_tokens(text: str) -> int:
+    """Rough estimate of token count based on words and punctuation."""
+    # Split on whitespace and count punctuation as separate tokens
+    words = text.split()
+    # Add count of common punctuation marks that might be separate tokens
+    punctuation_count = text.count('.') + text.count(',') + text.count('!') + \
+                       text.count('?') + text.count(';') + text.count(':')
+    return len(words) + punctuation_count
+
+
+@router.get("/get-aggregated-summary")
+async def get_aggregated_summary():
+    """
+    Aggregate all summary .txt files into a single file and return its link.
+    """
+    logger.debug("Get aggregated summary called")
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        output_dir = os.path.join(script_dir, 'output')
+        
+        # Create aggregated summaries directory if it doesn't exist
+        agg_dir = os.path.join(output_dir, 'aggregated_summaries')
+        os.makedirs(agg_dir, exist_ok=True)
+        
+        # Find all summary .txt files
+        summary_files = []
+        total_content = ""
+        for root, _, files in os.walk(output_dir):
+            for file in files:
+                if file.endswith('_summary.txt'):
+                    summary_files.append(os.path.join(root, file))
+        
+        if not summary_files:
+            logger.debug("No summary files found")
+            return JSONResponse({"link": None})
+        
+        # Create aggregated file with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        agg_filename = f'aggregated_summaries_{timestamp}.txt'
+        agg_path = os.path.join(agg_dir, agg_filename)
+        
+        # Aggregate content from all summary files
+        with open(agg_path, 'w', encoding='utf-8') as agg_file:
+            for i, summary_file in enumerate(summary_files, 1):
+                try:
+                    with open(summary_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        total_content += content
+                        
+                    # Add file header
+                    filename = os.path.basename(summary_file)
+                    agg_file.write(f"\n{'='*80}\n")
+                    agg_file.write(f"Summary {i}: {filename}\n")
+                    agg_file.write(f"{'='*80}\n\n")
+                    agg_file.write(content)
+                    agg_file.write("\n\n")
+                except Exception as e:
+                    logger.error(f"Error reading summary file {summary_file}: {str(e)}")
+                    continue
+        
+        # Calculate total token count
+        token_count = count_tokens(total_content)
+        
+        # Generate URL for the aggregated file
+        url = f"/output/aggregated_summaries/{agg_filename}"
+        logger.debug(f"Created aggregated summary at: {url}")
+        
+        return JSONResponse({
+            "link": url,
+            "token_count": token_count
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error creating aggregated summary: {str(e)}")
         return JSONResponse({"status": "error", "message": str(e)})
