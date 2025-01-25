@@ -331,6 +331,36 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+
+        /* Add these styles to handle the tooltip */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltip-content {
+            visibility: hidden;
+            position: absolute;
+            z-index: 1;
+            left: 100%;
+            top: 0;
+            background-color: #f9f9f9;
+            color: #333;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            width: 400px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+
+        .tooltip:hover .tooltip-content {
+            visibility: visible;
+        }
     </style>
 </head>
 <body>
@@ -341,6 +371,13 @@
             <button id="analyze-checked-btn">Analyze Checked</button>
             <button id="reload-vector-db-btn">Reload Vector DB</button>
             <button id="summarize-posts-btn">Summarize Posts</button>
+            
+            <!-- Update heading to "Notes" -->
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+            <h3>Notes</h3>
+            <div id="aggregated-summary-link">
+                <!-- Will be populated by JavaScript -->
+            </div>
         </div>
 
         <!-- Main content area -->
@@ -779,6 +816,115 @@
             window.onclick = function(event) {
                 if (event.target == modal) {
                     modal.style.display = 'none';
+                }
+            }
+
+            // Update function to include token count
+            async function updateAggregatedSummaryLink() {
+                try {
+                    const resp = await fetch('/backend/get-aggregated-summary');
+                    const data = await resp.json();
+                    
+                    const summaryDiv = document.getElementById('aggregated-summary-link');
+                    if (data.link) {
+                        summaryDiv.innerHTML = `
+                            <a href="${data.link}" target="_blank" style="color: #0066cc; text-decoration: none; display: block; margin-top: 10px;">
+                                View Notes (${data.token_count} tokens)
+                            </a>`;
+                    } else {
+                        summaryDiv.innerHTML = '<span style="color: #666;">No notes available</span>';
+                    }
+                } catch (error) {
+                    console.error('Error fetching aggregated summary:', error);
+                }
+            }
+
+            // Update the aggregated summary link on page load
+            updateAggregatedSummaryLink();
+
+            // Update the aggregated summary link after running analysis
+            const runButtons = document.querySelectorAll('.run-btn');
+            runButtons.forEach(button => {
+                button.addEventListener('click', async () => {
+                    // Wait a bit for the analysis to complete
+                    setTimeout(updateAggregatedSummaryLink, 2000);
+                });
+            });
+
+            // Function to safely escape HTML
+            function escapeHtml(unsafe) {
+                return unsafe
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+
+            // Function to load and display file content
+            async function loadFileContent(url) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return await response.text();
+                } catch (error) {
+                    console.error('Error loading file content:', error);
+                    return 'Error loading content';
+                }
+            }
+
+            // Update the function that creates links to include tooltips
+            function createFileLink(fileType, url, parentElement) {
+                const linkWrapper = document.createElement('div');
+                linkWrapper.className = 'file-link tooltip';
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.target = '_blank';
+                link.textContent = fileType.toUpperCase();
+                
+                const tooltip = document.createElement('div');
+                tooltip.className = 'tooltip-content';
+                tooltip.textContent = 'Loading...';
+                
+                // Only load content for txt files
+                if (fileType === 'txt') {
+                    loadFileContent(url).then(content => {
+                        tooltip.textContent = content;
+                    });
+                    linkWrapper.appendChild(tooltip);
+                }
+                
+                linkWrapper.appendChild(link);
+                parentElement.appendChild(linkWrapper);
+            }
+
+            // Update the function that handles the response from get-updated-links
+            function updateOutputLinks(endpoint, data) {
+                const outputDiv = document.querySelector(`[data-endpoint="${endpoint}"] .output-links`);
+                if (!outputDiv) return;
+                
+                outputDiv.innerHTML = '';
+                
+                for (const [folder, files] of Object.entries(data.links)) {
+                    const folderDiv = document.createElement('div');
+                    folderDiv.className = 'folder-links';
+                    
+                    if (folder !== '.') {
+                        const folderLabel = document.createElement('span');
+                        folderLabel.textContent = folder + ': ';
+                        folderDiv.appendChild(folderLabel);
+                    }
+                    
+                    // Create links for each file type
+                    for (const [fileType, url] of Object.entries(files)) {
+                        createFileLink(fileType, url, folderDiv);
+                        if (fileType !== Object.keys(files).pop()) {
+                            folderDiv.appendChild(document.createTextNode(' | '));
+                        }
+                    }
+                    
+                    outputDiv.appendChild(folderDiv);
                 }
             }
         });
