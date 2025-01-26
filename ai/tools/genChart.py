@@ -163,13 +163,15 @@ def generate_time_series_chart(
             if aggregation_period == 'year':
                 period_name = last_time_period.strftime('%Y')
             elif aggregation_period == 'month':
-                period_name = last_time_period.strftime('%B')
+                period_name = last_time_period.strftime('%B %Y')
             elif aggregation_period == 'quarter':
                 quarter = (last_time_period.month - 1) // 3 + 1
                 period_name = f"Q{quarter} {last_time_period.year}"
             elif aggregation_period == 'week':
                 period_name = f"Week {last_time_period.strftime('%U')} of {last_time_period.year}"
-            else:  # day or any other period
+            elif aggregation_period == 'day':  # Specific handling for daily data
+                period_name = last_time_period.strftime('%B %d, %Y')
+            else:  # fallback for any other period
                 period_name = last_time_period.strftime('%Y-%m-%d')
 
             logging.debug(f"Last time period: {last_time_period}, Period name: {period_name}")
@@ -453,11 +455,17 @@ def generate_time_series_chart(
                 xaxis=dict(
                     title=dict(font=dict(size=14, family='Arial', color='black')),
                     tickfont=dict(size=10, family='Arial', color='black'),
-                    tickformat='%Y' if time_series_field == 'year' else '%m-%y',
-                    dtick="M12",      # One tick per year
-                    tickangle=0,      # Horizontal tick labels
+                    tickformat='%Y' if time_series_field == 'year' 
+                              else '%m-%y' if aggregation_period == 'month'
+                              else '%d-%m-%y' if aggregation_period == 'day'
+                              else '%m-%y',
+                    dtick="M12" if aggregation_period in ['year', 'month'] else "D7",  # One tick per year for year/month, weekly for days
+                    tickangle=45 if aggregation_period == 'day' else 0,  # Angled labels for daily data
                     tickmode='array',
-                    ticktext=[d.strftime('%Y' if time_series_field == 'year' else '%m-%y') 
+                    ticktext=[d.strftime('%Y' if time_series_field == 'year' 
+                                       else '%m-%y' if aggregation_period == 'month'
+                                       else '%d-%m-%y' if aggregation_period == 'day'
+                                       else '%m-%y') 
                              for d in aggregated_df['time_period'].unique()],
                     tickvals=aggregated_df['time_period'].unique()
                 )
@@ -608,11 +616,19 @@ def generate_time_series_chart(
                     aggfunc='sum',
                     fill_value=0
                 )
-                # Format the date columns for better readability
-                crosstab_df.columns = [col.strftime('%Y') for col in crosstab_df.columns]
+                # Format the date columns for better readability based on aggregation period
+                crosstab_df.columns = [col.strftime('%Y' if aggregation_period == 'year'
+                                                   else '%b %Y' if aggregation_period == 'month'
+                                                   else '%d %b %Y' if aggregation_period == 'day'
+                                                   else '%Y') 
+                                     for col in crosstab_df.columns]
             else:
                 crosstab_df = aggregated_df.set_index('time_period')[[numeric_fields[0]]].T
-                crosstab_df.columns = [col.strftime('%Y') for col in crosstab_df.columns]
+                crosstab_df.columns = [col.strftime('%Y' if aggregation_period == 'year'
+                                                   else '%b %Y' if aggregation_period == 'month'
+                                                   else '%d %b %Y' if aggregation_period == 'day'
+                                                   else '%Y') 
+                                     for col in crosstab_df.columns]
                 crosstab_df.index = [y_axis_label]
 
             # Convert crosstab to HTML table

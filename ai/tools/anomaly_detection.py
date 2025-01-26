@@ -115,7 +115,7 @@ def generate_anomalies_summary(results):
 
     return {"anomalies": html_summary}
 
-def group_data_by_field_and_date(data_array, group_field, numeric_field, date_field):
+def group_data_by_field_and_date(data_array, group_field, numeric_field, date_field, period_type='month'):
     logging.info("=== Starting Data Grouping ===")
     logging.info(f"First 5 records of raw data:")
     for i, item in enumerate(data_array[:5]):
@@ -137,10 +137,28 @@ def group_data_by_field_and_date(data_array, group_field, numeric_field, date_fi
             logging.warning(f"Missing date for record: {item}")
             continue
 
-        # Debug the actual date object before strftime
-        # logging.debug(f"Processing date: {date_obj} (type: {type(date_obj)}) for group: {group_value}")
+        # Convert string dates to datetime objects
+        if isinstance(date_obj, str):
+            date_obj = custom_parse_date(date_obj)
+            if not date_obj:
+                logging.warning(f"Could not parse date for record: {item}")
+                continue
+        elif isinstance(date_obj, pd.Timestamp):
+            date_obj = date_obj.to_pydatetime().date()
+        elif isinstance(date_obj, datetime.datetime):
+            date_obj = date_obj.date()
+        elif not isinstance(date_obj, datetime.date):
+            logging.warning(f"Unrecognized date type for record: {item}")
+            continue
 
-        date_key = date_obj.strftime("%Y-%m")
+        # Use appropriate date format based on period_type
+        if period_type == 'year':
+            date_key = date_obj.strftime("%Y")
+        elif period_type == 'month':
+            date_key = date_obj.strftime("%Y-%m")
+        else:  # day
+            date_key = date_obj.strftime("%Y-%m-%d")
+            
         all_dates.add(date_key)
         
         if group_value not in grouped:
@@ -194,7 +212,7 @@ def custom_parse_date(date_str):
     except (ValueError, parser.ParserError):
         return None
 
-def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None, end_date=None, date_field=None):
+def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None, end_date=None, date_field=None, period_type='month'):
     # Initialize error log
     error_log = []
     # Convert date strings to datetime.date objects
@@ -212,6 +230,14 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
                 pass
         return date_val
 
+    # Function to format date based on period_type
+    def format_date(date_obj, period_type):
+        if period_type == 'year':
+            return date_obj.strftime("%Y")
+        elif period_type == 'month':
+            return date_obj.strftime("%Y-%m")
+        else:  # day
+            return date_obj.strftime("%Y-%m-%d")
 
     if start_date:
         start_date = parse_filter_date(start_date)
@@ -238,6 +264,7 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
     logging.info(f"  start_date: {start_date} ({type(start_date)})")
     logging.info(f"  end_date: {end_date} ({type(end_date)})")
     logging.info(f"  date_field: {date_field}")
+    logging.info(f"  period_type: {period_type}")
     logging.info(f"  filter_conditions: {filter_conditions}")
 
     filtered_data = []
@@ -264,11 +291,11 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
                 else:
                     item_date = custom_parse_date(date_value)
             elif isinstance(date_value, pd.Timestamp):
-                # For Timestamp, convert to YYYY-MM string format
-                item_date = date_value.strftime("%Y-%m")
+                # Format based on period_type
+                item_date = format_date(date_value, period_type)
             elif isinstance(date_value, (datetime.date, datetime.datetime)):
-                # For date/datetime, convert to YYYY-MM string format
-                item_date = date_value.strftime("%Y-%m")
+                # Format based on period_type
+                item_date = format_date(date_value, period_type)
             else:
                 error_log.append(f"Record {idx}: Unrecognized {date_field} type: {type(date_value)}. Skipping.")
                 continue
@@ -318,13 +345,22 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
                 next_month = datetime.datetime.strptime(f"{end_date}-01", "%Y-%m-%d").date().replace(day=28) + datetime.timedelta(days=4)
                 end_date = next_month - datetime.timedelta(days=next_month.day)
 
-            # Perform date filtering based on start_date and end_date
+            # Ensure item_date is a datetime.date object for comparison
+            if isinstance(item_date, str):
+                if period_type == 'year':
+                    item_date = datetime.datetime.strptime(item_date, "%Y").date()
+                elif period_type == 'month':
+                    item_date = datetime.datetime.strptime(f"{item_date}-01", "%Y-%m").date()
+                else:  # day
+                    item_date = datetime.datetime.strptime(item_date, "%Y-%m-%d").date()
+
+            # Perform date filtering based on actual date objects
             if not (start_date <= item_date <= end_date):
                 logging.debug(f"Record {idx}: Date outside range - skipping")
                 continue  # Skip this record
 
-            # Update item with parsed date
-            item[date_field] = item_date
+            # Update item with formatted date string based on period_type
+            item[date_field] = format_date(item_date, period_type)
         
         # Now, check the filter_conditions
         for condition in filter_conditions:
@@ -494,7 +530,8 @@ def anomaly_detection(
     date_field=None,
     numeric_field=None,
     y_axis_label=None,
-    title=None
+    title=None,
+    period_type='month'  # Add period_type parameter with default
 ):
     
     data = context_variables.get("dataset")
@@ -556,16 +593,18 @@ def anomaly_detection(
         filter_conditions,
         start_date=comparison_period['start'] if comparison_period else None,
         end_date=recent_period['end'] if recent_period else None,
-        date_field=date_field
+        date_field=date_field,
+        period_type=period_type
     )
 
     logging.info(f"Filtered data size: {len(recent_data)} records after applying filters.")
-    # Group data
+    # Group data with period_type
     grouped_data = group_data_by_field_and_date(
         recent_data,
         group_field,
         numeric_field,
-        date_field=date_field
+        date_field=date_field,
+        period_type=period_type
     )
     logging.info(f"Grouped data size: {len(grouped_data)} groups.")
     print(grouped_data)
@@ -624,7 +663,14 @@ def anomaly_detection(
                 logging.debug(f"Processing date {date_key} with count: {count}")
                 if date_field:
                     try:
-                        item_date = datetime.datetime.strptime(date_key, "%Y-%m").date()
+                        # Use appropriate date format based on period_type
+                        if period_type == 'year':
+                            item_date = datetime.datetime.strptime(date_key, "%Y").date()
+                        elif period_type == 'month':
+                            item_date = datetime.datetime.strptime(date_key, "%Y-%m").date()
+                        else:  # day
+                            item_date = datetime.datetime.strptime(date_key, "%Y-%m-%d").date()
+                            
                         if comparison_period['start'] <= item_date <= comparison_period['end']:
                             comparison_counts.append(count)
                         elif recent_period['start'] <= item_date <= recent_period['end']:

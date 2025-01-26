@@ -74,12 +74,98 @@ def save_combined_html(combined_data, output_folder):
         html_file.write("</table>")
     print(f"Combined data saved to {output_file}")
 
-def process_entry(index, data_entry, output_folder, log_file, script_dir):
+def get_time_ranges(period_type):
+    """
+    Calculate recent and comparison periods based on period type.
+    
+    Args:
+        period_type (str): One of 'year', 'month', or 'day'
+    
+    Returns:
+        tuple: (recent_period, comparison_period) each containing start and end dates
+    """
+    today = datetime.date.today()
+    
+    if period_type == 'year':
+        # Last complete year
+        last_year = today.year - 1 
+        recent_period = {
+            'start': datetime.date(last_year, 1, 1),
+            'end': datetime.date(last_year, 12, 31)
+        }
+        comparison_period = {
+            'start': datetime.date(last_year - 10, 1, 1),
+            'end': datetime.date(last_year - 1, 12, 31)
+        }
+    
+    elif period_type == 'month':
+        # Last complete month
+        if today.day == 1:
+            last_month = (today.replace(day=1) - datetime.timedelta(days=1))
+        else:
+            last_month = today.replace(day=1) - datetime.timedelta(days=1)
+        
+        recent_period = {
+            'start': last_month.replace(day=1),
+            'end': last_month
+        }
+        
+        # Calculate start of comparison (24 months before)
+        comparison_start = (last_month.replace(day=1) - datetime.timedelta(days=1))
+        for _ in range(23):
+            comparison_start = (comparison_start.replace(day=1) - datetime.timedelta(days=1))
+        
+        comparison_period = {
+            'start': comparison_start.replace(day=1),
+            'end': (last_month.replace(day=1) - datetime.timedelta(days=1))
+        }
+    
+    else:  # day
+        # Last complete day
+        yesterday = today - datetime.timedelta(days=1)
+        recent_period = {
+            'start': yesterday,
+            'end': yesterday
+        }
+        comparison_period = {
+            'start': yesterday - datetime.timedelta(days=28),
+            'end': yesterday - datetime.timedelta(days=1)
+        }
+    
+    return recent_period, comparison_period
+
+def process_entry(index, data_entry, output_folder, log_file, script_dir, period_type='year'):
     title = data_entry.get('title', 'Unknown')
     noun = data_entry.get('item_noun', data_entry.get('table_metadata', {}).get('item_noun', 'Unknown'))
     category = data_entry.get('report_category', 'Unknown')
     endpoint = data_entry.get('endpoint', None)
-    query = data_entry.get('queries', {}).get('Yearly', None)
+    
+    # Log the period type and available queries
+    queries = data_entry.get('queries', {})
+    log_file.write(f"\n{index}: {title} ({endpoint}) - Processing with period_type: {period_type}\n")
+    log_file.write(f"Available queries: {list(queries.keys())}\n")
+    
+    
+    # Select query based on period_type
+    query = None
+    if period_type == 'year':
+        query = queries.get('Yearly')
+        log_file.write(f"Selected Yearly query: {query is not None}\n")
+    elif period_type == 'month':
+        query = queries.get('Monthly')
+        log_file.write(f"Selected Monthly query: {query is not None}\n")
+    elif period_type == 'day':
+        query = queries.get('Daily')
+        log_file.write(f"Selected Daily query: {query is not None}\n")
+    else:
+        log_file.write(f"Unknown period_type: {period_type}\n")
+    
+    # Log the selected query
+    if query:
+        log_file.write(f"Using query: {query[:100]}...\n")
+    else:
+        log_file.write(f"No query found for period_type: {period_type}\n")
+
     date_fields = data_entry.get('DateFields', [])
     numeric_fields = data_entry.get('NumericFields', [])
     category_field = data_entry.get('CategoryFields', [])
@@ -96,29 +182,43 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir):
     if not query or not endpoint or not date_fields or not numeric_fields:
         log_file.write(f"{index}: {title}({endpoint}) - Missing required fields. Skipping.\n")
         return
-
-    # Replace 'month' with 'year' in date_fields if present
-    date_fields = ['year' if field == 'month' else field for field in date_fields]
-
     # Extract table and column metadata
     column_metadata = data_entry.get('columns', [])
 
-    # Set up anomaly detection parameters
-    recent_period = {
-        'start': datetime.date(2024, 1, 1),
-        'end': datetime.date(2024, 12, 31)
-    }
-    comparison_period = {
-        'start': datetime.date(2014, 1, 1),
-        'end': datetime.date(2023, 12, 31)
-    }
+    # Get time ranges based on period type
+    recent_period, comparison_period = get_time_ranges(period_type)
+    
+    # Calculate the number of periods looking back
+    periods_lookback = {
+        'year': comparison_period['end'].year - comparison_period['start'].year + 1,
+        'month': (comparison_period['end'].year - comparison_period['start'].year) * 12 + 
+                 comparison_period['end'].month - comparison_period['start'].month + 1,
+        'day': (comparison_period['end'] - comparison_period['start']).days + 1
+    }[period_type]
 
-    # Initialize filter conditions (excluding supervisor_district for now)
+    # Create period description for titles
+    period_names = {
+        'year': 'Annual',
+        'month': 'Monthly',
+        'day': 'Daily'
+    }
+    period_desc = f"{period_names[period_type]} ({periods_lookback} {period_type}s lookback)"
+
+    # Modify filter conditions based on period type
+    # Determine the appropriate date field name
+    date_field_name = date_fields[0]
+    if date_field_name in ['year', 'month', 'day'] and date_field_name != period_type:
+        date_field_name = period_type
+
     filter_conditions = [
-        {'field': date_fields[0], 'operator': '<=', 'value': recent_period['end']},
-        {'field': date_fields[0], 'operator': '>=', 'value': comparison_period['start']},
+        {'field': date_field_name, 'operator': '<=', 'value': recent_period['end']},
+        {'field': date_field_name, 'operator': '>=', 'value': comparison_period['start']},
     ]
-
+    # Add filter conditions to log
+    log_file.write(f"Filter conditions:\n")
+    for condition in filter_conditions:
+        log_file.write(f"  - {condition['field']} {condition['operator']} {condition['value']}\n")
+    
     # Determine if supervisor_district is present
     has_supervisor_district = 'supervisor_district' in location_field
 
@@ -166,9 +266,9 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir):
                     # Generate the chart
                     chart_result = generate_time_series_chart(
                         context_variables=context_variables,
-                        time_series_field=date_field,
+                        time_series_field=date_field_name,
                         numeric_fields=numeric_field,
-                        aggregation_period='year',
+                        aggregation_period=period_type,
                         max_legend_items=10,
                         filter_conditions=current_filter_conditions,
                         show_average_line=True,
@@ -192,9 +292,9 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir):
                     )
                     chart_result = generate_time_series_chart(
                         context_variables=context_variables,
-                        time_series_field=date_fields[0],
+                        time_series_field=date_field_name,
                         numeric_fields=numeric_fields[0],
-                        aggregation_period='year',
+                        aggregation_period=period_type,
                         max_legend_items=10,
                         group_field=cat_field,
                         filter_conditions=current_filter_conditions,
@@ -223,10 +323,11 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir):
                             min_diff=2,
                             recent_period=recent_period,
                             comparison_period=comparison_period,
-                            date_field=date_fields[0],
+                            date_field=date_field_name,
                             numeric_field=numeric_field,
                             y_axis_label=numeric_field,
-                            title=context_variables['chart_title']
+                            title=context_variables['chart_title'],
+                            period_type=period_type
                         )
 
                         if anomalies_result and 'anomalies' in anomalies_result:
@@ -260,11 +361,16 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir):
             combined_html = "\n\n".join(processed_html_contents)
 
             # Prepare metadata for HTML
-            metadata_html = f"<head><title>{metadata['noun']} {current_title_suffix}</title></head><body><h1>10 year look-back for {metadata['noun']} {current_title_suffix}</h1>\n"
-            metadata_html += f"<p><strong>Query URL:</strong> <a href='{query_url}'>LINK</a></p>\n"
-            metadata_html += f"<p><strong>{metadata['description']}</strong></p>"
-            metadata_html += f"<p><strong>{metadata['endpoint']}</strong></p>"
-            metadata_html += f"<p><strong>{metadata['title']}</strong></p>"
+            metadata_html = f"""<head>
+                <title>{metadata['noun']} {current_title_suffix} - {period_desc}</title>
+            </head>
+            <body>
+                <h1>{periods_lookback} {period_type} look-back for {metadata['noun']} {current_title_suffix}</h1>
+                <p><strong>Analysis Type:</strong> {period_desc}</p>
+                <p><strong>Query URL:</strong> <a href='{query_url}'>LINK</a></p>
+                <p><strong>{metadata['description']}</strong></p>
+                <p><strong>{metadata['endpoint']}</strong></p>
+                <p><strong>{metadata['title']}</strong></p>"""
             metadata_html += "<h2>Column Metadata</h2><table border='1'><tr><th>Field Name</th><th>Description</th><th>Data Type</th></tr>"
             for column in metadata['column_metadata']:
                 row = "<tr>"
@@ -372,30 +478,39 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir):
         print(traceback_str)
         log_file.write(f"{index}: {title}({endpoint}) - Error: {str(e)}\n")
 
-def process_entries(combined_data, num_start, num_end, output_folder, log_file_path, script_dir):
+def process_entries(combined_data, num_start, num_end, output_folder, log_file_path, script_dir, period_type='year'):
     with open(log_file_path, 'a', encoding='utf-8') as log_file:
         for index in range(num_start, num_end):
             if index >= len(combined_data):
                 break
             data_entry = combined_data[index]
             # Process each entry once; district handling is managed within process_entry
-            process_entry(index, data_entry, output_folder, log_file, script_dir)
+            process_entry(index, data_entry, output_folder, log_file, script_dir, period_type)
 
-def export_for_endpoint(endpoint, output_folder=None, log_file_path=os.path.join('logs', 'annual_process.log')):
+def export_for_endpoint(endpoint, period_type='year', output_folder=None, 
+                       log_file_path=os.path.join('logs', 'analysis_process.log')):
     """
-    Export processing for a specific endpoint.
-
+    Export processing for a specific endpoint with specified period type.
+    
     Args:
-        endpoint (str): The endpoint to process.
-        output_folder (str, optional): The base output folder. Defaults to None.
-        log_file_path (str, optional): Path to the log file. Defaults to None.
+        endpoint (str): The endpoint to process
+        period_type (str): One of 'year', 'month', or 'day'. Defaults to 'year'
+        output_folder (str, optional): Custom output folder path
+        log_file_path (str, optional): Path to log file
     """
+    # Add logging for the function entry
+    print(f"export_for_endpoint called with: endpoint={endpoint}, period_type={period_type}")
+    
     # Paths
     script_dir = os.path.dirname(os.path.abspath(__file__))
     data_folder = os.path.join(script_dir, 'data')
     datasets_folder = os.path.join(data_folder, 'datasets/fixed')
+    
     if not output_folder:
-        output_folder = os.path.join(script_dir, 'output')
+        # Update output folder based on period_type
+        period_folder = {'year': 'annual', 'month': 'monthly', 'day': 'daily'}[period_type]
+        output_folder = os.path.join(script_dir, 'output', period_folder)
+        print(f"Using output folder: {output_folder}")
 
     # Ensure the output directory exists
     os.makedirs(output_folder, exist_ok=True)
@@ -403,8 +518,14 @@ def export_for_endpoint(endpoint, output_folder=None, log_file_path=os.path.join
     # Create a log file to track the processing results
     if not log_file_path:
         log_file_path = os.path.join(output_folder, "processing_log.txt")
+    
     with open(log_file_path, "a", encoding="utf-8") as log_file:
-        log_file.write(f"\nProcessing Export for Endpoint: {endpoint} at {datetime.datetime.now()}\n")
+        log_file.write(f"\n{'='*50}\n")
+        log_file.write(f"Processing Export for Endpoint: {endpoint}\n")
+        log_file.write(f"Period Type: {period_type}\n")
+        log_file.write(f"Output Folder: {output_folder}\n")
+        log_file.write(f"Timestamp: {datetime.datetime.now()}\n")
+        log_file.write(f"{'='*50}\n")
     
     print(f"Processing Export for Endpoint: {endpoint} at {datetime.datetime.now()}")
     # Load combined data
@@ -425,8 +546,7 @@ def export_for_endpoint(endpoint, output_folder=None, log_file_path=os.path.join
     with open(log_file_path, "a", encoding="utf-8") as log_file:
         for record in matching_records:
             index = combined_data.index(record)
-            # Process each entry once; district handling is managed within process_entry
-            process_entry(index, record, output_folder, log_file, script_dir)
+            process_entry(index, record, output_folder, log_file, script_dir, period_type)
 
     print(f"\nExport processing complete for endpoint: {endpoint}.")
     print(f"Log file location: {log_file_path}")
@@ -463,8 +583,11 @@ def main():
     else:
         print("No valid data found to save.")
 
-    # Process entries from num_start to num_end
-    process_entries(combined_data, num_start, num_end, output_folder, log_file_path, script_dir)
+    # Add period_type parameter
+    period_type = 'year'  # Default to year, but could be passed as command line argument
+    
+    # Process entries with period_type
+    process_entries(combined_data, num_start, num_end, output_folder, log_file_path, script_dir, period_type)
 
     print(f"\nProcessing complete for entries from index {num_start} to {num_end - 1}.")
     print(f"Log file location: {log_file_path}")

@@ -73,6 +73,7 @@
     "data_validated": false,
     "item_noun": "residential unit certifications",
     "queries": {
+        "Daily": "SELECT document_type, building_address, date_trunc_ymd(date_issued) AS day, SUM(number_of_units_certified) AS total_units_certified WHERE date_issued >= start_date GROUP BY document_type, building_address, day ORDER BY day",    
         "Monthly": "SELECT document_type, building_address, date_trunc_ym(date_issued) AS month, SUM(number_of_units_certified) AS total_units_certified WHERE date_issued >= start_date GROUP BY document_type, building_address, month ORDER BY month",
         "Yearly": "SELECT document_type, building_address, date_trunc_y(date_issued) AS year, SUM(number_of_units_certified) AS total_units_certified WHERE date_issued >= start_date GROUP BY document_type, building_address, year ORDER BY year"
     },

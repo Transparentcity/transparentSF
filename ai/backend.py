@@ -279,9 +279,9 @@ async def prep_data(filename: str):
 
 
 @router.get("/run_analysis/{endpoint}")
-async def run_analysis(endpoint: str):
+async def run_analysis(endpoint: str, period_type: str = 'year'):
     """Run analysis for a given endpoint."""
-    logger.debug(f"Run analysis called for endpoint: {endpoint}")
+    logger.debug(f"Run analysis called for endpoint: {endpoint} with period_type: {period_type}")
     
     # Remove .json extension if present
     endpoint = endpoint.replace('.json', '')
@@ -292,8 +292,15 @@ async def run_analysis(endpoint: str):
         logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
         os.makedirs(logs_dir, exist_ok=True)
         
-        logger.debug(f"Attempting to run export_for_endpoint with endpoint: {endpoint}")
-        export_for_endpoint(endpoint, output_folder=output_dir,
+        # Create period-specific output folder
+        period_folder = {'year': 'annual', 'month': 'monthly', 'day': 'daily'}[period_type]
+        period_output_dir = os.path.join(output_dir, period_folder)
+        os.makedirs(period_output_dir, exist_ok=True)
+        
+        logger.debug(f"Attempting to run export_for_endpoint with endpoint: {endpoint} and period_type: {period_type}")
+        export_for_endpoint(endpoint, 
+                          period_type=period_type,
+                          output_folder=period_output_dir,  # Use period-specific output folder
                           log_file_path=os.path.join(logs_dir, 'processing_log.txt'))
         
         if error_log:

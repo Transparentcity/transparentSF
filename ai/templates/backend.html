@@ -368,11 +368,12 @@
         <!-- Left sidebar -->
         <div class="sidebar">
             <h2>Actions</h2>
-            <button id="analyze-checked-btn">Analyze Checked</button>
+            <button id="analyze-yearly-btn">Analyze Yearly</button>
+            <button id="analyze-monthly-btn">Analyze Monthly</button>
+            <button id="analyze-daily-btn">Analyze Daily</button>
             <button id="reload-vector-db-btn">Reload Vector DB</button>
             <button id="summarize-posts-btn">Summarize Posts</button>
             
-            <!-- Update heading to "Notes" -->
             <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
             <h3>Notes</h3>
             <div id="aggregated-summary-link">
@@ -691,9 +692,8 @@
                 }
             }
 
-            // Analyze Checked button logic
-            const analyzeCheckedBtn = document.getElementById('analyze-checked-btn');
-            analyzeCheckedBtn.addEventListener('click', async () => {
+            // Remove the old analyze-checked-btn handler and add these new handlers:
+            async function analyzeCheckedRows(periodType) {
                 // Gather all checked rows
                 const checkboxes = document.querySelectorAll('.row-check:checked');
                 if (checkboxes.length === 0) {
@@ -701,22 +701,66 @@
                     return;
                 }
 
-                // For each checked row, run /run_analysis
+                // For each checked row, run analysis with the specified period type
                 for (let i = 0; i < checkboxes.length; i++) {
                     const row = checkboxes[i].closest('tr');
                     const endpoint = row.getAttribute('data-endpoint');
                     const runBtn = row.querySelector('button[data-action="run_analysis"]');
                     
-                    // If there's no runBtn or no endpoint, skip
                     if (!runBtn || !endpoint) continue;
 
-                    // Simulate click on the "Run Analysis" button
-                    // to keep consistent spinner / error handling
-                    runBtn.click();
+                    try {
+                        const url = `/backend/run_analysis/${encodeURIComponent(endpoint)}?period_type=${periodType}`;
+                        
+                        // Disable the run button and show loading state
+                        runBtn.disabled = true;
+                        runBtn.classList.add('button-disabled');
+                        const spinner = createSpinner();
+                        runBtn.appendChild(spinner);
 
-                    // Quick wait to avoid sending all requests at once
+                        const response = await fetch(url);
+                        const data = await response.json();
+
+                        // Remove spinner
+                        if (runBtn.contains(spinner)) {
+                            runBtn.removeChild(spinner);
+                        }
+
+                        if (response.ok) {
+                            runBtn.textContent = 'Run ✅';
+                        } else {
+                            runBtn.textContent = 'Run ❌';
+                            alert(`Error processing ${endpoint}: ${data.message}`);
+                        }
+
+                        // Update the output links
+                        await updateRowOutputLinks(row);
+
+                    } catch (error) {
+                        console.error(`Error processing ${endpoint}:`, error);
+                        runBtn.textContent = 'Run ❌';
+                    } finally {
+                        // Re-enable the button
+                        runBtn.disabled = false;
+                        runBtn.classList.remove('button-disabled');
+                    }
+
+                    // Wait between requests
                     await new Promise(res => setTimeout(res, 2000));
                 }
+            }
+
+            // Add click handlers for the new period-specific buttons
+            document.getElementById('analyze-yearly-btn').addEventListener('click', () => {
+                analyzeCheckedRows('year');
+            });
+
+            document.getElementById('analyze-monthly-btn').addEventListener('click', () => {
+                analyzeCheckedRows('month');
+            });
+
+            document.getElementById('analyze-daily-btn').addEventListener('click', () => {
+                analyzeCheckedRows('day');
             });
 
             // *** RELOAD VECTOR DB BUTTON LOGIC ***
