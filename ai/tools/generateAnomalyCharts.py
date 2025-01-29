@@ -200,24 +200,34 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
         chart_id (str): The 8-char unique ID of this chart image.
     """
     
-    # Validate input data
-    dates = item.get('dates')
-    counts = item.get('counts')
-    if not dates or not counts or len(dates) != len(counts):
-        raise ValueError(f"Invalid data provided for chart generation: dates={dates}, counts={counts}")
-    if 'title' not in metadata or 'y_axis_label' not in metadata:
-        logging.warning("Metadata is missing 'title' or 'y_axis_label'. Default values will be used.")
-
-    chart_container_id = f"chart{chart_counter}"
-
-    # Convert date strings or date objects to datetime objects
+    # Extract data from the item
+    dates = item['dates']
+    counts = item['counts']
     combined_data = []
+
+    # Get period type from metadata, default to month if not specified
+    period_type = metadata.get('period_type', 'month')
+
+    # Process dates based on period type
     for idx, date_entry in enumerate(dates):
         if isinstance(date_entry, str):
             try:
-                date_obj = datetime.datetime.strptime(date_entry, "%Y-%m").date()
+                if period_type == 'year':
+                    # For year period, expect YYYY format
+                    year = int(date_entry)
+                    date_obj = datetime.date(year, 1, 1)
+                else:
+                    # For monthly data, expect YYYY-MM format
+                    if len(date_entry.split('-')) == 2:
+                        year, month = map(int, date_entry.split('-'))
+                        date_obj = datetime.date(year, month, 1)
+                    else:
+                        # If we somehow get just a year in monthly mode, use January
+                        year = int(date_entry)
+                        date_obj = datetime.date(year, 1, 1)
+                        logging.warning(f"Found year-only format in monthly mode for date: {date_entry}")
             except ValueError as ve:
-                logging.warning(f"Record {idx}: Invalid date format '{date_entry}'. Expected 'YYYY-MM'. Skipping this date.")
+                logging.warning(f"Record {idx}: Invalid date format '{date_entry}' for {period_type} period. Skipping this date.")
                 continue
         elif isinstance(date_entry, datetime.date):
             date_obj = date_entry
@@ -228,6 +238,9 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
 
     if not combined_data:
         raise ValueError("No valid dates available after processing.")
+
+    # Create a unique chart container ID
+    chart_container_id = f"chart{chart_counter}"
 
     # Prepare Plotly traces
     comparison_mean = float(round(item['comparison_mean'], 1))

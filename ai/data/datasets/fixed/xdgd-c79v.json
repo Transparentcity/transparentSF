@@ -245,8 +245,8 @@
     "data_validated": true,
     "item_noun": "budget entries",
     "queries": {
-        "Monthly": "SELECT fiscal_year, revenue_or_spending, organization_group, department, SUM(to_number(budget)) AS total_budget WHERE data_as_of >= start_date GROUP BY fiscal_year, revenue_or_spending, organization_group, department ORDER BY fiscal_year, organization_group",
-        "Yearly": "SELECT fiscal_year, revenue_or_spending, organization_group, department, SUM(to_number(budget)) AS total_budget WHERE data_as_of >= start_date GROUP BY fiscal_year, revenue_or_spending, organization_group, department ORDER BY fiscal_year, organization_group"
+        "Monthly": "SELECT fiscal_year, revenue_or_spending, organization_group, department, SUM(budget) AS total_budget WHERE data_as_of >= start_date GROUP BY fiscal_year, revenue_or_spending, organization_group, department ORDER BY fiscal_year, organization_group",
+        "Yearly": "SELECT fiscal_year, revenue_or_spending, organization_group, department, SUM(budget) AS total_budget WHERE data_as_of >= start_date GROUP BY fiscal_year, revenue_or_spending, organization_group, department ORDER BY fiscal_year, organization_group"
     },
     "filename": "xdgd-c79v.json"
 }

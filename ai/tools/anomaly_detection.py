@@ -139,7 +139,7 @@ def group_data_by_field_and_date(data_array, group_field, numeric_field, date_fi
 
         # Convert string dates to datetime objects
         if isinstance(date_obj, str):
-            date_obj = custom_parse_date(date_obj)
+            date_obj = custom_parse_date(date_obj, period_type)
             if not date_obj:
                 logging.warning(f"Could not parse date for record: {item}")
                 continue
@@ -153,25 +153,28 @@ def group_data_by_field_and_date(data_array, group_field, numeric_field, date_fi
 
         # Use appropriate date format based on period_type
         if period_type == 'year':
-            date_key = date_obj.strftime("%Y")
+            # For year period, always use YYYY format
+            date_key = str(date_obj.year)
         elif period_type == 'month':
+            # For month period, always use YYYY-MM format
             date_key = date_obj.strftime("%Y-%m")
         else:  # day
             date_key = date_obj.strftime("%Y-%m-%d")
-            
+
         all_dates.add(date_key)
-        
+
         if group_value not in grouped:
             grouped[group_value] = {}
         if date_key not in grouped[group_value]:
-            grouped[group_value][date_key] = 0
+            grouped[group_value][date_key] = 0.0  # Initialize as float
 
-         # Convert numeric value to int, with error handling
+        # Convert numeric value to float, with error handling
         try:
-            numeric_value = int(item.get(numeric_field, 0))
+            numeric_str = str(item.get(numeric_field, '0')).replace(',', '')  # Remove any commas
+            numeric_value = float(numeric_str)
         except (ValueError, TypeError):
             logging.warning(f"Invalid numeric value for record: {item}")
-            numeric_value = 0
+            numeric_value = 0.0
             
         grouped[group_value][date_key] += numeric_value
 
@@ -183,8 +186,20 @@ def group_data_by_field_and_date(data_array, group_field, numeric_field, date_fi
 
     return grouped
 
-def custom_parse_date(date_str):
-    # Handle YYYY-MM format first
+def custom_parse_date(date_str, period_type='month'):
+    # Handle YYYY format for year period type
+    if period_type == 'year' and isinstance(date_str, str):
+        try:
+            # For year period, always extract just the year regardless of input format
+            if '-' in date_str:
+                year = int(date_str.split('-')[0])
+            else:
+                year = int(date_str)
+            return datetime.date(year, 1, 1)
+        except ValueError:
+            pass
+
+    # Handle YYYY-MM format for month period type
     if isinstance(date_str, str) and len(date_str.split('-')) == 2:
         try:
             year, month = map(int, date_str.split('-'))
@@ -289,7 +304,7 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
                     # If it's YYYY-MM format, keep it as is
                     item_date = date_value
                 else:
-                    item_date = custom_parse_date(date_value)
+                    item_date = custom_parse_date(date_value, period_type)
             elif isinstance(date_value, pd.Timestamp):
                 # Format based on period_type
                 item_date = format_date(date_value, period_type)
@@ -308,7 +323,7 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
 
             # Convert date_field value to datetime.date if necessary
             if isinstance(date_value, str):
-                item_date = custom_parse_date(date_value)
+                item_date = custom_parse_date(date_value, period_type)
                 logging.debug(f"Record {idx}: Parsed string date to: {item_date}")
             elif isinstance(date_value, pd.Timestamp):
                 item_date = date_value.date()
@@ -385,7 +400,7 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
             # Parse item_value if condition value is a date
             if is_date:
                 if isinstance(item_value, str):
-                    item_value = custom_parse_date(item_value)
+                    item_value = custom_parse_date(item_value, period_type)
                 elif isinstance(item_value, (datetime.date, datetime.datetime)):
                     item_value = item_value.date() if isinstance(item_value, datetime.datetime) else item_value
                 elif isinstance(item_value, (int, float)):
@@ -610,17 +625,17 @@ def anomaly_detection(
     print(grouped_data)
     # Get the full list of periods between comparison_period['start'] and recent_period['end']
     if date_field:
-        if date_field.lower() == 'year':
-            # Get full years between start and end, but format as YYYY-01
+        if period_type == 'year':  # Changed from date_field.lower() == 'year'
+            # Get full years between start and end, format as YYYY only
             start_year = comparison_period['start'].year
             end_year = recent_period['end'].year
-            full_months = [f"{year}-01" for year in range(start_year, end_year + 1)]
+            full_months = [str(year) for year in range(start_year, end_year + 1)]
         else:
             # Get full months between start and end
             full_months = get_month_range(comparison_period['start'], recent_period['end'])
     else:
         full_months = ['All']  # When date_field is not provided
-    logging.info (f"full months {full_months}")
+    logging.info(f"full months {full_months}")
     results = []
     for group_value, data_points in grouped_data.items():
         logging.info(f"Processing group: {group_value}")
@@ -665,16 +680,28 @@ def anomaly_detection(
                     try:
                         # Use appropriate date format based on period_type
                         if period_type == 'year':
-                            item_date = datetime.datetime.strptime(date_key, "%Y").date()
-                        elif period_type == 'month':
-                            item_date = datetime.datetime.strptime(date_key, "%Y-%m").date()
-                        else:  # day
-                            item_date = datetime.datetime.strptime(date_key, "%Y-%m-%d").date()
+                            # For year period, just compare the years
+                            item_year = int(date_key)
+                            comp_start_year = comparison_period['start'].year
+                            comp_end_year = comparison_period['end'].year
+                            recent_start_year = recent_period['start'].year
+                            recent_end_year = recent_period['end'].year
                             
-                        if comparison_period['start'] <= item_date <= comparison_period['end']:
-                            comparison_counts.append(count)
-                        elif recent_period['start'] <= item_date <= recent_period['end']:
-                            recent_counts.append(count)
+                            if comp_start_year <= item_year <= comp_end_year:
+                                comparison_counts.append(count)
+                            elif recent_start_year <= item_year <= recent_end_year:
+                                recent_counts.append(count)
+                        else:
+                            # For month/day periods, use full date comparison
+                            if period_type == 'month':
+                                item_date = datetime.datetime.strptime(date_key, "%Y-%m").date()
+                            else:  # day
+                                item_date = datetime.datetime.strptime(date_key, "%Y-%m-%d").date()
+                            
+                            if comparison_period['start'] <= item_date <= comparison_period['end']:
+                                comparison_counts.append(count)
+                            elif recent_period['start'] <= item_date <= recent_period['end']:
+                                recent_counts.append(count)
                     except ValueError as e:
                         logging.error(f"Error parsing date {date_key}: {e}")
                 else:
@@ -745,7 +772,8 @@ def anomaly_detection(
         'y_axis_label': y_axis_label,
         'title': title,
         'filter_conditions': filter_conditions,
-        'numeric_field': numeric_field
+        'numeric_field': numeric_field,
+        'period_type': period_type  # Add period_type to metadata
     }
 
     html_content, markdown_content = generate_anomalies_summary_with_charts(results, metadata)
