@@ -30,10 +30,6 @@ cd ai
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
-# Start Qdrant and wait for it
-echo "Starting Qdrant..."
-qdrant > logs/qdrant.log 2>&1 &
-wait_for_service "http://0.0.0.0:6333/healthz" "Qdrant"
 
 # # Initialize vector database if needed
 # if [ ! -f .qdrant-initialized ]; then
@@ -51,6 +47,10 @@ wait_for_service "http://0.0.0.0:8000/backend" "Backend"
 echo "Checking frontend..."
 wait_for_service "http://0.0.0.0:8000" "Frontend"
 
+# Start Qdrant and wait for it
+echo "Starting Qdrant..."
+qdrant > logs/qdrant.log 2>&1 &
+wait_for_service "http://0.0.0.0:6333/healthz" "Qdrant"
 
 # Start Ghost Bridge
 echo "Starting Ghost Bridge..."
