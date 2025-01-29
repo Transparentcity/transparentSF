@@ -308,6 +308,7 @@ analyst_agent = Agent(
     - Use `set_dataset(endpoint, query)` Query and endpoint are required parameters . to set the dataset after the user selects one. The `endpoint` is the dataset identifier (e.g., `'abcd-1234.json'`), and `query` is the SoQL query string.  There are often valid soql querties in your docs for each endpoint to show you how to format your queries.  
         Here's an example call: 
         Here are some examples of valid soql queries:
+    - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
 
     """,
     # functions=[get_notes, query_docs, transfer_to_researcher_agent],
@@ -412,7 +413,7 @@ def load_data(context_variables):
     Loads and combines data, setting the dataset and updating the agent instructions with column names.
     """
     combined_data=combined_df["dataset"]
-    # combined_data = load_and_combine_climate_data()
+    combined_data = load_and_combine_climate_data()
     set_dataset_in_context(context_variables, combined_data)
     return combined_data
 

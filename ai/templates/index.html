@@ -498,6 +498,37 @@
         <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
 
         <script>
+            // Add this function at the top of your script section
+            function getOutputDirectory(content) {
+                // Check if this is a query result by looking for "Query URL" pattern
+                const queryUrlMatch = content.match(/\*\*Query URL:\*\* .*?\/resource\/([^.]+)\.json/);
+                if (queryUrlMatch) {
+                    // This is a query result, so the charts will be in the same directory as the markdown
+                    console.log('Found query result for endpoint:', queryUrlMatch[1]);
+                    // Look for directory hints in the content
+                    if (content.includes('Year-to-Date') || content.includes('YTD')) {
+                        return '/output/ytd/';
+                    } else if (content.includes('Monthly Analysis') || content.includes('per Month')) {
+                        return '/output/monthly/';
+                    } else if (content.includes('Daily Analysis') || content.includes('per Day')) {
+                        return '/output/daily/';
+                    } else {
+                        return '/output/annual/';
+                    }
+                }
+
+                // If not a query result, check for explicit paths
+                const pathMatch = content.match(/\/output\/[^/]+\//);
+                if (pathMatch) {
+                    console.log('Found explicit output path:', pathMatch[0]);
+                    return pathMatch[0];
+                }
+
+                // Default to annual
+                console.log('No directory indicators found, defaulting to annual');
+                return '/output/annual/';
+            }
+
             // Corrected element references
             const responseArea = document.getElementById("response-area");
             const userInput = document.getElementById("userInput"); // Correct ID
@@ -562,6 +593,9 @@
                 // Process each segment
                 for (let segment of message.contentSegments) {
                     if (typeof segment === "string") {
+                        // Log the content we're processing
+                        console.log('Processing content segment:', segment.substring(0, 200) + '...');
+                        
                         // It's a markdown content segment
                         try {
                             const htmlContent = marked.parse(segment);
@@ -569,6 +603,23 @@
                                 DOMPurify.sanitize(htmlContent);
                             const tempDiv = document.createElement("div");
                             tempDiv.innerHTML = sanitizedContent;
+
+                            // Determine the output directory based on content
+                            const outputDir = getOutputDirectory(segment);
+                            console.log('Selected output directory:', outputDir);
+
+                            // Fix relative image paths
+                            const images = tempDiv.getElementsByTagName('img');
+                            for (let img of images) {
+                                const src = img.getAttribute('src');
+                                console.log('Processing image source:', src);
+                                if (src && !src.startsWith('/') && !src.startsWith('http')) {
+                                    // If it's a relative path, prepend the determined output path
+                                    const newSrc = `${outputDir}${src}`;
+                                    console.log('Updating image path from', src, 'to', newSrc);
+                                    img.src = newSrc;
+                                }
+                            }
 
                             // Modify links to open in the specified frame
                             modifyLinksToOpenInFrame(tempDiv, "canvasTarget");

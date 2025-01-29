@@ -382,7 +382,7 @@ def generate_time_series_chart(
         if output_dir:
             chart_dir = output_dir
         else:
-            chart_dir = os.path.join(script_dir, '..', 'static')
+            chart_dir = os.path.join(script_dir, '..', 'output')
         os.makedirs(chart_dir, exist_ok=True)
 
         # Use a short unique ID for the filename
@@ -611,10 +611,9 @@ def generate_time_series_chart(
             fig.write_image(image_path, engine="kaleido")
             logging.info("Chart saved successfully at %s", image_path)
 
-            # Generate relative path that will be relative to the HTML file location
-            # Since the image is saved in the same directory as the HTML, we just need the filename
-            relative_path = image_filename
-            logging.debug(f"Using relative path for image: {relative_path}")
+            # Get the output directory name from the path
+            output_subdir = os.path.basename(os.path.dirname(image_path))
+            logging.debug(f"Using output subdirectory: {output_subdir}")
 
             # Prepare crosstabbed data
             if group_field:
@@ -643,10 +642,10 @@ def generate_time_series_chart(
             # Convert crosstab to HTML table
             html_table = crosstab_df.to_html(classes='data-table', index=True)
 
-            # Create markdown content
+            # Create markdown content with full path
             markdown_content = f""" 
 {context_variables.get("chart_title", "Time Series Chart")}
-![Chart]({relative_path.replace(os.sep, '/')})
+![Chart](/output/{output_subdir}/{image_filename})
 Caption: {caption}
 
 ### Data Table
