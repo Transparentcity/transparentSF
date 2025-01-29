@@ -234,16 +234,10 @@ def get_directory_path(base_path, timeframe, location):
     Get the correct directory path based on timeframe and location.
     """
     if location == 'citywide':
-        if timeframe == 'annual':
-            return os.path.join(base_path, 'ai/output/analysis')
-        else:
-            return os.path.join(base_path, 'ai/output', timeframe)
+        return os.path.join(base_path, 'ai/output', timeframe)
     else:
         # For district locations
-        if timeframe == 'annual':
-            return os.path.join(base_path, 'ai/output/districts', location)
-        else:
-            return os.path.join(base_path, 'ai/output', timeframe, 'districts', location)
+        return os.path.join(base_path, 'ai/output', timeframe, 'districts', location)
 
 def clear_collections_for_timeframe(qdrant_client, timeframe):
     """
