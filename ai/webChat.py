@@ -413,7 +413,7 @@ def load_data(context_variables):
     Loads and combines data, setting the dataset and updating the agent instructions with column names.
     """
     combined_data=combined_df["dataset"]
-    combined_data = load_and_combine_climate_data()
+    # combined_data = load_and_combine_climate_data()
     set_dataset_in_context(context_variables, combined_data)
     return combined_data
 
