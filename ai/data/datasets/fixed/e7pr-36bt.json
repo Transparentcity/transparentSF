@@ -175,6 +175,8 @@
     "data_validated": true,
     "item_noun": "night noise permits",
     "queries": {
+        "YTD": "WITH current_ytd AS (SELECT type_of_work as label, COUNT(*) as this_year FROM `e7pr-36bt` WHERE start_date >= date_trunc_y(start_date) AND start_date <= start_date GROUP BY type_of_work), previous_ytd AS (SELECT type_of_work as label, COUNT(*) as last_year FROM `e7pr-36bt` WHERE start_date >= date_sub_y(date_trunc_y(start_date), 1) AND start_date <= date_sub_y(start_date, 1) GROUP BY type_of_work) SELECT current_ytd.label, last_year, this_year, (this_year - last_year) as delta, CASE WHEN last_year = 0 THEN NULL ELSE ((this_year - last_year) * 100.0 / last_year) END as perc_diff FROM current_ytd LEFT JOIN previous_ytd ON current_ytd.label = previous_ytd.label ORDER BY label",
+        "Daily": "SELECT type_of_work, supervisor_district, analysis_neighborhood, date_trunc_ymd(start_date) AS day, COUNT(*) AS permit_count WHERE start_date >= start_date GROUP BY type_of_work, supervisor_district, analysis_neighborhood, day ORDER BY day",
         "Monthly": "SELECT type_of_work, supervisor_district, analysis_neighborhood, date_trunc_ym(start_date) AS month, COUNT(*) AS permit_count WHERE start_date >= start_date GROUP BY type_of_work, supervisor_district, analysis_neighborhood, month ORDER BY month",
         "Yearly": "SELECT type_of_work, supervisor_district, analysis_neighborhood, date_trunc_y(start_date) AS year, COUNT(*) AS permit_count WHERE start_date >= start_date GROUP BY type_of_work, supervisor_district, analysis_neighborhood, year ORDER BY year"
     },

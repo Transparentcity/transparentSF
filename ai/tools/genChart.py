@@ -27,7 +27,8 @@ def generate_time_series_chart(
     show_average_line: bool = False,
     y_axis_min: float = 0,  # Ensure default is 0
     y_axis_max: float = None,
-    return_html: bool = False  # New parameter
+    return_html: bool = False,  # New parameter
+    output_dir: str = None  # New parameter for output directory
 ) -> str:
     try:
         logging.info("Full context_variables: %s", context_variables)
@@ -377,13 +378,17 @@ def generate_time_series_chart(
             aggregated_df = filtered_agg
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        static_dir = os.path.join(script_dir, '..', 'static')
-        os.makedirs(static_dir, exist_ok=True)
+        # Use output_dir if provided, otherwise fall back to static directory
+        if output_dir:
+            chart_dir = output_dir
+        else:
+            chart_dir = os.path.join(script_dir, '..', 'static')
+        os.makedirs(chart_dir, exist_ok=True)
 
         # Use a short unique ID for the filename
         chart_id = uuid.uuid4().hex[:6]
         image_filename = f"chart_{chart_id}.png"
-        image_path = os.path.join(static_dir, image_filename)
+        image_path = os.path.join(chart_dir, image_filename)
         logging.debug("Image will be saved to: %s", image_path)
 
         try:
@@ -605,8 +610,12 @@ def generate_time_series_chart(
             # Save the chart as an image
             fig.write_image(image_path, engine="kaleido")
             logging.info("Chart saved successfully at %s", image_path)
-            relative_path = os.path.relpath(image_path, start=script_dir)
-            
+
+            # Generate relative path that will be relative to the HTML file location
+            # Since the image is saved in the same directory as the HTML, we just need the filename
+            relative_path = image_filename
+            logging.debug(f"Using relative path for image: {relative_path}")
+
             # Prepare crosstabbed data
             if group_field:
                 crosstab_df = aggregated_df.pivot_table(

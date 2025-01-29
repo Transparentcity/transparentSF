@@ -32,6 +32,13 @@ if not os.path.exists(output_dir):
 app.mount("/output", StaticFiles(directory=output_dir), name="output")
 logger.debug(f"Output directory: {output_dir}")
 
+# Mount logs directory
+logs_dir = os.path.join(current_dir, "logs")
+if not os.path.exists(logs_dir):
+    os.makedirs(logs_dir)
+app.mount("/logs", StaticFiles(directory=logs_dir), name="logs")
+logger.debug(f"Logs directory: {logs_dir}")
+
 # Root route to serve index.html
 @app.get("/")
 async def root(request: Request):

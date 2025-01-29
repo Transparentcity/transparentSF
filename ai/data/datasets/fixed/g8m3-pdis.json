@@ -364,6 +364,7 @@
     "district_level": true,
     "whom_it_may_interest": "This data appeals to city planners, local government officials, economic analysts, and researchers interested in urban development, business patterns, and regional economics concerning San Francisco.",
     "queries": {
+        "Daily": "SELECT date_trunc_ymd(location_start_date) AS day, count(*) as item_count, naic_code_description, supervisor_district, neighborhoods_analysis_boundaries WHERE location_start_date >= start_date GROUP BY day, naic_code_description, supervisor_district, neighborhoods_analysis_boundaries",
         "Monthly": "SELECT date_trunc_ym(location_start_date) AS month, count(*) as item_count, naic_code_description, supervisor_district, neighborhoods_analysis_boundaries WHERE location_start_date >= start_date GROUP BY month, naic_code_description, supervisor_district, neighborhoods_analysis_boundaries",
         "Yearly": "SELECT date_trunc_y(location_start_date) AS year, count(*) as item_count, naic_code_description, supervisor_district, neighborhoods_analysis_boundaries WHERE location_start_date >= start_date GROUP BY year, naic_code_description, supervisor_district, neighborhoods_analysis_boundaries"
     }

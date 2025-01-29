@@ -5,6 +5,11 @@ from tools.genChart import generate_time_series_chart
 from tools.anomaly_detection import anomaly_detection
 import datetime
 from swarm import Swarm
+from pathlib import Path
+import logging
+import sys
+import pytz
+from summarize_posts import create_document_summary
 
 # ------------------------------
 # Initialization
@@ -79,14 +84,25 @@ def get_time_ranges(period_type):
     Calculate recent and comparison periods based on period type.
     
     Args:
-        period_type (str): One of 'year', 'month', or 'day'
+        period_type (str): One of 'year', 'month', 'day', or 'ytd'
     
     Returns:
         tuple: (recent_period, comparison_period) each containing start and end dates
     """
     today = datetime.date.today()
     
-    if period_type == 'year':
+    if period_type == 'ytd':
+        # Current year from Jan 1 to yesterday
+        recent_period = {
+            'start': datetime.date(today.year, 1, 1),
+            'end': today - datetime.timedelta(days=1)
+        }
+        # Same days last year
+        comparison_period = {
+            'start': datetime.date(today.year - 1, 1, 1),
+            'end': datetime.date(today.year - 1, today.month, today.day) - datetime.timedelta(days=1)
+        }
+    elif period_type == 'year':
         # Last complete year
         last_year = today.year - 1 
         recent_period = {
@@ -97,29 +113,24 @@ def get_time_ranges(period_type):
             'start': datetime.date(last_year - 10, 1, 1),
             'end': datetime.date(last_year - 1, 12, 31)
         }
-    
     elif period_type == 'month':
-        # Last complete month
-        if today.day == 1:
-            last_month = (today.replace(day=1) - datetime.timedelta(days=1))
-        else:
-            last_month = today.replace(day=1) - datetime.timedelta(days=1)
+        # For monthly analysis, always use the previous month as it's complete
+        last_complete_month = today.replace(day=1) - datetime.timedelta(days=1)
+        last_complete_month = last_complete_month.replace(day=1)  # First day of the month
         
         recent_period = {
-            'start': last_month.replace(day=1),
-            'end': last_month
+            'start': last_complete_month,
+            'end': (last_complete_month.replace(day=1) + datetime.timedelta(days=32)).replace(day=1) - datetime.timedelta(days=1)
         }
         
         # Calculate start of comparison (24 months before)
-        comparison_start = (last_month.replace(day=1) - datetime.timedelta(days=1))
-        for _ in range(23):
-            comparison_start = (comparison_start.replace(day=1) - datetime.timedelta(days=1))
+        comparison_start = last_complete_month - datetime.timedelta(days=730)  # Roughly 24 months
+        comparison_start = comparison_start.replace(day=1)  # First day of that month
         
         comparison_period = {
-            'start': comparison_start.replace(day=1),
-            'end': (last_month.replace(day=1) - datetime.timedelta(days=1))
+            'start': comparison_start,
+            'end': last_complete_month - datetime.timedelta(days=1)
         }
-    
     else:  # day
         # Last complete day
         yesterday = today - datetime.timedelta(days=1)
@@ -134,17 +145,51 @@ def get_time_ranges(period_type):
     
     return recent_period, comparison_period
 
+def log_analysis(analysis_info):
+    """
+    Write analysis information to a single log file in JSONL format.
+    
+    Args:
+        analysis_info (dict): Dictionary containing analysis information
+    """
+    log_dir = 'logs'
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, 'analysis.log')
+    
+    # Create a concise log entry
+    log_entry = {
+        'timestamp': datetime.datetime.now().isoformat(),
+        'endpoint': analysis_info.get('endpoint', ''),
+        'period_type': analysis_info.get('period_type', ''),
+        'recent_period': analysis_info.get('recent_period', {}),
+        'comparison_period': analysis_info.get('comparison_period', {}),
+        'location': analysis_info.get('location', 'citywide'),
+        'fields_analyzed': analysis_info.get('fields_analyzed', []),
+        'charts_generated': analysis_info.get('charts_generated', [])
+    }
+    
+    # Write to log file in JSONL format (append mode)
+    with open(log_file_path, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(log_entry) + '\n')
+
 def process_entry(index, data_entry, output_folder, log_file, script_dir, period_type='year'):
     title = data_entry.get('title', 'Unknown')
     noun = data_entry.get('item_noun', data_entry.get('table_metadata', {}).get('item_noun', 'Unknown'))
     category = data_entry.get('report_category', 'Unknown')
     endpoint = data_entry.get('endpoint', None)
     
+    # Initialize analysis info
+    analysis_info = {
+        'endpoint': endpoint,
+        'period_type': period_type,
+        'fields_analyzed': [],
+        'charts_generated': []
+    }
+    
     # Log the period type and available queries
     queries = data_entry.get('queries', {})
     log_file.write(f"\n{index}: {title} ({endpoint}) - Processing with period_type: {period_type}\n")
     log_file.write(f"Available queries: {list(queries.keys())}\n")
-    
     
     # Select query based on period_type
     query = None
@@ -154,7 +199,7 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
     elif period_type == 'month':
         query = queries.get('Monthly')
         log_file.write(f"Selected Monthly query: {query is not None}\n")
-    elif period_type == 'day':
+    elif period_type == 'day' or period_type == 'ytd':  # Use Daily query for both day and ytd
         query = queries.get('Daily')
         log_file.write(f"Selected Daily query: {query is not None}\n")
     else:
@@ -164,7 +209,12 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
     if query:
         log_file.write(f"Using query: {query[:100]}...\n")
     else:
-        log_file.write(f"No query found for period_type: {period_type}\n")
+        # If Daily query not found for YTD, try Monthly as fallback
+        if period_type == 'ytd':
+            query = queries.get('Monthly')
+            log_file.write(f"Daily query not found for YTD, using Monthly query as fallback: {query is not None}\n")
+        if not query:
+            log_file.write(f"No query found for period_type: {period_type}\n")
 
     date_fields = data_entry.get('DateFields', [])
     numeric_fields = data_entry.get('NumericFields', [])
@@ -172,6 +222,12 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
     location_field = data_entry.get('LocationFields', [])   
     usefulness = data_entry.get('usefulness', data_entry.get('table_metadata', {}).get('usefulness', 0))
     description = data_entry.get('description', data_entry.get('table_metadata', {}).get('description', ''))
+    
+    # Add fields to analysis info
+    analysis_info['fields_analyzed'].extend(date_fields)
+    analysis_info['fields_analyzed'].extend(numeric_fields)
+    analysis_info['fields_analyzed'].extend(category_field)
+    analysis_info['fields_analyzed'].extend(location_field)
     
     # Check usefulness
     if usefulness == 0:
@@ -182,32 +238,51 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
     if not query or not endpoint or not date_fields or not numeric_fields:
         log_file.write(f"{index}: {title}({endpoint}) - Missing required fields. Skipping.\n")
         return
+    
     # Extract table and column metadata
     column_metadata = data_entry.get('columns', [])
 
     # Get time ranges based on period type
     recent_period, comparison_period = get_time_ranges(period_type)
+    analysis_info['recent_period'] = {
+        'start': recent_period['start'].isoformat(),
+        'end': recent_period['end'].isoformat()
+    }
+    analysis_info['comparison_period'] = {
+        'start': comparison_period['start'].isoformat(),
+        'end': comparison_period['end'].isoformat()
+    }
     
     # Calculate the number of periods looking back
     periods_lookback = {
         'year': comparison_period['end'].year - comparison_period['start'].year + 1,
         'month': (comparison_period['end'].year - comparison_period['start'].year) * 12 + 
                  comparison_period['end'].month - comparison_period['start'].month + 1,
-        'day': (comparison_period['end'] - comparison_period['start']).days + 1
+        'day': (comparison_period['end'] - comparison_period['start']).days + 1,
+        'ytd': 1  # YTD always compares to previous year's same period
     }[period_type]
 
     # Create period description for titles
     period_names = {
         'year': 'Annual',
         'month': 'Monthly',
-        'day': 'Daily'
+        'day': 'Daily',
+        'ytd': 'Year-to-Date'
     }
     period_desc = f"{period_names[period_type]} ({periods_lookback} {period_type}s lookback)"
 
     # Modify filter conditions based on period type
     # Determine the appropriate date field name
     date_field_name = date_fields[0]
-    if date_field_name in ['year', 'month', 'day'] and date_field_name != period_type:
+    if period_type == 'ytd':
+        # For YTD using Daily query, we need to use 'day' as that's what the query outputs
+        if query and 'date_trunc_ymd' in query:
+            date_field_name = 'day'
+        elif query and 'date_trunc_ym' in query:
+            date_field_name = 'month'
+        elif query and 'date_trunc_y' in query:
+            date_field_name = 'year'
+    elif date_field_name in ['year', 'month', 'day'] and date_field_name != period_type:
         date_field_name = period_type
 
     filter_conditions = [
@@ -225,9 +300,8 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
     try:
         context_variables = {}  # Initialize context_variables for each iteration
         # Set the dataset
-        # Replace start_date with Jan 1 of ten years ago:
-        ten_years_ago = datetime.date.today().year - 11
-        query_modified = query.replace(' start_date', f"'{datetime.date(ten_years_ago, 1, 1)}'")
+        # Use the comparison period start date instead of hardcoding 10 years ago
+        query_modified = query.replace(' start_date', f"'{comparison_period['start']}'")
         result = set_dataset(context_variables=context_variables, endpoint=endpoint, query=query_modified, filter_conditions=filter_conditions)
         if 'error' in result:
             log_file.write(f"{index}: {title} ({endpoint}) - Error setting dataset: {result['error']}\n")
@@ -253,16 +327,19 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
 
         # Function to generate charts and anomalies
         def generate_reports(current_dataset, current_filter_conditions, current_output_folder, current_title_suffix, metadata):
-            nonlocal all_markdown_contents, all_html_contents
+            nonlocal all_markdown_contents, all_html_contents, analysis_info
             # Generate charts for each combination of date and numeric fields
 
             for date_field in date_fields:
                 for numeric_field in numeric_fields:
                     # Update chart title for this combination
-                    context_variables['chart_title'] = (
-                        f"{title} <br> {'count' if numeric_field == 'item_count' else numeric_field.replace('_', ' ')} by {date_field}"
-                    )
+                    chart_title = f"{title} <br> {'count' if numeric_field == 'item_count' else numeric_field.replace('_', ' ')} by {date_field}"
+                    context_variables['chart_title'] = chart_title
                     context_variables['noun'] = f"{title}"
+                    
+                    # Track chart being generated
+                    analysis_info['charts_generated'].append(chart_title)
+                    
                     # Generate the chart
                     chart_result = generate_time_series_chart(
                         context_variables=context_variables,
@@ -272,7 +349,8 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
                         max_legend_items=10,
                         filter_conditions=current_filter_conditions,
                         show_average_line=True,
-                        return_html=True
+                        return_html=True,
+                        output_dir=current_output_folder
                     )
                     # Ensure we're adding strings, not tuples or dicts
                     if isinstance(chart_result, tuple):
@@ -287,9 +365,10 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
             # Loop through each category field to detect anomalies
             for cat_field in category_field:
                 try:
-                    context_variables['chart_title'] = (
-                        f"{title} <br> {'count' if numeric_fields[0] == 'item_count' else numeric_fields[0].replace('_', ' ')} by {date_fields[0]} by {cat_field}"
-                    )
+                    chart_title = f"{title} <br> {'count' if numeric_fields[0] == 'item_count' else numeric_fields[0].replace('_', ' ')} by {date_fields[0]} by {cat_field}"
+                    context_variables['chart_title'] = chart_title
+                    analysis_info['charts_generated'].append(chart_title)
+                    
                     chart_result = generate_time_series_chart(
                         context_variables=context_variables,
                         time_series_field=date_field_name,
@@ -299,7 +378,8 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
                         group_field=cat_field,
                         filter_conditions=current_filter_conditions,
                         show_average_line=False,
-                        return_html=True
+                        return_html=True,
+                        output_dir=current_output_folder
                     )
                     if isinstance(chart_result, tuple):
                         markdown_content, html_content = chart_result
@@ -431,11 +511,17 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
                     metadata_md += f"| {column} | No description | Unknown |\n"
 
             full_markdown_content = metadata_md + "\n\n" + combined_markdown
+
+            # Save markdown file
             markdown_filename = os.path.join(current_output_folder, f"{sanitized_title}.md")
             if os.path.exists(markdown_filename):
                 os.remove(markdown_filename)
             with open(markdown_filename, 'w', encoding='utf-8') as f:
                 f.write(full_markdown_content)
+
+            # Generate summary for citywide analysis only
+            if current_title_suffix == "City Wide":
+                summarize_markdown_file(markdown_filename, log_file)
 
             # Clear the contents for the next iteration
             all_markdown_contents.clear()
@@ -453,19 +539,30 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
             'column_metadata': column_metadata
         }
 
-        # Process unfiltered data
+        # Process unfiltered data (citywide)
+        analysis_info['location'] = 'citywide'
         main_html_file = generate_reports(dataset, filter_conditions, output_folder, "City Wide", metadata)
+        
+        # Log citywide analysis
+        log_analysis(analysis_info)
 
         # If supervisor_district is present, process for each district
         if has_supervisor_district:
-            for district in range(1, 12):  # Districts 1-11
-                district_output = os.path.join(output_folder, 'districts', f'district_{district}')
+            for district in range(1, 12):
+                district_analysis_info = analysis_info.copy()
+                district_analysis_info['location'] = f'district_{district}'
                 
+                district_output = os.path.join(output_folder, 'districts', f'district_{district}')
                 os.makedirs(district_output, exist_ok=True)
+                
                 district_filter_conditions = filter_conditions + [
                     {'field': 'supervisor_district', 'operator': '=', 'value': district}
                 ]
+                
                 generate_reports(dataset, district_filter_conditions, district_output, f"District {district}", metadata)
+                
+                # Log district analysis
+                log_analysis(district_analysis_info)
 
         # Log success using the main HTML file path
         relative_html_path = os.path.relpath(main_html_file, start=script_dir)
@@ -508,7 +605,7 @@ def export_for_endpoint(endpoint, period_type='year', output_folder=None,
     
     if not output_folder:
         # Update output folder based on period_type
-        period_folder = {'year': 'annual', 'month': 'monthly', 'day': 'daily'}[period_type]
+        period_folder = {'year': 'annual', 'month': 'monthly', 'day': 'daily', 'ytd': 'ytd'}[period_type]
         output_folder = os.path.join(script_dir, 'output', period_folder)
         print(f"Using output folder: {output_folder}")
 
@@ -550,6 +647,43 @@ def export_for_endpoint(endpoint, period_type='year', output_folder=None,
 
     print(f"\nExport processing complete for endpoint: {endpoint}.")
     print(f"Log file location: {log_file_path}")
+
+def summarize_markdown_file(markdown_filename: str, log_file) -> None:
+    """
+    Create a summary of a markdown file and save it as a _summary.txt file.
+    Only processes the file if a summary doesn't already exist.
+    
+    Args:
+        markdown_filename (str): Path to the markdown file to summarize
+        log_file: File object for logging
+    """
+    try:
+        # Convert to Path object for easier manipulation
+        md_file = Path(markdown_filename)
+        if not md_file.exists():
+            log_file.write(f"Markdown file not found: {markdown_filename}\n")
+            return
+            
+        # Check if summary already exists
+        summary_file = md_file.parent / f"{md_file.stem}_summary.txt"
+        if summary_file.exists():
+            log_file.write(f"Summary already exists for {md_file.name}, skipping...\n")
+            return
+            
+        log_file.write(f"Generating summary for: {md_file.name}\n")
+        
+        # Read the markdown content
+        content = md_file.read_text(encoding='utf-8')
+        
+        # Generate summary
+        summary = create_document_summary(content)
+        
+        # Save summary
+        summary_file.write_text(summary, encoding='utf-8')
+        log_file.write(f"✓ Successfully saved summary to {summary_file.name}\n")
+        
+    except Exception as e:
+        log_file.write(f"❌ Error processing {markdown_filename}: {str(e)}\n")
 
 # ------------------------------
 # Main Function

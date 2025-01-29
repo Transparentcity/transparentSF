@@ -20,6 +20,8 @@ from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uuid
+import datetime
+import sys
 
 # ------------------------------
 # Configuration and Setup
@@ -43,16 +45,57 @@ router.mount("/static", StaticFiles(directory="static"), name="static")
 # Mount the static directory
 templates = Jinja2Templates(directory="templates")
 
-# Configure logging
+# Configure logging with more detailed format
+# Get absolute path for logs directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+logs_dir = os.path.join(current_dir, 'logs')
+log_file = os.path.join(logs_dir, 'webchat.log')
+
+# Create logs directory if it doesn't exist
+os.makedirs(logs_dir, exist_ok=True)
+
+# Test write access and log startup
+try:
+    with open(log_file, 'a', encoding='utf-8') as f:
+        startup_message = f"\n{'='*50}\nLog started at {datetime.datetime.now()}\nLog file: {log_file}\nPython path: {sys.executable}\n{'='*50}\n"
+        f.write(startup_message)
+except Exception as e:
+    print(f"Error writing to log file: {e}")
+    raise
+
+# Configure root logger first
 logging.basicConfig(
-    level=logging.DEBUG,  # Set to DEBUG to capture all levels of log messages
+    level=logging.INFO,  # Set to INFO level
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler()
+        logging.StreamHandler(sys.stdout),  # Log to stdout for debugging
+        logging.FileHandler(log_file, mode='a', encoding='utf-8')
     ]
 )
 
+# Configure our module's logger
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Remove any existing handlers to avoid duplication
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
+
+# Add handlers specifically for our logger
+file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+stream_handler = logging.StreamHandler(sys.stdout)
+
+# Create a custom formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+stream_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
+
+# Test the logger
+logger.info(f"WebChat logging initialized at {datetime.datetime.now()}")
+logger.info(f"Log file location: {log_file}")
 
 # Initialize connections
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -88,20 +131,39 @@ def load_and_combine_notes():
     logger = logging.getLogger(__name__)
     data_folder = Path('output/')
     combined_text = ''
+    total_files = 0
     
-    logger.info(f"Starting to load and combine notes from {data_folder} and its subfolders")
+    logger.info("Starting to load and combine notes")
     
-    # Use rglob to recursively find all .txt files
-    for file_path in data_folder.rglob('*.txt'):
-        logger.debug(f"Reading file: {file_path}")
-        try:
-            combined_text += file_path.read_text(encoding='utf-8') + '\n'
-        except Exception as e:
-            logger.error(f"Failed to read {file_path}: {e}")
+    # First find the most recent aggregated summary
+    aggregated_dir = data_folder / 'aggregated_summaries'
+    if aggregated_dir.exists():
+        aggregated_files = list(aggregated_dir.glob('aggregated_summaries_*.txt'))
+        if aggregated_files:
+            latest_aggregated = max(aggregated_files, key=lambda x: x.stat().st_mtime)
+            logger.info(f"Loading most recent aggregated summary: {latest_aggregated}")
+            combined_text = latest_aggregated.read_text(encoding='utf-8')
+            total_files += 1
+            logger.info(f"Aggregated summary size: {len(combined_text)} characters")
     
-    logger.info("Finished loading and combining notes")
-    print(f"First 100 characters:\n{combined_text[:100]}")
-    print(f"Total length: {len(combined_text)} characters ({len(combined_text.split())} tokens)")
+    # Then load any individual summaries that are newer than the aggregated summary
+    latest_mtime = latest_aggregated.stat().st_mtime if 'latest_aggregated' in locals() else 0
+    
+    for file_path in data_folder.glob('*.json_summary.txt'):
+        if file_path.stat().st_mtime > latest_mtime:
+            logger.info(f"Loading newer summary: {file_path}")
+            file_content = file_path.read_text(encoding='utf-8')
+            logger.info(f"File {file_path.name} size: {len(file_content)} characters")
+            combined_text += '\n' + file_content
+            total_files += 1
+    
+    logger.info(f"""
+Notes loading complete:
+Total files processed: {total_files}
+Total combined length: {len(combined_text)} characters
+First 100 characters: {combined_text[:100]}
+""")
+    
     return combined_text
 
 combined_notes=load_and_combine_notes() 
@@ -145,21 +207,50 @@ def get_dataset(context_variables, *args, **kwargs):
         return {'error': 'Dataset is not available or is empty.'}
 
 def get_notes(context_variables, *args, **kwargs):
-    notes = context_variables.get("notes", "").strip()
+    """
+    Returns the notes from context variables, with length checking and logging.
+    """
     logger = logging.getLogger(__name__)
-    logger.info("Context variables contents:")
-    for key, value in context_variables.items():
-        if isinstance(value, pd.DataFrame):
-            logger.info(f"{key}: DataFrame with shape {value.shape}")
+    
+    try:
+        notes = context_variables.get("notes", "").strip()
+        total_length = len(notes)
+        
+        logger.info(f"""
+=== get_notes called ===
+Total length: {total_length} characters
+Approximate tokens: {len(notes.split())}
+First 100 chars: {notes[:100]}
+Number of lines: {len(notes.splitlines())}
+""")
+        
+        # If notes exceed OpenAI's limit, truncate them
+        if total_length > MAX_MESSAGE_LENGTH:
+            logger.warning(f"""
+Notes exceed maximum length:
+Current length: {total_length}
+Maximum allowed: {MAX_MESSAGE_LENGTH}
+Difference: {total_length - MAX_MESSAGE_LENGTH}
+""")
+            # Keep the first part and last part with a message in between
+            keep_length = (MAX_MESSAGE_LENGTH // 2) - 100  # Leave room for the truncation message
+            truncation_message = "\n\n[CONTENT TRUNCATED DUE TO LENGTH]\n\n"
+            notes = notes[:keep_length] + truncation_message + notes[-keep_length:]
+            logger.info(f"""
+Notes truncated:
+New length: {len(notes)}
+Truncation point: {keep_length}
+""")
+        
+        if notes:
+            return {"notes": notes}
         else:
-            logger.info(f"{key}: {type(value)} - {value[:200]}...")  # Show first 200 chars for strings
-    if notes is not None and len(notes.strip()) > 0:
-        logger.info("Notes found in the dataset.")
-        return {"notes": notes}
-    else:
-        logger.error("No notes found or notes are empty.")
-        return {"error": "No notes found or notes are empty."}
-
+            logger.error("No notes found or notes are empty")
+            return {"error": "No notes found or notes are empty"}
+            
+    except Exception as e:
+        logger.error(f"Error in get_notes: {str(e)}")
+        return {"error": f"Error processing notes: {str(e)}"}
 
 def get_columns(context_variables, *args, **kwargs):
 
@@ -232,384 +323,14 @@ def update_agent_instructions_with_columns(columns):
     column_list_str = ', '.join(columns)
     logger.info(f"Updating agent instructions with columns: {column_list_str}")  # Log before updating
 
-    # Use a regular string and .format() method
-    analyst_agent.instructions = """ 
-    Your Objectives: You are an expert in anomaly detection. Your primary job is to identify anomalies in the data provided. When the conversation is transferred to you, get the get_data_summary and share it with the user. This will help them understand the data better.
-    Dataset Awareness:
-    Available Columns in the Dataset:
-    You have access to the following columns: [{column_list_str}]. ANNOUNCE THESE TO THE USER.
-
-    Upon starting the conversation, immediately retrieve the dataset using the get_dataset() function.
-    Announce to the user that you have access to the dataset and provide the list of available columns.
-    Anomaly Detection Expertise:
-
-    You are an expert in anomaly detection. Your primary job is to identify anomalies in the provided data.
-    Engage with the User:
-
-    Clarify Requirements:
-    Ask specific questions to gather necessary parameters such as date ranges, fields of interest, filters, and grouping preferences.
-    When the user mentions column names, verify them against the available columns. If discrepancies are found, politely correct the user and provide the correct column names.
-
-    Engage with the user to clarify their requirements.
-    Ask specific questions to gather necessary parameters such as date ranges, fields of interest, filters, and grouping preferences.
-    Find the Appropriate Dataset:
-
-    Use the query_docs function to search for relevant datasets in the "SFPublicData" knowledge base based on the user's needs.
-    Present the user with a shortlist of the most relevant datasets, including titles, descriptions, endpoints, and available columns.
-    Assist the user in selecting the most suitable dataset.
-    Gather Necessary Query Parameters:
-    
-**Function Usage:**
-
-    - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in.
-    - Use `set_dataset(endpoint, query)` to set the dataset after the user selects one. The `endpoint` is the dataset identifier (e.g., `'abcd-1234.json'`), and `query` is the SoQL query string.
-    - Use `generate_time_series_chart` to create visualizations of the aggregated data.
-
-    **User Interaction:**
-
-    - Always communicate clearly and professionally.
-    - If you need additional information, ask the user specific questions.
-    - Do not overwhelm the user with too many questions at once; prioritize based on what is essential to proceed.
-
-    **SoQL Query Construction:**
-
-    - Be aware that SoQL differs from SQL in several key ways:
-      - SoQL does not support the `EXTRACT()` function; use functions like `date_trunc_y()` or `date_trunc_ym()` for year and month.
-      - There is no `FROM` statement; the dataset is specified via the endpoint.
-      - Use parentheses in `WHERE` clauses to ensure correct logical grouping when combining `AND` and `OR`.
-    - **Never leave placeholders or blanks in the query; ensure all parameters are filled with exact values.**
-    - Double-check that all fields and functions used are supported by SoQL and exist in the dataset.
-
-    **Data Freshness and Relevance:**
-
-    - Prefer datasets that are up-to-date and most relevant to the user's query.
-    - Inform the user if the data they are requesting is outdated or has limitations.
-
-    **Example Workflow:**
-
-    **Understanding User Needs:**
-
-    **Finding the Appropriate Dataset:**
-
-    **Gathering Query Parameters:**
-
-    **Generating the SoQL Query:**
-
-    Agent constructs the query:
-
-    ```soql
-    SELECT incident_date, incident_type, severity
-    WHERE incident_date >= '2023-08-01' AND incident_date <= '2023-09-30'
-    AND (severity = 'High' OR severity = 'Critical')
-    ORDER BY incident_date DESC
-    ```
-    Agent ensures the query is URL-encoded if necessary.
-
-    **Setting the Dataset:**
-
-    Agent uses:
-
-    ```python
-    set_dataset(
-        endpoint='abcd-1234.json',
-        query="SELECT incident_date, incident_type, severity WHERE incident_date >= '2023-08-01' AND incident_date <= '2023-09-30' AND (severity = 'High' OR severity = 'Critical') ORDER BY incident_date DESC"
-    )
-    ```
-
-    Once a dataset is selected, discuss with the user to determine, user set_columns to lock in the column names for this query session. 
-    Specific columns they are interested in. You can show column names or fieldNames to the user, but only use fieldNames when making the query.
-    Exact date ranges (start and end dates in 'YYYY-MM-DD' format).
-    Any filters or conditions (e.g., categories, regions, statuses).
-    Grouping and aggregation requirements.
-    Generate a Complete SoQL Query:
-
-    Construct a SoQL query that incorporates all the parameters provided by the user. Remember to use column functions like date_trunc_y() or date_trunc_ym() for date grouping.
-    Ensure the query includes:
-    A SELECT clause with the desired columns.
-    A WHERE clause with exact dates and specified conditions.
-    GROUP BY, ORDER BY, and LIMIT clauses as needed.
-    Validate that all columns used in the query exist in the dataset's schema.
-    Make sure the query is properly URL-encoded when needed.
-    Set the Dataset:
-
-    Use the set_dataset function to retrieve the data and store it in the context variables.
-    The set_dataset function requires two parameters:
-    endpoint: The 9-character dataset identifier plus the .json extension (e.g., 'wg3w-h783.json'). NOT THE ENTIRE URL.
-    query: The complete SoQL query string.
-    Confirm that the data has been successfully retrieved.
-    Transfer to the Anomaly Finder Agent:
-
-    Generate and Display Data Visualizations:
-
-    The generate_time_series_chart function creates a time series chart by aggregating numeric fields over specified time intervals, applying optional grouping and filter conditions. This function is suitable for visualizing trends, comparing groups, and filtering data dynamically based on specific requirements.
-
-    Function Call Structure
-    ```python
-    markdown_chart = generate_time_series_chart(
-        context_variables={{'dataset': df}},             # Dictionary containing the dataset under 'dataset'
-        time_series_field='date',              # Column name representing time
-        numeric_fields=['sales', 'expenses'],  # List of numeric fields to visualize
-        aggregation_period='month',            # Aggregation period ('day', 'week', 'month', etc.)
-        group_field='agent',                   # Optional field for grouping (e.g., 'agent')
-        agg_functions={{{{'sales': 'sum'}}}},      # Optional aggregation functions for numeric fields
-        filter_conditions=[                    # Optional filter conditions for specific records
-            {{{{"field": "status", "operator": "==", "value": "Completed"}}}},
-            {{{{"field": "sales", "operator": ">", "value": 500}}}}
-        ]
-    )
-    Function Call Structure
-    ```python
-    markdown_chart = generate_time_series_chart(
-        context_variables=context,             # Dictionary containing the dataset under 'dataset'
-        time_series_field='date',              # Column name representing time
-        numeric_fields=['sales', 'expenses'],  # List of numeric fields to visualize
-        aggregation_period='month',            # Aggregation period ('day', 'week', 'month', etc.)
-        group_field='agent',                   # Optional field for grouping (e.g., 'agent')
-        agg_functions={{'sales': 'sum'}},      # Optional aggregation functions for numeric fields
-        filter_conditions=[                    # Optional filter conditions for specific records
-            {{"field": "status", "operator": "==", "value": "Completed"}},
-            {{"field": "sales", "operator": ">", "value": 500}}
-        ]
-    )
-    ```
-    Key Parameters
-    **context_variables:**
-
-    Contains the dataset in the format `{{'dataset': <your_dataframe>}}`.
-    Ensure the dataset is properly loaded into this dictionary under the key `'dataset'`.
-
-    **time_series_field:**
-
-    Specifies the column representing time (e.g., `'date'`).
-    This field will be used to aggregate data over the period specified in `aggregation_period`.
-
-    **numeric_fields:**
-
-    A list of numeric columns to visualize (e.g., `['sales', 'expenses']`).
-    Ensure these fields are numerical, as the function will aggregate them according to the specified aggregation functions.
-
-    **aggregation_period** (optional, defaults to `'day'`):
-
-    Specifies the time interval for data aggregation, such as `'day'`, `'week'`, `'month'`, `'quarter'`, or `'year'`.
-
-    **group_field** (optional):
-
-    The field by which to group data (e.g., `'agent'` or `'category'`).
-    If provided, the chart will display a breakdown by this field; otherwise, it will generate an aggregated time series without grouping.
-
-    **agg_functions** (optional):
-
-    A dictionary defining aggregation functions for each numeric field.
-    Example: `{{'sales': 'sum', 'expenses': 'mean'}}`.
-    If not specified, default aggregation (`'sum'`) will be applied to all numeric fields.
-
-    **filter_conditions** (optional):
-
-    A list of dictionaries, each specifying a condition for filtering records based on specific fields.
-
-    **Format:**
-    ```python
-    filter_conditions = [
-        {{"field": "<field_name>", "operator": "<operator>", "value": <value>}}
-    ]
-    ```
-
-    **Operators:**
-
-    Supported operators include `==` (equals), `!=` (not equals), `>`, `<`, `>=`, and `<=`.
-
-    **Example:**
-    ```python
-    filter_conditions = [
-        {{"field": "status", "operator": "==", "value": "Completed"}},
-        {{"field": "sales", "operator": ">", "value": 500}}
-    ]
-    ```
-    This example keeps only records where the status is `"Completed"` and sales are greater than `500`.
-
-    **Filtering Data with `filter_conditions`**
-
-    When `filter_conditions` is provided, the function uses `filter_data_by_date_and_conditions` to apply filters. Here's how this works:
-
-    **Date Filtering:**
-
-    If `filter_conditions` include date-based criteria (e.g., `{{"field": "transaction_date", "operator": ">", "value": "2023-01-01"}}`), the function will:
-
-    - Parse `value` in the filter condition as a date.
-    - Filter records based on whether the `transaction_date` meets the specified condition (`>` in this example).
-
-    **Range Filtering Using `start_date` and `end_date` (optional):**
-
-    If you wish to filter records within a date range:
-
-    - Set `start_date` and `end_date` in the `filter_data_by_date_and_conditions` function call.
-    - This will exclude records outside the specified range, adding an additional layer to the filtering process.
-
-    **Non-Date Filters:**
-
-    - Conditions not related to dates are applied directly.
-    - The function supports filtering based on numeric or string matches, using the specified operator.
-    - For example, `{{"field": "sales", "operator": ">", "value": 500}}` filters for records with sales greater than `500`.
-
-    **Displaying the Chart**
-
-    The `generate_time_series_chart` function outputs a Markdown string pointing to the chart image. Here's how to display it:
-
-    ```markdown
-    ![Chart](<relative_path_to_chart>)
-    ```
-    The chart will be saved in the `static` directory with a unique filename, and the relative path to this file is returned as Markdown content to be displayed in the interface.
-
-    **Example Workflow**
-
-    To create a monthly time series chart of sales and expenses grouped by agent, showing only records where status is `"Completed"` and sales are above `500`, you would call:
-
-    ```python
-    markdown_chart = generate_time_series_chart(
-        context_variables={'dataset': df}, 
-        time_series_field='date',
-        numeric_fields=['sales', 'expenses'],
-        aggregation_period='month',
-        group_field='agent',
-        agg_functions={'sales': 'sum', 'expenses': 'mean'},
-        filter_conditions=[
-            {"field": "status", "operator": "==", "value": "Completed"},
-            {"field": "sales", "operator": ">", "value": 500}
-        ]
-    )
-    ```
-    The `markdown_chart` output will contain the Markdown string for displaying the generated chart.
-
-    **Troubleshooting Tips**
-
-    - Ensure `context_variables` has the dataset under the key `'dataset'`.
-    - Make sure all fields in `numeric_fields`, `time_series_field`, and `group_field` exist in the dataset.
-    - When using `filter_conditions`, check that values match the types in your dataset (e.g., convert dates to strings if needed).
-    - If an error occurs in parsing or filtering dates, check the format and validity of all date fields and conditions.
-
-    These instructions should guide you in using `generate_time_series_chart` with full control over data visualization, aggregation, grouping, and filtering.
-
-    **Important Guidelines:**
-
-    **Function Usage:**
-
-    - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in. always pass the context_variables and the collection name is allways "SFPublicData"
-    - Use `set_dataset(endpoint, query)` to set the dataset after the user selects one. The `endpoint` is the dataset identifier (e.g., `'abcd-1234.json'`), and `query` is the SoQL query string.
-    - Use `generate_time_series_chart` to create visualizations of the aggregated data.
-
-    **User Interaction:**
-
-    - Always communicate clearly and professionally.
-    - If you need additional information, ask the user specific questions.
-    - Do not overwhelm the user with too many questions at once; prioritize based on what is essential to proceed.
-
-    **SoQL Query Construction:**
-
-    - Be aware that SoQL differs from SQL in several key ways:
-      - SoQL does not support the `EXTRACT()` function; use functions like `date_trunc_y()` or `date_trunc_ym()` for year and month.
-      - There is no `FROM` statement; the dataset is specified via the endpoint.
-      - Use parentheses in `WHERE` clauses to ensure correct logical grouping when combining `AND` and `OR`.
-    - **Never leave placeholders or blanks in the query; ensure all parameters are filled with exact values.**
-    - Double-check that all fields and functions used are supported by SoQL and exist in the dataset.
-
-    **Data Freshness and Relevance:**
-
-    - Prefer datasets that are up-to-date and most relevant to the user's query.
-    - Inform the user if the data they are requesting is outdated or has limitations.
-
-    **Example Workflow:**
-
-    **Understanding User Needs:**
-
-    **Finding the Appropriate Dataset:**
-
-    **Gathering Query Parameters:**
-
-    **Generating the SoQL Query:**
-
-    Agent constructs the query:
-
-    ```soql
-    SELECT incident_date, incident_type, severity
-    WHERE incident_date >= '2023-08-01' AND incident_date <= '2023-09-30'
-    AND (severity = 'High' OR severity = 'Critical')
-    ORDER BY incident_date DESC
-    ```
-    Agent ensures the query is URL-encoded if necessary.
-
-    **Setting the Dataset:**
-
-    Agent uses:
-
-    ```python
-    set_dataset(
-        endpoint='abcd-1234.json',
-        query="SELECT incident_date, incident_type, severity WHERE incident_date >= '2023-08-01' AND incident_date <= '2023-09-30' AND (severity = 'High' OR severity = 'Critical') ORDER BY incident_date DESC"
-    )
-    ```
-    Agent confirms the data has been retrieved.
-
-    - Use the `get_dataset` function (without any parameters) to access the dataset.
-    - Use the `set_columns` function (without any parameters) to set columns from a dataset the user wants to query
-    - Use the `get_data_summary` function (without any parameters) to get a statistical summary of the data.
-    - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
-    - Use the `anomaly_detection` function to perform anomaly detection on the dataset. When calling this function, ensure you correctly pass values for the following parameters:
-    - `group_field`: Specify the column name by which you want to group the data. Use the result of `get_columns` to decide which column is suitable for grouping (e.g., `'Category'`).
-    - `filter_conditions`: Pass in a list of conditions to filter the data. Use this to narrow down the dataset for specific analysis. The format is a list of dictionaries with `'field'`, `'operator'`, and `'value'` keys.
-
-    **Example:**
-
-    ```python
-    filter_conditions = [
-        {'field': 'Date', 'operator': '>', 'value': '2022-01-01'},
-        {'field': 'Region', 'operator': '==', 'value': 'San Francisco'}
-    ]
-    min_diff = 2  # Numeric values only
-
-    recent_period = {'start': '2024-09-01', 'end': '2024-09-30'}
-    comparison_period = {'start': '2023-08-01', 'end': '2023-08-31'}
-
-    anomaly_detection(
-        group_field='Category',
-        filter_conditions=filter_conditions,
-        min_diff=min_diff,
-        recent_period=recent_period,
-        comparison_period=comparison_period,
-        date_field='DATE',
-        numeric_field='COUNT'
-    )
-    ```
-    **Note:** You must provide a `recent_period` and `comparison_period`. If the user doesn't provide them, then use the values in the example above.
-
-    **Generating and Displaying Charts:**
-
-    - Use the `generate_time_series_chart` function to create visualizations of the aggregated data.
-    - The results from `generate_time_series_chart` are returned as Markdown text and should be displayed to the user within the conversation interface.
-
-    **Example:**
-
-    ```python
-    markdown_chart = generate_time_series_chart(
-        context_variables=context,
-        time_series_field='date',
-        numeric_fields=['sales', 'expenses'],
-        aggregation_period='month',
-        group_field='agent'
-    )
-    ```
-    Agent then displays the chart:
-
-    ```markdown
-    ![Chart](../static/chart_20240427_123456_abcdef123456.png)
-    ```
-    **Remember:**
-
-    - Always validate user inputs for correctness and completeness before constructing the query.
-    - Keep the conversation user-focused, aiming to make the process smooth and efficient.
-    - Endpoints are 9 characters long and are not the full URL. They are unique identifiers for datasets.
-    - Your text should be in Markdown for best formatting.
-    """
-
+    # Split the base instructions at the Dataset Awareness section if it exists
+    base_instructions = analyst_agent.instructions.split("Dataset Awareness:", 1)[0]
+
+    # Create the new instructions by combining base instructions with column information
+    analyst_agent.instructions = base_instructions + f"""Dataset Awareness:
+Available Columns in the Dataset:
+You have access to the following columns: {column_list_str}. ANNOUNCE THESE TO THE USER.
+"""
 
 def load_and_combine_climate_data():
     data_folder = 'data/climate'
@@ -631,24 +352,42 @@ Researcher_agent = Agent(
     model=AGENT_MODEL,
     name="Researcher",
      instructions="""
-        Role: You are a reporter for Anomalous SF, focusing on overlooked trends in city data.
-        Purpose: Use query_docs() to find objective details—avoid speculating on causes or using value terms (like "good" or "bad"). Report the "what," not the "why."
-        Examples: Instead of just saying property crime is down, highlight specifics (e.g., auto theft down 40% from a 2-year average).
+        Role: You are a researcher for Transparent SF, focusing on trends in city data.
+        Purpose: help the user find objective data and specific details on their question. 
+        Avoid speculating on causes or using value terms (like "good" or "bad"). Report the "what," not the "why."
+
+        Examples: Instead of just saying property crime is down, highlight specifics (e.g., auto theft down 40% from it's trailing 2-year average).
         Data Categories: Public Safety, City Management and Ethics, Health, Housing, Drugs, Homelessness, etc.
+        
         Deliverables:
         List of notable trends.
         Query URLs generating raw data.
         URLs of supporting charts.
-        Questions you would ask an analyst (especially for any YTD trends significantly above prior years).
+        
         Tools:
-        get_notes() always start here this is a sumamry of everyhting in your docs. 
+        get_notes() always start here this is a sumamry of everyhting in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
         query_docs(context_variables, "<Collection Name>", query) to gather details from:
-        district_<number>
+        
+        There are many collections you can search.  Sometimes you might want to look at multiple collections to get the data you need. 
+        
+        Each collection is named as follows:
+        
+        timeframe_location
+        timeframes are one of the following:
+        annual
+        monthly
+        daily
+
+        location is one of the following:
         citywide
-        Only make one query_docs() call per category due to response length.
+        or
+        district_<number>
+        
+        
+        Only make one query_docs() call per category due to response length. 
         Use generate_ghost_post(context_variables, content, title) to produce a simple HTML post once content is finalized.
         Ensure chart/image src links are correct and accessible.
-        Analyst Handoff: Use Transfer_to_analyst_agent() only if specifically requested by the user.
+        Analyst Handoff: Use Transfer_to_analyst_agent() only if specifically requested to do so by the user.
 
         """,
     functions=[get_notes, query_docs, transfer_to_analyst_agent, generate_ghost_post],  
@@ -811,43 +550,140 @@ def summarize_conversation(messages):
         summary += f"{msg['role']}: {msg['content']}\n"
     return summary
 
+# Define maximum message length (OpenAI's limit)
+MAX_MESSAGE_LENGTH = 1048576  # 1MB in characters
+MAX_SINGLE_MESSAGE = 100000   # Maximum length for any single message
+
+def truncate_messages(messages):
+    """
+    Truncate messages to stay within OpenAI's context limits.
+    More aggressive truncation that preserves the most recent context.
+    """
+    logger.info(f"""
+=== Message Truncation Started ===
+Initial message count: {len(messages)}
+""")
+    
+    # First pass: Truncate any individual messages that are too long
+    for msg in messages:
+        content = msg.get("content", "")
+        if len(content) > MAX_SINGLE_MESSAGE:
+            msg["content"] = f"[TRUNCATED]...{content[-MAX_SINGLE_MESSAGE//2:]}"
+            logger.info(f"""
+Truncated large message:
+Original length: {len(content)}
+New length: {len(msg['content'])}
+""")
+    
+    # Calculate total length
+    total_length = sum(len(str(msg.get("content", ""))) for msg in messages)
+    
+    if total_length <= MAX_MESSAGE_LENGTH * 0.9:  # Leave 10% buffer
+        return messages
+    
+    # Keep the last message (user input) and most recent context
+    truncated_messages = []
+    running_length = 0
+    
+    # Always keep the last message
+    last_message = messages[-1]
+    running_length += len(str(last_message.get("content", "")))
+    truncated_messages.append(last_message)
+    
+    # Add recent messages until we approach the limit
+    for msg in reversed(messages[:-1]):
+        msg_length = len(str(msg.get("content", "")))
+        if running_length + msg_length > MAX_MESSAGE_LENGTH * 0.8:  # More conservative buffer
+            break
+        running_length += msg_length
+        truncated_messages.insert(0, msg)
+    
+    # If we have space, add a summary message at the start
+    if len(truncated_messages) < len(messages):
+        summary = {
+            "role": "system",
+            "content": f"[HISTORY SUMMARY] Previous conversation had {len(messages) - len(truncated_messages)} older messages that were truncated to save space."
+        }
+        truncated_messages.insert(0, summary)
+    
+    logger.info(f"""
+=== Message Truncation Complete ===
+Original messages: {len(messages)}
+Truncated messages: {len(truncated_messages)}
+Original length: {total_length}
+New length: {sum(len(str(msg.get('content', ''))) for msg in truncated_messages)}
+""")
+    
+    return truncated_messages
+
 async def generate_response(user_input, session_data):
-    logger.info("Starting generate_response")
+    logger.info(f"""
+=== New Chat Interaction ===
+Timestamp: {datetime.datetime.now().isoformat()}
+Session ID: {id(session_data)}
+Current Agent: {session_data['agent'].name}
+User Input: {user_input[:200]}{'...' if len(user_input) > 200 else ''}
+""")
+    
     messages = session_data["messages"]
     agent = session_data["agent"]
     context_variables = session_data.get("context_variables") or {}
 
     # Log initial state
-    logger.info(f"Current agent: {agent.name}")
-    logger.info(f"Number of messages in history: {len(messages)}")
+    logger.info(f"""
+Context State:
+Message History: {len(messages)} messages
+Active Context Variables: {', '.join(context_variables.keys())}
+Last Message Preview: {messages[-1]['content'][:100] + '...' if messages else 'No previous messages'}
+""")
 
     # Append user message
     messages.append({"role": "user", "content": user_input})
-    logger.info(f"User input: {user_input}")
-
-    # Run the agent
-    logger.info("Starting agent.run")
-    response_generator = swarm_client.run(
-        agent=agent,
-        messages=messages,
-        context_variables=context_variables,
-        stream=True,
-        debug=False,
-    )
-    logger.info("Agent.run initialized")
-
-    # Initialize assistant message
-    assistant_message = {"role": "assistant", "content": "", "sender": agent.name}
-    incomplete_tool_call = None
-    current_function_name = None
+    
+    # Truncate messages if needed before sending to agent
+    original_message_count = len(messages)
+    truncated_messages = truncate_messages(messages)
+    if len(truncated_messages) < original_message_count:
+        logger.warning(f"""
+Messages were truncated:
+Original count: {original_message_count}
+Truncated count: {len(truncated_messages)}
+Removed: {original_message_count - len(truncated_messages)} messages
+""")
+        messages = truncated_messages
 
     try:
+        # Run the agent
+        logger.info("Starting agent interaction")
+        response_generator = swarm_client.run(
+            agent=agent,
+            messages=truncated_messages,
+            context_variables=context_variables,
+            stream=True,
+            debug=False,
+        )
+        
+        # Initialize assistant message
+        assistant_message = {"role": "assistant", "content": "", "sender": agent.name}
+        incomplete_tool_call = None
+        current_function_name = None
+
         for chunk in response_generator:
-            logger.debug(f"Received chunk: {chunk}")
+            # Determine chunk type
+            chunk_type = (
+                "content" if "content" in chunk and chunk["content"] is not None
+                else "tool_call" if "tool_calls" in chunk and chunk["tool_calls"] is not None
+                else "delimiter" if "delim" in chunk
+                else "unknown"
+            )
+            
+            logger.debug(f"""
+Processing {chunk_type} chunk:
+Content preview: {str(chunk)[:150]}...
+""")
 
             # Handle content
-            if "content" in chunk and chunk["content"] is not None:
-                logger.debug(f"Processing content chunk: {chunk['content'][:100]}...")  # First 100 chars
+            if chunk_type == "content":
                 content_piece = chunk["content"]
                 assistant_message["content"] += content_piece
                 message = {
@@ -855,10 +691,14 @@ async def generate_response(user_input, session_data):
                     "sender": assistant_message["sender"],
                     "content": content_piece
                 }
+                logger.debug(f"""
+Added content to response:
+Content piece: {content_piece[:100]}...
+""")
                 yield json.dumps(message) + "\n"
 
             # Handle tool calls
-            if "tool_calls" in chunk and chunk["tool_calls"] is not None:
+            elif chunk_type == "tool_call":
                 logger.info("Processing tool calls")
                 for tool_call in chunk["tool_calls"]:
                     function_info = tool_call.get("function")
@@ -867,13 +707,19 @@ async def generate_response(user_input, session_data):
 
                     if function_info.get("name"):
                         current_function_name = function_info["name"]
-                        logger.info(f"Processing tool call: {current_function_name}")
+                        logger.info(f"""
+Tool call started:
+Function: {current_function_name}
+""")
 
                     if not current_function_name:
                         continue
 
                     arguments_fragment = function_info.get("arguments", "")
-                    logger.debug(f"Received arguments fragment: {arguments_fragment}")
+                    logger.debug(f"""
+Received function arguments:
+Arguments fragment: {arguments_fragment}
+""")
 
                     if incomplete_tool_call is None or incomplete_tool_call["function_name"] != current_function_name:
                         incomplete_tool_call = {
@@ -887,8 +733,11 @@ async def generate_response(user_input, session_data):
 
                     try:
                         arguments_json = json.loads(incomplete_tool_call["arguments"])
-                        logger.info(f"Complete tool call received for {current_function_name}")
-                        logger.debug(f"Arguments: {arguments_json}")
+                        logger.info(f"""
+Complete tool call received:
+Function: {current_function_name}
+Arguments: {json.dumps(arguments_json, indent=2)}
+""")
 
                         incomplete_tool_call["arguments"] = arguments_json
                         message = json.dumps(incomplete_tool_call) + "\n"
@@ -898,68 +747,103 @@ async def generate_response(user_input, session_data):
                         function_to_call = function_mapping.get(current_function_name)
                         if function_to_call:
                             logger.info(f"Executing function: {current_function_name}")
-                            function_args = incomplete_tool_call["arguments"]
-                            if not isinstance(function_args, dict):
-                                function_args = {}
-                            
-                            if current_function_name == "generate_time_series_chart":
-                                logger.info(f"Calling generate_time_series_chart with args: {function_args}")
-                                # Create a clean copy of context without the dataset
-                                chart_context = {
-                                    key: value 
-                                    for key, value in context_variables.items() 
-                                    if key == 'dataset'  # Only keep the dataset
-                                }
-                                result = function_to_call(chart_context, **function_args)
-                                
-                                if isinstance(result, tuple):
-                                    markdown_content, _ = result  # Ignore the HTML content completely
-                                    logger.info(f"Chart generated successfully. Markdown length: {len(markdown_content)}")
+                            try:
+                                if current_function_name == "generate_time_series_chart":
+                                    logger.info(f"""
+Generating time series chart:
+Arguments: {json.dumps(arguments_json, indent=2)}
+""")
+                                    # Create a clean copy of context without the dataset
+                                    chart_context = {
+                                        key: value 
+                                        for key, value in context_variables.items() 
+                                        if key == 'dataset'  # Only keep the dataset
+                                    }
+                                    result = function_to_call(chart_context, **arguments_json)
                                     
-                                    # Only store and send the markdown content
-                                    assistant_message["content"] += f"\n{markdown_content}\n"
-                                    yield json.dumps({
-                                        "type": "content",
-                                        "sender": assistant_message["sender"],
-                                        "content": markdown_content
-                                    }) + "\n"
+                                    if isinstance(result, tuple):
+                                        markdown_content, _ = result  # Ignore the HTML content
+                                        logger.info(f"""
+Chart generated successfully:
+Markdown length: {len(markdown_content)}
+""")
+                                        
+                                        # Only store and send the markdown content
+                                        assistant_message["content"] += f"\n{markdown_content}\n"
+                                        yield json.dumps({
+                                            "type": "content",
+                                            "sender": assistant_message["sender"],
+                                            "content": markdown_content
+                                        }) + "\n"
+                                    else:
+                                        logger.warning(f"""
+Unexpected chart result format:
+Result type: {type(result)}
+""")
+                                        yield json.dumps({
+                                            "type": "content",
+                                            "sender": assistant_message["sender"],
+                                            "content": str(result)
+                                        }) + "\n"
                                 else:
-                                    logger.warning(f"Unexpected chart result format: {type(result)}")
-                                    yield json.dumps({
-                                        "type": "content",
-                                        "sender": assistant_message["sender"],
-                                        "content": str(result)
-                                    }) + "\n"
-                            else:
-                                logger.info(f"Executing {current_function_name}")
-                                result = function_to_call(context_variables, **function_args)
-                                logger.info(f"Function result: {result}")
-                                
-                                # Handle agent transfer
-                                if isinstance(result, Agent):
-                                    session_data["agent"] = result
-                                    assistant_message["sender"] = session_data["agent"].name
-                                    logger.info(f"Agent transferred to {session_data['agent'].name}")
+                                    result = function_to_call(context_variables, **arguments_json)
+                                    logger.info(f"""
+Function executed successfully:
+Function: {current_function_name}
+Result type: {type(result)}
+Result preview: {str(result)[:200]}...
+""")
+                                    
+                                    # Handle agent transfer
+                                    if isinstance(result, Agent):
+                                        session_data["agent"] = result
+                                        assistant_message["sender"] = session_data["agent"].name
+                                        logger.info(f"""
+Agent transferred:
+New agent: {session_data['agent'].name}
+""")
 
-                            session_data["context_variables"] = context_variables
+                                session_data["context_variables"] = context_variables
+                                
+                            except Exception as e:
+                                logger.error(f"""
+Error executing function:
+Function: {current_function_name}
+Error: {str(e)}
+Arguments: {json.dumps(arguments_json, indent=2)}
+""")
+                                raise
 
                         incomplete_tool_call = None
                         current_function_name = None
-                    except json.JSONDecodeError as e:
-                        logger.debug(f"Incomplete JSON received: {e}")
+                    except json.JSONDecodeError:
+                        # Still accumulating arguments
                         pass
 
             # Handle end of message
             if "delim" in chunk and chunk["delim"] == "end":
-                logger.info("End of message reached")
+                logger.info(f"""
+Message complete:
+Final message length: {len(assistant_message['content'])}
+""")
                 messages.append(assistant_message)
-                assistant_message = {"role": "assistant", "content": "", "sender": session_data["agent"].name}
+                assistant_message = {"role": "assistant", "content": "", "sender": agent.name}
 
     except Exception as e:
-        logger.error(f"Error in generate_response: {e}", exc_info=True)
+        logger.error(f"""
+Error in generate_response:
+Error type: {type(e).__name__}
+Error message: {str(e)}
+Current function: {current_function_name}
+Last message length: {len(assistant_message.get('content', ''))}
+""")
         raise
 
-    logger.info("generate_response completed")
+    logger.info(f"""
+Chat interaction completed:
+Total messages: {len(messages)}
+Final message preview: {messages[-1].get('content', '')[:200]}...
+""")
 
 @router.post("/api/chat")
 async def chat(request: Request, session_id: str = Cookie(None)):

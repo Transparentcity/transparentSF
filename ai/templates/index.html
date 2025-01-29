@@ -215,21 +215,29 @@
                     margin-bottom: 80px; /* Increased margin to accommodate fixed input */
                     font-size: 1em; /* Slightly decreased from 1.2em to 1em */
                     padding: 10px; /* Reduced padding to save space */
+                    line-height: 1.7; /* Added line height for better readability */
                 }
 
                 /* Adjust message sizes */
                 .message {
                     font-size: 0.95em;  /* Reduced from 1.1em */
-                    padding: 6px;  /* Slightly reduced padding */
+                    padding: 12px 16px;  /* Increased padding for better readability */
+                    margin: 10px 5px;  /* Added horizontal margin and increased vertical margin */
+                    border-radius: 15px;  /* Slightly more rounded corners */
+                    max-width: 85%;  /* Limit maximum width of messages */
                 }
 
                 .user-message {
                     background-color: #264653;
                     color: #ffffff;
+                    margin-left: auto;  /* Push user messages to the right */
+                    margin-right: 5px;  /* Add some space from the right edge */
                 }
                 .ai-message {
                     background-color: #2a3f4d;
                     color: #ffffff;
+                    margin-right: auto;  /* Push AI messages to the left */
+                    margin-left: 5px;  /* Add some space from the left edge */
                 }
 
                 #input-container {
@@ -411,6 +419,22 @@
                 padding: 5px 10px;
                 color: #999;
             }
+
+            /* Add blinking cursor animation */
+            @keyframes blink {
+                0% { opacity: 1; }
+                50% { opacity: 0; }
+                100% { opacity: 1; }
+            }
+
+            .typing-indicator {
+                display: inline-block;
+                width: 4px;
+                height: 16px;
+                background-color: #ffffff;
+                margin-left: 4px;
+                animation: blink 1s infinite;
+            }
         </style>
     </head>
     <body>
@@ -437,12 +461,6 @@
                     </h1>
                     <div id="chat-container">
                         <div id="response-area"></div>
-                        <div
-                            id="loading"
-                            style="display: none; padding: 10px; text-align: center"
-                        >
-                            AI is thinking...
-                        </div>
                         <div id="input-container">
                             <input
                                 type="text"
@@ -484,7 +502,6 @@
             const responseArea = document.getElementById("response-area");
             const userInput = document.getElementById("userInput"); // Correct ID
             const submitBtn = document.getElementById("submit-button"); // Correct ID
-            const loading = document.getElementById("loading");
             let currentAIMessage = null;
 
             function handleServerMessage(data) {
@@ -635,7 +652,12 @@
                 // Reset currentAIMessage to null
                 currentAIMessage = null;
 
-                loading.style.display = "block";
+                // Create initial AI message with typing indicator
+                currentAIMessage = addMessage("AI", "ai-message");
+                const typingIndicator = document.createElement("div");
+                typingIndicator.className = "typing-indicator";
+                currentAIMessage.contentElement.appendChild(typingIndicator);
+
                 userInput.value = "";
 
                 try {
@@ -644,6 +666,10 @@
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ query }),
                     });
+
+                    // Remove typing indicator when we get the first response
+                    currentAIMessage.contentElement.removeChild(typingIndicator);
+                    currentAIMessage.contentSegments = [];
 
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
@@ -691,8 +717,6 @@
                         "error-message",
                     ).contentElement.textContent =
                         "An error occurred. Please try again.";
-                } finally {
-                    loading.style.display = "none";
                 }
             }
             function addMessage(sender, messageType) {

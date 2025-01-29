@@ -392,8 +392,12 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
     chart_id = uuid.uuid4().hex[:8]
     chart_filename = f"chart_{chart_id}.png"
     chart_path = os.path.join(output_dir, chart_filename)
+    os.makedirs(output_dir, exist_ok=True)  # Ensure output directory exists
     fig.write_image(chart_path, engine="kaleido")
     logging.info(f"Chart image saved as {chart_path}")
+
+    # For markdown summary, we just need the filename since images are in same directory
+    chart_reference = chart_filename
 
     # Assemble the HTML snippet for the chart and its caption
     chart_html = f"""
@@ -404,7 +408,6 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
         {caption}
     </div>
     """
-    # Assemble the markdown summary with the Chart reference as well
 
     return chart_html, chart_id
 
@@ -436,7 +439,7 @@ def generate_markdown_summary(table_data, metadata, output_dir):
     for row in table_data:
         anomaly_marker = "**Yes**" if row['out_of_bounds'] else "No"
         # Only include chart reference if there is a chart_id
-        chart_cell = f"![Chart](../static/chart_{row['chart_id']}.png)" if row['chart_id'] else "N/A"
+        chart_cell = f"![Chart](../static/{row['chart_id']})" if row['chart_id'] else "N/A"
         md_lines.append(
             f"| {row['group_value']} | {row['recent_mean']:,} | {row['comparison_mean']:,} | {row['difference']:,} | {row['percent_difference']}% | {row['std_dev']:,} | {anomaly_marker} | {chart_cell} |"
         )

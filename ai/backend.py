@@ -13,7 +13,7 @@ import subprocess  # ADDED
 import glob
 
 from ai_dataprep import process_single_file  # Ensure these imports are correct
-from annual_analysis import export_for_endpoint  # Ensure this import is correct
+from periodic_analysis import export_for_endpoint  # Ensure this import is correct
 import logging
 
 # Configure logging
@@ -293,7 +293,7 @@ async def run_analysis(endpoint: str, period_type: str = 'year'):
         os.makedirs(logs_dir, exist_ok=True)
         
         # Create period-specific output folder
-        period_folder = {'year': 'annual', 'month': 'monthly', 'day': 'daily'}[period_type]
+        period_folder = {'year': 'annual', 'month': 'monthly', 'day': 'daily', 'ytd': 'ytd'}[period_type]
         period_output_dir = os.path.join(output_dir, period_folder)
         os.makedirs(period_output_dir, exist_ok=True)
         
@@ -560,3 +560,34 @@ async def get_aggregated_summary():
     except Exception as e:
         logger.exception(f"Error creating aggregated summary: {str(e)}")
         return JSONResponse({"status": "error", "message": str(e)})
+
+
+@router.get("/get-log-files")
+async def get_log_files():
+    """Get a list of all log files in the logs directory."""
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        logs_dir = os.path.join(script_dir, 'logs')
+        
+        if not os.path.exists(logs_dir):
+            return JSONResponse({"files": []})
+            
+        log_files = []
+        for file in os.listdir(logs_dir):
+            if file.endswith('.log') or file.endswith('.txt'):
+                file_path = os.path.join(logs_dir, file)
+                # Get file stats
+                stats = os.stat(file_path)
+                log_files.append({
+                    "name": file,
+                    "size": stats.st_size,
+                    "modified": datetime.fromtimestamp(stats.st_mtime).isoformat()
+                })
+                
+        # Sort by modification time, most recent first
+        log_files.sort(key=lambda x: x["modified"], reverse=True)
+        
+        return JSONResponse({"files": log_files})
+    except Exception as e:
+        logger.exception(f"Error getting log files: {str(e)}")
+        return JSONResponse({"error": str(e)})
