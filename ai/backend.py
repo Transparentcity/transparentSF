@@ -370,30 +370,50 @@ async def get_updated_links(endpoint: str):
 @router.get("/reload_vector_db")
 async def reload_vector_db():
     """
-    Reload the vector DB by running the script load_analysis2vec.py with no params.
+    Reload the vector DB by running the vector_loader_periodic.py script.
     """
     logger.debug("Reload vector DB called")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(script_dir, "vector_loader.py")
+        script_path = os.path.join(script_dir, "vector_loader_periodic.py")
+        log_file = os.path.join(script_dir, "logs", "vector_loader.log")
+        
+        # Clear the log file before running
+        with open(log_file, 'w') as f:
+            f.write("")  # Clear the file
+            
         result = subprocess.run(["python", script_path], capture_output=True, text=True)
+        
+        # Read the log file content
+        try:
+            with open(log_file, 'r') as f:
+                log_content = f.read()
+        except Exception as e:
+            log_content = f"Error reading log file: {str(e)}"
+            
         if result.returncode == 0:
             logger.info("Vector DB reloaded successfully.")
             return JSONResponse({
                 "status": "success",
                 "message": "Vector DB reloaded successfully.",
-                "output": result.stdout
+                "output": result.stdout,
+                "log_content": log_content
             })
         else:
             logger.error(f"Failed to reload Vector DB: {result.stderr}")
             return JSONResponse({
                 "status": "error",
                 "message": "Failed to reload Vector DB.",
-                "output": result.stderr
+                "output": result.stderr,
+                "log_content": log_content
             })
     except Exception as e:
         logger.exception(f"Error reloading Vector DB: {str(e)}")
-        return JSONResponse({"status": "error", "message": str(e)})
+        return JSONResponse({
+            "status": "error", 
+            "message": str(e),
+            "log_content": "Error occurred before log file could be read"
+        })
 
 
 @router.get("/dataset-json/{filename:path}")

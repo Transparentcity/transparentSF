@@ -1,0 +1,20 @@
+run = "bash start_services.sh"
+modules = ["python-3.11"]
+
+[deployment]
+run = ["sh", "-c", "bash start_services.sh"]
+
+[nix]
+channel = "stable-24_05"
+
+[[ports]]
+localPort = 6333
+externalPort = 3000
+
+[[ports]]
+localPort = 6334
+externalPort = 3001
+
+[[ports]]
+localPort = 8000
+externalPort = 80

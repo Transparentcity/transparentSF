@@ -880,19 +880,43 @@
             // *** RELOAD VECTOR DB BUTTON LOGIC ***
             const reloadDBBtn = document.getElementById('reload-vector-db-btn');
             reloadDBBtn.addEventListener('click', async () => {
+                const originalText = reloadDBBtn.textContent;
+                
                 // Add loading state
                 reloadDBBtn.classList.add('loading');
                 reloadDBBtn.disabled = true;
+                reloadDBBtn.textContent = 'Reloading DB...';
                 
                 try {
                     const resp = await fetch('/backend/reload_vector_db');
                     const data = await resp.json();
+                    
+                    // Show log content in log modal
+                    const logModal = document.getElementById('logModal');
+                    const logContent = document.getElementById('logContent');
+                    const logTitle = document.getElementById('logTitle');
+                    
+                    logTitle.textContent = 'Vector Loader Log';
+                    logContent.innerHTML = `<pre style="margin: 0;">${data.log_content || 'No log content available'}</pre>`;
+                    logModal.style.display = 'block';
+                    
                     if (data.status === 'success') {
-                        alert('Vector DB reloaded successfully!');
+                        reloadDBBtn.textContent = 'Reload Complete ✅';
+                        setTimeout(() => {
+                            reloadDBBtn.textContent = originalText;
+                        }, 3000);
                     } else {
+                        reloadDBBtn.textContent = 'Reload Failed ❌';
+                        setTimeout(() => {
+                            reloadDBBtn.textContent = originalText;
+                        }, 3000);
                         alert('Error reloading Vector DB: ' + data.message);
                     }
                 } catch (error) {
+                    reloadDBBtn.textContent = 'Reload Failed ❌';
+                    setTimeout(() => {
+                        reloadDBBtn.textContent = originalText;
+                    }, 3000);
                     alert('Failed to reload Vector DB: ' + error.message);
                 } finally {
                     // Remove loading state

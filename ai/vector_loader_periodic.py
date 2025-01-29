@@ -16,11 +16,17 @@ import tiktoken  # For counting tokens
 # ------------------------------
 # Configure Logging
 # ------------------------------
+script_dir = os.path.dirname(os.path.abspath(__file__))
+log_dir = os.path.join(script_dir, 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'vector_loader.log')
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout)
+        logging.FileHandler(log_file),  # Log to file
+        logging.StreamHandler(sys.stdout)  # Also log to console
     ]
 )
 
