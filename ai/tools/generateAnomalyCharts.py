@@ -172,10 +172,10 @@ def generate_anomalies_summary_with_charts(results, metadata, output_dir='static
     html_file_path = os.path.join(output_dir, unique_filename)
     
     # Save the HTML content to a file
-    with open(html_file_path, 'w', encoding='utf-8') as f:
-        f.write(html_content)
+    # with open(html_file_path, 'w', encoding='utf-8') as f:
+    #     f.write(html_content)
     
-    logging.info(f"Anomaly charts HTML page generated at: {html_file_path}")
+    logging.info(f"Anomaly charts HTML page commented out save generated at: {html_file_path}")
 
     # Generate a Markdown summary
     markdown_summary = generate_markdown_summary(table_data, metadata, output_dir)
