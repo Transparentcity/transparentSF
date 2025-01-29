@@ -23,7 +23,7 @@ wait_for_service() {
 # Kill existing processes
 pkill -f qdrant
 pkill -f main.py
-
+pkill -f ghostBridge.js
 
 cd ai
 
@@ -49,7 +49,13 @@ wait_for_service "http://0.0.0.0:8000/backend" "Backend"
 
 # Start frontend and wait for it
 echo "Checking frontend..."
-wait_for_service "http://0.0.0.0:80010" "Frontend"
+wait_for_service "http://0.0.0.0:8000" "Frontend"
+
+
+# Start Ghost Bridge
+echo "Starting Ghost Bridge..."
+node tools/ghost_bridge/ghostBridge.js > logs/ghostBridge.log 2>&1 &
+
 
 # Keep script running to maintain processes
 wait
