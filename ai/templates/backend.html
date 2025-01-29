@@ -406,12 +406,57 @@
         .button-loading .spinner {
             display: block; /* Show spinner when button is loading */
         }
+
+        /* Add disk space styles */
+        .disk-space {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        
+        .disk-space h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .disk-space-details {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: #ddd;
+            border-radius: 3px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        
+        .progress {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <!-- Left sidebar -->
         <div class="sidebar">
+            <div id="disk-space-info" class="disk-space">
+                <h3>System Info</h3>
+                <div class="disk-space-details">
+                    <div>Available: <span id="available-space">Loading...</span></div>
+                    <div>Total: <span id="total-space">Loading...</span></div>
+                    <div class="progress-bar">
+                        <div id="space-used-bar" class="progress"></div>
+                    </div>
+                </div>
+            </div>
             <h2>Actions</h2>
             <button id="analyze-yearly-btn">Analyze Yearly</button>
             <button id="analyze-monthly-btn">Analyze Monthly</button>
@@ -529,6 +574,53 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // Function to format bytes to human readable format
+            function formatBytes(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+
+            // Function to update disk space information
+            async function updateDiskSpace() {
+                try {
+                    const response = await fetch('/backend/disk-space');
+                    const data = await response.json();
+                    
+                    const availableSpace = document.getElementById('available-space');
+                    const totalSpace = document.getElementById('total-space');
+                    const progressBar = document.getElementById('space-used-bar');
+                    
+                    if (data.available && data.total) {
+                        availableSpace.textContent = formatBytes(data.available);
+                        totalSpace.textContent = formatBytes(data.total);
+                        
+                        // Calculate used percentage
+                        const usedPercentage = ((data.total - data.available) / data.total) * 100;
+                        progressBar.style.width = `${usedPercentage}%`;
+                        
+                        // Change color based on usage
+                        if (usedPercentage > 90) {
+                            progressBar.style.backgroundColor = '#dc3545'; // Red
+                        } else if (usedPercentage > 70) {
+                            progressBar.style.backgroundColor = '#ffc107'; // Yellow
+                        } else {
+                            progressBar.style.backgroundColor = '#4CAF50'; // Green
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching disk space:', error);
+                    document.getElementById('available-space').textContent = 'Error';
+                    document.getElementById('total-space').textContent = 'Error';
+                }
+            }
+
+            // Update disk space initially and every 5 minutes
+            updateDiskSpace();
+            setInterval(updateDiskSpace, 300000);
+
             // Function to format file size
             function formatFileSize(bytes) {
                 if (bytes === 0) return '0 Bytes';

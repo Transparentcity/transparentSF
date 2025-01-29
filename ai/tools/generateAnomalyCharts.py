@@ -24,7 +24,11 @@ def generate_anomalies_summary_with_charts(results, metadata, output_dir='static
     if 'title' not in metadata or 'y_axis_label' not in metadata:
         logging.warning("Metadata is missing 'title' or 'y_axis_label'. Default values will be used.")
     chart_counter=0
-    # Create output directory if it doesn't exist
+    
+    # Get script directory and set up output directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if output_dir == 'static':
+        output_dir = os.path.join(script_dir, '..', 'output')
     os.makedirs(output_dir, exist_ok=True)
     
     # Initialize a list to hold all chart HTML snippets
@@ -398,14 +402,10 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
         f"a {percent_difference:.1f}% {action}."
     )
 
-    # Generate Plotly HTML div
-    plot_html = pio.to_html(fig, full_html=False, include_plotlyjs='cdn')
-
     # Save chart as PNG using Kaleido
     chart_id = uuid.uuid4().hex[:8]
     chart_filename = f"chart_{chart_id}.png"
     chart_path = os.path.join(output_dir, chart_filename)
-    os.makedirs(output_dir, exist_ok=True)  # Ensure output directory exists
     fig.write_image(chart_path, engine="kaleido")
     logging.info(f"Chart image saved as {chart_path}")
 
@@ -415,7 +415,7 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
     # Assemble the HTML snippet for the chart and its caption
     chart_html = f"""
     <div id="{chart_container_id}" class="chart-container" style="margin-bottom: 50px;">
-        {plot_html}
+        {fig.to_html(full_html=False)}
     </div>
     <div class="chart-caption" style="font-size: 12px; text-align: left; margin-bottom: 50px;">
         {caption}
@@ -448,24 +448,16 @@ def generate_markdown_summary(table_data, metadata, output_dir):
         md_lines.append(f"No anomalies detected comparing {numeric_field} in {group_field} comparing {metadata['recent_period']['start']} to {metadata['recent_period']['end']} against {metadata['comparison_period']['start']} to {metadata['comparison_period']['end']}.")
         md_lines.append("")
 
+    # Get the output directory name from the path
+    output_subdir = os.path.basename(output_dir)
+
     # Include a column referencing the saved PNG chart
     for row in table_data:
         anomaly_marker = "**Yes**" if row['out_of_bounds'] else "No"
         # Only include chart reference if there is a chart_id
-        chart_cell = f"![Chart](../static/{row['chart_id']})" if row['chart_id'] else "N/A"
+        chart_cell = f"![Chart](../{output_subdir}/chart_{row['chart_id']}.png)" if row['chart_id'] else "N/A"
         md_lines.append(
             f"| {row['group_value']} | {row['recent_mean']:,} | {row['comparison_mean']:,} | {row['difference']:,} | {row['percent_difference']}% | {row['std_dev']:,} | {anomaly_marker} | {chart_cell} |"
         )
-
-    # md_lines.append("")
-    # md_lines.append("**Anomalies** (Out of Bounds) detected above are highlighted with **Yes**.")
-
-    # md_lines.append("\n## Anomaly Highlights\n")
-    # for row in table_data:
-    #     if row['out_of_bounds']:
-    #         direction = "increase" if row['difference'] > 0 else "decrease" if row['difference'] < 0 else "no change"
-    #         md_lines.append(
-    #             f"- **{row['group_value']}**: {row['recent_mean']:,} vs {row['comparison_mean']:,} historically, a {row['percent_difference']}% {direction}. [Chart](..static/chart_{row['chart_id']}.png)"
-    #         )
 
     return "\n".join(md_lines)

@@ -4,6 +4,7 @@ import logging
 import pandas as pd
 from tools.generateAnomalyCharts import generate_anomalies_summary_with_charts 
 from dateutil import parser  # Import this library for robust date parsing
+import os
 
 # set logging level to INFO
 logging.basicConfig(level=logging.INFO)
@@ -776,6 +777,30 @@ def anomaly_detection(
         'period_type': period_type  # Add period_type to metadata
     }
 
-    html_content, markdown_content = generate_anomalies_summary_with_charts(results, metadata)
+    # Get script directory and set up output directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    base_output_dir = os.path.join(script_dir, '..', 'output')
+    
+    # Create period-specific directory name
+    period_name = 'annual' if period_type == 'year' else 'monthly'
+    
+    # Get district from filter conditions if it exists
+    district = None
+    if filter_conditions:
+        for condition in filter_conditions:
+            if condition.get('field', '').lower() in ['district', 'police_district']:
+                district = condition.get('value')
+                break
+    
+    # Construct the full output path
+    if district:
+        output_dir = os.path.join(base_output_dir, period_name, district)
+    else:
+        output_dir = os.path.join(base_output_dir, period_name)
+    
+    # Ensure the directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    html_content, markdown_content = generate_anomalies_summary_with_charts(results, metadata, output_dir=output_dir)
     
     return  {"anomalies":html_content, "anomalies_markdown":markdown_content}

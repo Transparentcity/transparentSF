@@ -11,6 +11,7 @@ from datetime import datetime
 import pytz
 import subprocess  # ADDED
 import glob
+import shutil  # Add this import at the top with other imports
 
 from ai_dataprep import process_single_file  # Ensure these imports are correct
 from periodic_analysis import export_for_endpoint  # Ensure this import is correct
@@ -611,3 +612,23 @@ async def get_log_files():
     except Exception as e:
         logger.exception(f"Error getting log files: {str(e)}")
         return JSONResponse({"error": str(e)})
+
+
+@router.get("/disk-space")
+async def get_disk_space():
+    """Get disk space information for the current drive."""
+    try:
+        # Get disk usage for the current directory's drive
+        total, used, free = shutil.disk_usage(os.path.abspath(os.sep))
+        
+        return JSONResponse({
+            "total": total,
+            "available": free,
+            "used": used
+        })
+    except Exception as e:
+        logger.exception(f"Error getting disk space: {str(e)}")
+        return JSONResponse(
+            {"error": str(e)},
+            status_code=500
+        )
