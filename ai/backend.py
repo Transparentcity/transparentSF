@@ -632,3 +632,40 @@ async def get_disk_space():
             {"error": str(e)},
             status_code=500
         )
+
+
+@router.post("/clear-html-files")
+async def clear_html_files():
+    """Delete all HTML files from the output directory and its subdirectories."""
+    logger.debug("Clear HTML files called")
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        output_dir = os.path.join(script_dir, 'output')
+        
+        # Count of deleted files
+        deleted_count = 0
+        
+        # Walk through all subdirectories
+        for root, _, files in os.walk(output_dir):
+            for file in files:
+                if file.endswith('.html'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        os.remove(file_path)
+                        deleted_count += 1
+                        logger.debug(f"Deleted file: {file_path}")
+                    except Exception as e:
+                        logger.error(f"Error deleting file {file_path}: {str(e)}")
+        
+        logger.info(f"Successfully deleted {deleted_count} HTML files")
+        return JSONResponse({
+            "status": "success",
+            "message": f"Successfully deleted {deleted_count} HTML files"
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error clearing HTML files: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        })

@@ -450,6 +450,16 @@
             width: 0%;
             transition: width 0.3s ease;
         }
+
+        /* Add danger button style */
+        .danger-btn {
+            background-color: #dc3545 !important;
+            border-color: #dc3545 !important;
+        }
+        .danger-btn:hover {
+            background-color: #c82333 !important;
+            border-color: #bd2130 !important;
+        }
     </style>
 </head>
 <body>
@@ -474,6 +484,7 @@
             <button id="analyze-ytd-btn">Analyze YTD</button>
             <button id="reload-vector-db-btn">Reload Vector DB</button>
             <button id="summarize-posts-btn">Summarize Posts</button>
+            <button id="clear-html-btn" class="danger-btn">Clear HTML Files</button>
             
             <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
             <h3>Logs</h3>
@@ -1133,6 +1144,46 @@
                     // Wait a bit for the analysis to complete
                     setTimeout(updateAggregatedSummaryLink, 2000);
                 });
+            });
+
+            // Clear HTML files button functionality
+            const clearHtmlBtn = document.getElementById('clear-html-btn');
+            clearHtmlBtn.addEventListener('click', async () => {
+                if (!confirm('Are you sure you want to delete all HTML files in the output folder? This action cannot be undone.')) {
+                    return;
+                }
+
+                clearHtmlBtn.disabled = true;
+                clearHtmlBtn.classList.add('loading');
+                const originalText = clearHtmlBtn.textContent;
+                clearHtmlBtn.textContent = 'Clearing...';
+
+                try {
+                    const response = await fetch('/backend/clear-html-files', {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+
+                    if (data.status === 'success') {
+                        clearHtmlBtn.textContent = 'Cleared ✅';
+                        // Refresh all output links
+                        document.querySelectorAll('tr[data-endpoint]').forEach(row => {
+                            updateRowOutputLinks(row);
+                        });
+                    } else {
+                        clearHtmlBtn.textContent = 'Error ❌';
+                        alert('Error clearing HTML files: ' + data.message);
+                    }
+                } catch (error) {
+                    clearHtmlBtn.textContent = 'Error ❌';
+                    alert('Failed to clear HTML files: ' + error.message);
+                } finally {
+                    setTimeout(() => {
+                        clearHtmlBtn.textContent = originalText;
+                        clearHtmlBtn.disabled = false;
+                        clearHtmlBtn.classList.remove('loading');
+                    }, 3000);
+                }
             });
 
             // Function to safely escape HTML
