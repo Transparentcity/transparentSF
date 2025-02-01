@@ -5,6 +5,7 @@ import plotly.graph_objs as go
 import plotly.io as pio
 import datetime
 import uuid
+import pandas as pd
 
 def generate_anomalies_summary_with_charts(results, metadata, output_dir='static'):
     """
@@ -442,8 +443,22 @@ def generate_markdown_summary(table_data, metadata, output_dir):
         
         md_lines.append(f"Searched for anomalies of {numeric_field} in {group_field} comparing {metadata['recent_period']['start']} to {metadata['recent_period']['end']} against {metadata['comparison_period']['start']} to {metadata['comparison_period']['end']}.")
         md_lines.append("")
-        md_lines.append(f"| Group | Recent Mean | Comparison Mean | Difference | % Difference | Std Dev | Anomaly? | Chart |")
-        md_lines.append("|---|---|---|---|---|---|---|---|")
+        
+        # Convert table_data to DataFrame for markdown conversion
+        df = pd.DataFrame(table_data)
+        df = df[['group_value', 'recent_mean', 'comparison_mean', 'difference', 'percent_difference', 'std_dev', 'out_of_bounds']]
+        df.columns = ['Group', 'Recent Mean', 'Comparison Mean', 'Difference', '% Difference', 'Std Dev', 'Anomaly']
+        df['Anomaly'] = df['Anomaly'].map({True: '**Yes**', False: 'No'})
+        
+        # Format numeric columns
+        numeric_cols = ['Recent Mean', 'Comparison Mean', 'Difference', 'Std Dev']
+        for col in numeric_cols:
+            df[col] = df[col].map(lambda x: f"{x:,.0f}")
+        df['% Difference'] = df['% Difference'].map(lambda x: f"{x:.1f}%")
+        
+        # Add markdown table
+        md_lines.append(df.to_markdown(index=False))
+        md_lines.append("")
     else:
         md_lines.append(f"No anomalies detected comparing {numeric_field} in {group_field} comparing {metadata['recent_period']['start']} to {metadata['recent_period']['end']} against {metadata['comparison_period']['start']} to {metadata['comparison_period']['end']}.")
         md_lines.append("")
@@ -451,13 +466,10 @@ def generate_markdown_summary(table_data, metadata, output_dir):
     # Get the output directory name from the path
     output_subdir = os.path.basename(output_dir)
 
-    # Include a column referencing the saved PNG chart
+    # Add chart references for anomalies
     for row in table_data:
-        anomaly_marker = "**Yes**" if row['out_of_bounds'] else "No"
-        # Only include chart reference if there is a chart_id
-        chart_cell = f"![Chart](../{output_subdir}/chart_{row['chart_id']}.png)" if row['chart_id'] else "N/A"
-        md_lines.append(
-            f"| {row['group_value']} | {row['recent_mean']:,} | {row['comparison_mean']:,} | {row['difference']:,} | {row['percent_difference']}% | {row['std_dev']:,} | {anomaly_marker} | {chart_cell} |"
-        )
+        if row['out_of_bounds'] and row['chart_id']:
+            md_lines.append(f"\n### {row['group_value']}")
+            md_lines.append(f"![Chart](../{output_subdir}/chart_{row['chart_id']}.png)")
 
     return "\n".join(md_lines)

@@ -1,0 +1,154 @@
+{
+    "districts": {
+      "0": {
+        "name": "Citywide",
+        "categories": [
+          {
+            "category": "Crime",
+            "metrics": [
+              {
+                "name": "Police Incident Reports",
+                "id": "police_incidents",
+                "lastYear": 15234,
+                "thisYear": 14876
+              },
+              {
+                "name": "Violent Incident Reports",
+                "id": "violent_incidents",
+                "lastYear": 2456,
+                "thisYear": 2198
+              },
+              {
+                "name": "Property Crime Reports",
+                "id": "property_crimes",
+                "lastYear": 8765,
+                "thisYear": 8234
+              },
+              {
+                "name": "Drug Crime Reports",
+                "id": "drug_crimes",
+                "lastYear": 3421,
+                "thisYear": 2987
+              },
+              {
+                "name": "Jail Bookings",
+                "id": "jail_bookings",
+                "lastYear": 6543,
+                "thisYear": 6123
+              },
+              {
+                "name": "Calls to the Police",
+                "id": "police_calls",
+                "lastYear": 98765,
+                "thisYear": 95432
+              }
+            ]
+          },
+          {
+            "category": "Safety",
+            "metrics": [
+              {
+                "name": "Total Fire Incidents",
+                "id": "fire_incidents",
+                "lastYear": 876,
+                "thisYear": 798
+              },
+              {
+                "name": "Fire Safety Warnings",
+                "id": "fire_warnings",
+                "lastYear": 2345,
+                "thisYear": 2567
+              },
+              {
+                "name": "Emergency Response Time (min)",
+                "id": "emergency_response_time",
+                "lastYear": 8.5,
+                "thisYear": 7.8
+              },
+              {
+                "name": "Fire Inspections Completed",
+                "id": "fire_inspections",
+                "lastYear": 4532,
+                "thisYear": 5123
+              }
+            ]
+          }
+        ]
+      },
+      "1": {
+        "name": "District 1",
+        "categories": [
+          {
+            "category": "Crime",
+            "metrics": [
+              {
+                "name": "Police Incident Reports",
+                "id": "police_incidents",
+                "lastYear": 1234,
+                "thisYear": 1187
+              },
+              {
+                "name": "Violent Incident Reports",
+                "id": "violent_incidents",
+                "lastYear": 245,
+                "thisYear": 198
+              },
+              {
+                "name": "Property Crime Reports",
+                "id": "property_crimes",
+                "lastYear": 876,
+                "thisYear": 823
+              },
+              {
+                "name": "Drug Crime Reports",
+                "id": "drug_crimes",
+                "lastYear": 342,
+                "thisYear": 298
+              },
+              {
+                "name": "Jail Bookings",
+                "id": "jail_bookings",
+                "lastYear": 654,
+                "thisYear": 612
+              },
+              {
+                "name": "Calls to the Police",
+                "id": "police_calls",
+                "lastYear": 9876,
+                "thisYear": 9543
+              }
+            ]
+          },
+          {
+            "category": "Safety",
+            "metrics": [
+              {
+                "name": "Total Fire Incidents",
+                "id": "fire_incidents",
+                "lastYear": 87,
+                "thisYear": 79
+              },
+              {
+                "name": "Fire Safety Warnings",
+                "id": "fire_warnings",
+                "lastYear": 234,
+                "thisYear": 256
+              },
+              {
+                "name": "Emergency Response Time (min)",
+                "id": "emergency_response_time",
+                "lastYear": 7.5,
+                "thisYear": 6.8
+              },
+              {
+                "name": "Fire Inspections Completed",
+                "id": "fire_inspections",
+                "lastYear": 453,
+                "thisYear": 512
+              }
+            ]
+          }
+        ]
+      }
+    }
+  } 

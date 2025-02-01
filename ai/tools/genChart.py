@@ -656,7 +656,7 @@ Caption: {caption}
             # Include crosstab data table with toggle in HTML content
             html_content = f'''
 <div style="width:100%" id="chart_{chart_id}">
-    {fig.to_html(full_html=False)}
+    <img src="/output/{output_subdir}/{image_filename}" style="width:100%; max-width:1200px;" alt="{chart_title}"/>
     <div> 
         {caption}
     </div>

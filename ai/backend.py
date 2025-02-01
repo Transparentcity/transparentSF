@@ -519,20 +519,18 @@ def count_tokens(text: str) -> int:
 @router.get("/get-aggregated-summary")
 async def get_aggregated_summary():
     """
-    Aggregate all summary .txt files into a single file and return its link.
+    Aggregate all summary .txt files from the output directory and return their combined content.
     """
     logger.debug("Get aggregated summary called")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         output_dir = os.path.join(script_dir, 'output')
         
-        # Create aggregated summaries directory if it doesn't exist
-        agg_dir = os.path.join(output_dir, 'aggregated_summaries')
-        os.makedirs(agg_dir, exist_ok=True)
-        
         # Find all summary .txt files
         summary_files = []
         total_content = ""
+        
+        # Walk through output directory and find all summary text files
         for root, _, files in os.walk(output_dir):
             for file in files:
                 if file.endswith('_summary.txt'):
@@ -540,41 +538,33 @@ async def get_aggregated_summary():
         
         if not summary_files:
             logger.debug("No summary files found")
-            return JSONResponse({"link": None})
-        
-        # Create aggregated file with timestamp
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        agg_filename = f'aggregated_summaries_{timestamp}.txt'
-        agg_path = os.path.join(agg_dir, agg_filename)
+            return JSONResponse({"content": "", "token_count": 0})
         
         # Aggregate content from all summary files
-        with open(agg_path, 'w', encoding='utf-8') as agg_file:
-            for i, summary_file in enumerate(summary_files, 1):
-                try:
-                    with open(summary_file, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        total_content += content
-                        
-                    # Add file header
-                    filename = os.path.basename(summary_file)
-                    agg_file.write(f"\n{'='*80}\n")
-                    agg_file.write(f"Summary {i}: {filename}\n")
-                    agg_file.write(f"{'='*80}\n\n")
-                    agg_file.write(content)
-                    agg_file.write("\n\n")
-                except Exception as e:
-                    logger.error(f"Error reading summary file {summary_file}: {str(e)}")
-                    continue
+        aggregated_content = []
+        for i, summary_file in enumerate(summary_files, 1):
+            try:
+                with open(summary_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    total_content += content
+                
+                # Add file header and content to aggregated content
+                filename = os.path.basename(summary_file)
+                section = f"\n{'='*80}\nSummary {i}: {filename}\n{'='*80}\n\n{content}\n\n"
+                aggregated_content.append(section)
+                    
+            except Exception as e:
+                logger.error(f"Error reading summary file {summary_file}: {str(e)}")
+                continue
+        
+        # Join all content
+        final_content = "".join(aggregated_content)
         
         # Calculate total token count
         token_count = count_tokens(total_content)
         
-        # Generate URL for the aggregated file
-        url = f"/output/aggregated_summaries/{agg_filename}"
-        logger.debug(f"Created aggregated summary at: {url}")
-        
         return JSONResponse({
-            "link": url,
+            "content": final_content,
             "token_count": token_count
         })
         
