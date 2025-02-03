@@ -1059,12 +1059,15 @@
 
             // Close modal when clicking outside
             window.onclick = function(event) {
+                if (event.target == jsonModal) {
+                    jsonModal.style.display = 'none';
+                }
                 if (event.target == logModal) {
                     logModal.style.display = 'none';
                     clearInterval(logUpdateInterval);
                 }
-                if (event.target == modal) {
-                    modal.style.display = 'none';
+                if (event.target == notesModal) {
+                    notesModal.style.display = 'none';
                 }
             }
 
@@ -1130,18 +1133,160 @@
                 notesModal.style.display = 'none';
             }
 
-            // Update window click handler to include notes modal
-            window.onclick = function(event) {
-                if (event.target == modal) {
-                    modal.style.display = 'none';
+            // Add click handlers for analysis buttons
+            const analyzeButtons = ['analyze-yearly-btn', 'analyze-monthly-btn', 'analyze-daily-btn', 'analyze-ytd-btn'];
+            
+            // Map button IDs to period types
+            const buttonToPeriodType = {
+                'analyze-yearly-btn': 'year',
+                'analyze-monthly-btn': 'month',
+                'analyze-daily-btn': 'day',
+                'analyze-ytd-btn': 'ytd'
+            };
+            
+            async function runAnalysis(buttonId) {
+                // Map period type to button text
+                const buttonTexts = {
+                    'analyze-yearly-btn': 'Analyze Yearly',
+                    'analyze-monthly-btn': 'Analyze Monthly',
+                    'analyze-daily-btn': 'Analyze Daily',
+                    'analyze-ytd-btn': 'Analyze YTD'
+                };
+                
+                const button = document.getElementById(buttonId);
+                if (!button) {
+                    console.error(`Button not found: ${buttonId}`);
+                    return;
                 }
-                if (event.target == logModal) {
-                    logModal.style.display = 'none';
-                    clearInterval(logUpdateInterval);
+                
+                // Get checked rows
+                const checkedRows = document.querySelectorAll('tr[data-endpoint] input.row-check:checked');
+                if (checkedRows.length === 0) {
+                    alert('Please select at least one dataset to analyze.');
+                    return;
                 }
-                if (event.target == notesModal) {
-                    notesModal.style.display = 'none';
+                
+                const originalText = buttonTexts[buttonId];
+                const periodType = buttonToPeriodType[buttonId];
+                
+                if (!periodType) {
+                    console.error(`Invalid button ID: ${buttonId}`);
+                    return;
                 }
+                
+                // Disable all analysis buttons
+                analyzeButtons.forEach(btnId => {
+                    const btn = document.getElementById(btnId);
+                    if (btn) {
+                        btn.disabled = true;
+                    }
+                });
+                
+                button.textContent = 'Analyzing...';
+                button.classList.add('button-loading');
+                
+                try {
+                    let successCount = 0;
+                    let errorCount = 0;
+                    
+                    for (const checkbox of checkedRows) {
+                        const row = checkbox.closest('tr');
+                        const endpoint = row.getAttribute('data-endpoint');
+                        try {
+                            console.log(`Running analysis for ${endpoint} with period_type=${periodType}`);
+                            const response = await fetch(`/backend/run_analysis/${encodeURIComponent(endpoint)}?period_type=${periodType}`);
+                            const data = await response.json();
+                            if (data.status === 'success') {
+                                await updateRowOutputLinks(row);
+                                successCount++;
+                            } else {
+                                console.error(`Error analyzing ${endpoint}:`, data.message);
+                                errorCount++;
+                            }
+                        } catch (error) {
+                            console.error(`Error analyzing ${endpoint}:`, error);
+                            errorCount++;
+                        }
+                    }
+                    
+                    // Show summary of results
+                    if (errorCount > 0) {
+                        button.textContent = `${originalText} (${successCount} ok, ${errorCount} failed)`;
+                        button.style.color = '#dc3545';
+                        setTimeout(() => {
+                            button.textContent = originalText;
+                            button.style.color = '';
+                        }, 5000);
+                    }
+                } finally {
+                    // Re-enable all analysis buttons
+                    analyzeButtons.forEach(btnId => {
+                        const btn = document.getElementById(btnId);
+                        if (btn) {
+                            btn.disabled = false;
+                            if (btn === button) {
+                                if (!btn.textContent.includes('failed')) {
+                                    btn.textContent = originalText;
+                                }
+                                btn.classList.remove('button-loading');
+                            }
+                        }
+                    });
+                }
+            }
+
+            // Add event listeners only if buttons exist
+            analyzeButtons.forEach(btnId => {
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    btn.addEventListener('click', () => runAnalysis(btnId));
+                }
+            });
+
+            // Add reload vector DB button functionality
+            const reloadVectorDbBtn = document.getElementById('reload-vector-db-btn');
+            if (reloadVectorDbBtn) {
+                reloadVectorDbBtn.addEventListener('click', async () => {
+                    const button = reloadVectorDbBtn;
+                    const originalText = button.textContent;
+                    
+                    button.disabled = true;
+                    button.textContent = 'Reloading...';
+                    button.classList.add('button-loading');
+                    
+                    try {
+                        const response = await fetch('/backend/reload_vector_db');
+                        const data = await response.json();
+                        
+                        if (data.status === 'success') {
+                            button.textContent = 'Reload Successful ✅';
+                            setTimeout(() => {
+                                button.textContent = originalText;
+                            }, 3000);
+                        } else {
+                            button.textContent = 'Reload Failed ❌';
+                            button.style.color = '#dc3545';
+                            console.error('Vector DB reload failed:', data.message);
+                            alert(`Failed to reload vector DB: ${data.message}`);
+                            setTimeout(() => {
+                                button.textContent = originalText;
+                                button.style.color = '';
+                            }, 3000);
+                        }
+                    } catch (error) {
+                        button.textContent = 'Reload Failed ❌';
+                        button.style.color = '#dc3545';
+                        console.error('Error reloading vector DB:', error);
+                        alert(`Error reloading vector DB: ${error.message}`);
+                        setTimeout(() => {
+                            button.textContent = originalText;
+                            button.style.color = '';
+                        }, 3000);
+                    } finally {
+                        button.disabled = false;
+                        button.classList.remove('button-loading');
+                    }
+                });
             }
         });
     </script>

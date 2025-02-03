@@ -294,14 +294,24 @@ async def run_analysis(endpoint: str, period_type: str = 'year'):
         os.makedirs(logs_dir, exist_ok=True)
         
         # Create period-specific output folder
-        period_folder = {'year': 'annual', 'month': 'monthly', 'day': 'daily', 'ytd': 'ytd'}[period_type]
+        period_folder_map = {
+            'year': 'annual',
+            'month': 'monthly',
+            'day': 'daily',
+            'ytd': 'ytd'
+        }
+        
+        if period_type not in period_folder_map:
+            raise ValueError(f"Invalid period_type: {period_type}. Must be one of: {', '.join(period_folder_map.keys())}")
+            
+        period_folder = period_folder_map[period_type]
         period_output_dir = os.path.join(output_dir, period_folder)
         os.makedirs(period_output_dir, exist_ok=True)
         
         logger.debug(f"Attempting to run export_for_endpoint with endpoint: {endpoint} and period_type: {period_type}")
         export_for_endpoint(endpoint, 
                           period_type=period_type,
-                          output_folder=period_output_dir,  # Use period-specific output folder
+                          output_folder=period_output_dir,
                           log_file_path=os.path.join(logs_dir, 'processing_log.txt'))
         
         if error_log:
@@ -319,7 +329,10 @@ async def run_analysis(endpoint: str, period_type: str = 'year'):
         })
     except Exception as e:
         logger.exception(f"Error running analysis for endpoint '{endpoint}': {str(e)}")
-        return JSONResponse({'status': 'error', 'message': str(e)})
+        return JSONResponse({
+            'status': 'error', 
+            'message': str(e)
+        }, status_code=500)
 
 
 @router.get("/get-updated-links/{endpoint}")
