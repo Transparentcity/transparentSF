@@ -611,9 +611,13 @@ def generate_time_series_chart(
             fig.write_image(image_path, engine="kaleido")
             logging.info("Chart saved successfully at %s", image_path)
 
-            # Get the output directory name from the path
-            output_subdir = os.path.basename(os.path.dirname(image_path))
-            logging.debug(f"Using output subdirectory: {output_subdir}")
+            # Get the relative path from the output directory
+            # First, find the 'output' directory in the path
+            path_parts = image_path.split(os.sep)
+            output_index = path_parts.index('output')
+            # Include all parts after 'output' except the filename
+            relative_path = os.path.join(*path_parts[output_index:-1])
+            logging.debug(f"Using relative path: {relative_path}")
 
             # Prepare crosstabbed data
             if group_field:
@@ -645,7 +649,7 @@ def generate_time_series_chart(
             # Create markdown content with full path
             markdown_content = f""" 
 {context_variables.get("chart_title", "Time Series Chart")}
-![Chart](/output/{output_subdir}/{image_filename})
+![Chart]/{relative_path}/{image_filename})
 Caption: {caption}
 
 ### Data Table
@@ -656,7 +660,7 @@ Caption: {caption}
             # Include crosstab data table with toggle in HTML content
             html_content = f'''
 <div style="width:100%" id="chart_{chart_id}">
-    <img src="/output/{output_subdir}/{image_filename}" style="width:100%; max-width:1200px;" alt="{chart_title}"/>
+    <img src="/{relative_path}/{image_filename}" style="width:100%; max-width:1200px;" alt="{chart_title}"/>
     <div> 
         {caption}
     </div>

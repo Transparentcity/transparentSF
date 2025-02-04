@@ -614,9 +614,14 @@
                                 const src = img.getAttribute('src');
                                 console.log('Processing image source:', src);
                                 if (src && !src.startsWith('/') && !src.startsWith('http')) {
-                                    // If it's a relative path, prepend the determined output path
-                                    const newSrc = `${outputDir}${src}`;
+                                    // Only add /output/ if it's not already there
+                                    const newSrc = src.startsWith('output/') ? `/${src}` : `/output/${src}`;
                                     console.log('Updating image path from', src, 'to', newSrc);
+                                    img.src = newSrc;
+                                } else if (src && src.includes('/output/output/')) {
+                                    // Fix double output in path
+                                    const newSrc = src.replace('/output/output/', '/output/');
+                                    console.log('Fixing double output in path from', src, 'to', newSrc);
                                     img.src = newSrc;
                                 }
                             }

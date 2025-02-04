@@ -387,7 +387,7 @@ Researcher_agent = Agent(
         
         Only make one query_docs() call per category due to response length. 
         Use generate_ghost_post(context_variables, content, title) to produce a simple HTML post once content is finalized.
-        Ensure chart/image src links are correct and accessible.
+        Ensure chart/image src links are correct and accessible. Chart URLS are RELATIVE to the output folder.
         Analyst Handoff: Use Transfer_to_analyst_agent() only if specifically requested to do so by the user.
 
         """,
