@@ -480,7 +480,6 @@
             <h2>Actions</h2>
             <button id="analyze-yearly-btn">Analyze Yearly</button>
             <button id="analyze-monthly-btn">Analyze Monthly</button>
-            <button id="analyze-daily-btn">Analyze Daily</button>
             <button id="analyze-ytd-btn">Analyze YTD</button>
             <button id="reload-vector-db-btn">Reload Vector DB</button>
             <button id="summarize-posts-btn">Summarize Posts</button>
@@ -1134,13 +1133,12 @@
             }
 
             // Add click handlers for analysis buttons
-            const analyzeButtons = ['analyze-yearly-btn', 'analyze-monthly-btn', 'analyze-daily-btn', 'analyze-ytd-btn'];
+            const analyzeButtons = ['analyze-yearly-btn', 'analyze-monthly-btn', 'analyze-ytd-btn'];
             
             // Map button IDs to period types
             const buttonToPeriodType = {
                 'analyze-yearly-btn': 'year',
                 'analyze-monthly-btn': 'month',
-                'analyze-daily-btn': 'day',
                 'analyze-ytd-btn': 'ytd'
             };
             
@@ -1149,13 +1147,50 @@
                 const buttonTexts = {
                     'analyze-yearly-btn': 'Analyze Yearly',
                     'analyze-monthly-btn': 'Analyze Monthly',
-                    'analyze-daily-btn': 'Analyze Daily',
                     'analyze-ytd-btn': 'Analyze YTD'
                 };
                 
                 const button = document.getElementById(buttonId);
                 if (!button) {
                     console.error(`Button not found: ${buttonId}`);
+                    return;
+                }
+                
+                // Special handling for YTD button
+                if (buttonId === 'analyze-ytd-btn') {
+                    button.disabled = true;
+                    const originalText = buttonTexts[buttonId];
+                    button.textContent = 'Generating YTD Metrics...';
+                    button.classList.add('button-loading');
+                    
+                    try {
+                        const response = await fetch('/backend/generate_ytd_metrics');
+                        const data = await response.json();
+                        
+                        if (data.status === 'success') {
+                            button.textContent = 'YTD Metrics Generated ✅';
+                            setTimeout(() => {
+                                button.textContent = originalText;
+                            }, 3000);
+                        } else {
+                            button.textContent = 'Generation Failed ❌';
+                            console.error('Error:', data.message);
+                            alert(`Failed to generate YTD metrics: ${data.message}`);
+                            setTimeout(() => {
+                                button.textContent = originalText;
+                            }, 3000);
+                        }
+                    } catch (error) {
+                        button.textContent = 'Generation Failed ❌';
+                        console.error('Error:', error);
+                        alert(`Error generating YTD metrics: ${error.message}`);
+                        setTimeout(() => {
+                            button.textContent = originalText;
+                        }, 3000);
+                    } finally {
+                        button.disabled = false;
+                        button.classList.remove('button-loading');
+                    }
                     return;
                 }
                 
@@ -1286,6 +1321,39 @@
                         button.disabled = false;
                         button.classList.remove('button-loading');
                     }
+                });
+            }
+
+            // Add JSON link click handlers
+            const jsonModal = document.getElementById('jsonModal');
+            const jsonContent = document.getElementById('jsonContent');
+            const jsonLinks = document.querySelectorAll('.json-link');
+            
+            jsonLinks.forEach(link => {
+                link.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const filename = link.getAttribute('data-filename');
+                    
+                    try {
+                        const response = await fetch(`/backend/dataset-json/${encodeURIComponent(filename)}`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        const data = await response.json();
+                        jsonContent.textContent = JSON.stringify(data, null, 2);
+                        jsonModal.style.display = 'block';
+                    } catch (error) {
+                        console.error('Error loading JSON:', error);
+                        alert(`Error loading JSON file: ${error.message}`);
+                    }
+                });
+            });
+
+            // Add close button functionality for JSON modal
+            const jsonCloseBtn = jsonModal.querySelector('.close');
+            if (jsonCloseBtn) {
+                jsonCloseBtn.addEventListener('click', () => {
+                    jsonModal.style.display = 'none';
                 });
             }
         });

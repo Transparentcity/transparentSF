@@ -16,6 +16,7 @@ import shutil  # Add this import at the top with other imports
 from ai_dataprep import process_single_file  # Ensure these imports are correct
 from periodic_analysis import export_for_endpoint  # Ensure this import is correct
 import logging
+from generate_dashboard_metrics import main as generate_metrics
 
 # Configure logging
 logging.basicConfig(
@@ -672,3 +673,22 @@ async def clear_html_files():
             "status": "error",
             "message": str(e)
         })
+
+
+@router.get("/generate_ytd_metrics")
+async def generate_ytd_metrics():
+    """Generate YTD metrics on demand."""
+    logger.debug("Generate YTD metrics called")
+    try:
+        generate_metrics()
+        logger.info("YTD metrics generated successfully")
+        return JSONResponse({
+            "status": "success",
+            "message": "YTD metrics generated successfully"
+        })
+    except Exception as e:
+        logger.exception(f"Error generating YTD metrics: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)

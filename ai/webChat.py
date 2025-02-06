@@ -135,28 +135,18 @@ def load_and_combine_notes():
     
     logger.info("Starting to load and combine notes")
     
-    # First find the most recent aggregated summary
-    aggregated_dir = data_folder / 'aggregated_summaries'
-    if aggregated_dir.exists():
-        aggregated_files = list(aggregated_dir.glob('aggregated_summaries_*.txt'))
-        if aggregated_files:
-            latest_aggregated = max(aggregated_files, key=lambda x: x.stat().st_mtime)
-            logger.info(f"Loading most recent aggregated summary: {latest_aggregated}")
-            combined_text = latest_aggregated.read_text(encoding='utf-8')
-            total_files += 1
-            logger.info(f"Aggregated summary size: {len(combined_text)} characters")
-    
-    # Then load any individual summaries that are newer than the aggregated summary
-    latest_mtime = latest_aggregated.stat().st_mtime if 'latest_aggregated' in locals() else 0
-    
-    for file_path in data_folder.glob('*.json_summary.txt'):
-        if file_path.stat().st_mtime > latest_mtime:
-            logger.info(f"Loading newer summary: {file_path}")
+    # Recursively find all .txt files in the output directory
+    for file_path in data_folder.rglob('*.txt'):
+        try:
+            logger.info(f"Loading file: {file_path}")
             file_content = file_path.read_text(encoding='utf-8')
             logger.info(f"File {file_path.name} size: {len(file_content)} characters")
             combined_text += '\n' + file_content
             total_files += 1
-    
+        except Exception as e:
+            logger.error(f"Error reading file {file_path}: {e}")
+            continue
+
     logger.info(f"""
 Notes loading complete:
 Total files processed: {total_files}
@@ -305,9 +295,11 @@ analyst_agent = Agent(
 
     - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in. always pass the context_variables and the collection name is allways "SFPublicData"
     - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
-    - Use `set_dataset(endpoint, query)` Query and endpoint are required parameters . to set the dataset after the user selects one. The `endpoint` is the dataset identifier (e.g., `'abcd-1234.json'`), and `query` is the SoQL query string.  There are often valid soql querties in your docs for each endpoint to show you how to format your queries.  
-        Here's an example call: 
-        Here are some examples of valid soql queries:
+    - Use `set_dataset(context_variables, endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
+        - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')
+        - query: The complete SoQL query string (e.g., '$select=field1,field2&$where=condition')
+        Example usage:
+        set_dataset(context_variables, endpoint="ubvf-ztfx.json", query="$select=unique_id,collision_date,number_injured&$where=accident_year=2025")
     - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
 
     """,
@@ -377,7 +369,6 @@ Researcher_agent = Agent(
         timeframes are one of the following:
         annual
         monthly
-        daily
 
         location is one of the following:
         citywide

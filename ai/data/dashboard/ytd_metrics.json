@@ -8,32 +8,32 @@
           "metrics": [
             {
               "name": "Total Police Incidents",
-              "id": "total_police_incidents",
+              "id": "total_police_incidents_ytd",
               "lastYear": 10679.0,
               "thisYear": 8873.0
             },
             {
               "name": "Violent Crime Incidents",
-              "id": "violent_crime_incidents",
+              "id": "violent_crime_incidents_ytd",
               "lastYear": 1216.0,
               "thisYear": 1152.0
             },
             {
               "name": "Property Crime Incidents",
-              "id": "property_crime_incidents",
+              "id": "property_crime_incidents_ytd",
               "lastYear": 5114.0,
               "thisYear": 3621.0
             },
             {
               "name": "Drug Crime Incidents",
-              "id": "drug_crime_incidents",
+              "id": "drug_crime_incidents_ytd",
               "lastYear": 371.0,
               "thisYear": 461.0
             }
           ]
         },
         {
-          "category": "Fires",
+          "category": "Safety",
           "metrics": [
             {
               "name": "Fire Incidents",
@@ -58,6 +58,29 @@
               "id": "fire_fatalities_ytd",
               "lastYear": 0.0,
               "thisYear": 0.0
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 377.0,
+              "thisYear": 0.0
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 2.0,
+              "thisYear": 0.0
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 1633.0,
+              "thisYear": 878.0
             }
           ]
         }
@@ -65,7 +88,7 @@
     }
   },
   "metadata": {
-    "generated_at": "2025-02-05T11:01:59.224689",
+    "generated_at": "2025-02-05T16:35:10.905490",
     "data_as_of": "2025-02-04",
     "next_update": "2025-02-06T01:00:00"
   }

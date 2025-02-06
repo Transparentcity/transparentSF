@@ -1,8 +1,14 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import os
+import json
 import logging
+import asyncio
+from datetime import datetime, timedelta
+from generate_dashboard_metrics import main as generate_metrics
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -13,6 +19,15 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 logger.debug(f"Current directory: {current_dir}")
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 # Initialize templates with absolute path
 templates = Jinja2Templates(directory=os.path.join(current_dir, "templates"))
@@ -39,6 +54,34 @@ if not os.path.exists(logs_dir):
 app.mount("/logs", StaticFiles(directory=logs_dir), name="logs")
 logger.debug(f"Logs directory: {logs_dir}")
 
+# Define metrics data directory
+metrics_dir = os.path.join(current_dir, "data/dashboard")
+logger.debug(f"Metrics directory: {metrics_dir}")
+
+@app.get("/api/metrics/{filename}")
+async def get_metrics(filename: str):
+    """Serve metrics data from JSON files."""
+    # Ensure filename ends with .json
+    if not filename.endswith('.json'):
+        filename = f"{filename}.json"
+    
+    file_path = os.path.join(output_dir, filename)
+    logger.debug(f"Attempting to read metrics from: {file_path}")
+    
+    try:
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            return JSONResponse(content=data)
+    except FileNotFoundError:
+        logger.error(f"Metrics file not found: {file_path}")
+        raise HTTPException(status_code=404, detail=f"Metrics file '{filename}' not found")
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON in metrics file: {file_path}")
+        raise HTTPException(status_code=500, detail=f"Invalid JSON in metrics file '{filename}'")
+    except Exception as e:
+        logger.error(f"Error reading metrics file {file_path}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 # Root route to serve index.html
 @app.get("/")
 async def root(request: Request):
@@ -62,21 +105,50 @@ logger.debug("Included chat router at /chat")
 app.include_router(backend_router, prefix="/backend", tags=["backend"])
 logger.debug("Included backend router at /backend")
 
-# Debug: Print all registered routes
+async def schedule_metrics_generation():
+    """Schedule metrics generation to run daily at 1 AM."""
+    while True:
+        try:
+            # Calculate time until next run (1 AM)
+            now = datetime.now()
+            target = now.replace(hour=1, minute=0, second=0, microsecond=0)
+            if now.hour >= 1:
+                target += timedelta(days=1)
+            
+            # Wait until the next scheduled time
+            wait_seconds = (target - now).total_seconds()
+            logger.info(f"Next metrics generation scheduled for {target} (in {wait_seconds/3600:.2f} hours)")
+            await asyncio.sleep(wait_seconds)
+            
+            # Generate metrics
+            logger.info("Starting scheduled metrics generation...")
+            try:
+                generate_metrics()
+                logger.info("Metrics generation completed successfully")
+            except Exception as e:
+                logger.error(f"Error during metrics generation: {str(e)}")
+                
+        except Exception as e:
+            logger.error(f"Error in metrics generation scheduler: {str(e)}")
+            await asyncio.sleep(300)  # Wait 5 minutes before retrying if there's an error
+
 @app.on_event("startup")
 async def startup_event():
+    # Existing startup code
     routes = []
     for route in app.routes:
         if hasattr(route, "methods"):
-            # Regular routes
             routes.append(f"{route.path} [{route.methods}]")
         elif hasattr(route, "path"):
-            # Mount routes
             routes.append(f"{route.path} [Mount]")
     
     logger.debug("Registered routes:")
     for route in routes:
         logger.debug(f"  {route}")
+        
+    # Start the metrics generation scheduler
+    asyncio.create_task(schedule_metrics_generation())
+    logger.info("Started metrics generation scheduler")
 
 if __name__ == "__main__":
     import uvicorn

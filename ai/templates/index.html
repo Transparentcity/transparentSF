@@ -498,6 +498,25 @@
         <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
 
         <script>
+            // Configure Marked.js
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                headerIds: false,
+                mangle: false,
+            });
+
+            // Add a custom renderer for images
+            const renderer = new marked.Renderer();
+            renderer.image = function(href, title, text) {
+                // If the path starts with '../', replace it with '/output/'
+                if (href.startsWith('../')) {
+                    href = '/output/' + href.substring(3);
+                }
+                return `<img src="${href}" title="${title || ''}" alt="${text || ''}" />`;
+            };
+            marked.use({ renderer });
+
             // Add this function at the top of your script section
             function getOutputDirectory(content) {
                 // Check if this is a query result by looking for "Query URL" pattern
@@ -581,14 +600,6 @@
             function renderContentSegments(message) {
                 // Clear the content element
                 message.contentElement.innerHTML = "";
-
-                // Configure Marked.js
-                marked.setOptions({
-                    breaks: true,
-                    gfm: true,
-                    headerIds: false,
-                    mangle: false,
-                });
 
                 // Process each segment
                 for (let segment of message.contentSegments) {
@@ -723,14 +734,15 @@
                         body: JSON.stringify({ query }),
                     });
 
-                    // Remove typing indicator when we get the first response
-                    currentAIMessage.contentElement.removeChild(typingIndicator);
+                    // Initialize content segments but keep typing indicator
                     currentAIMessage.contentSegments = [];
 
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
 
                     let buffer = "";
+                    let firstChunkReceived = false;
+
                     while (true) {
                         const { done, value } = await reader.read();
                         if (done) break;
@@ -738,6 +750,12 @@
                         const chunk = decoder.decode(value);
                         console.log("Received chunk:", chunk);
                         buffer += chunk;
+
+                        // Only remove typing indicator after we've received actual content
+                        if (!firstChunkReceived && buffer.trim()) {
+                            firstChunkReceived = true;
+                            currentAIMessage.contentElement.removeChild(typingIndicator);
+                        }
 
                         // Process complete lines
                         let lines = buffer.split("\n");
@@ -766,8 +784,17 @@
                             console.error("Invalid JSON:", buffer);
                         }
                     }
+
+                    // Ensure typing indicator is removed at the end if it hasn't been already
+                    if (typingIndicator.parentNode === currentAIMessage.contentElement) {
+                        currentAIMessage.contentElement.removeChild(typingIndicator);
+                    }
                 } catch (error) {
                     console.error("Error:", error);
+                    // Remove typing indicator if there's an error
+                    if (typingIndicator.parentNode === currentAIMessage.contentElement) {
+                        currentAIMessage.contentElement.removeChild(typingIndicator);
+                    }
                     addMessage(
                         "Error",
                         "error-message",

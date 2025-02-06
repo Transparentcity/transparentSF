@@ -32,15 +32,31 @@ def fetch_data_from_api(query_object):
 
     endpoint = query_object.get('endpoint')
     query = query_object.get('query')
+    logger.info(f"Initial query string: {query}")
+    
     if not endpoint or not query:
         logger.error("Invalid query object: %s", query_object)
         return {'error': 'Invalid query object provided.'}
 
     cleaned_query = clean_query_string(query)
+    logger.info(f"After clean_query_string: {cleaned_query}")
+    
+    # Remove any $query= prefix if it exists
+    if cleaned_query.startswith('$query='):
+        cleaned_query = cleaned_query[7:]
+        logger.info("Removed $query= prefix")
+    if cleaned_query.startswith('query='):
+        cleaned_query = cleaned_query[6:]
+        logger.info("Removed query= prefix")
+    
+    logger.info(f"Final cleaned query: {cleaned_query}")
 
     has_limit = "limit" in cleaned_query.lower()
     url = urljoin(base_url, f"{endpoint if endpoint.endswith('.json') else endpoint + '.json'}")
+    
+    # Don't wrap the query in $query= here, just pass it directly
     params = {"$query": cleaned_query}
+    logger.info(f"Final request parameters: {params}")
 
     headers = {
         'Accept': 'application/json'
@@ -105,16 +121,36 @@ def fetch_data_from_api(query_object):
 def set_dataset(context_variables, *args, **kwargs):
     """
     Fetches data from the API and sets it in the context variables.
+    Supports both:
+    - Named parameters: set_dataset(context_variables, endpoint="...", query="...")
+    - Args/kwargs syntax: set_dataset(context_variables, "endpoint.json", "$select=...")
+    - JSON format: {"args": "endpoint.json", "kwargs": "$select=..."}
     """
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
-    logger.debug("Starting set_dataset with kwargs: %s", kwargs)
-    endpoint = kwargs.get('endpoint')
-    query = kwargs.get('query')
+    logger.debug("Starting set_dataset with args: %s, kwargs: %s", args, kwargs)
+
+    # Handle the JSON format with "args" and "kwargs" keys
+    if 'args' in kwargs and 'kwargs' in kwargs:
+        endpoint = kwargs['args']
+        query = kwargs['kwargs']
+        logger.info(f"Using JSON format - Raw query: {query}")
+    # Handle the args/kwargs syntax
+    elif len(args) >= 1 and isinstance(args[0], str):
+        endpoint = args[0]
+        query = kwargs.get('kwargs') if 'kwargs' in kwargs else kwargs.get('query')
+        logger.info(f"Using args/kwargs syntax - Raw query: {query}")
+    else:
+        # Handle named parameters syntax
+        endpoint = kwargs.get('endpoint')
+        query = kwargs.get('query')
+        logger.info(f"Using named parameters - Raw query: {query}")
+
     if not endpoint or not query:
         logger.error("Endpoint and query are required parameters.")
         return {'error': 'Endpoint and query are required parameters.', 'queryURL': None}
 
+    logger.info(f"Processing request with endpoint: {endpoint}, query: {query}")
     query_object = {'endpoint': endpoint, 'query': query}
     result = fetch_data_from_api(query_object)
     if result and 'data' in result:
