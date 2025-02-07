@@ -9,26 +9,30 @@
             {
               "name": "Total Police Incidents",
               "id": "total_police_incidents_ytd",
-              "lastYear": 10679.0,
-              "thisYear": 8873.0
+              "lastYear": 10877,
+              "thisYear": 9216,
+              "lastDataDate": "2025-02-05"
             },
             {
               "name": "Violent Crime Incidents",
               "id": "violent_crime_incidents_ytd",
-              "lastYear": 1216.0,
-              "thisYear": 1152.0
+              "lastYear": 1247,
+              "thisYear": 1197,
+              "lastDataDate": "2025-02-05"
             },
             {
               "name": "Property Crime Incidents",
               "id": "property_crime_incidents_ytd",
-              "lastYear": 5114.0,
-              "thisYear": 3621.0
+              "lastYear": 5206,
+              "thisYear": 3750,
+              "lastDataDate": "2025-02-05"
             },
             {
               "name": "Drug Crime Incidents",
               "id": "drug_crime_incidents_ytd",
-              "lastYear": 371.0,
-              "thisYear": 461.0
+              "lastYear": 379,
+              "thisYear": 478,
+              "lastDataDate": "2025-02-05"
             }
           ]
         },
@@ -38,38 +42,30 @@
             {
               "name": "Fire Incidents",
               "id": "fire_incidents_ytd",
-              "lastYear": 4008.0,
-              "thisYear": 2667.0
-            },
-            {
-              "name": "Fire Property Loss",
-              "id": "fire_property_loss_ytd",
-              "lastYear": 1868854.0,
-              "thisYear": 514711.0
-            },
-            {
-              "name": "Fire Injuries",
-              "id": "fire_injuries_ytd",
-              "lastYear": 0.0,
-              "thisYear": 0.0
+              "lastYear": 4181,
+              "thisYear": 2797,
+              "lastDataDate": "2025-02-05"
             },
             {
               "name": "Fire Fatalities",
               "id": "fire_fatalities_ytd",
-              "lastYear": 0.0,
-              "thisYear": 0.0
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
             },
             {
               "name": "Traffic Injuries",
               "id": "traffic_injuries_ytd",
-              "lastYear": 377.0,
-              "thisYear": 0.0
+              "lastYear": 387,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
             },
             {
               "name": "Traffic Fatalities",
               "id": "traffic_fatalities_ytd",
-              "lastYear": 2.0,
-              "thisYear": 0.0
+              "lastYear": 2,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
             }
           ]
         },
@@ -79,8 +75,934 @@
             {
               "name": "Business Registrations",
               "id": "business_registrations_ytd",
-              "lastYear": 1633.0,
-              "thisYear": 878.0
+              "lastYear": 1712,
+              "thisYear": 921,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        },
+        {
+          "category": "Health",
+          "metrics": [
+            {
+              "name": "Overdose 911 Calls",
+              "id": "overdose_911_calls_ytd",
+              "lastYear": 422,
+              "thisYear": 30,
+              "lastDataDate": "2025-01-01"
+            }
+          ]
+        }
+      ]
+    },
+    "1": {
+      "name": "District 1",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 478,
+              "thisYear": 297,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 27,
+              "thisYear": 17,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 297,
+              "thisYear": 158,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 1,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 222,
+              "thisYear": 175,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 17,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 1,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 92,
+              "thisYear": 46,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "2": {
+      "name": "District 2",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 702,
+              "thisYear": 548,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 64,
+              "thisYear": 44,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 420,
+              "thisYear": 306,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 5,
+              "thisYear": 6,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 353,
+              "thisYear": 261,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 22,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 116,
+              "thisYear": 59,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "3": {
+      "name": "District 3",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 1465,
+              "thisYear": 1044,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 168,
+              "thisYear": 132,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 756,
+              "thisYear": 430,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 14,
+              "thisYear": 26,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 583,
+              "thisYear": 266,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 28,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 216,
+              "thisYear": 116,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "4": {
+      "name": "District 4",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 424,
+              "thisYear": 235,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 28,
+              "thisYear": 19,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 268,
+              "thisYear": 124,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 2,
+              "thisYear": 1,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 210,
+              "thisYear": 119,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 28,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 66,
+              "thisYear": 26,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "5": {
+      "name": "District 5",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 1761,
+              "thisYear": 1325,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 220,
+              "thisYear": 215,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 572,
+              "thisYear": 381,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 174,
+              "thisYear": 142,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 645,
+              "thisYear": 550,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 49,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 109,
+              "thisYear": 62,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "6": {
+      "name": "District 6",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 1473,
+              "thisYear": 1936,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 246,
+              "thisYear": 286,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 462,
+              "thisYear": 529,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 131,
+              "thisYear": 231,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 652,
+              "thisYear": 435,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 65,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 146,
+              "thisYear": 87,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "7": {
+      "name": "District 7",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 525,
+              "thisYear": 369,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 45,
+              "thisYear": 42,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 311,
+              "thisYear": 190,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 2,
+              "thisYear": 6,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 281,
+              "thisYear": 219,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 37,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 1,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 90,
+              "thisYear": 35,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "8": {
+      "name": "District 8",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 661,
+              "thisYear": 598,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 57,
+              "thisYear": 47,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 367,
+              "thisYear": 316,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 3,
+              "thisYear": 6,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 313,
+              "thisYear": 198,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 32,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 146,
+              "thisYear": 62,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "9": {
+      "name": "District 9",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 1224,
+              "thisYear": 1106,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 174,
+              "thisYear": 189,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 492,
+              "thisYear": 438,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 38,
+              "thisYear": 29,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 388,
+              "thisYear": 259,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 38,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 108,
+              "thisYear": 67,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "10": {
+      "name": "District 10",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 1039,
+              "thisYear": 905,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 147,
+              "thisYear": 156,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 518,
+              "thisYear": 394,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 6,
+              "thisYear": 22,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 356,
+              "thisYear": 148,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 38,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 104,
+              "thisYear": 58,
+              "lastDataDate": "2025-02-04"
+            }
+          ]
+        }
+      ]
+    },
+    "11": {
+      "name": "District 11",
+      "categories": [
+        {
+          "category": "Crime",
+          "metrics": [
+            {
+              "name": "Total Police Incidents",
+              "id": "total_police_incidents_ytd",
+              "lastYear": 508,
+              "thisYear": 383,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Violent Crime Incidents",
+              "id": "violent_crime_incidents_ytd",
+              "lastYear": 65,
+              "thisYear": 45,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Property Crime Incidents",
+              "id": "property_crime_incidents_ytd",
+              "lastYear": 282,
+              "thisYear": 176,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Drug Crime Incidents",
+              "id": "drug_crime_incidents_ytd",
+              "lastYear": 3,
+              "thisYear": 7,
+              "lastDataDate": "2025-02-05"
+            }
+          ]
+        },
+        {
+          "category": "Safety",
+          "metrics": [
+            {
+              "name": "Fire Incidents",
+              "id": "fire_incidents_ytd",
+              "lastYear": 167,
+              "thisYear": 110,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Fire Fatalities",
+              "id": "fire_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2025-02-05"
+            },
+            {
+              "name": "Traffic Injuries",
+              "id": "traffic_injuries_ytd",
+              "lastYear": 31,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            },
+            {
+              "name": "Traffic Fatalities",
+              "id": "traffic_fatalities_ytd",
+              "lastYear": 0,
+              "thisYear": 0,
+              "lastDataDate": "2024-12-29"
+            }
+          ]
+        },
+        {
+          "category": "Economy",
+          "metrics": [
+            {
+              "name": "Business Registrations",
+              "id": "business_registrations_ytd",
+              "lastYear": 76,
+              "thisYear": 29,
+              "lastDataDate": "2025-02-04"
             }
           ]
         }
@@ -88,8 +1010,8 @@
     }
   },
   "metadata": {
-    "generated_at": "2025-02-05T16:35:10.905490",
-    "data_as_of": "2025-02-04",
-    "next_update": "2025-02-06T01:00:00"
+    "generated_at": "2025-02-06T18:26:20.414832",
+    "data_as_of": "2025-02-05",
+    "next_update": "2025-02-07T01:00:00"
   }
 }

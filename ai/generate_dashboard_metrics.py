@@ -4,6 +4,7 @@ import logging
 import traceback
 from datetime import datetime, date, timedelta
 from tools.data_fetcher import set_dataset  # Import the set_dataset function
+import pandas as pd
 
 # Create logs directory if it doesn't exist
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -53,27 +54,9 @@ def get_date_ranges(target_date=None):
     }
 
 def process_query_for_district(query, endpoint, date_ranges, district_number=None):
-    """Process a single query for a specific district or citywide."""
+    """Process a single query and handle district-level aggregation from the same dataset."""
     try:
         modified_query = query
-        
-        # Only add district filter if district is specified and query contains supervisor_district
-        if district_number and 'supervisor_district' in modified_query.lower():
-            # Find where to insert the district filter
-            # Look for existing WHERE clause
-            if "WHERE" in modified_query.upper():
-                # Add district filter after the first condition
-                modified_query = modified_query.replace("WHERE", f"WHERE supervisor_district = '{district_number}' AND", 1)
-            else:
-                # If no WHERE clause exists, add one before any GROUP BY, ORDER BY, or LIMIT
-                district_clause = f" WHERE supervisor_district = '{district_number}'"
-                for clause in ["GROUP BY", "ORDER BY", "LIMIT"]:
-                    if clause in modified_query:
-                        modified_query = modified_query.replace(clause, f"{district_clause} {clause}")
-                        break
-                else:
-                    # If no clause found, append to the end
-                    modified_query = f"{modified_query}{district_clause}"
         
         # Replace date placeholders in the query
         modified_query = modified_query.replace('this_year_start', f"'{date_ranges['this_year_start']}'")
@@ -81,37 +64,79 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
         modified_query = modified_query.replace('last_year_start', f"'{date_ranges['last_year_start']}'")
         modified_query = modified_query.replace('last_year_end', f"'{date_ranges['last_year_end']}'")
         
-        logger.info(f"Executing query for district {district_number if district_number else 'Citywide'}")
+        logger.info("Executing query")
         logger.debug(f"Query: {modified_query}")
         
         # Create context variables dictionary to store the dataset
         context_variables = {}
         
-        # Execute the query
+        # Execute the query once
         result = set_dataset(context_variables, endpoint=endpoint, query=modified_query)
-        
-        # Add detailed logging of the result
-        logger.debug("Query Result:")
-        logger.debug("-------------")
-        logger.debug(f"Result type: {type(result)}")
-        logger.debug(f"Result keys: {result.keys() if result and isinstance(result, dict) else 'None'}")
-        logger.debug(f"Result structure: {json.dumps(result, indent=2) if result else 'None'}")
         
         if result.get('status') == 'success' and 'dataset' in context_variables:
             df = context_variables['dataset']
             logger.debug(f"Dataset shape: {df.shape}")
             logger.debug(f"Dataset columns: {df.columns.tolist()}")
+            logger.debug(f"Data types: {df.dtypes}")
             
-            if not df.empty:
-                # Get the first row as a dictionary
-                row = df.iloc[0].to_dict()
-                logger.debug(f"First row data: {json.dumps(row, indent=2)}")
-                return {
-                    'lastYear': float(row.get('last_year', 0)),
-                    'thisYear': float(row.get('this_year', 0))
-                }
+            results = {}
+            
+            # Check if this query contains supervisor_district
+            has_district = 'supervisor_district' in df.columns
+            
+            # Get the max date - first check for max_date column, then fall back to date columns
+            max_date = None
+            if 'max_date' in df.columns:
+                # Use the max_date column directly
+                df['max_date'] = pd.to_datetime(df['max_date'], errors='coerce')
+                max_date = df['max_date'].iloc[0]  # Take the first value since this should be constant
+                if pd.notnull(max_date):
+                    max_date = max_date.strftime('%Y-%m-%d')
             else:
-                logger.warning("Dataset is empty")
+                # Fall back to searching for date columns
+                date_columns = [col for col in df.columns if 'date' in col.lower()]
+                if date_columns:
+                    date_col = date_columns[0]  # Use the first date column found
+                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+                    max_date = df[date_col].max()
+                    if pd.notnull(max_date):
+                        max_date = max_date.strftime('%Y-%m-%d')
+            
+            if has_district:
+                # Convert numeric columns to float first to ensure proper handling
+                df['last_year'] = pd.to_numeric(df['last_year'], errors='coerce')
+                df['this_year'] = pd.to_numeric(df['this_year'], errors='coerce')
+                
+                # For citywide, sum all rows
+                if not df.empty:
+                    results['0'] = {
+                        'lastYear': int(df['last_year'].sum()),
+                        'thisYear': int(df['this_year'].sum()),
+                        'lastDataDate': max_date
+                    }
+                
+                # Process each district's data from the same dataset
+                for district in range(1, 12):
+                    district_df = df[df['supervisor_district'] == str(district)]
+                    if not district_df.empty:
+                        district_data = {
+                            'lastYear': int(district_df['last_year'].sum()),
+                            'thisYear': int(district_df['this_year'].sum()),
+                            'lastDataDate': max_date
+                        }
+                        results[str(district)] = district_data
+            else:
+                # For non-district queries, just return the total from first row
+                if not df.empty:
+                    row = df.iloc[0].to_dict()
+                    results['0'] = {
+                        'lastYear': int(float(row.get('last_year', 0))),
+                        'thisYear': int(float(row.get('this_year', 0))),
+                        'lastDataDate': max_date
+                    }
+            
+            return results
+            
         else:
             logger.error("Query failed or no data returned")
             if 'error' in result:
@@ -162,31 +187,30 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                 
                 # Process each query in the subcategory
                 for query_name, query in subcategory_data['queries'].items():
-                    # Process for citywide first
-                    result = process_query_for_district(query, endpoint, date_ranges)
-                    if result:
-                        metric = {
-                            "name": query_name.replace(" YTD", ""),
-                            "id": query_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd",  # Fixed _ytd suffix
-                            "lastYear": result['lastYear'],
-                            "thisYear": result['thisYear']
-                        }
-                        top_category_metrics['metrics'].append(metric)
-                
-                # Process for all districts only if the query contains supervisor_district
-                if any('supervisor_district' in query.lower() for query in subcategory_data['queries'].values()):
-                    for district_num in range(1, 12):
-                        district_str = str(district_num)
-                        logger.info(f"\nProcessing {subcategory_name} metrics for District {district_str}")
+                    # Process query once and get results for all districts if applicable
+                    results = process_query_for_district(query, endpoint, date_ranges)
+                    if results:
+                        # Add citywide metric
+                        if '0' in results:
+                            metric = {
+                                "name": query_name.replace(" YTD", ""),
+                                "id": query_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd",
+                                "lastYear": results['0']['lastYear'],
+                                "thisYear": results['0']['thisYear'],
+                                "lastDataDate": results['0'].get('lastDataDate')
+                            }
+                            top_category_metrics['metrics'].append(metric)
                         
-                        for query_name, query in subcategory_data['queries'].items():
-                            district_result = process_query_for_district(query, endpoint, date_ranges, district_str)
-                            if district_result:
+                        # Add district metrics if they exist
+                        for district_num in range(1, 12):
+                            district_str = str(district_num)
+                            if district_str in results:
                                 metric = {
                                     "name": query_name.replace(" YTD", ""),
-                                    "id": query_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd",  # Fixed _ytd suffix
-                                    "lastYear": district_result['lastYear'],
-                                    "thisYear": district_result['thisYear']
+                                    "id": query_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd",
+                                    "lastYear": results[district_str]['lastYear'],
+                                    "thisYear": results[district_str]['thisYear'],
+                                    "lastDataDate": results[district_str].get('lastDataDate')
                                 }
                                 
                                 # Initialize district if not exists
@@ -205,7 +229,7 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                                 if district_category is None:
                                     district_category = {
                                         "category": top_category_name.title(),
-                                        "metrics": []  # Changed from subcategories to metrics
+                                        "metrics": []
                                     }
                                     metrics['districts'][district_str]['categories'].append(district_category)
                                 district_category['metrics'].append(metric)

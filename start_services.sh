@@ -30,13 +30,6 @@ cd ai
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
-# Add cron job for metrics generation if it doesn't exist
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Remove any existing cron jobs for this script
-crontab -l 2>/dev/null | grep -v "generate_dashboard_metrics.py" | crontab -
-# Add the new cron job
-(crontab -l 2>/dev/null; echo "0 1 * * * cd ${SCRIPT_DIR}/ai && python3 generate_dashboard_metrics.py >> ${SCRIPT_DIR}/ai/logs/metrics_generation.log 2>&1") | crontab -
-
 # Start backend and wait for it
 echo "Starting Main..."
 python main.py &
