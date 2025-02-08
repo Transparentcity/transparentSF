@@ -53,7 +53,7 @@ def get_date_ranges(target_date=None):
         'last_year_end': last_year_end
     }
 
-def process_query_for_district(query, endpoint, date_ranges, district_number=None):
+def process_query_for_district(query, endpoint, date_ranges, district_number=None, query_name=None):
     """Process a single query and handle district-level aggregation from the same dataset."""
     try:
         modified_query = query
@@ -84,47 +84,73 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
             # Check if this query contains supervisor_district
             has_district = 'supervisor_district' in df.columns
             
-            # Get the max date - first check for max_date column, then fall back to date columns
+            # Get the max date from received_datetime or max_date
             max_date = None
-            if 'max_date' in df.columns:
-                # Use the max_date column directly
+            if 'received_datetime' in df.columns:
+                df['received_datetime'] = pd.to_datetime(df['received_datetime'], errors='coerce')
+                max_date = df['received_datetime'].max()
+            elif 'max_date' in df.columns:
                 df['max_date'] = pd.to_datetime(df['max_date'], errors='coerce')
-                max_date = df['max_date'].iloc[0]  # Take the first value since this should be constant
-                if pd.notnull(max_date):
-                    max_date = max_date.strftime('%Y-%m-%d')
-            else:
-                # Fall back to searching for date columns
-                date_columns = [col for col in df.columns if 'date' in col.lower()]
-                if date_columns:
-                    date_col = date_columns[0]  # Use the first date column found
-                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-                    max_date = df[date_col].max()
-                    if pd.notnull(max_date):
-                        max_date = max_date.strftime('%Y-%m-%d')
+                max_date = df['max_date'].max()
+            
+            if pd.notnull(max_date):
+                max_date = max_date.strftime('%Y-%m-%d')
             
             if has_district:
-                # Convert numeric columns to float first to ensure proper handling
-                df['last_year'] = pd.to_numeric(df['last_year'], errors='coerce')
-                df['this_year'] = pd.to_numeric(df['this_year'], errors='coerce')
+                # Check if this is a response time metric
+                is_response_time = query_name and 'response time' in query_name.lower()
                 
-                # For citywide, sum all rows
-                if not df.empty:
+                if is_response_time:
+                    # For response time metrics, we expect this_year and last_year columns
+                    if 'this_year' not in df.columns or 'last_year' not in df.columns:
+                        logger.error(f"Required columns not found in dataset. Available columns: {df.columns.tolist()}")
+                        return None
+                    
+                    # Convert columns to numeric
+                    df['this_year'] = pd.to_numeric(df['this_year'], errors='coerce')
+                    df['last_year'] = pd.to_numeric(df['last_year'], errors='coerce')
+                    
+                    # Calculate citywide median (district '0')
                     results['0'] = {
-                        'lastYear': int(df['last_year'].sum()),
-                        'thisYear': int(df['this_year'].sum()),
+                        'lastYear': int(df['last_year'].mean()) if pd.notnull(df['last_year'].mean()) else 0,
+                        'thisYear': int(df['this_year'].mean()) if pd.notnull(df['this_year'].mean()) else 0,
                         'lastDataDate': max_date
                     }
-                
-                # Process each district's data from the same dataset
-                for district in range(1, 12):
-                    district_df = df[df['supervisor_district'] == str(district)]
-                    if not district_df.empty:
-                        district_data = {
-                            'lastYear': int(district_df['last_year'].sum()),
-                            'thisYear': int(district_df['this_year'].sum()),
-                            'lastDataDate': max_date
-                        }
-                        results[str(district)] = district_data
+                    
+                    # Calculate district-level medians
+                    for district in range(1, 12):
+                        district_df = df[df['supervisor_district'] == str(district)]
+                        if not district_df.empty:
+                            district_data = {
+                                'lastYear': int(district_df['last_year'].mean()) if pd.notnull(district_df['last_year'].mean()) else 0,
+                                'thisYear': int(district_df['this_year'].mean()) if pd.notnull(district_df['this_year'].mean()) else 0,
+                                'lastDataDate': max_date
+                            }
+                            results[str(district)] = district_data
+                else:
+                    # For non-response time metrics, use the existing sum logic
+                    if not df.empty:
+                        # Convert columns to numeric if they exist
+                        if 'last_year' in df.columns and 'this_year' in df.columns:
+                            df['last_year'] = pd.to_numeric(df['last_year'], errors='coerce')
+                            df['this_year'] = pd.to_numeric(df['this_year'], errors='coerce')
+                            
+                            results['0'] = {
+                                'lastYear': int(df['last_year'].sum()),
+                                'thisYear': int(df['this_year'].sum()),
+                                'lastDataDate': max_date
+                            }
+                            
+                            # Process each district's data
+                            for district in range(1, 12):
+                                district_df = df[df['supervisor_district'] == str(district)]
+                                if not district_df.empty:
+                                    district_data = {
+                                        'lastYear': int(district_df['last_year'].sum()),
+                                        'thisYear': int(district_df['this_year'].sum()),
+                                        'lastDataDate': max_date
+                                    }
+                                    results[str(district)] = district_data
             else:
                 # For non-district queries, just return the total from first row
                 if not df.empty:
@@ -188,7 +214,7 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                 # Process each query in the subcategory
                 for query_name, query in subcategory_data['queries'].items():
                     # Process query once and get results for all districts if applicable
-                    results = process_query_for_district(query, endpoint, date_ranges)
+                    results = process_query_for_district(query, endpoint, date_ranges, query_name=query_name)
                     if results:
                         # Add citywide metric
                         if '0' in results:

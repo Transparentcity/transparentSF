@@ -22,3 +22,5 @@ app_debug.log
 node_modules
 ai/tools/__pycache__/anomaly_detection.cpython-313.pyc
 ai/tools/__pycache__/generateAnomalyCharts.cpython-313.pyc
+qdrant_storage/raft_state.json
+qdrant_storage/aliases/data.json
