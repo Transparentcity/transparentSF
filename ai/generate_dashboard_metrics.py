@@ -240,6 +240,22 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
     # Get date ranges
     date_ranges = get_date_ranges(target_date)
     
+    # Calculate the next update time (either 5 AM or 11 AM)
+    now = datetime.now()
+    next_5am = now.replace(hour=5, minute=0, second=0, microsecond=0)
+    next_11am = now.replace(hour=11, minute=0, second=0, microsecond=0)
+    
+    # If we're past 11 AM, set targets to next day
+    if now.hour >= 11:
+        next_5am += timedelta(days=1)
+        next_11am += timedelta(days=1)
+    # If we're past 5 AM but before 11 AM, only adjust the 5 AM target
+    elif now.hour >= 5:
+        next_5am += timedelta(days=1)
+    
+    # Find the next closest update time
+    next_update = min(next_5am, next_11am)
+    
     # Initialize the metrics structure
     metrics = {
         "districts": {
@@ -251,7 +267,7 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
         "metadata": {
             "generated_at": datetime.now().isoformat(),
             "data_as_of": date_ranges['this_year_end'],
-            "next_update": (datetime.now() + timedelta(days=1)).replace(hour=1, minute=0, second=0, microsecond=0).isoformat()
+            "next_update": next_update.isoformat()
         }
     }
     
