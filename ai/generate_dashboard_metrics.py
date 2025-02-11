@@ -175,6 +175,65 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
     
     return None
 
+def process_ytd_trend_query(query, endpoint, target_date=None, query_name=None):
+    """Process a YTD trend query to get historical daily counts."""
+    try:
+        logger.info(f"Processing YTD trend query for {query_name}")
+        
+        # Use target_date or current date
+        if target_date is None:
+            target_date = datetime.now().date()
+        
+        # Replace current_date with actual date in query
+        start_date = (target_date.replace(month=1, day=1) - timedelta(days=365)).strftime('%Y-%m-%d')
+        end_date = target_date.strftime('%Y-%m-%d')
+        
+        # Replace current_date placeholders with actual dates
+        query = query.replace("date_trunc_y(date_sub_y(current_date, 1))", f"'{start_date}'")
+        query = query.replace("current_date", f"'{end_date}'")
+        
+        logger.info(f"Modified query: {query}")
+        
+        # Create context variables dictionary to store the dataset
+        context_variables = {}
+        
+        # Execute the query
+        result = set_dataset(context_variables, endpoint=endpoint, query=query)
+        logger.info(f"Query result status: {result.get('status')}")
+        
+        if result.get('status') == 'success' and 'dataset' in context_variables:
+            df = context_variables['dataset']
+            logger.info(f"Retrieved dataset with shape: {df.shape}")
+            
+            # Convert date column to datetime
+            df['date'] = pd.to_datetime(df['date'])
+            
+            # Sort by date and convert Timestamp keys to string dates
+            trend_data = {
+                date.strftime('%Y-%m-%d'): value 
+                for date, value in df.sort_values('date').set_index('date')['value'].items()
+            }
+            
+            logger.info(f"Processed {len(trend_data)} trend data points")
+            
+            return {
+                'trend_data': trend_data,
+                'last_updated': df['date'].max().strftime('%Y-%m-%d')
+            }
+            
+        else:
+            logger.error("YTD trend query failed or no data returned")
+            if 'error' in result:
+                logger.error(f"Error: {result['error']}")
+            logger.error(f"Query URL: {result.get('queryURL')}")
+            logger.error(f"Context variables: {context_variables}")
+            
+    except Exception as e:
+        logger.error(f"Error executing YTD trend query: {str(e)}")
+        logger.error(traceback.format_exc())
+    
+    return None
+
 def generate_ytd_metrics(queries_data, output_dir, target_date=None):
     """Generate a single YTD metrics file for all districts."""
     
@@ -201,10 +260,10 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
         # Initialize category metrics for the top-level category
         top_category_metrics = {
             "category": top_category_name.title(),
-            "metrics": []  # Changed from subcategories to metrics
+            "metrics": []
         }
         
-        # Process each subcategory (fire, traffic, business, etc.)
+        # Process each subcategory
         for subcategory_name, subcategory_data in top_category_data.items():
             if isinstance(subcategory_data, dict) and 'endpoint' in subcategory_data and 'queries' in subcategory_data:
                 endpoint = subcategory_data['endpoint']
@@ -212,32 +271,67 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                     endpoint = f"{endpoint}.json"
                 
                 # Process each query in the subcategory
-                for query_name, query in subcategory_data['queries'].items():
-                    # Process query once and get results for all districts if applicable
-                    results = process_query_for_district(query, endpoint, date_ranges, query_name=query_name)
+                for query_name, query_data in subcategory_data['queries'].items():
+                    # Extract queries and metadata
+                    if isinstance(query_data, str):
+                        metric_query = query_data
+                        ytd_query = None
+                        metadata = {
+                            "summary": "",
+                            "definition": "",
+                            "data_sf_url": "",
+                            "ytd_query": ""
+                        }
+                    else:
+                        metric_query = query_data.get('metric_query', '')
+                        ytd_query = query_data.get('ytd_query', '')
+                        metadata = {
+                            "summary": query_data.get('summary', ''),
+                            "definition": query_data.get('definition', ''),
+                            "data_sf_url": query_data.get('data_sf_url', ''),
+                            "ytd_query": query_data.get('ytd_query', '')
+                        }
+                    
+                    # Process YTD trend data if available
+                    trend_data = None
+                    if ytd_query:
+                        trend_data = process_ytd_trend_query(ytd_query, endpoint, target_date, query_name)
+                    
+                    # Process metric query for all districts
+                    results = process_query_for_district(metric_query, endpoint, date_ranges, query_name=query_name)
                     if results:
+                        # Create metric object with metadata
+                        metric_base = {
+                            "name": query_name.replace(" YTD", ""),
+                            "id": query_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd",
+                            "metadata": metadata
+                        }
+                        
+                        # Add trend data if available
+                        if trend_data:
+                            metric_base["trend_data"] = trend_data["trend_data"]
+                            metric_base["trend_last_updated"] = trend_data["last_updated"]
+                        
                         # Add citywide metric
                         if '0' in results:
-                            metric = {
-                                "name": query_name.replace(" YTD", ""),
-                                "id": query_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd",
+                            citywide_metric = metric_base.copy()
+                            citywide_metric.update({
                                 "lastYear": results['0']['lastYear'],
                                 "thisYear": results['0']['thisYear'],
                                 "lastDataDate": results['0'].get('lastDataDate')
-                            }
-                            top_category_metrics['metrics'].append(metric)
+                            })
+                            top_category_metrics['metrics'].append(citywide_metric)
                         
-                        # Add district metrics if they exist
+                        # Add district metrics
                         for district_num in range(1, 12):
                             district_str = str(district_num)
                             if district_str in results:
-                                metric = {
-                                    "name": query_name.replace(" YTD", ""),
-                                    "id": query_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd",
+                                district_metric = metric_base.copy()
+                                district_metric.update({
                                     "lastYear": results[district_str]['lastYear'],
                                     "thisYear": results[district_str]['thisYear'],
                                     "lastDataDate": results[district_str].get('lastDataDate')
-                                }
+                                })
                                 
                                 # Initialize district if not exists
                                 if district_str not in metrics['districts']:
@@ -258,32 +352,24 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                                         "metrics": []
                                     }
                                     metrics['districts'][district_str]['categories'].append(district_category)
-                                district_category['metrics'].append(metric)
+                                district_category['metrics'].append(district_metric)
         
-        if top_category_metrics['metrics']:  # Changed from subcategories to metrics
+        if top_category_metrics['metrics']:
             metrics['districts']['0']['categories'].append(top_category_metrics)
     
-    # Save to output directory
+    # Save files
     output_file = os.path.join(output_dir, 'ytd_metrics.json')
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(metrics, f, indent=2)
-    logger.info(f"YTD metrics file generated at {output_file}")
-    
-    # Save to dashboard directory
     dashboard_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'dashboard')
     dashboard_file = os.path.join(dashboard_dir, 'ytd_metrics.json')
-    with open(dashboard_file, 'w', encoding='utf-8') as f:
-        json.dump(metrics, f, indent=2)
-    logger.info(f"YTD metrics file copied to {dashboard_file}")
-    
-    # Also save a timestamped copy for historical tracking
-    timestamp = datetime.now().strftime('%Y%m%d')
     history_dir = os.path.join(output_dir, 'history')
     os.makedirs(history_dir, exist_ok=True)
-    history_file = os.path.join(history_dir, f'ytd_metrics_{timestamp}.json')
-    with open(history_file, 'w', encoding='utf-8') as f:
-        json.dump(metrics, f, indent=2)
-    logger.info(f"Historical copy saved at {history_file}")
+    history_file = os.path.join(history_dir, f'ytd_metrics_{datetime.now().strftime("%Y%m%d")}.json')
+    
+    # Write to all locations
+    for file_path in [output_file, dashboard_file, history_file]:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, indent=2)
+        logger.info(f"Metrics file saved to {file_path}")
     
     return metrics
 

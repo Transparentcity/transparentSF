@@ -335,7 +335,8 @@
     "usefulness": 3,
     "report_category": "Safety",
     "NumericFields": [
-        "call_count"
+        "call_count",
+        "avg_response_time_mins"
     ],
     "CategoryFields": [
         "agency",
@@ -357,8 +358,8 @@
     "whom_it_may_interest": "Data Analysts, Law Enforcement Agencies, Policy Makers, Public Safety Officials, and Researchers studying emergency response patterns and public safety.",
     "data_validated": true,
     "queries": {
-        "Monthly": "SELECT agency, call_type_final_desc, disposition, priority_final, supervisor_district, police_district, analysis_neighborhood, date_trunc_ym(received_datetime) AS month, COUNT(*) AS call_count WHERE received_datetime >= start_date GROUP BY agency, call_type_final_desc, disposition, priority_final, supervisor_district, police_district, analysis_neighborhood, month ORDER BY month",
-        "Yearly": "SELECT agency, call_type_final_desc, disposition, priority_final, supervisor_district, police_district, analysis_neighborhood, date_trunc_y(received_datetime) AS year, COUNT(*) AS call_count WHERE received_datetime >= start_date GROUP BY agency, call_type_final_desc, disposition, priority_final, supervisor_district, police_district, analysis_neighborhood, year ORDER BY year"
+        "Monthly": "SELECT agency, call_type_final_desc,  priority_final, supervisor_district, police_district, date_trunc_ym(received_datetime) AS month, COUNT(*) AS call_count, AVG(CASE WHEN received_datetime IS NOT NULL AND onscene_datetime IS NOT NULL AND received_datetime < onscene_datetime THEN ((date_extract_y(onscene_datetime) - date_extract_y(received_datetime)) * 525600 + (date_extract_m(onscene_datetime) - date_extract_m(received_datetime)) * 43800 + (date_extract_d(onscene_datetime) - date_extract_d(received_datetime)) * 1440 + (date_extract_hh(onscene_datetime) * 60 + date_extract_mm(onscene_datetime)) - (date_extract_hh(received_datetime) * 60 + date_extract_mm(received_datetime))) END) as avg_response_time_mins WHERE received_datetime >= start_date GROUP BY agency, call_type_final_desc, disposition, priority_final, supervisor_district, police_district, month ORDER BY month",
+        "Yearly": "SELECT agency, call_type_final_desc,  priority_final, supervisor_district, police_district, date_trunc_y(received_datetime) AS year, COUNT(*) AS call_count, AVG(CASE WHEN received_datetime IS NOT NULL AND onscene_datetime IS NOT NULL AND received_datetime < onscene_datetime THEN ((date_extract_y(onscene_datetime) - date_extract_y(received_datetime)) * 525600 + (date_extract_m(onscene_datetime) - date_extract_m(received_datetime)) * 43800 + (date_extract_d(onscene_datetime) - date_extract_d(received_datetime)) * 1440 + (date_extract_hh(onscene_datetime) * 60 + date_extract_mm(onscene_datetime)) - (date_extract_hh(received_datetime) * 60 + date_extract_mm(received_datetime))) END) as avg_response_time_mins WHERE received_datetime >= start_date GROUP BY agency, call_type_final_desc, disposition, priority_final, supervisor_district, police_district, year ORDER BY year"
     },
     "filename": "2zdj-bwza.json"
 }

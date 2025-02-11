@@ -304,16 +304,33 @@
         }
     ],
     "publishing_department": "Fire Department",
-    "rows_updated_at": "2024-12-22T10:22:28Z",
-    "item_noun": "complaint",
+    "rows_updated_at": "2025-01-01T10:26:58Z",
     "usefulness": 2,
     "report_category": "Safety",
-    "periodic": "yes",
-    "district_level": false,
-    "whom_it_may_interest": "Fire safety officials, policy makers, public safety administrators",
-    "data_validated": true,
+    "NumericFields": [
+        "complaint_count"
+    ],
+    "CategoryFields": [
+        "complaint_item_type",
+        "complaint_item_type_description",
+        "bfp_district",
+        "supervisor_district",
+        "neighborhood_district"
+    ],
+    "DateFields": [
+        "month"
+    ],
+    "LocationFields": [
+        "bfp_district"
+    ],
+    "periodic": true,
+    "district_level": true,
+    "whom_it_may_interest": "Fire Department personnel, Public Safety Officials, Policy Makers, and Researchers analyzing fire safety trends and public concerns related to fire hazards.",
+    "data_validated": false,
+    "item_noun": "fire safety complaints",
     "queries": {
-        "Monthly": "SELECT neighborhood_district, disposition, date_trunc_ym(received_date) AS month, COUNT(*) AS count WHERE received_date >= '2022-09-01' GROUP BY neighborhood_district, disposition, month ORDER BY month, neighborhood_district, disposition",
-        "Yearly": "SELECT neighborhood_district, disposition, date_trunc_y(received_date) AS year, COUNT(*) AS count WHERE received_date >= '2022-09-01' GROUP BY neighborhood_district, disposition, year ORDER BY year, neighborhood_district, disposition"
-    }
+        "Monthly": "SELECT complaint_item_type, complaint_item_type_description, bfp_district, supervisor_district, neighborhood_district, date_trunc_ym(received_date) AS month, COUNT(*) AS complaint_count WHERE received_date >= start_date GROUP BY complaint_item_type, complaint_item_type_description, bfp_district, supervisor_district, neighborhood_district, month ORDER BY month, complaint_item_type",
+        "Yearly": "SELECT complaint_item_type, complaint_item_type_description, bfp_district, supervisor_district, neighborhood_district, date_trunc_y(received_date) AS year, COUNT(*) AS complaint_count WHERE received_date >= start_date GROUP BY complaint_item_type, complaint_item_type_description, bfp_district, supervisor_district, neighborhood_district, year ORDER BY year, complaint_item_type"
+    },
+    "filename": "2wsq-7wmv.json"
 }

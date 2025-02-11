@@ -106,18 +106,28 @@ app.include_router(backend_router, prefix="/backend", tags=["backend"])
 logger.debug("Included backend router at /backend")
 
 async def schedule_metrics_generation():
-    """Schedule metrics generation to run daily at 1 AM."""
+    """Schedule metrics generation to run daily at 5 AM and 11 AM."""
     while True:
         try:
-            # Calculate time until next run (1 AM)
+            # Calculate time until next run (either 5 AM or 11 AM)
             now = datetime.now()
-            target = now.replace(hour=1, minute=0, second=0, microsecond=0)
-            if now.hour >= 1:
-                target += timedelta(days=1)
+            target_5am = now.replace(hour=5, minute=0, second=0, microsecond=0)
+            target_11am = now.replace(hour=11, minute=0, second=0, microsecond=0)
+            
+            # If we're past 11 AM, set targets to next day
+            if now.hour >= 11:
+                target_5am += timedelta(days=1)
+                target_11am += timedelta(days=1)
+            # If we're past 5 AM but before 11 AM, only adjust the 5 AM target
+            elif now.hour >= 5:
+                target_5am += timedelta(days=1)
+            
+            # Find the next closest target time
+            next_run = min(target_5am, target_11am)
             
             # Wait until the next scheduled time
-            wait_seconds = (target - now).total_seconds()
-            logger.info(f"Next metrics generation scheduled for {target} (in {wait_seconds/3600:.2f} hours)")
+            wait_seconds = (next_run - now).total_seconds()
+            logger.info(f"Next metrics generation scheduled for {next_run} (in {wait_seconds/3600:.2f} hours)")
             await asyncio.sleep(wait_seconds)
             
             # Generate metrics
