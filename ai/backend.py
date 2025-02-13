@@ -17,6 +17,8 @@ from ai_dataprep import process_single_file  # Ensure these imports are correct
 from periodic_analysis import export_for_endpoint  # Ensure this import is correct
 import logging
 from generate_dashboard_metrics import main as generate_metrics
+from tools.data_fetcher import fetch_data_from_api
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(
@@ -692,3 +694,65 @@ async def generate_ytd_metrics():
             "status": "error",
             "message": str(e)
         }, status_code=500)
+
+
+@router.get("/query")
+async def query_page(request: Request):
+    """Serve the query interface page."""
+    logger.debug("Query page route called")
+    if templates is None:
+        logger.error("Templates not initialized in backend router")
+        raise RuntimeError("Templates not initialized")
+    
+    return templates.TemplateResponse("query.html", {
+        "request": request
+    })
+
+
+@router.post("/execute-query")
+async def execute_query(request: Request):
+    """Execute a query and return results as HTML or Markdown table."""
+    try:
+        form_data = await request.form()
+        endpoint = form_data.get('endpoint', '').strip()
+        query = form_data.get('query', '').strip()
+        format_type = form_data.get('format', 'html')
+        
+        if not endpoint or not query:
+            return JSONResponse({
+                'status': 'error',
+                'message': 'Both endpoint and query are required'
+            })
+            
+        # Execute query using existing data_fetcher
+        result = fetch_data_from_api({'endpoint': endpoint, 'query': query})
+        
+        if 'error' in result:
+            return JSONResponse({
+                'status': 'error',
+                'message': result['error'],
+                'queryURL': result.get('queryURL')
+            })
+            
+        # Convert data to DataFrame
+        df = pd.DataFrame(result['data'])
+        
+        # Generate table based on format
+        if format_type == 'markdown':
+            table = df.to_markdown(index=False)
+        else:  # html
+            table = df.to_html(index=False, classes=['table', 'table-striped', 'table-hover'])
+            
+        return JSONResponse({
+            'status': 'success',
+            'table': table,
+            'queryURL': result.get('queryURL'),
+            'rowCount': len(df)
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error executing query: {str(e)}")
+        return JSONResponse({
+            'status': 'error',
+            'message': str(e)
+        })

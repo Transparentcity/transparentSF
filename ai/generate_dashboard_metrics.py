@@ -74,6 +74,12 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
         result = set_dataset(context_variables, endpoint=endpoint, query=modified_query)
         
         if result.get('status') == 'success' and 'dataset' in context_variables:
+            # Store the queries for later use in the output
+            query_info = {
+                'original_query': query,
+                'executed_query': modified_query
+            }
+            
             df = context_variables['dataset']
             logger.debug(f"Dataset shape: {df.shape}")
             logger.debug(f"Dataset columns: {df.columns.tolist()}")
@@ -161,7 +167,10 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
                         'lastDataDate': max_date
                     }
             
-            return results
+            return {
+                'results': results,
+                'queries': query_info
+            }
             
         else:
             logger.error("Query failed or no data returned")
@@ -314,13 +323,20 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                         trend_data = process_ytd_trend_query(ytd_query, endpoint, target_date, query_name)
                     
                     # Process metric query for all districts
-                    results = process_query_for_district(metric_query, endpoint, date_ranges, query_name=query_name)
-                    if results:
+                    query_results = process_query_for_district(metric_query, endpoint, date_ranges, query_name=query_name)
+                    if query_results:
+                        results = query_results['results']
+                        queries = query_results['queries']
+                        
                         # Create metric object with metadata
                         metric_base = {
                             "name": query_name.replace(" YTD", ""),
                             "id": query_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd",
-                            "metadata": metadata
+                            "metadata": metadata,
+                            "queries": {
+                                "metric_query": queries['original_query'],
+                                "executed_query": queries['executed_query']
+                            }
                         }
                         
                         # Add trend data if available

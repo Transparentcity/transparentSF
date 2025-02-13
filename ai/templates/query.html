@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Query Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        textarea {
+            height: 150px;
+            resize: vertical;
+        }
+        .button-group {
+            margin-top: 15px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        #executeBtn {
+            background-color: #28a745;
+            color: white;
+        }
+        #executeBtn:hover {
+            background-color: #218838;
+        }
+        .format-select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: none;
+        }
+        #result.visible {
+            display: block;
+        }
+        .info-bar {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .table th, .table td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        .table th {
+            background-color: #f8f9fa;
+        }
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(0,0,0,.05);
+        }
+        .table-hover tbody tr:hover {
+            background-color: rgba(0,0,0,.075);
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 0;
+        }
+        .loading {
+            display: none;
+            margin: 20px 0;
+            text-align: center;
+            color: #666;
+        }
+        .loading.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Query Tool</h1>
+        <div class="form-group">
+            <label for="endpoint">Endpoint:</label>
+            <input type="text" id="endpoint" placeholder="e.g., abcd-1234.json" />
+        </div>
+        <div class="form-group">
+            <label for="query">Query:</label>
+            <textarea id="query" placeholder="Enter your SoQL query here..."></textarea>
+        </div>
+        <div class="button-group">
+            <select id="format" class="format-select">
+                <option value="html">HTML Table</option>
+                <option value="markdown">Markdown Table</option>
+            </select>
+            <button id="executeBtn">Execute Query</button>
+        </div>
+        
+        <div id="loading" class="loading">
+            Executing query... Please wait...
+        </div>
+        
+        <div id="result">
+            <div class="info-bar">
+                <div>Query URL: <span id="queryUrl"></span></div>
+                <div>Rows returned: <span id="rowCount">0</span></div>
+            </div>
+            <div id="tableResult"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('executeBtn').addEventListener('click', async () => {
+            const endpoint = document.getElementById('endpoint').value.trim();
+            const query = document.getElementById('query').value.trim();
+            const format = document.getElementById('format').value;
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            const tableResult = document.getElementById('tableResult');
+            
+            if (!endpoint || !query) {
+                alert('Both endpoint and query are required');
+                return;
+            }
+            
+            // Show loading state
+            loading.classList.add('visible');
+            result.classList.remove('visible');
+            
+            try {
+                const formData = new FormData();
+                formData.append('endpoint', endpoint);
+                formData.append('query', query);
+                formData.append('format', format);
+                
+                const response = await fetch('/backend/execute-query', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    document.getElementById('queryUrl').textContent = data.queryURL || 'N/A';
+                    document.getElementById('rowCount').textContent = data.rowCount;
+                    
+                    if (format === 'markdown') {
+                        tableResult.innerHTML = `<pre>${data.table}</pre>`;
+                    } else {
+                        tableResult.innerHTML = data.table;
+                    }
+                    
+                    result.classList.add('visible');
+                } else {
+                    alert(`Error: ${data.message}`);
+                }
+            } catch (error) {
+                alert(`Error executing query: ${error.message}`);
+            } finally {
+                loading.classList.remove('visible');
+            }
+        });
+    </script>
+</body>
+</html>
