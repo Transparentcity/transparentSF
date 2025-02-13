@@ -198,16 +198,16 @@ def process_ytd_trend_query(query, endpoint, target_date=None, query_name=None):
         end_date = target_date.strftime('%Y-%m-%d')
         
         # Replace current_date placeholders with actual dates
-        query = query.replace("date_trunc_y(date_sub_y(current_date, 1))", f"'{start_date}'")
-        query = query.replace("current_date", f"'{end_date}'")
+        modified_query = query.replace("date_trunc_y(date_sub_y(current_date, 1))", f"'{start_date}'")
+        modified_query = modified_query.replace("current_date", f"'{end_date}'")
         
-        logger.info(f"Modified query: {query}")
+        logger.info(f"Modified query: {modified_query}")
         
         # Create context variables dictionary to store the dataset
         context_variables = {}
         
         # Execute the query
-        result = set_dataset(context_variables, endpoint=endpoint, query=query)
+        result = set_dataset(context_variables, endpoint=endpoint, query=modified_query)
         logger.info(f"Query result status: {result.get('status')}")
         
         if result.get('status') == 'success' and 'dataset' in context_variables:
@@ -227,7 +227,9 @@ def process_ytd_trend_query(query, endpoint, target_date=None, query_name=None):
             
             return {
                 'trend_data': trend_data,
-                'last_updated': df['date'].max().strftime('%Y-%m-%d')
+                'last_updated': df['date'].max().strftime('%Y-%m-%d'),
+                'original_query': query,
+                'executed_query': modified_query
             }
             
         else:
@@ -343,6 +345,9 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                         if trend_data:
                             metric_base["trend_data"] = trend_data["trend_data"]
                             metric_base["trend_last_updated"] = trend_data["last_updated"]
+                            # Add YTD queries to the queries object
+                            metric_base["queries"]["ytd_query"] = trend_data["original_query"]
+                            metric_base["queries"]["executed_ytd_query"] = trend_data["executed_query"]
                         
                         # Add citywide metric
                         if '0' in results:
