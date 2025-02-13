@@ -197,9 +197,10 @@ def process_ytd_trend_query(query, endpoint, target_date=None, query_name=None):
         start_date = (target_date.replace(month=1, day=1) - timedelta(days=365)).strftime('%Y-%m-%d')
         end_date = target_date.strftime('%Y-%m-%d')
         
-        # Replace current_date placeholders with actual dates
+        # Replace date placeholders with actual dates
         modified_query = query.replace("date_trunc_y(date_sub_y(current_date, 1))", f"'{start_date}'")
         modified_query = modified_query.replace("current_date", f"'{end_date}'")
+        modified_query = modified_query.replace("last_year_start", f"'{start_date}'")
         
         logger.info(f"Modified query: {modified_query}")
         
