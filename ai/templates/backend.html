@@ -1147,42 +1147,11 @@
                     return;
                 }
 
-                // Update modal title
-                const selectedOption = logSelector.options[logSelector.selectedIndex];
-                logTitle.textContent = `Log Viewer - ${selectedOption.text}`;
-
-                // Show modal
-                logModal.style.display = 'block';
-
-                async function updateLogContent() {
-                    try {
-                        const response = await fetch(`/logs/${selectedLog}`);
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        const logText = await response.text();
-                        
-                        // Format the log content with line numbers
-                        const lines = logText.split('\n');
-                        const formattedContent = lines.map((line, i) => 
-                            `<div style="color: #858585; display: inline-block; width: 50px; user-select: none;">${i + 1}</div>${line}`
-                        ).join('\n');
-                        
-                        logContent.innerHTML = `<pre style="margin: 0;">${formattedContent}</pre>`;
-                        logContent.scrollTop = logContent.scrollHeight;
-                    } catch (error) {
-                        logContent.innerHTML = `<pre style="color: #ff6b6b;">Error loading log: ${error.message}</pre>`;
-                    }
-                }
-
-                // Initial update
-                await updateLogContent();
-
-                // Clear any existing interval
-                clearInterval(logUpdateInterval);
-
-                // Set up auto-refresh
-                logUpdateInterval = setInterval(updateLogContent, 5000);
+                // Open log file in new tab
+                window.open(`/logs/${selectedLog}`, '_blank');
+                
+                // Reset selector
+                logSelector.value = '';
             });
 
             // Add notes modal functionality
