@@ -4,7 +4,6 @@ import json
 import re
 import time
 import uuid
-import glob
 import logging
 from openai import OpenAI
 import qdrant_client
@@ -12,8 +11,7 @@ from qdrant_client.http import models as rest
 from dotenv import load_dotenv
 import tiktoken  # For counting tokens
 from tools.data_processing import format_columns, serialize_columns, convert_to_timestamp
-from pathlib import Path
-
+import shutil
 
 # ------------------------------
 # Configure Logging
@@ -22,6 +20,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
+        logging.FileHandler("logs/vector_loader.log", mode='w'),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -43,28 +42,17 @@ client = OpenAI(api_key=openai_api_key)
 # ------------------------------
 # Model Configuration
 # ------------------------------
-GPT_MODEL = 'gpt-4'
 EMBEDDING_MODEL = "text-embedding-3-large"
 
 # ------------------------------
 # Qdrant Setup
 # ------------------------------
 try:
-    qdrant = qdrant_client.QdrantClient(host='localhost', port=6333)  # Adjust if needed
+    qdrant = qdrant_client.QdrantClient(host='localhost', port=6333)
     logger.info("Connected to Qdrant at localhost:6333")
 except Exception as e:
     logger.error(f"Failed to connect to Qdrant: {e}")
     raise
-
-# ------------------------------
-# Script Paths
-# ------------------------------
-script_dir = os.path.dirname(os.path.abspath(__file__))
-output_folder = os.path.join(script_dir, 'output/')
-
-# ------------------------------
-# Utility Functions
-# ------------------------------
 
 def split_text_into_chunks(text, max_tokens=8192):
     """
@@ -85,12 +73,6 @@ def split_text_into_chunks(text, max_tokens=8192):
 
     logger.info(f"Split text into {len(chunks)} chunks.")
     return chunks
-
-def sanitize_filename(filename):
-    """Sanitize filename by removing invalid chars."""
-    sanitized = re.sub(r'[<>:"/\\|?*]', '', filename).strip()
-    logger.debug(f"Sanitized filename: {sanitized}")
-    return sanitized
 
 def get_embedding(text, retries=3, delay=5):
     """
@@ -135,13 +117,13 @@ def get_embedding(text, retries=3, delay=5):
 def recreate_collection(collection_name, vector_size):
     """Delete if exists and recreate the collection."""
     try:
-        # Delete collection if it exists
+        # Check if collection exists
         if qdrant.collection_exists(collection_name):
-            logger.info(f"Deleting existing collection '{collection_name}'")
+            logger.info(f"Collection '{collection_name}' exists, deleting...")
             qdrant.delete_collection(collection_name)
-            # Wait a moment for deletion to complete
-            time.sleep(2)
-            
+            time.sleep(2)  # Wait for deletion to complete
+            logger.info(f"Collection '{collection_name}' deleted.")
+        
         # Create new collection
         logger.info(f"Creating collection '{collection_name}' with vector size {vector_size}")
         qdrant.create_collection(
@@ -149,120 +131,33 @@ def recreate_collection(collection_name, vector_size):
             vectors_config=rest.VectorParams(
                 distance=rest.Distance.COSINE,
                 size=vector_size,
-            )
+            ),
+            timeout=60  # Increase timeout to allow for directory cleanup
         )
-        logger.info(f"Collection '{collection_name}' created successfully")
+        logger.info(f"Collection '{collection_name}' created successfully.")
         
     except Exception as e:
         logger.error(f"Failed to recreate collection '{collection_name}': {e}")
         raise
 
-def process_directory(directory_path, collection_name, qdrant_client, vector_size):
-    """
-    Process all markdown files in a directory and load them into a Qdrant collection.
-    """
-    logger.info(f"Processing directory {directory_path} for collection {collection_name}")
+def load_sf_public_data():
+    """Load SF Public Data into Qdrant."""
+    collection_name = 'SFPublicData'
     
-    # Gather all .md files in the directory (not including subdirectories)
-    all_md_files = glob.glob(os.path.join(directory_path, '*.md'))
-    if not all_md_files:
-        logger.warning(f"No .md files found under {directory_path}. Skipping collection.")
-        return False
-
-    logger.info(f"Found {len(all_md_files)} .md files to process for {collection_name}")
-
-    # Create or recreate the collection
-    recreate_collection(collection_name, vector_size)
-
-    # Build and upsert points
-    points_to_upsert = []
-    for idx, md_file in enumerate(all_md_files, start=1):
-        logger.info(f"Processing file {idx}/{len(all_md_files)}: {md_file}")
-        try:
-            with open(md_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
-            logger.error(f"Error reading {md_file}: {e}")
-            continue
-
-        embedding = get_embedding(content)
-        if not embedding:
-            logger.error(f"Failed to generate embedding for file {md_file}. Skipping.")
-            continue
-
-        payload = {
-            "filename": os.path.basename(md_file),
-            "filepath": md_file,
-            "content": content
-        }
-
-        point_id = str(uuid.uuid4())
-        point = rest.PointStruct(id=point_id, vector=embedding, payload=payload)
-        points_to_upsert.append(point)
-
-    if points_to_upsert:
-        try:
-            qdrant_client.upsert(collection_name=collection_name, points=points_to_upsert)
-            logger.info(f"Successfully upserted {len(points_to_upsert)} documents into '{collection_name}'")
-            return True
-        except Exception as e:
-            logger.error(f"Error upserting points into '{collection_name}': {e}")
-            return False
-    
-    return False
-
-def load_vectors(base_path):
-    """
-    Main function to load vectors into different collections based on directory structure.
-    """
-    try:
-        qdrant = qdrant_client.QdrantClient(host='localhost', port=6333)
-        logger.info("Connected to Qdrant at localhost:6333")
-    except Exception as e:
-        logger.error(f"Failed to connect to Qdrant: {e}")
-        raise
-
-    # Get vector size using sample embedding
+    # Get sample embedding to determine vector size
     sample_embedding = get_embedding("Sample text to determine vector size.")
     if not sample_embedding:
         logger.error("Failed to get a sample embedding for vector size determination.")
         return False
     vector_size = len(sample_embedding)
-
-    logger.info(f"Processing citywide collection")
-    # Process citywide collection (root output folder)
-    citywide_path = os.path.join(base_path, 'ai/output')
-    process_directory(citywide_path, "citywide", qdrant, vector_size)
-
-    # Process district collections
-    districts_path = os.path.join(base_path, 'ai/output', 'districts')
-    if os.path.exists(districts_path):
-        for district_dir in os.listdir(districts_path):
-            if district_dir.startswith('district_'):
-                logger.info(f"Processing district collection {district_dir}")
-                district_path = os.path.join(districts_path, district_dir)
-                collection_name = f"district_{district_dir.split('_')[1]}"
-                process_directory(district_path, collection_name, qdrant, vector_size)
-
-    # Process SFPublicData collection
-    datasets_path = os.path.join(base_path, 'ai/data/datasets', 'fixed')
-    if os.path.exists(datasets_path):
-        logger.info("Processing SFPublicData collection")
-        load_sf_public_data(qdrant, datasets_path, vector_size)
-
-    logger.info("Vector loading completed for all collections")
-    return True
-
-def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
-    """Load SF Public Data into Qdrant."""
-    collection_name = 'SFPublicData'
     
     # Create or recreate collection
     recreate_collection(collection_name, vector_size)
 
-    # Get paths for both directories
-    fixed_folder = os.path.join(datasets_folder, 'fixed')
-    original_folder = os.path.dirname(datasets_folder)  # Parent directory of 'fixed'
+    # Get paths for datasets
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    datasets_path = os.path.join(script_dir, 'data', 'datasets')
+    fixed_folder = os.path.join(datasets_path, 'fixed')
 
     # Get list of fixed files (without path)
     fixed_files = set()
@@ -271,14 +166,14 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
 
     # Get list of all original files that don't have a fixed version
     original_files = []
-    if os.path.exists(original_folder):
-        original_files = [f for f in os.listdir(original_folder) 
+    if os.path.exists(datasets_path):
+        original_files = [f for f in os.listdir(datasets_path) 
                          if f.endswith('.json') and f not in fixed_files]
 
     # Process fixed files first
     all_files_to_process = [(os.path.join(fixed_folder, f), True) for f in fixed_files]
     # Then add original files that don't have fixed versions
-    all_files_to_process.extend([(os.path.join(original_folder, f), False) for f in original_files])
+    all_files_to_process.extend([(os.path.join(datasets_path, f), False) for f in original_files])
 
     if not all_files_to_process:
         logger.warning(f"No JSON files found to process")
@@ -314,7 +209,7 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
         district_level = data.get('district_level', '')
         category = data.get('category', '')
 
-        # Format text for embedding, only including non-empty fields
+        # Format text for embedding
         combined_text_parts = []
         if title:
             combined_text_parts.append(f"Title: {title}")
@@ -350,7 +245,7 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
             logger.error(f"Failed to generate embedding for article '{title}'. Skipping.")
             continue
 
-        # Prepare payload with safe defaults
+        # Prepare payload
         payload = {
             'title': title,
             'description': description,
@@ -377,7 +272,7 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
         # Batch upload every 100 points
         if len(points_to_upsert) >= 100:
             try:
-                qdrant_client.upsert(collection_name=collection_name, points=points_to_upsert)
+                qdrant.upsert(collection_name=collection_name, points=points_to_upsert)
                 logger.info(f"Successfully upserted batch of {len(points_to_upsert)} documents")
                 points_to_upsert = []
             except Exception as e:
@@ -386,7 +281,7 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
     # Upload any remaining points
     if points_to_upsert:
         try:
-            qdrant_client.upsert(collection_name=collection_name, points=points_to_upsert)
+            qdrant.upsert(collection_name=collection_name, points=points_to_upsert)
             logger.info(f"Successfully upserted final batch of {len(points_to_upsert)} documents")
         except Exception as e:
             logger.error(f"Error upserting final batch to Qdrant: {e}")
@@ -394,5 +289,4 @@ def load_sf_public_data(qdrant_client, datasets_folder, vector_size):
     return True
 
 if __name__ == '__main__':
-    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    load_vectors(script_dir) 
+    load_sf_public_data() 

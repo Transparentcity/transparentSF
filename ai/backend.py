@@ -19,6 +19,7 @@ import logging
 from generate_dashboard_metrics import main as generate_metrics
 from tools.data_fetcher import fetch_data_from_api
 import pandas as pd
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
@@ -426,6 +427,53 @@ async def reload_vector_db():
             })
     except Exception as e:
         logger.exception(f"Error reloading Vector DB: {str(e)}")
+        return JSONResponse({
+            "status": "error", 
+            "message": str(e),
+            "log_content": "Error occurred before log file could be read"
+        })
+
+
+@router.get("/reload_sfpublic")
+async def reload_sfpublic():
+    """Reload the SF Public Data collection."""
+    logger.debug("Reload SF Public Data collection called")
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(script_dir, "vector_loader_sfpublic.py")
+        log_file = os.path.join(script_dir, "logs", "vector_loader.log")
+        
+        # Clear the log file before running
+        with open(log_file, 'w') as f:
+            f.write("")  # Clear the file
+            
+        result = subprocess.run(["python", script_path], capture_output=True, text=True)
+        
+        # Read the log file content
+        try:
+            with open(log_file, 'r') as f:
+                log_content = f.read()
+        except Exception as e:
+            log_content = f"Error reading log file: {str(e)}"
+            
+        if result.returncode == 0:
+            logger.info("SF Public Data collection reloaded successfully.")
+            return JSONResponse({
+                "status": "success",
+                "message": "SF Public Data collection reloaded successfully.",
+                "output": result.stdout,
+                "log_content": log_content
+            })
+        else:
+            logger.error(f"Failed to reload SF Public Data collection: {result.stderr}")
+            return JSONResponse({
+                "status": "error",
+                "message": "Failed to reload SF Public Data collection.",
+                "output": result.stderr,
+                "log_content": log_content
+            })
+    except Exception as e:
+        logger.exception(f"Error reloading SF Public Data collection: {str(e)}")
         return JSONResponse({
             "status": "error", 
             "message": str(e),

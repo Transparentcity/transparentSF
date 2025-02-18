@@ -220,21 +220,55 @@
             display: block;
             width: 100%;
             margin-bottom: 10px;
-            padding: 8px 12px;  /* Increased padding */
-            border: 1px solid #138496;  /* Added border */
+            padding: 8px 12px;
             border-radius: 4px;
-            background-color: #17a2b8;
             color: white;
             cursor: pointer;
             transition: all 0.3s ease;
-            font-weight: bold;  /* Make text bold */
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);  /* Add subtle shadow */
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        .sidebar button:hover {
-            background-color: #138496;
-            transform: translateY(-1px);  /* Slight lift effect */
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        /* Analysis buttons - Blue */
+        #analyze-yearly-btn,
+        #analyze-monthly-btn,
+        #analyze-ytd-btn {
+            background-color: #007bff;
+            border: 1px solid #0056b3;
+        }
+
+        #analyze-yearly-btn:hover,
+        #analyze-monthly-btn:hover,
+        #analyze-ytd-btn:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        /* Other action buttons - Purple */
+        #reload-vector-db-btn,
+        #reload-sfpublic-btn,
+        button[onclick*="query"] {
+            background-color: #6f42c1;
+            border: 1px solid #6610f2;
+        }
+
+        #reload-vector-db-btn:hover,
+        #reload-sfpublic-btn:hover,
+        button[onclick*="query"]:hover {
+            background-color: #6610f2;
+            transform: translateY(-1px);
+        }
+
+        /* Clear HTML button - Red */
+        #clear-html-btn {
+            background-color: #dc3545 !important;
+            border: 1px solid #bd2130 !important;
+            margin-top: auto;  /* Push to bottom */
+        }
+
+        #clear-html-btn:hover {
+            background-color: #c82333 !important;
+            transform: translateY(-1px);
         }
 
         /* Adjust table container */
@@ -460,12 +494,43 @@
             background-color: #c82333 !important;
             border-color: #bd2130 !important;
         }
+
+        /* Add styles for reload button */
+        #reload-sfpublic-btn {
+            background-color: #6f42c1;  /* Purple color to distinguish it */
+            border-color: #6610f2;
+        }
+        
+        #reload-sfpublic-btn:hover {
+            background-color: #6610f2;
+        }
+
+        /* Add styles for reload output modal */
+        #reloadOutputModal .modal-content {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        #reloadOutput {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: monospace;
+            font-size: 12px;
+            background-color: #ffffff;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            max-height: 400px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
-    <div class="header">Transparent SF</div>
+    <div class="header">
+        SF Public Data Dashboard
+    </div>
     <div class="container">
-        <!-- Left sidebar -->
         <div class="sidebar">
             <div id="disk-space-info" class="disk-space">
                 <h3>System Info</h3>
@@ -478,13 +543,18 @@
                 </div>
             </div>
             <h2>Actions</h2>
+            <!-- Analysis Buttons - Blue -->
             <button id="analyze-yearly-btn">Analyze Yearly</button>
             <button id="analyze-monthly-btn">Analyze Monthly</button>
             <button id="analyze-ytd-btn">Analyze YTD</button>
+            
+            <!-- Action Buttons - Purple -->
             <button id="reload-vector-db-btn">Reload Vector DB</button>
-            <button id="summarize-posts-btn">Summarize Posts</button>
-            <button id="clear-html-btn" class="danger-btn">Clear HTML Files</button>
-            <button onclick="window.location.href='/backend/query'" style="background-color: #6610f2;">Query Tool</button>
+            <button id="reload-sfpublic-btn">Reload SF Public Data</button>
+            <button onclick="window.location.href='/backend/query'">Query Tool</button>
+            
+            <!-- Clear HTML Button - Red (at bottom) -->
+            <button id="clear-html-btn">Clear HTML Files</button>
             
             <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
             <h3>Logs</h3>
@@ -1357,6 +1427,57 @@
                     jsonModal.style.display = 'none';
                 });
             }
+
+            // Get the reload SF Public Data button and modal
+            const reloadSFPublicBtn = document.getElementById('reload-sfpublic-btn');
+            const reloadOutputModal = document.getElementById('reloadOutputModal');
+            const reloadOutput = document.getElementById('reloadOutput');
+            const reloadModalClose = reloadOutputModal.querySelector('.close');
+
+            // Close modal when clicking the close button or outside the modal
+            reloadModalClose.onclick = function() {
+                reloadOutputModal.style.display = "none";
+            }
+
+            window.onclick = function(event) {
+                if (event.target == reloadOutputModal) {
+                    reloadOutputModal.style.display = "none";
+                }
+            }
+
+            // Handle reload SF Public Data button click
+            reloadSFPublicBtn.addEventListener('click', async function() {
+                try {
+                    // Add spinner to button
+                    const spinner = document.createElement('div');
+                    spinner.className = 'spinner';
+                    reloadSFPublicBtn.appendChild(spinner);
+                    reloadSFPublicBtn.disabled = true;
+
+                    // Call the reload endpoint
+                    const response = await fetch('/backend/reload_sfpublic');
+                    const data = await response.json();
+
+                    // Remove spinner
+                    spinner.remove();
+                    reloadSFPublicBtn.disabled = false;
+
+                    // Show output in modal
+                    reloadOutput.textContent = `Status: ${data.status}\n\nMessage: ${data.message}\n\nLog Output:\n${data.log_content}`;
+                    reloadOutputModal.style.display = "block";
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    // Remove spinner and enable button
+                    const spinner = reloadSFPublicBtn.querySelector('.spinner');
+                    if (spinner) spinner.remove();
+                    reloadSFPublicBtn.disabled = false;
+                    
+                    // Show error in modal
+                    reloadOutput.textContent = `Error: ${error.message}`;
+                    reloadOutputModal.style.display = "block";
+                }
+            });
         });
     </script>
 
@@ -1383,6 +1504,15 @@
             <span class="close">&times;</span>
             <h2 id="notesTitle" style="color: #d4d4d4; margin-bottom: 15px;">Analysis Notes</h2>
             <div id="notesContent" style="height: 60vh; overflow-y: auto; padding: 10px; background-color: #252526; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; line-height: 1.5; white-space: pre-wrap;"></div>
+        </div>
+    </div>
+
+    <!-- Add reload output modal -->
+    <div id="reloadOutputModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Reload Output</h2>
+            <div id="reloadOutput"></div>
         </div>
     </div>
 </body>
