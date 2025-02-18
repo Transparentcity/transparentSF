@@ -536,6 +536,7 @@ def count_tokens(text: str) -> int:
 async def get_aggregated_summary():
     """
     Aggregate all summary .txt files from the output directory and return their combined content.
+    Also includes current YTD metrics data.
     """
     logger.debug("Get aggregated summary called")
     try:
@@ -572,6 +573,44 @@ async def get_aggregated_summary():
             except Exception as e:
                 logger.error(f"Error reading summary file {summary_file}: {str(e)}")
                 continue
+        
+        # Add YTD metrics data
+        ytd_file = os.path.join(script_dir, 'data', 'dashboard', 'ytd_metrics.json')
+        if os.path.exists(ytd_file):
+            try:
+                with open(ytd_file, 'r', encoding='utf-8') as f:
+                    ytd_data = json.load(f)
+                
+                # Format YTD metrics as text
+                ytd_text = "\n" + "="*80 + "\nYear-to-Date (YTD) Metrics Summary:\n" + "="*80 + "\n\n"
+                
+                # Add citywide metrics
+                if "districts" in ytd_data and "0" in ytd_data["districts"]:
+                    citywide = ytd_data["districts"]["0"]
+                    ytd_text += f"Citywide Statistics:\n"
+                    
+                    for category in citywide.get("categories", []):
+                        ytd_text += f"\n{category['category']}:\n"
+                        for metric in category.get("metrics", []):
+                            name = metric.get("name", "")
+                            this_year = metric.get("thisYear", 0)
+                            last_year = metric.get("lastYear", 0)
+                            last_date = metric.get("lastDataDate", "")
+                            
+                            # Calculate percent change
+                            if last_year != 0:
+                                pct_change = ((this_year - last_year) / last_year) * 100
+                                change_text = f"({pct_change:+.1f}% vs last year)"
+                            else:
+                                change_text = "(no prior year data)"
+                            
+                            ytd_text += f"- {name}: {this_year:,} {change_text} as of {last_date}\n"
+                
+                aggregated_content.append(ytd_text)
+                logger.info("Successfully added YTD metrics to aggregated summary")
+                
+            except Exception as e:
+                logger.error(f"Error processing YTD metrics: {str(e)}")
         
         # Join all content
         final_content = "".join(aggregated_content)

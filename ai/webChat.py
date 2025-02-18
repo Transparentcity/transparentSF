@@ -146,7 +146,48 @@ def load_and_combine_notes():
         except Exception as e:
             logger.error(f"Error reading file {file_path}: {e}")
             continue
-
+    
+    # Load current YTD metrics from dashboard directory
+    dashboard_dir = Path('ai/data/dashboard')
+    ytd_file = dashboard_dir / 'ytd_metrics.json'
+    
+    if ytd_file.exists():
+        logger.info("Loading current YTD metrics")
+        try:
+            with open(ytd_file, 'r', encoding='utf-8') as f:
+                ytd_data = json.load(f)
+            
+            # Format YTD metrics as text
+            ytd_text = "\nYear-to-Date (YTD) Metrics Summary:\n\n"
+            
+            # Add citywide metrics
+            if "districts" in ytd_data and "0" in ytd_data["districts"]:
+                citywide = ytd_data["districts"]["0"]
+                ytd_text += f"Citywide Statistics:\n"
+                
+                for category in citywide.get("categories", []):
+                    ytd_text += f"\n{category['category']}:\n"
+                    for metric in category.get("metrics", []):
+                        name = metric.get("name", "")
+                        this_year = metric.get("thisYear", 0)
+                        last_year = metric.get("lastYear", 0)
+                        last_date = metric.get("lastDataDate", "")
+                        
+                        # Calculate percent change
+                        if last_year != 0:
+                            pct_change = ((this_year - last_year) / last_year) * 100
+                            change_text = f"({pct_change:+.1f}% vs last year)"
+                        else:
+                            change_text = "(no prior year data)"
+                        
+                        ytd_text += f"- {name}: {this_year:,} {change_text} as of {last_date}\n"
+            
+            combined_text += "\n" + ytd_text
+            logger.info("Successfully added YTD metrics to notes")
+            
+        except Exception as e:
+            logger.error(f"Error processing YTD metrics: {e}")
+    
     logger.info(f"""
 Notes loading complete:
 Total files processed: {total_files}
@@ -296,10 +337,10 @@ analyst_agent = Agent(
     - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in. always pass the context_variables and the collection name is allways "SFPublicData"
     - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
     - Use `set_dataset(context_variables, endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
-        - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')
-        - query: The complete SoQL query string (e.g., '$select=field1,field2&$where=condition')
+        - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')  It should come from a query_docs() call.
+        - query: The complete SoQL query string using standard SQL syntax (e.g., 'select field1, field2 where condition')
         Example usage:
-        set_dataset(context_variables, endpoint="ubvf-ztfx.json", query="$select=unique_id,collision_date,number_injured&$where=accident_year=2025")
+        set_dataset(context_variables, endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
     - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
 
     """,
@@ -339,53 +380,253 @@ def load_and_combine_climate_data():
 
     return vera_df
 
+def format_table(context_variables, title=None):
+    """
+    Formats data from context_variables into a markdown table with an optional title.
+    Args:
+        context_variables: The context variables containing the dataset
+        title: Optional title for the table
+    Returns:
+        The formatted table as markdown
+    """
+    logger.info(f"""
+=== format_table called ===
+Title: {title}
+Context variables keys: {list(context_variables.keys())}
+""")
+    
+    try:
+        data = context_variables.get("dataset")
+        logger.info(f"""
+Data retrieved from context:
+Type: {type(data)}
+Is None: {data is None}
+""")
+            
+        if data is None:
+            logger.error("No dataset found in context")
+            return {"error": "No dataset found in context"}
+            
+        # If it's a dict with 'status' or 'error', return that directly
+        if isinstance(data, dict):
+            logger.info(f"Data is dict with keys: {list(data.keys())}")
+            if 'error' in data:
+                logger.error(f"Error in data: {data['error']}")
+                return {"error": data['error']}
+            if 'status' in data:
+                logger.info(f"Status in data: {data['status']}")
+                return {"status": data['status']}
+        
+        # Format as DataFrame
+        import pandas as pd
+        if isinstance(data, pd.DataFrame):
+            df = data
+            logger.info(f"""
+DataFrame details:
+Shape: {df.shape}
+Columns: {df.columns.tolist()}
+""")
+        else:
+            logger.info(f"Converting data to DataFrame from type: {type(data)}")
+            df = pd.DataFrame(data)
+
+        # Get total row count
+        total_rows = len(df)
+        rows_per_page = 50
+        
+        logger.info(f"""
+Pagination details:
+Total rows: {total_rows}
+Rows per page: {rows_per_page}
+""")
+        
+        # Start with padding and separator
+        markdown = "\n---\n"
+        
+        if title:
+            markdown += f"### {title}\n\n"
+        
+        # Add dataset size info
+        if total_rows > rows_per_page:
+            markdown += f"*Showing first {rows_per_page} of {total_rows} rows*\n\n"
+            # Take only first 50 rows for display
+            display_df = df.head(rows_per_page)
+        else:
+            markdown += f"*Total rows: {total_rows}*\n\n"
+            display_df = df
+            
+        # Convert DataFrame to markdown and add padding
+        table_md = display_df.to_markdown(index=False)
+        markdown += table_md + "\n"
+        
+        # Add pagination info if needed
+        if total_rows > rows_per_page:
+            remaining = total_rows - rows_per_page
+            markdown += f"\n*{remaining:,} more rows not shown*\n"
+        
+        # Add bottom padding and separator
+        markdown += "---\n"
+        
+        logger.info(f"""
+Generated markdown:
+Length: {len(markdown)}
+Preview: {markdown[:500]}...
+""")
+        
+        # Store pagination info in context for potential follow-up
+        context_variables["table_pagination"] = {
+            "total_rows": total_rows,
+            "current_page": 1,
+            "rows_per_page": rows_per_page,
+            "total_pages": (total_rows + rows_per_page - 1) // rows_per_page
+        }
+        
+        # Return the markdown directly - no more direct response bypass
+        return {"status": "Table formatted successfully", "content": markdown}
+        
+    except Exception as e:
+        logger.error(f"Error formatting table: {str(e)}", exc_info=True)
+        return {"error": f"Error formatting table: {str(e)}"}
+
+# Add a new function to handle pagination
+def format_table_page(context_variables, page_number, title=None):
+    """
+    Formats a specific page of the dataset.
+    Args:
+        context_variables: The context variables containing the dataset
+        page_number: The page number to display (1-based)
+        title: Optional title for the table
+    Returns:
+        Status message for the LLM
+    """
+    try:
+        data = context_variables.get("dataset")
+        if data is None:
+            return {"error": "No dataset found in context"}
+            
+        import pandas as pd
+        if isinstance(data, pd.DataFrame):
+            df = data
+        else:
+            df = pd.DataFrame(data)
+
+        pagination = context_variables.get("table_pagination", {})
+        if not pagination:
+            return {"error": "No pagination info found. Please display the table first."}
+
+        rows_per_page = pagination["rows_per_page"]
+        total_rows = len(df)
+        total_pages = (total_rows + rows_per_page - 1) // rows_per_page
+
+        if not (1 <= page_number <= total_pages):
+            return {"error": f"Invalid page number. Please specify a page between 1 and {total_pages}"}
+
+        start_idx = (page_number - 1) * rows_per_page
+        end_idx = min(start_idx + rows_per_page, total_rows)
+        
+        markdown = "\n---\n"
+        
+        if title:
+            markdown += f"### {title}\n\n"
+        
+        markdown += f"*Page {page_number} of {total_pages} (rows {start_idx + 1}-{end_idx} of {total_rows})*\n\n"
+            
+        # Get the rows for this page
+        display_df = df.iloc[start_idx:end_idx]
+        table_md = display_df.to_markdown(index=False)
+        markdown += table_md + "\n"
+        
+        # Add navigation info
+        nav_info = []
+        if page_number > 1:
+            nav_info.append(f"Previous: Page {page_number - 1}")
+        if page_number < total_pages:
+            nav_info.append(f"Next: Page {page_number + 1}")
+        
+        if nav_info:
+            markdown += f"\n*{' | '.join(nav_info)}*\n"
+        
+        markdown += "---\n"
+        
+        # Store the formatted table in context for direct streaming
+        context_variables["last_formatted_table"] = markdown
+        
+        # Update pagination info
+        context_variables["table_pagination"]["current_page"] = page_number
+        
+        return {"status": "Table page formatted successfully", "pagination": context_variables["table_pagination"]}
+        
+    except Exception as e:
+        logger.error(f"Error formatting table page: {str(e)}")
+        return {"error": f"Error formatting table page: {str(e)}"}
+
+# Function mapping
+function_mapping = {
+    'transfer_to_analyst_agent': transfer_to_analyst_agent,
+    'transfer_to_researcher_agent': transfer_to_researcher_agent,
+    'get_dataset': get_dataset,
+    'get_notes': get_notes,
+    'get_columns': get_columns,
+    'get_data_summary': get_data_summary,
+    'anomaly_detection': anomaly_detection,
+    'query_docs': query_docs,
+    'set_dataset': set_dataset,
+    'generate_time_series_chart': generate_time_series_chart,
+    'format_table': format_table,
+    'format_table_page': format_table_page,
+}
 
 
 Researcher_agent = Agent(
     model=AGENT_MODEL,
     name="Researcher",
-     instructions="""
-        Role: You are a researcher for Transparent SF, focusing on trends in city data.
-        Purpose: help the user find objective data and specific details on their question. 
-        Avoid speculating on causes or using value terms (like "good" or "bad"). Report the "what," not the "why."
+    instructions="""
+    Role: You are a researcher for Transparent SF, focusing on trends in city data.
+    Purpose: help the user find objective data and specific details on their question. Always illustrate your findings with charts and graphs.
+    
+    - get_notes() This is a summary of everything in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
+    - Use query_docs("collection_name=<Collection_Name>", query=<query>) to review analysis of city data.
+    - Use set_dataset() to set the correct dataset with a proper SQL query.
+    - Use format_table(data, title) to display data in a nicely formatted table. This is especially useful for showing query results or summarized data to the user.
+    
+    When displaying data:
+    1. Use format_table() for structured data that would benefit from a tabular format
+    2. Include relevant titles and context with your tables
+    3. Follow up tables with explanations of key insights or trends
+    
+    Query Format:
+    - Use standard SQL syntax: "select field1, field2 where condition"
+    - Do not use $ prefixes in your queries
+    - Example: "select dba_name, location_start_date where supervisor_district = '6' and location_start_date >= '2025-01-01'"
+    
+    There are many collections you can search. Sometimes you might want to look at multiple collections to get the data you need. 
+    
+    Each collection is named as follows:
+    
+    timeframe_location
+    timeframes are one of the following:
+    annual
+    monthly
+    daily
 
-        Examples: Instead of just saying property crime is down, highlight specifics (e.g., auto theft down 40% from it's trailing 2-year average).
-        Data Categories: Public Safety, City Management and Ethics, Health, Housing, Drugs, Homelessness, etc.
-        
-        Deliverables:
-        List of notable trends.
-        Query URLs generating raw data.
-        URLs of supporting charts.
-        
-        Tools:
-        get_notes() always start here this is a sumamry of everyhting in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
-        query_docs(context_variables, "<Collection Name>", query) to gather details from:
-        
-        There are many collections you can search.  Sometimes you might want to look at multiple collections to get the data you need. 
-        
-        Each collection is named as follows:
-        
-        timeframe_location
-        timeframes are one of the following:
-        annual
-        monthly
+    location is one of the following:
+    citywide
+    or
+    district_<number>
+    
+    So one example collection is "annual_citywide"
+    another example is "monthly_district_1"
 
-        location is one of the following:
-        citywide
-        or
-        district_<number>
-        
-        
-        Only make one query_docs() call per category due to response length. 
-        Use generate_ghost_post(context_variables, content, title) to produce a simple HTML post once content is finalized.
-        Ensure chart/image src links are correct and accessible. Chart URLS are RELATIVE to the output folder.
-        Analyst Handoff: Use Transfer_to_analyst_agent() only if specifically requested to do so by the user.
+    There is also a special collection called "SFPublicData" that contains all the data from the city of San Francisco including all the table names and column names you would need to set a custom dataset because the answer to the user's question isn't in the other collections.
+    
+    Only make one query_docs() call per call due to response length. 
 
-        """,
-    functions=[get_notes, query_docs, transfer_to_analyst_agent, generate_ghost_post],  
-    # functions=[query_docs, generate_ghost_post, transfer_to_analyst_agent],  
+    If, after searching through your docs, you can't find the data you need, you can check to see if there is data available in the "SFPublicData" collection. 
+    If you find a good dataset, you can use the set_dataset() function to set the dataset, and share info about it with the user.
+    """,
+    functions=[get_notes, query_docs, set_dataset, transfer_to_analyst_agent, generate_ghost_post, format_table],
     context_variables=context_variables,
-    debug=True,
+    debug=True
 )
 
 def set_dataset_in_context(context_variables, dataset):
@@ -551,13 +792,24 @@ def truncate_messages(messages):
     Truncate messages to stay within OpenAI's context limits.
     More aggressive truncation that preserves the most recent context.
     """
+    # Set stricter limits to leave room for functions and responses
+    MAX_SINGLE_MESSAGE = 24000  # ~6k tokens
+    MAX_TOTAL_LENGTH = 100000   # ~25k tokens, leaving plenty of room for functions and responses
+    
     logger.info(f"""
 === Message Truncation Started ===
 Initial message count: {len(messages)}
 """)
     
+    # Always keep the last message (user input)
+    if not messages:
+        return messages
+        
+    last_message = messages[-1]
+    truncated_messages = [last_message]
+    
     # First pass: Truncate any individual messages that are too long
-    for msg in messages:
+    for msg in messages[:-1]:  # Skip the last message as we're keeping it complete
         content = msg.get("content", "")
         if len(content) > MAX_SINGLE_MESSAGE:
             msg["content"] = f"[TRUNCATED]...{content[-MAX_SINGLE_MESSAGE//2:]}"
@@ -567,34 +819,23 @@ Original length: {len(content)}
 New length: {len(msg['content'])}
 """)
     
-    # Calculate total length
-    total_length = sum(len(str(msg.get("content", ""))) for msg in messages)
+    # Calculate how much space we have left
+    current_length = len(str(last_message.get("content", "")))
     
-    if total_length <= MAX_MESSAGE_LENGTH * 0.9:  # Leave 10% buffer
-        return messages
-    
-    # Keep the last message (user input) and most recent context
-    truncated_messages = []
-    running_length = 0
-    
-    # Always keep the last message
-    last_message = messages[-1]
-    running_length += len(str(last_message.get("content", "")))
-    truncated_messages.append(last_message)
-    
-    # Add recent messages until we approach the limit
+    # Add messages from most recent to oldest until we approach the limit
     for msg in reversed(messages[:-1]):
         msg_length = len(str(msg.get("content", "")))
-        if running_length + msg_length > MAX_MESSAGE_LENGTH * 0.8:  # More conservative buffer
+        if current_length + msg_length > MAX_TOTAL_LENGTH:
             break
-        running_length += msg_length
+        current_length += msg_length
         truncated_messages.insert(0, msg)
     
-    # If we have space, add a summary message at the start
+    # If we truncated any messages, add a summary message
     if len(truncated_messages) < len(messages):
+        removed_count = len(messages) - len(truncated_messages)
         summary = {
             "role": "system",
-            "content": f"[HISTORY SUMMARY] Previous conversation had {len(messages) - len(truncated_messages)} older messages that were truncated to save space."
+            "content": f"[Note: {removed_count} earlier messages were removed to stay within context limits]"
         }
         truncated_messages.insert(0, summary)
     
@@ -602,248 +843,25 @@ New length: {len(msg['content'])}
 === Message Truncation Complete ===
 Original messages: {len(messages)}
 Truncated messages: {len(truncated_messages)}
-Original length: {total_length}
-New length: {sum(len(str(msg.get('content', ''))) for msg in truncated_messages)}
+Estimated total length: {current_length:,} characters
 """)
     
     return truncated_messages
 
-async def generate_response(user_input, session_data):
-    logger.info(f"""
-=== New Chat Interaction ===
-Timestamp: {datetime.datetime.now().isoformat()}
-Session ID: {id(session_data)}
-Current Agent: {session_data['agent'].name}
-User Input: {user_input[:200]}{'...' if len(user_input) > 200 else ''}
-""")
-    
-    messages = session_data["messages"]
-    agent = session_data["agent"]
-    context_variables = session_data.get("context_variables") or {}
-
-    # Log initial state
-    logger.info(f"""
-Context State:
-Message History: {len(messages)} messages
-Active Context Variables: {', '.join(context_variables.keys())}
-Last Message Preview: {messages[-1]['content'][:100] + '...' if messages else 'No previous messages'}
-""")
-
-    # Append user message
-    messages.append({"role": "user", "content": user_input})
-    
-    # Truncate messages if needed before sending to agent
-    original_message_count = len(messages)
-    truncated_messages = truncate_messages(messages)
-    if len(truncated_messages) < original_message_count:
-        logger.warning(f"""
-Messages were truncated:
-Original count: {original_message_count}
-Truncated count: {len(truncated_messages)}
-Removed: {original_message_count - len(truncated_messages)} messages
-""")
-        messages = truncated_messages
-
-    try:
-        # Run the agent
-        logger.info("Starting agent interaction")
-        response_generator = swarm_client.run(
-            agent=agent,
-            messages=truncated_messages,
-            context_variables=context_variables,
-            stream=True,
-            debug=False,
-        )
-        
-        # Initialize assistant message
-        assistant_message = {"role": "assistant", "content": "", "sender": agent.name}
-        incomplete_tool_call = None
-        current_function_name = None
-
-        for chunk in response_generator:
-            # Determine chunk type
-            chunk_type = (
-                "content" if "content" in chunk and chunk["content"] is not None
-                else "tool_call" if "tool_calls" in chunk and chunk["tool_calls"] is not None
-                else "delimiter" if "delim" in chunk
-                else "unknown"
-            )
-            
-            logger.debug(f"""
-Processing {chunk_type} chunk:
-Content preview: {str(chunk)[:150]}...
-""")
-
-            # Handle content
-            if chunk_type == "content":
-                content_piece = chunk["content"]
-                assistant_message["content"] += content_piece
-                message = {
-                    "type": "content",
-                    "sender": assistant_message["sender"],
-                    "content": content_piece
-                }
-                logger.debug(f"""
-Added content to response:
-Content piece: {content_piece[:100]}...
-""")
-                yield json.dumps(message) + "\n"
-
-            # Handle tool calls
-            elif chunk_type == "tool_call":
-                logger.info("Processing tool calls")
-                for tool_call in chunk["tool_calls"]:
-                    function_info = tool_call.get("function")
-                    if not function_info:
-                        continue
-
-                    if function_info.get("name"):
-                        current_function_name = function_info["name"]
-                        logger.info(f"""
-Tool call started:
-Function: {current_function_name}
-""")
-
-                    if not current_function_name:
-                        continue
-
-                    arguments_fragment = function_info.get("arguments", "")
-                    logger.debug(f"""
-Received function arguments:
-Arguments fragment: {arguments_fragment}
-""")
-
-                    if incomplete_tool_call is None or incomplete_tool_call["function_name"] != current_function_name:
-                        incomplete_tool_call = {
-                            "type": "tool_call",
-                            "sender": assistant_message["sender"],
-                            "function_name": current_function_name,
-                            "arguments": ""
-                        }
-
-                    incomplete_tool_call["arguments"] += arguments_fragment
-
-                    try:
-                        arguments_json = json.loads(incomplete_tool_call["arguments"])
-                        logger.info(f"""
-Complete tool call received:
-Function: {current_function_name}
-Arguments: {json.dumps(arguments_json, indent=2)}
-""")
-
-                        incomplete_tool_call["arguments"] = arguments_json
-                        message = json.dumps(incomplete_tool_call) + "\n"
-                        yield message
-
-                        # Process the function call
-                        function_to_call = function_mapping.get(current_function_name)
-                        if function_to_call:
-                            logger.info(f"Executing function: {current_function_name}")
-                            try:
-                                if current_function_name == "generate_time_series_chart":
-                                    logger.info(f"""
-Generating time series chart:
-Arguments: {json.dumps(arguments_json, indent=2)}
-""")
-                                    # Create a clean copy of context without the dataset
-                                    chart_context = {
-                                        key: value 
-                                        for key, value in context_variables.items() 
-                                        if key == 'dataset'  # Only keep the dataset
-                                    }
-                                    result = function_to_call(chart_context, **arguments_json)
-                                    
-                                    if isinstance(result, tuple):
-                                        markdown_content, _ = result  # Ignore the HTML content
-                                        logger.info(f"""
-Chart generated successfully:
-Markdown length: {len(markdown_content)}
-""")
-                                        
-                                        # Only store and send the markdown content
-                                        assistant_message["content"] += f"\n{markdown_content}\n"
-                                        yield json.dumps({
-                                            "type": "content",
-                                            "sender": assistant_message["sender"],
-                                            "content": markdown_content
-                                        }) + "\n"
-                                    else:
-                                        logger.warning(f"""
-Unexpected chart result format:
-Result type: {type(result)}
-""")
-                                        yield json.dumps({
-                                            "type": "content",
-                                            "sender": assistant_message["sender"],
-                                            "content": str(result)
-                                        }) + "\n"
-                                else:
-                                    result = function_to_call(context_variables, **arguments_json)
-                                    logger.info(f"""
-Function executed successfully:
-Function: {current_function_name}
-Result type: {type(result)}
-Result preview: {str(result)[:200]}...
-""")
-                                    
-                                    # Handle agent transfer
-                                    if isinstance(result, Agent):
-                                        session_data["agent"] = result
-                                        assistant_message["sender"] = session_data["agent"].name
-                                        logger.info(f"""
-Agent transferred:
-New agent: {session_data['agent'].name}
-""")
-
-                                session_data["context_variables"] = context_variables
-                                
-                            except Exception as e:
-                                logger.error(f"""
-Error executing function:
-Function: {current_function_name}
-Error: {str(e)}
-Arguments: {json.dumps(arguments_json, indent=2)}
-""")
-                                raise
-
-                        incomplete_tool_call = None
-                        current_function_name = None
-                    except json.JSONDecodeError:
-                        # Still accumulating arguments
-                        pass
-
-            # Handle end of message
-            if "delim" in chunk and chunk["delim"] == "end":
-                logger.info(f"""
-Message complete:
-Final message length: {len(assistant_message['content'])}
-""")
-                messages.append(assistant_message)
-                assistant_message = {"role": "assistant", "content": "", "sender": agent.name}
-
-    except Exception as e:
-        logger.error(f"""
-Error in generate_response:
-Error type: {type(e).__name__}
-Error message: {str(e)}
-Current function: {current_function_name}
-Last message length: {len(assistant_message.get('content', ''))}
-""")
-        raise
-
-    logger.info(f"""
-Chat interaction completed:
-Total messages: {len(messages)}
-Final message preview: {messages[-1].get('content', '')[:200]}...
-""")
-
 @router.post("/api/chat")
 async def chat(request: Request, session_id: str = Cookie(None)):
-    logger.debug("Chat endpoint called")
+    logger.info("Chat endpoint called")
     try:
         data = await request.json()
         user_input = data.get("query")
-        logger.debug(f"Received query: {user_input}")
+        logger.info(f"""
+=== New User Message ===
+Session ID: {session_id if session_id else 'New Session'}
+Timestamp: {datetime.datetime.now().isoformat()}
+Message:
+{user_input}
+===============================
+""")
 
         # Get or create session data
         if session_id is None or session_id not in sessions:
@@ -853,6 +871,7 @@ async def chat(request: Request, session_id: str = Cookie(None)):
                 "agent": Researcher_agent,
                 "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
             }
+            logger.info(f"Created new session: {session_id}")
 
         session_data = sessions[session_id]
 
@@ -882,3 +901,152 @@ async def reset_conversation(session_id: str = Cookie(None)):
         }
         return {"status": "success"}
     return {"status": "error", "message": "No active session found"}
+
+async def generate_response(user_input, session_data):
+    logger.info(f"""
+=== Starting Agent Response ===
+Session ID: {id(session_data)}
+Current Agent: {session_data['agent'].name}
+Timestamp: {datetime.datetime.now().isoformat()}
+""")
+    
+    messages = session_data["messages"]
+    agent = session_data["agent"]
+    context_variables = session_data.get("context_variables") or {}
+    current_function_name = None  # Initialize at the top level
+
+    # Append user message
+    messages.append({"role": "user", "content": user_input})
+    
+    # Truncate messages before sending to agent
+    truncated_messages = truncate_messages(messages)
+
+    try:
+        # Run the agent
+        response_generator = swarm_client.run(
+            agent=agent,
+            messages=truncated_messages,
+            context_variables=context_variables,
+            stream=True,
+            debug=False,
+        )
+        
+        # Initialize assistant message
+        assistant_message = {"role": "assistant", "content": "", "sender": agent.name}
+        incomplete_tool_call = None
+
+        for chunk in response_generator:
+            # Handle tool calls first
+            if "tool_calls" in chunk and chunk["tool_calls"] is not None:
+                for tool_call in chunk["tool_calls"]:
+                    function_info = tool_call.get("function")
+                    if not function_info:
+                        continue
+
+                    if function_info.get("name"):
+                        current_function_name = function_info["name"]
+                        logger.debug(f"Receiving tool call: {current_function_name}")
+
+                    if not current_function_name:
+                        continue
+
+                    arguments_fragment = function_info.get("arguments", "")
+
+                    if incomplete_tool_call is None or incomplete_tool_call["function_name"] != current_function_name:
+                        incomplete_tool_call = {
+                            "type": "tool_call",
+                            "sender": assistant_message["sender"],
+                            "function_name": current_function_name,
+                            "arguments": ""
+                        }
+
+                    incomplete_tool_call["arguments"] += arguments_fragment
+
+                    try:
+                        arguments_json = json.loads(incomplete_tool_call["arguments"])
+                        logger.info(f"""
+=== Tool Call ===
+Function: {current_function_name}
+Arguments: {json.dumps(arguments_json, indent=2)}
+""")
+
+                        incomplete_tool_call["arguments"] = arguments_json
+                        message = json.dumps(incomplete_tool_call) + "\n"
+                        yield message
+
+                        # Process the function call
+                        function_to_call = function_mapping.get(current_function_name)
+                        if function_to_call:
+                            try:
+                                result = function_to_call(context_variables, **arguments_json)
+                                logger.info(f"""
+=== Tool Result ===
+Function: {current_function_name}
+Result: {str(result)[:500]}{'...' if len(str(result)) > 500 else ''}
+""")
+                                # If the result has content (like from format_table), send it as a message
+                                if isinstance(result, dict) and "content" in result:
+                                    message = {
+                                        "type": "content",
+                                        "sender": assistant_message["sender"],
+                                        "content": result["content"]
+                                    }
+                                    yield json.dumps(message) + "\n"
+                            except Exception as e:
+                                logger.error(f"""
+=== Tool Error ===
+Function: {current_function_name}
+Error: {str(e)}
+""")
+                                raise
+
+                        incomplete_tool_call = None
+                        current_function_name = None
+                    except json.JSONDecodeError:
+                        # Still accumulating arguments
+                        pass
+
+            # Handle content
+            elif "content" in chunk and chunk["content"] is not None:
+                content_piece = chunk["content"]
+                assistant_message["content"] += content_piece
+                message = {
+                    "type": "content",
+                    "sender": assistant_message["sender"],
+                    "content": content_piece
+                }
+                yield json.dumps(message) + "\n"
+
+            # Handle end of message
+            if "delim" in chunk and chunk["delim"] == "end":
+                # Always append assistant message if it has content
+                if assistant_message["content"]:
+                    messages.append(assistant_message)
+                    logger.info(f"""
+=== Agent Response Complete ===
+Timestamp: {datetime.datetime.now().isoformat()}
+Agent: {assistant_message['sender']}
+Response:
+{assistant_message['content']}
+===============================
+""")
+                # Reset for next message
+                assistant_message = {"role": "assistant", "content": "", "sender": agent.name}
+
+    except Exception as e:
+        logger.error(f"""
+=== Error in Response Generation ===
+Error type: {type(e).__name__}
+Error message: {str(e)}
+Current function: {current_function_name}
+Timestamp: {datetime.datetime.now().isoformat()}
+===============================
+""")
+        raise
+
+    logger.info(f"""
+=== Chat Interaction Summary ===
+Total messages: {len(messages)}
+Timestamp: {datetime.datetime.now().isoformat()}
+===============================
+""")

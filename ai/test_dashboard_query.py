@@ -3,87 +3,218 @@ import json
 from datetime import datetime, timedelta
 from tools.data_fetcher import set_dataset
 import logging
+import pandas as pd
+from generate_dashboard_metrics import get_date_ranges
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def extract_error_details(result):
+    """Extract detailed error information from the API response."""
+    error_details = {
+        'error': result.get('error'),
+        'message': None,
+        'error_code': None,
+        'details': None,
+        'data': None,
+        'query': result.get('query'),
+        'url': result.get('queryURL')
+    }
+    
+    # Try to get more detailed error info from the response
+    if 'response' in result:
+        try:
+            response = result['response']
+            if isinstance(response, dict):
+                error_details['message'] = response.get('message') or response.get('error')
+                error_details['error_code'] = response.get('errorCode')
+                error_details['details'] = response.get('details')
+                error_details['data'] = response.get('data')
+            elif isinstance(response, str):
+                error_details['message'] = response
+        except Exception as e:
+            error_details['message'] = f"Error parsing response: {str(e)}"
+    
+    return error_details
+
 def load_dashboard_queries():
     """Load the dashboard queries from the JSON file."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    queries_file = os.path.join(script_dir, 'data', 'dashboard_queries.json')
+    queries_file = os.path.join(script_dir, 'data', 'dashboard', 'dashboard_queries.json')
     
     with open(queries_file, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def test_query(query_name, query_data):
-    """Test a specific query and save its results."""
-    logger.info(f"Testing query: {query_name}")
+def test_business_query():
+    """Test the business registrations query as a reference."""
+    logger.info("Testing business registrations query")
     
-    # Initialize context variables
+    # Load queries
+    queries = load_dashboard_queries()
+    
+    # Get business query details
+    business_data = queries['economy']['business']
+    endpoint = business_data['endpoint']
+    query_data = business_data['queries']['🏢 New Business Registrations']
+    
+    # Get date ranges using the shared function
+    date_ranges = get_date_ranges(endpoint=endpoint)
+    
+    # Initialize context variables for main queries
     context_variables = {}
     
-    # Get query details
-    endpoint = query_data['endpoint']
-    monthly_query = query_data['queries']['Monthly']
+    # Test YTD query
+    ytd_query = query_data['ytd_query'].replace('last_year_start', f"'{date_ranges['last_year_start']}'").replace('current_date', f"'{date_ranges['this_year_end']}'")
+    logger.info(f"Testing YTD query: {ytd_query}")
     
-    # Set start date to 10 years ago
-    start_date = (datetime.now() - timedelta(days=365*10)).strftime('%Y-%m-%d')
-    query_modified = monthly_query.replace('start_date', f"'{start_date}'")
-    
-    # Try to fetch the data
-    result = set_dataset(
+    ytd_result = set_dataset(
         context_variables=context_variables,
         endpoint=endpoint,
-        query=query_modified
+        query=ytd_query
     )
     
-    if 'error' in result:
-        logger.error(f"Error setting dataset: {result['error']}")
-        return None
-        
-    if 'dataset' not in context_variables:
-        logger.error("No dataset found in context variables")
-        return None
-        
-    dataset = context_variables['dataset']
-    logger.info(f"Successfully fetched {len(dataset)} records")
+    if 'error' in ytd_result:
+        error_details = extract_error_details(ytd_result)
+        logger.error("Error in YTD query:")
+        logger.error(f"  Error: {error_details['error']}")
+        logger.error(f"  Message: {error_details['message']}")
+        logger.error(f"  Error Code: {error_details['error_code']}")
+        logger.error(f"  Details: {error_details['details']}")
+        logger.error(f"  Data: {error_details['data']}")
+        logger.error(f"  Query: {error_details['query']}")
+        logger.error(f"  URL: {error_details['url']}")
+    else:
+        logger.info(f"YTD query successful, fetched {len(context_variables.get('dataset', []))} records")
+        logger.info(f"YTD response: {ytd_result}")
     
     # Save the results
     script_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(script_dir, 'data', 'dashboard_data')
     os.makedirs(output_dir, exist_ok=True)
     
-    output_file = os.path.join(output_dir, f"{query_name}_data.json")
+    output_file = os.path.join(output_dir, "business_registrations_test.json")
     
-    # Convert DataFrame to JSON format
-    data_json = dataset.to_json(orient='records')
-    data_dict = {
+    results = {
         'metadata': query_data,
-        'data': json.loads(data_json),
-        'generated_at': datetime.now().isoformat(),
-        'query_url': result.get('queryURL', '')
+        'ytd_result': {
+            'query': ytd_query,
+            'error': extract_error_details(ytd_result) if 'error' in ytd_result else None,
+            'url': ytd_result.get('queryURL'),
+            'data': context_variables.get('dataset').to_json(orient='records') if 'dataset' in context_variables else None,
+            'raw_response': ytd_result
+        },
+        'generated_at': datetime.now().isoformat()
     }
     
     with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(data_dict, f, indent=2)
+        json.dump(results, f, indent=2)
     
-    logger.info(f"Saved results to {output_file}")
-    return output_file
+    logger.info(f"Saved test results to {output_file}")
+    return not 'error' in ytd_result
 
-def main():
-    """Main function to test all dashboard queries."""
+def test_housing_query():
+    """Test the housing completion query specifically."""
+    logger.info("Testing housing completion query")
+    
+    # Load queries
     queries = load_dashboard_queries()
     
-    for query_name, query_data in queries.items():
-        try:
-            output_file = test_query(query_name, query_data)
-            if output_file:
-                logger.info(f"Successfully processed {query_name}")
-            else:
-                logger.error(f"Failed to process {query_name}")
-        except Exception as e:
-            logger.error(f"Error processing {query_name}: {str(e)}", exc_info=True)
+    # Get housing query details
+    housing_data = queries['economy']['housing']
+    endpoint = housing_data['endpoint']
+    query_data = housing_data['queries']['🏠 New Housing Units Completed']
+    
+    # Get date ranges using the shared function
+    date_ranges = get_date_ranges(endpoint=endpoint)
+    
+    # Initialize context variables for main queries
+    context_variables = {}
+    
+    # Test YTD query
+    ytd_query = query_data['ytd_query'].replace('last_year_start', f"'{date_ranges['last_year_start']}'").replace('current_date', f"'{date_ranges['this_year_end']}'")
+    logger.info(f"Testing YTD query: {ytd_query}")
+    
+    ytd_result = set_dataset(
+        context_variables=context_variables,
+        endpoint=endpoint,
+        query=ytd_query
+    )
+    
+    if 'error' in ytd_result:
+        error_details = extract_error_details(ytd_result)
+        logger.error("Error in YTD query:")
+        logger.error(f"  Error: {error_details['error']}")
+        logger.error(f"  Message: {error_details['message']}")
+        logger.error(f"  Error Code: {error_details['error_code']}")
+        logger.error(f"  Details: {error_details['details']}")
+        logger.error(f"  Data: {error_details['data']}")
+        logger.error(f"  Query: {error_details['query']}")
+        logger.error(f"  URL: {error_details['url']}")
+    else:
+        logger.info(f"YTD query successful, fetched {len(context_variables.get('dataset', []))} records")
+        logger.info(f"YTD response: {ytd_result}")
+    
+    # Test metric query
+    metric_query = query_data['metric_query'].replace('this_year_start', f"'{date_ranges['this_year_start']}'").replace('this_year_end', f"'{date_ranges['this_year_end']}'").replace('last_year_start', f"'{date_ranges['last_year_start']}'").replace('last_year_end', f"'{date_ranges['last_year_end']}'")
+    logger.info(f"Testing metric query: {metric_query}")
+    
+    metric_result = set_dataset(
+        context_variables=context_variables,
+        endpoint=endpoint,
+        query=metric_query
+    )
+    
+    if 'error' in metric_result:
+        error_details = extract_error_details(metric_result)
+        logger.error("Error in metric query:")
+        logger.error(f"  Error: {error_details['error']}")
+        logger.error(f"  Message: {error_details['message']}")
+        logger.error(f"  Error Code: {error_details['error_code']}")
+        logger.error(f"  Details: {error_details['details']}")
+        logger.error(f"  Data: {error_details['data']}")
+        logger.error(f"  Query: {error_details['query']}")
+        logger.error(f"  URL: {error_details['url']}")
+    else:
+        logger.info(f"Metric query successful, fetched {len(context_variables.get('dataset', []))} records")
+        logger.info(f"Metric response: {metric_result}")
+    
+    # Save the results
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.join(script_dir, 'data', 'dashboard_data')
+    os.makedirs(output_dir, exist_ok=True)
+    
+    output_file = os.path.join(output_dir, "housing_completions_test.json")
+    
+    results = {
+        'metadata': query_data,
+        'ytd_result': {
+            'query': ytd_query,
+            'error': extract_error_details(ytd_result) if 'error' in ytd_result else None,
+            'url': ytd_result.get('queryURL'),
+            'data': context_variables.get('dataset').to_json(orient='records') if 'dataset' in context_variables else None,
+            'raw_response': ytd_result
+        },
+        'metric_result': {
+            'query': metric_query,
+            'error': extract_error_details(metric_result) if 'error' in metric_result else None,
+            'url': metric_result.get('queryURL'),
+            'data': context_variables.get('dataset').to_json(orient='records') if 'dataset' in context_variables else None,
+            'raw_response': metric_result
+        },
+        'generated_at': datetime.now().isoformat()
+    }
+    
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(results, f, indent=2)
+    
+    logger.info(f"Saved test results to {output_file}")
+    return not ('error' in ytd_result or 'error' in metric_result)
 
 if __name__ == '__main__':
-    main() 
+    logger.info("Testing queries...")
+    business_success = test_business_query()
+    logger.info(f"Business query {'succeeded' if business_success else 'failed'}")
+    
+    housing_success = test_housing_query()
+    logger.info(f"Housing query {'succeeded' if housing_success else 'failed'}") 

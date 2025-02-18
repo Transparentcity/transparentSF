@@ -506,14 +506,36 @@
                 mangle: false,
             });
 
-            // Add a custom renderer for images
+            // Simplify the image renderer
             const renderer = new marked.Renderer();
             renderer.image = function(href, title, text) {
-                // If the path starts with '../', replace it with '/output/'
-                if (href.startsWith('../')) {
-                    href = '/output/' + href.substring(3);
+                // Clean up the href to handle potential datasf.org URLs
+                if (href.includes('datasf.org')) {
+                    // Extract just the path portion if it's a datasf.org URL
+                    const urlPath = href.split('datasf.org').pop();
+                    if (urlPath) {
+                        href = urlPath;
+                    }
                 }
-                return `<img src="${href}" title="${title || ''}" alt="${text || ''}" />`;
+
+                // Handle data URLs
+                if (href.startsWith('data:')) {
+                    return `<img src="${href}" title="${title || ''}" alt="${text || ''}" />`;
+                }
+                
+                // Handle relative paths
+                let src = href;
+                // Remove any domain references and clean up the path
+                src = src.replace(/^https?:\/\/[^\/]+/, '');
+                if (src.startsWith('../')) {
+                    src = src.substring(3);
+                }
+                // Remove any duplicate 'output/' prefixes and leading slashes
+                src = src.replace(/^\/+|^output\/+|^\/+output\/+/, '');
+                // Ensure path starts with output/
+                src = 'output/' + src;
+                
+                return `<img src="${src}" title="${title || ''}" alt="${text || ''}" />`;
             };
             marked.use({ renderer });
 
@@ -565,30 +587,22 @@
                     currentAIMessage.contentSegments = []; // Initialize content segments array
                 }
 
-                if (data.type === "content" || data.type === "tool_call") {
-                    if (data.type === "content") {
-                        // Append to the last content segment if it's a string
-                        if (
-                            typeof currentAIMessage.contentSegments[
-                                currentAIMessage.contentSegments.length - 1
-                            ] === "string"
-                        ) {
-                            currentAIMessage.contentSegments[
-                                currentAIMessage.contentSegments.length - 1
-                            ] += data.content;
-                        } else {
-                            currentAIMessage.contentSegments.push(data.content);
-                        }
-                    } else if (data.type === "tool_call") {
-                        // Add the tool call object as a segment
-                        currentAIMessage.contentSegments.push({
-                            type: "tool_call",
-                            function_name: data.function_name,
-                            arguments: data.arguments,
-                        });
+                if (data.type === "content") {
+                    // Regular content - append to the last content segment
+                    if (typeof currentAIMessage.contentSegments[currentAIMessage.contentSegments.length - 1] === "string") {
+                        currentAIMessage.contentSegments[currentAIMessage.contentSegments.length - 1] += data.content;
+                    } else {
+                        currentAIMessage.contentSegments.push(data.content);
                     }
-
-                    // Re-render the content segments
+                    // Render the updated content
+                    renderContentSegments(currentAIMessage);
+                } else if (data.type === "tool_call") {
+                    // Add the tool call object as a segment
+                    currentAIMessage.contentSegments.push({
+                        type: "tool_call",
+                        function_name: data.function_name,
+                        arguments: data.arguments,
+                    });
                     renderContentSegments(currentAIMessage);
                 } else {
                     console.warn("Unknown message type:", data.type);
@@ -610,29 +624,42 @@
                         // It's a markdown content segment
                         try {
                             const htmlContent = marked.parse(segment);
-                            const sanitizedContent =
-                                DOMPurify.sanitize(htmlContent);
+                            const sanitizedContent = DOMPurify.sanitize(htmlContent);
                             const tempDiv = document.createElement("div");
                             tempDiv.innerHTML = sanitizedContent;
 
-                            // Determine the output directory based on content
-                            const outputDir = getOutputDirectory(segment);
-                            console.log('Selected output directory:', outputDir);
-
-                            // Fix relative image paths
+                            // Fix image paths
                             const images = tempDiv.getElementsByTagName('img');
                             for (let img of images) {
                                 const src = img.getAttribute('src');
                                 console.log('Processing image source:', src);
-                                if (src && !src.startsWith('/') && !src.startsWith('http')) {
-                                    // Only add /output/ if it's not already there
-                                    const newSrc = src.startsWith('output/') ? `/${src}` : `/output/${src}`;
-                                    console.log('Updating image path from', src, 'to', newSrc);
-                                    img.src = newSrc;
-                                } else if (src && src.includes('/output/output/')) {
-                                    // Fix double output in path
-                                    const newSrc = src.replace('/output/output/', '/output/');
-                                    console.log('Fixing double output in path from', src, 'to', newSrc);
+                                
+                                // Clean up the src to handle potential datasf.org URLs
+                                if (src.includes('datasf.org')) {
+                                    // Extract just the path portion if it's a datasf.org URL
+                                    const urlPath = src.split('datasf.org').pop();
+                                    if (urlPath) {
+                                        let newSrc = urlPath;
+                                        // Remove any duplicate 'output/' prefixes and leading slashes
+                                        newSrc = newSrc.replace(/^\/+|^output\/+|^\/+output\/+/, '');
+                                        // Ensure path starts with output/
+                                        newSrc = 'output/' + newSrc;
+                                        console.log('Updated datasf.org URL to local path:', newSrc);
+                                        img.src = newSrc;
+                                        continue;
+                                    }
+                                }
+                                
+                                // Only modify relative paths
+                                if (src && !src.startsWith('data:')) {
+                                    // Remove any domain references
+                                    let newSrc = src.replace(/^https?:\/\/[^\/]+/, '');
+                                    // Remove any duplicate output/ prefixes and leading slashes
+                                    newSrc = newSrc.replace(/^\/+|^output\/+|^\/+output\/+/, '');
+                                    // Ensure path starts with output/
+                                    newSrc = 'output/' + newSrc;
+                                    
+                                    console.log('Updated image path:', newSrc);
                                     img.src = newSrc;
                                 }
                             }
@@ -642,13 +669,11 @@
 
                             // Append the content to the message content element
                             while (tempDiv.firstChild) {
-                                message.contentElement.appendChild(
-                                    tempDiv.firstChild,
-                                );
+                                message.contentElement.appendChild(tempDiv.firstChild);
                             }
                         } catch (error) {
                             console.warn("Markdown parsing error:", error);
-                            // Optionally, handle parsing errors
+                            console.error(error);
                         }
                     } else if (segment.type === "tool_call") {
                         // It's a tool call segment
