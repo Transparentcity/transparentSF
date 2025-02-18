@@ -843,3 +843,31 @@ async def execute_query(request: Request):
             'status': 'error',
             'message': str(e)
         })
+
+
+@router.get("/logs/{filename}")
+async def get_log_file(filename: str):
+    """Serve a log file directly."""
+    logger.debug(f"Get log file called for: {filename}")
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        logs_dir = os.path.join(script_dir, 'logs')
+        file_path = os.path.join(logs_dir, filename)
+        
+        # Basic security check - ensure the file is within the logs directory
+        if not os.path.abspath(file_path).startswith(os.path.abspath(logs_dir)):
+            logger.error(f"Attempted to access file outside logs directory: {file_path}")
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        if not os.path.exists(file_path):
+            logger.error(f"Log file not found: {file_path}")
+            raise HTTPException(status_code=404, detail="File not found")
+            
+        return FileResponse(
+            file_path,
+            media_type="text/plain",
+            filename=filename
+        )
+    except Exception as e:
+        logger.exception(f"Error serving log file: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

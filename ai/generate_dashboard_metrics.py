@@ -13,16 +13,24 @@ logs_dir = os.path.join(script_dir, 'logs')
 os.makedirs(logs_dir, exist_ok=True)
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(logs_dir, 'dashboard_metrics.log')),
-        logging.StreamHandler()
-    ]
-)
-
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Remove any existing handlers
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
+
+# Add file handler
+file_handler = logging.FileHandler(os.path.join(logs_dir, 'dashboard_metrics.log'))
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(file_handler)
+
+# Add console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
 
 def load_json_file(file_path):
     """Load and parse a JSON file."""
@@ -59,9 +67,14 @@ def get_date_ranges(target_date=None):
 def process_query_for_district(query, endpoint, date_ranges, district_number=None, query_name=None):
     """Process a single query and handle district-level aggregation from the same dataset."""
     try:
+        logger.info(f"Processing query for endpoint {endpoint}, query_name: {query_name}")
+        
         # Get date ranges if not provided
         if not date_ranges:
+            logger.info("No date ranges provided, generating new date ranges")
             date_ranges = get_date_ranges()
+        else:
+            logger.info(f"Using provided date ranges: {date_ranges}")
             
         modified_query = query
         
@@ -74,6 +87,8 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
         # Handle cases where the query uses direct year comparisons
         this_year = datetime.strptime(date_ranges['this_year_end'], '%Y-%m-%d').year
         last_year = this_year - 1
+        
+        logger.info(f"Processing years: this_year={this_year}, last_year={last_year}")
         
         # Define all possible date patterns we need to fix
         date_patterns = [
@@ -98,7 +113,9 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
         
         # Apply all pattern replacements
         for pattern, replacement in date_patterns:
-            modified_query = modified_query.replace(pattern, replacement)
+            if pattern in modified_query:
+                logger.info(f"Replacing date pattern: {pattern} -> {replacement}")
+                modified_query = modified_query.replace(pattern, replacement)
         
         logger.info("Original query:")
         logger.info(query)
@@ -108,8 +125,10 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
         # Create context variables dictionary to store the dataset
         context_variables = {}
         
+        logger.info(f"Executing query against endpoint: {endpoint}")
         # Execute the query once
         result = set_dataset(context_variables, endpoint=endpoint, query=modified_query)
+        logger.info(f"Query execution result status: {result.get('status')}")
         
         if result.get('status') == 'success' and 'dataset' in context_variables:
             # Store the queries for later use in the output
@@ -119,7 +138,7 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
             }
             
             df = context_variables['dataset']
-            logger.debug(f"Dataset shape: {df.shape}")
+            logger.info(f"Dataset retrieved successfully - Shape: {df.shape}")
             logger.debug(f"Dataset columns: {df.columns.tolist()}")
             logger.debug(f"Data types: {df.dtypes}")
             
@@ -127,22 +146,29 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
             
             # Check if this query contains supervisor_district
             has_district = 'supervisor_district' in df.columns
+            logger.info(f"Query has district data: {has_district}")
             
             # Get the max date from received_datetime or max_date
             max_date = None
             if 'received_datetime' in df.columns:
+                logger.info("Using received_datetime for max date calculation")
                 df['received_datetime'] = pd.to_datetime(df['received_datetime'], errors='coerce')
                 max_date = df['received_datetime'].max()
             elif 'max_date' in df.columns:
+                logger.info("Using max_date column for max date calculation")
                 df['max_date'] = pd.to_datetime(df['max_date'], errors='coerce')
                 max_date = df['max_date'].max()
             
             if pd.notnull(max_date):
                 max_date = max_date.strftime('%Y-%m-%d')
+                logger.info(f"Max date determined: {max_date}")
+            else:
+                logger.warning("No valid max date found in dataset")
             
             if has_district:
                 # Check if this is a response time metric
                 is_response_time = query_name and 'response time' in query_name.lower()
+                logger.info(f"Processing as response time metric: {is_response_time}")
                 
                 if is_response_time:
                     # For response time metrics, we expect this_year and last_year columns
@@ -150,18 +176,22 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
                         logger.error(f"Required columns not found in dataset. Available columns: {df.columns.tolist()}")
                         return None
                     
+                    logger.info("Converting response time columns to numeric")
                     # Convert columns to numeric
                     df['this_year'] = pd.to_numeric(df['this_year'], errors='coerce')
                     df['last_year'] = pd.to_numeric(df['last_year'], errors='coerce')
                     
                     # Calculate citywide median (district '0')
+                    logger.info("Calculating citywide averages")
                     results['0'] = {
                         'lastYear': int(df['last_year'].mean()) if pd.notnull(df['last_year'].mean()) else 0,
                         'thisYear': int(df['this_year'].mean()) if pd.notnull(df['this_year'].mean()) else 0,
                         'lastDataDate': max_date
                     }
+                    logger.debug(f"Citywide results: {results['0']}")
                     
                     # Calculate district-level medians
+                    logger.info("Calculating district-level averages")
                     for district in range(1, 12):
                         district_df = df[df['supervisor_district'] == str(district)]
                         if not district_df.empty:
@@ -171,11 +201,14 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
                                 'lastDataDate': max_date
                             }
                             results[str(district)] = district_data
+                            logger.debug(f"District {district} results: {district_data}")
                 else:
                     # For non-response time metrics, use the existing sum logic
+                    logger.info("Processing as non-response time metric")
                     if not df.empty:
                         # Convert columns to numeric if they exist
                         if 'last_year' in df.columns and 'this_year' in df.columns:
+                            logger.info("Converting year columns to numeric")
                             df['last_year'] = pd.to_numeric(df['last_year'], errors='coerce')
                             df['this_year'] = pd.to_numeric(df['this_year'], errors='coerce')
                             
@@ -184,8 +217,10 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
                                 'thisYear': int(df['this_year'].sum()),
                                 'lastDataDate': max_date
                             }
+                            logger.debug(f"Citywide results: {results['0']}")
                             
                             # Process each district's data
+                            logger.info("Processing district-level sums")
                             for district in range(1, 12):
                                 district_df = df[df['supervisor_district'] == str(district)]
                                 if not district_df.empty:
@@ -195,8 +230,10 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
                                         'lastDataDate': max_date
                                     }
                                     results[str(district)] = district_data
+                                    logger.debug(f"District {district} results: {district_data}")
             else:
                 # For non-district queries, just return the total from first row
+                logger.info("Processing non-district query")
                 if not df.empty:
                     row = df.iloc[0].to_dict()
                     results['0'] = {
@@ -204,7 +241,9 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
                         'thisYear': int(float(row.get('this_year', 0))),
                         'lastDataDate': max_date
                     }
+                    logger.debug(f"Non-district results: {results['0']}")
             
+            logger.info(f"Query processing completed successfully for {query_name}")
             return {
                 'results': results,
                 'queries': query_info
