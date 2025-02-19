@@ -621,17 +621,9 @@ def create_ytd_vector_collection(metrics):
                     f" compared to {metric['lastYear']} incidents last year for {citywide_data['name']}.\n"
                     f"The data is current as of {metric['lastDataDate']}.\n"
                     f"This is a {category_name.lower()} metric related to "
-                    f"{' '.join([
-                        'public safety, emergency response, and first responders' if category_name == 'Safety' else '',
-                        'law enforcement, police activity, and criminal statistics' if category_name == 'Crime' else '',
-                        'business and economic development' if category_name == 'Economy' else ''
-                    ]).strip()}"
+                    f"{' '.join(['public safety, emergency response, and first responders' if category_name == 'Safety' else '', 'law enforcement, police activity, and criminal statistics' if category_name == 'Crime' else '', 'business and economic development' if category_name == 'Economy' else '']).strip()}"
                     f" in San Francisco.\n"
-                    f"{' '.join([
-                        'This metric helps track emergency response, public safety incidents, and first responder activity.' if category_name == 'Safety' else '',
-                        'This metric helps track law enforcement activity, police incidents, and crime statistics.' if category_name == 'Crime' else '',
-                        'This metric helps track business and economic activity.' if category_name == 'Economy' else ''
-                    ]).strip()}\n"
+                    f"{' '.join(['This metric helps track emergency response, public safety incidents, and first responder activity.' if category_name == 'Safety' else '', 'This metric helps track law enforcement activity, police incidents, and crime statistics.' if category_name == 'Crime' else '', 'This metric helps track business and economic activity.' if category_name == 'Economy' else '']).strip()}\n"
                     f"Data Source: {metric['metadata']['data_sf_url']}\n"
                     f"Query Context: {metric['queries'].get('metric_query', '')}\n"
                     f"This data is specific to {citywide_data['name']} in San Francisco."
@@ -671,17 +663,9 @@ def create_ytd_vector_collection(metrics):
                             f" compared to {metric['lastYear']} incidents last year for {district_data['name']}.\n"
                             f"The data is current as of {metric['lastDataDate']}.\n"
                             f"This is a {category_name.lower()} metric related to "
-                            f"{' '.join([
-                                'public safety, emergency response, and first responders' if category_name == 'Safety' else '',
-                                'law enforcement, police activity, and criminal statistics' if category_name == 'Crime' else '',
-                                'business and economic development' if category_name == 'Economy' else ''
-                            ]).strip()}"
+                            f"{' '.join(['public safety, emergency response, and first responders' if category_name == 'Safety' else '', 'law enforcement, police activity, and criminal statistics' if category_name == 'Crime' else '', 'business and economic development' if category_name == 'Economy' else '']).strip()}"
                             f" in San Francisco.\n"
-                            f"{' '.join([
-                                'This metric helps track emergency response, public safety incidents, and first responder activity.' if category_name == 'Safety' else '',
-                                'This metric helps track law enforcement activity, police incidents, and crime statistics.' if category_name == 'Crime' else '',
-                                'This metric helps track business and economic activity.' if category_name == 'Economy' else ''
-                            ]).strip()}\n"
+                            f"{' '.join(['This metric helps track emergency response, public safety incidents, and first responder activity.' if category_name == 'Safety' else '', 'This metric helps track law enforcement activity, police incidents, and crime statistics.' if category_name == 'Crime' else '', 'This metric helps track business and economic activity.' if category_name == 'Economy' else '']).strip()}\n"
                             f"Data Source: {metric['metadata']['data_sf_url']}\n"
                             f"Query Context: {metric['queries'].get('metric_query', '')}\n"
                             f"This data is specific to {district_data['name']} in San Francisco."
