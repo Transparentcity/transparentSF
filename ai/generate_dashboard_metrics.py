@@ -6,6 +6,13 @@ from datetime import datetime, date, timedelta
 from tools.data_fetcher import set_dataset  # Import the set_dataset function
 import pandas as pd
 import re
+import uuid
+from openai import OpenAI
+import qdrant_client
+from qdrant_client.http import models as rest
+from dotenv import load_dotenv
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 
 # Create logs directory if it doesn't exist
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -487,19 +494,20 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                         for district_num in range(1, 12):
                             district_str = str(district_num)
                             if district_str in results:
+                                # Initialize district if not exists BEFORE accessing it
+                                if district_str not in metrics['districts']:
+                                    metrics['districts'][district_str] = {
+                                        "name": f"District {district_str}",
+                                        "categories": []
+                                    }
+                                
+                                district_data = metrics['districts'][district_str]
                                 district_metric = metric_base.copy()
                                 district_metric.update({
                                     "lastYear": results[district_str]['lastYear'],
                                     "thisYear": results[district_str]['thisYear'],
                                     "lastDataDate": metric_last_data_date or results[district_str].get('lastDataDate')
                                 })
-                                
-                                # Initialize district if not exists
-                                if district_str not in metrics['districts']:
-                                    metrics['districts'][district_str] = {
-                                        "name": f"District {district_str}",
-                                        "categories": []
-                                    }
                                 
                                 # Find or create category for this district
                                 district_category = next(
@@ -551,6 +559,192 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
     
     return metrics
 
+def create_ytd_vector_collection(metrics):
+    """Create a vector collection for YTD metrics data."""
+    try:
+        collection_name = 'YTD'
+        logger.info("Starting YTD vector collection creation")
+
+        # Initialize OpenAI client
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            logger.error("OpenAI API key not found in environment variables.")
+            raise ValueError("OpenAI API key not found in environment variables.")
+        
+        client = OpenAI(api_key=openai_api_key)
+        EMBEDDING_MODEL = "text-embedding-3-large"
+        BATCH_SIZE = 100  # Batch size for embeddings and upserts
+
+        # Initialize Qdrant client
+        qdrant = QdrantClient(host='localhost', port=6333)
+        logger.info("Connected to Qdrant")
+
+        # Get sample embedding to determine vector size
+        sample_text = "Sample text for vector size determination"
+        sample_response = client.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=sample_text
+        )
+        vector_size = len(sample_response.data[0].embedding)
+        logger.info(f"Vector size determined: {vector_size}")
+
+        # Recreate collection
+        if qdrant.collection_exists(collection_name):
+            logger.info(f"Deleting existing {collection_name} collection")
+            qdrant.delete_collection(collection_name)
+        
+        logger.info(f"Creating new {collection_name} collection")
+        qdrant.create_collection(
+            collection_name=collection_name,
+            vectors_config=rest.VectorParams(
+                distance=rest.Distance.COSINE,
+                size=vector_size
+            )
+        )
+
+        # Prepare batches of texts and their corresponding metadata
+        texts_to_embed = []
+        metadata_batch = []
+        
+        # Process citywide metrics
+        citywide_data = metrics['districts']['0']
+        for category in citywide_data['categories']:
+            category_name = category['category']
+            for metric in category['metrics']:
+                # Create text representation for embedding
+                metric_text = (
+                    f"Category: {category_name}\n"
+                    f"Metric Name: {metric['name']}\n"
+                    f"Description: {metric['metadata']['summary']}\n"
+                    f"Detailed Definition: {metric['metadata']['definition']}\n"
+                    f"This metric shows {metric['thisYear']} incidents in the current year"
+                    f" compared to {metric['lastYear']} incidents last year for {citywide_data['name']}.\n"
+                    f"The data is current as of {metric['lastDataDate']}.\n"
+                    f"This is a {category_name.lower()} metric related to "
+                    f"{' '.join([
+                        'public safety, emergency response, and first responders' if category_name == 'Safety' else '',
+                        'law enforcement, police activity, and criminal statistics' if category_name == 'Crime' else '',
+                        'business and economic development' if category_name == 'Economy' else ''
+                    ]).strip()}"
+                    f" in San Francisco.\n"
+                    f"{' '.join([
+                        'This metric helps track emergency response, public safety incidents, and first responder activity.' if category_name == 'Safety' else '',
+                        'This metric helps track law enforcement activity, police incidents, and crime statistics.' if category_name == 'Crime' else '',
+                        'This metric helps track business and economic activity.' if category_name == 'Economy' else ''
+                    ]).strip()}\n"
+                    f"Data Source: {metric['metadata']['data_sf_url']}\n"
+                    f"Query Context: {metric['queries'].get('metric_query', '')}\n"
+                    f"This data is specific to {citywide_data['name']} in San Francisco."
+                ).strip()
+
+                texts_to_embed.append(metric_text)
+                metadata_batch.append({
+                    'category': category_name,
+                    'metric_name': metric['name'],
+                    'metric_id': metric['id'],
+                    'this_year': metric['thisYear'],
+                    'last_year': metric['lastYear'],
+                    'last_data_date': metric['lastDataDate'],
+                    'summary': metric['metadata']['summary'],
+                    'definition': metric['metadata']['definition'],
+                    'data_url': metric['metadata']['data_sf_url'],
+                    'district': '0',
+                    'district_name': citywide_data['name'],
+                    'trend_data': metric.get('trend_data', {}),
+                    'queries': metric['queries']
+                })
+
+        # Process district metrics
+        for district_num in range(1, 12):
+            district_str = str(district_num)
+            if district_str in metrics['districts']:
+                district_data = metrics['districts'][district_str]
+                for category in district_data['categories']:
+                    category_name = category['category']
+                    for metric in category['metrics']:
+                        metric_text = (
+                            f"Category: {category_name}\n"
+                            f"Metric Name: {metric['name']}\n"
+                            f"Description: {metric['metadata']['summary']}\n"
+                            f"Detailed Definition: {metric['metadata']['definition']}\n"
+                            f"This metric shows {metric['thisYear']} incidents in the current year"
+                            f" compared to {metric['lastYear']} incidents last year for {district_data['name']}.\n"
+                            f"The data is current as of {metric['lastDataDate']}.\n"
+                            f"This is a {category_name.lower()} metric related to "
+                            f"{' '.join([
+                                'public safety, emergency response, and first responders' if category_name == 'Safety' else '',
+                                'law enforcement, police activity, and criminal statistics' if category_name == 'Crime' else '',
+                                'business and economic development' if category_name == 'Economy' else ''
+                            ]).strip()}"
+                            f" in San Francisco.\n"
+                            f"{' '.join([
+                                'This metric helps track emergency response, public safety incidents, and first responder activity.' if category_name == 'Safety' else '',
+                                'This metric helps track law enforcement activity, police incidents, and crime statistics.' if category_name == 'Crime' else '',
+                                'This metric helps track business and economic activity.' if category_name == 'Economy' else ''
+                            ]).strip()}\n"
+                            f"Data Source: {metric['metadata']['data_sf_url']}\n"
+                            f"Query Context: {metric['queries'].get('metric_query', '')}\n"
+                            f"This data is specific to {district_data['name']} in San Francisco."
+                        ).strip()
+
+                        texts_to_embed.append(metric_text)
+                        metadata_batch.append({
+                            'category': category_name,
+                            'metric_name': metric['name'],
+                            'metric_id': metric['id'],
+                            'this_year': metric['thisYear'],
+                            'last_year': metric['lastYear'],
+                            'last_data_date': metric['lastDataDate'],
+                            'summary': metric['metadata']['summary'],
+                            'definition': metric['metadata']['definition'],
+                            'data_url': metric['metadata']['data_sf_url'],
+                            'district': district_str,
+                            'district_name': district_data['name'],
+                            'trend_data': metric.get('trend_data', {}),
+                            'queries': metric['queries']
+                        })
+
+        # Process in batches
+        total_points = len(texts_to_embed)
+        points_to_upsert = []
+        
+        logger.info(f"Processing {total_points} points in batches of {BATCH_SIZE}")
+        
+        for i in range(0, total_points, BATCH_SIZE):
+            batch_texts = texts_to_embed[i:i + BATCH_SIZE]
+            batch_metadata = metadata_batch[i:i + BATCH_SIZE]
+            
+            # Get embeddings for the batch
+            response = client.embeddings.create(
+                model=EMBEDDING_MODEL,
+                input=batch_texts
+            )
+            embeddings = [data.embedding for data in response.data]
+            
+            # Create points for the batch
+            batch_points = [
+                rest.PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=embedding,
+                    payload=metadata
+                )
+                for embedding, metadata in zip(embeddings, batch_metadata)
+            ]
+            points_to_upsert.extend(batch_points)
+            
+            # If we've accumulated enough points or this is the last batch, upsert them
+            if len(points_to_upsert) >= BATCH_SIZE or i + BATCH_SIZE >= total_points:
+                logger.info(f"Upserting batch of {len(points_to_upsert)} points")
+                qdrant.upsert(collection_name=collection_name, points=points_to_upsert)
+                points_to_upsert = []  # Clear the batch
+                
+        logger.info("Successfully created YTD vector collection")
+
+    except Exception as e:
+        logger.error(f"Error creating YTD vector collection: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise
+
 def main():
     """Main function to generate YTD metrics."""
     try:
@@ -571,6 +765,12 @@ def main():
         logger.info("Starting YTD metrics generation")
         metrics = generate_ytd_metrics(queries_data, output_dir)
         logger.info("YTD metrics generation completed successfully")
+
+        # Create vector collection for YTD metrics
+        logger.info("Creating YTD vector collection")
+        create_ytd_vector_collection(metrics)
+        logger.info("YTD vector collection created successfully")
+
         return metrics
     except Exception as e:
         logger.error(f"Error in main function: {str(e)}")

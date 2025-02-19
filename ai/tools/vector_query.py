@@ -28,7 +28,7 @@ def trim_results_to_token_limit(results: List[Dict], max_tokens: int = 100000) -
             
     return trimmed_results
 
-def query_qdrant(query, collection_name, top_k=4):
+def query_qdrant(query, collection_name, top_k=4, score_threshold=0.45):
     try:
         embedded_query = get_embedding(query)
         if not embedded_query:
@@ -46,6 +46,7 @@ def query_qdrant(query, collection_name, top_k=4):
             query_vector=embedded_query,
             limit=top_k,
             with_payload=True,
+            score_threshold=score_threshold
         )
 
         # If there's a last_updated_date field, sort by it descending
@@ -117,32 +118,66 @@ def process_as_docs(query_results):
 
 def process_as_content(query_results):
     output = []
-    response = "Top text matches:\n\n"
+    response = "Top matches:\n\n"
 
     for i, result in enumerate(query_results, 1):
         payload = result.payload
-        content = payload.get("content", "No Content")
-        truncated_content = re.sub(
-            r"\s+", " ", (content[:100] + "...") if len(content) > 100 else content
-        )
-
-        response += (
-            f"{i}. **Content:** {truncated_content}\n\n"
-        )
-
-        output.append({"content": content})
-
-    # Add token limit check
-    output = trim_results_to_token_limit(output)
-    
-    # Rebuild response with trimmed results
-    if len(output) < len(query_results):
-        response = f"Top {len(output)} text matches (results trimmed to stay within token limit):\n\n"
-        for i, result in enumerate(output, 1):
-            content = result["content"]
+        
+        # Handle YTD collection data
+        if 'metric_name' in payload:
+            # Format the metric information
+            metric_info = (
+                f"{i}. **Metric:** {payload.get('metric_name')}\n"
+                f"   **Category:** {payload.get('category')}\n"
+                f"   **District:** {payload.get('district_name')}\n"
+                f"   **Current Year:** {payload.get('this_year')}\n"
+                f"   **Last Year:** {payload.get('last_year')}\n"
+                f"   **Last Updated:** {payload.get('last_data_date')}\n"
+                f"   **Summary:** {payload.get('summary')}\n\n"
+            )
+            response += metric_info
+            output.append({
+                'metric_name': payload.get('metric_name'),
+                'category': payload.get('category'),
+                'district': payload.get('district_name'),
+                'this_year': payload.get('this_year'),
+                'last_year': payload.get('last_year'),
+                'last_data_date': payload.get('last_data_date'),
+                'summary': payload.get('summary'),
+                'definition': payload.get('definition'),
+                'score': result.score
+            })
+        else:
+            # Handle other collections (fallback to original content processing)
+            content = payload.get('content', 'No Content')
             truncated_content = re.sub(
                 r"\s+", " ", (content[:100] + "...") if len(content) > 100 else content
             )
             response += f"{i}. **Content:** {truncated_content}\n\n"
+            output.append({"content": content})
+
+    # Add token limit check
+    output = trim_results_to_token_limit(output)
+    
+    # Rebuild response with trimmed results if needed
+    if len(output) < len(query_results):
+        response = f"Top {len(output)} matches (results trimmed to stay within token limit):\n\n"
+        for i, result in enumerate(output, 1):
+            if 'metric_name' in result:
+                response += (
+                    f"{i}. **Metric:** {result['metric_name']}\n"
+                    f"   **Category:** {result['category']}\n"
+                    f"   **District:** {result['district']}\n"
+                    f"   **Current Year:** {result['this_year']}\n"
+                    f"   **Last Year:** {result['last_year']}\n"
+                    f"   **Last Updated:** {result['last_data_date']}\n"
+                    f"   **Summary:** {result['summary']}\n\n"
+                )
+            else:
+                content = result["content"]
+                truncated_content = re.sub(
+                    r"\s+", " ", (content[:100] + "...") if len(content) > 100 else content
+                )
+                response += f"{i}. **Content:** {truncated_content}\n\n"
 
     return {"response": response, "results": output}
