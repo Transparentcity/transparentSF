@@ -13,6 +13,7 @@ from qdrant_client.http import models as rest
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+import time
 
 # Create logs directory if it doesn't exist
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -574,6 +575,7 @@ def create_ytd_vector_collection(metrics):
         client = OpenAI(api_key=openai_api_key)
         EMBEDDING_MODEL = "text-embedding-3-large"
         BATCH_SIZE = 100  # Batch size for embeddings and upserts
+        MAX_RETRIES = 3
 
         # Initialize Qdrant client
         qdrant = QdrantClient(host='localhost', port=6333)
@@ -588,19 +590,47 @@ def create_ytd_vector_collection(metrics):
         vector_size = len(sample_response.data[0].embedding)
         logger.info(f"Vector size determined: {vector_size}")
 
-        # Recreate collection
-        if qdrant.collection_exists(collection_name):
-            logger.info(f"Deleting existing {collection_name} collection")
-            qdrant.delete_collection(collection_name)
-        
-        logger.info(f"Creating new {collection_name} collection")
-        qdrant.create_collection(
-            collection_name=collection_name,
-            vectors_config=rest.VectorParams(
-                distance=rest.Distance.COSINE,
-                size=vector_size
-            )
-        )
+        # Attempt to recreate collection with retries
+        for attempt in range(MAX_RETRIES):
+            try:
+                # Check if collection exists
+                if qdrant.collection_exists(collection_name):
+                    logger.info(f"Attempting to delete existing {collection_name} collection (attempt {attempt + 1})")
+                    try:
+                        # Try to delete collection
+                        qdrant.delete_collection(collection_name)
+                        logger.info(f"Successfully deleted {collection_name} collection")
+                    except Exception as delete_error:
+                        logger.error(f"Error deleting collection: {str(delete_error)}")
+                        # If deletion failed, try to recreate with force flag
+                        logger.info("Attempting to recreate collection with force flag")
+                        qdrant.recreate_collection(
+                            collection_name=collection_name,
+                            vectors_config=rest.VectorParams(
+                                distance=rest.Distance.COSINE,
+                                size=vector_size
+                            )
+                        )
+                else:
+                    # Collection doesn't exist, create it normally
+                    logger.info(f"Creating new {collection_name} collection")
+                    qdrant.create_collection(
+                        collection_name=collection_name,
+                        vectors_config=rest.VectorParams(
+                            distance=rest.Distance.COSINE,
+                            size=vector_size
+                        )
+                    )
+                
+                # If we get here, collection creation was successful
+                logger.info("Collection creation/recreation successful")
+                break
+                
+            except Exception as e:
+                logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt == MAX_RETRIES - 1:
+                    raise Exception(f"Failed to create collection after {MAX_RETRIES} attempts")
+                time.sleep(2 ** attempt)  # Exponential backoff
 
         # Prepare batches of texts and their corresponding metadata
         texts_to_embed = []
@@ -695,32 +725,77 @@ def create_ytd_vector_collection(metrics):
         logger.info(f"Processing {total_points} points in batches of {BATCH_SIZE}")
         
         for i in range(0, total_points, BATCH_SIZE):
-            batch_texts = texts_to_embed[i:i + BATCH_SIZE]
-            batch_metadata = metadata_batch[i:i + BATCH_SIZE]
-            
-            # Get embeddings for the batch
-            response = client.embeddings.create(
-                model=EMBEDDING_MODEL,
-                input=batch_texts
-            )
-            embeddings = [data.embedding for data in response.data]
-            
-            # Create points for the batch
-            batch_points = [
-                rest.PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=embedding,
-                    payload=metadata
+            try:
+                # Verify collection exists before processing batch
+                if not qdrant.collection_exists(collection_name):
+                    logger.error("Collection disappeared before batch processing!")
+                    # Try to recreate collection
+                    logger.info("Attempting to recreate collection")
+                    qdrant.create_collection(
+                        collection_name=collection_name,
+                        vectors_config=rest.VectorParams(
+                            distance=rest.Distance.COSINE,
+                            size=vector_size
+                        )
+                    )
+                
+                batch_texts = texts_to_embed[i:i + BATCH_SIZE]
+                batch_metadata = metadata_batch[i:i + BATCH_SIZE]
+                
+                # Get embeddings for the batch
+                response = client.embeddings.create(
+                    model=EMBEDDING_MODEL,
+                    input=batch_texts
                 )
-                for embedding, metadata in zip(embeddings, batch_metadata)
-            ]
-            points_to_upsert.extend(batch_points)
-            
-            # If we've accumulated enough points or this is the last batch, upsert them
-            if len(points_to_upsert) >= BATCH_SIZE or i + BATCH_SIZE >= total_points:
-                logger.info(f"Upserting batch of {len(points_to_upsert)} points")
-                qdrant.upsert(collection_name=collection_name, points=points_to_upsert)
-                points_to_upsert = []  # Clear the batch
+                embeddings = [data.embedding for data in response.data]
+                
+                # Create points for the batch
+                batch_points = [
+                    rest.PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=embedding,
+                        payload=metadata
+                    )
+                    for embedding, metadata in zip(embeddings, batch_metadata)
+                ]
+                points_to_upsert.extend(batch_points)
+                
+                # If we've accumulated enough points or this is the last batch, upsert them
+                if len(points_to_upsert) >= BATCH_SIZE or i + BATCH_SIZE >= total_points:
+                    logger.info(f"Upserting batch of {len(points_to_upsert)} points")
+                    
+                    # Retry upsert operation if it fails
+                    max_upsert_retries = 3
+                    for upsert_attempt in range(max_upsert_retries):
+                        try:
+                            # Verify collection still exists
+                            if not qdrant.collection_exists(collection_name):
+                                raise Exception("Collection disappeared before upsert!")
+                            
+                            # Try the upsert
+                            qdrant.upsert(
+                                collection_name=collection_name,
+                                points=points_to_upsert
+                            )
+                            logger.info(f"Successfully upserted batch of {len(points_to_upsert)} points")
+                            points_to_upsert = []  # Clear the batch
+                            break
+                        except Exception as upsert_error:
+                            logger.error(f"Upsert attempt {upsert_attempt + 1} failed: {str(upsert_error)}")
+                            if upsert_attempt == max_upsert_retries - 1:
+                                raise  # Re-raise the last error if all retries failed
+                            time.sleep(2 ** upsert_attempt)  # Exponential backoff
+                            
+                            # Check collection status
+                            try:
+                                collection_info = qdrant.get_collection(collection_name)
+                                logger.info(f"Collection status after failed upsert: {collection_info}")
+                            except Exception as info_error:
+                                logger.error(f"Failed to get collection info: {str(info_error)}")
+                
+            except Exception as batch_error:
+                logger.error(f"Error processing batch starting at index {i}: {str(batch_error)}")
+                raise
                 
         logger.info("Successfully created YTD vector collection")
 
