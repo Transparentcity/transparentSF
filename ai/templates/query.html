@@ -6,198 +6,362 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
+            margin: 20px;
             background-color: #f5f5f5;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            background-color: white;
             padding: 20px;
+            background-color: white;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        .form-group {
-            margin-bottom: 15px;
+        .query-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #444;
+            margin-bottom: 20px;
         }
         label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin-bottom: 8px;
+            color: #555;
         }
-        input[type="text"], textarea {
+        input[type="text"], select {
             width: 100%;
             padding: 8px;
+            margin-bottom: 15px;
             border: 1px solid #ddd;
             border-radius: 4px;
-            font-family: monospace;
-        }
-        textarea {
-            height: 150px;
-            resize: vertical;
-        }
-        .button-group {
-            margin-top: 15px;
+            box-sizing: border-box;
         }
         button {
-            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            margin-right: 10px;
-            font-weight: bold;
+            font-size: 14px;
         }
-        #executeBtn {
-            background-color: #28a745;
-            color: white;
+        button:hover {
+            background-color: #0056b3;
         }
-        #executeBtn:hover {
-            background-color: #218838;
-        }
-        .format-select {
-            padding: 8px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-        }
-        #result {
+        .results {
             margin-top: 20px;
             padding: 15px;
             border: 1px solid #ddd;
             border-radius: 4px;
-            display: none;
+            background-color: #f9f9f9;
         }
-        #result.visible {
-            display: block;
-        }
-        .info-bar {
-            margin-bottom: 15px;
-            padding: 10px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .table {
-            width: 100%;
-            border-collapse: collapse;
+        .error {
+            color: #dc3545;
             margin-top: 10px;
         }
-        .table th, .table td {
-            padding: 8px;
-            border: 1px solid #ddd;
+        .success {
+            color: #28a745;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
             text-align: left;
+            border-bottom: 1px solid #ddd;
         }
-        .table th {
+        th {
             background-color: #f8f9fa;
+            font-weight: bold;
         }
-        .table-striped tbody tr:nth-of-type(odd) {
-            background-color: rgba(0,0,0,.05);
+        .qdrant-result {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: white;
         }
-        .table-hover tbody tr:hover {
-            background-color: rgba(0,0,0,.075);
+        .score {
+            font-weight: bold;
+            color: #007bff;
         }
-        pre {
+        .filename {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .content {
+            margin-top: 10px;
             white-space: pre-wrap;
-            word-wrap: break-word;
-            background-color: #f8f9fa;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .query-info {
+            background-color: #e9ecef;
             padding: 15px;
             border-radius: 4px;
-            margin: 0;
+            margin-bottom: 15px;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.5;
         }
-        .loading {
-            display: none;
-            margin: 20px 0;
-            text-align: center;
-            color: #666;
+        .results-count {
+            margin: 15px 0;
+            font-weight: bold;
+            color: #28a745;
         }
-        .loading.visible {
-            display: block;
+        .score {
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 5px;
         }
+        .filename {
+            color: #6c757d;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+        .content {
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .qdrant-result {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: white;
+        }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Query Tool</h1>
-        <div class="form-group">
-            <label for="endpoint">Endpoint:</label>
-            <input type="text" id="endpoint" placeholder="e.g., abcd-1234.json" />
+
+        <!-- API Query Section -->
+        <div class="query-section">
+            <h2>API Query</h2>
+            <form id="apiQueryForm">
+                <label for="endpoint">Endpoint:</label>
+                <input type="text" id="endpoint" name="endpoint" placeholder="Enter endpoint" required>
+                
+                <label for="query">Query:</label>
+                <input type="text" id="query" name="query" placeholder="Enter query" required>
+                
+                <label for="format">Format:</label>
+                <select id="format" name="format">
+                    <option value="html">HTML</option>
+                    <option value="markdown">Markdown</option>
+                </select>
+                
+                <button type="submit">Execute API Query</button>
+            </form>
+            <div id="apiResults" class="results" style="display: none;"></div>
         </div>
-        <div class="form-group">
-            <label for="query">Query:</label>
-            <textarea id="query" placeholder="Enter your SoQL query here..."></textarea>
-        </div>
-        <div class="button-group">
-            <select id="format" class="format-select">
-                <option value="html">HTML Table</option>
-                <option value="markdown">Markdown Table</option>
-            </select>
-            <button id="executeBtn">Execute Query</button>
-        </div>
-        
-        <div id="loading" class="loading">
-            Executing query... Please wait...
-        </div>
-        
-        <div id="result">
-            <div class="info-bar">
-                <div>Query URL: <span id="queryUrl"></span></div>
-                <div>Rows returned: <span id="rowCount">0</span></div>
-            </div>
-            <div id="tableResult"></div>
+
+        <!-- Qdrant Query Section -->
+        <div class="query-section">
+            <h2>Semantic Search</h2>
+            <form id="qdrantQueryForm">
+                <label for="collection">Collection:</label>
+                <select id="collection" name="collection" required>
+                    <option value="">Select a collection...</option>
+                </select>
+                
+                <label for="qdrantQuery">Search Query:</label>
+                <input type="text" id="qdrantQuery" name="query" placeholder="Enter semantic search query" required>
+                
+                <label for="limit">Results Limit:</label>
+                <select id="limit" name="limit">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                </select>
+                
+                <button type="submit">Execute Semantic Search</button>
+            </form>
+            <div id="qdrantResults" class="results" style="display: none;"></div>
         </div>
     </div>
 
     <script>
-        document.getElementById('executeBtn').addEventListener('click', async () => {
-            const endpoint = document.getElementById('endpoint').value.trim();
-            const query = document.getElementById('query').value.trim();
-            const format = document.getElementById('format').value;
-            const loading = document.getElementById('loading');
-            const result = document.getElementById('result');
-            const tableResult = document.getElementById('tableResult');
+        // Function to format the API query results
+        function formatApiResults(data) {
+            if (data.status === 'error') {
+                return `<div class="error">${data.message}</div>`;
+            }
             
-            if (!endpoint || !query) {
-                alert('Both endpoint and query are required');
+            let html = `<div class="success">Query executed successfully. Found ${data.rowCount} rows.</div>`;
+            if (data.queryURL) {
+                html += `<div>Query URL: <a href="${data.queryURL}" target="_blank">${data.queryURL}</a></div>`;
+            }
+            html += data.table;
+            return html;
+        }
+
+        // Function to format Qdrant results
+        function formatQdrantResults(data) {
+            if (data.status === 'error') {
+                return `<div class="error">${data.message}</div>`;
+            }
+            
+            let html = '<div class="success">';
+            
+            // Add query info if available
+            if (data.query_info) {
+                html += `
+                    <div class="query-info">
+                        <strong>Query Details:</strong><br>
+                        Collection: ${data.query_info.collection}<br>
+                        Query: "${data.query_info.query}"<br>
+                        Vector Size: ${data.query_info.vector_size}<br>
+                        Total Points in Collection: ${data.query_info.total_points}
+                    </div>
+                `;
+            }
+            
+            html += `<div class="results-count">Found ${data.results.length} results:</div>`;
+            
+            // Show results
+            data.results.forEach(result => {
+                html += `
+                    <div class="qdrant-result">
+                        <div class="score">Similarity Score: ${result.score}</div>
+                        <div class="filename">File: ${result.filename}</div>
+                        <div class="content">${result.content}</div>
+                    </div>
+                `;
+            });
+            
+            return html;
+        }
+
+        // Function to populate collections dropdown
+        function updateCollections(collections, collectionInfo) {
+            const select = document.getElementById('collection');
+            select.innerHTML = '<option value="">Select a collection...</option>';
+            
+            if (!collections || collections.length === 0) {
+                const option = document.createElement('option');
+                option.value = "";
+                option.textContent = "No collections available";
+                option.disabled = true;
+                select.appendChild(option);
                 return;
             }
             
-            // Show loading state
-            loading.classList.add('visible');
-            result.classList.remove('visible');
+            collections.forEach(collection => {
+                const option = document.createElement('option');
+                option.value = collection;
+                const info = collectionInfo && collectionInfo[collection];
+                if (info) {
+                    option.textContent = `${collection} (${info.points_count} points)`;
+                } else {
+                    option.textContent = collection;
+                }
+                select.appendChild(option);
+            });
+        }
+
+        // Handle API query form submission
+        document.getElementById('apiQueryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resultsDiv = document.getElementById('apiResults');
+            resultsDiv.innerHTML = 'Loading...';
+            resultsDiv.style.display = 'block';
             
             try {
-                const formData = new FormData();
-                formData.append('endpoint', endpoint);
-                formData.append('query', query);
-                formData.append('format', format);
-                
+                const formData = new FormData(e.target);
                 const response = await fetch('/backend/execute-query', {
                     method: 'POST',
                     body: formData
                 });
-                
                 const data = await response.json();
-                
-                if (data.status === 'success') {
-                    document.getElementById('queryUrl').textContent = data.queryURL || 'N/A';
-                    document.getElementById('rowCount').textContent = data.rowCount;
-                    
-                    if (format === 'markdown') {
-                        tableResult.innerHTML = `<pre>${data.table}</pre>`;
-                    } else {
-                        tableResult.innerHTML = data.table;
-                    }
-                    
-                    result.classList.add('visible');
-                } else {
-                    alert(`Error: ${data.message}`);
-                }
+                resultsDiv.innerHTML = formatApiResults(data);
             } catch (error) {
-                alert(`Error executing query: ${error.message}`);
-            } finally {
-                loading.classList.remove('visible');
+                resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
             }
         });
+
+        // Handle Qdrant query form submission
+        document.getElementById('qdrantQueryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resultsDiv = document.getElementById('qdrantResults');
+            resultsDiv.innerHTML = 'Loading...';
+            resultsDiv.style.display = 'block';
+            
+            try {
+                const formData = new FormData(e.target);
+                const response = await fetch('/backend/execute-qdrant-query', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                resultsDiv.innerHTML = formatQdrantResults(data);
+                
+                // Update collections dropdown if we got new collections data
+                if (data.collections) {
+                    updateCollections(data.collections, data.collection_info);
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        });
+
+        // Initial load of collections
+        async function loadCollections() {
+            const select = document.getElementById('collection');
+            select.innerHTML = '<option value="">Loading collections...</option>';
+            select.disabled = true;
+            
+            try {
+                const response = await fetch('/backend/execute-qdrant-query', {
+                    method: 'POST',
+                    body: new FormData()
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (data.status === 'error') {
+                    throw new Error(data.message);
+                }
+                
+                if (data.collections) {
+                    updateCollections(data.collections, data.collection_info);
+                } else {
+                    throw new Error('No collections data received');
+                }
+            } catch (error) {
+                console.error('Error loading collections:', error);
+                select.innerHTML = '<option value="">Error loading collections</option>';
+            } finally {
+                select.disabled = false;
+            }
+        }
+
+        // Load collections when page loads
+        loadCollections();
     </script>
 </body>
 </html>

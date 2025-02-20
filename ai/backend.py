@@ -20,6 +20,8 @@ from generate_dashboard_metrics import main as generate_metrics
 from tools.data_fetcher import fetch_data_from_api
 import pandas as pd
 from pathlib import Path
+from openai import OpenAI
+from qdrant_client import QdrantClient
 
 # Configure logging
 logging.basicConfig(
@@ -871,3 +873,130 @@ async def get_log_file(filename: str):
     except Exception as e:
         logger.exception(f"Error serving log file: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/execute-qdrant-query")
+async def execute_qdrant_query(request: Request):
+    """Execute a semantic search query using Qdrant."""
+    try:
+        form_data = await request.form()
+        collection_name = form_data.get('collection', '').strip()
+        query = form_data.get('query', '').strip()
+        
+        # Connect to Qdrant
+        qdrant = QdrantClient(host='localhost', port=6333)
+        
+        # If no parameters provided, just return collections list
+        if not collection_name and not query:
+            collections = [c.name for c in qdrant.get_collections().collections]
+            collections.sort()  # Sort alphabetically
+            logger.info(f"Available collections: {collections}")
+            
+            # Get collection info
+            collection_info = {}
+            for coll in collections:
+                try:
+                    info = qdrant.get_collection(coll)
+                    points_count = info.points_count
+                    collection_info[coll] = {
+                        "points_count": points_count,
+                        "vector_size": info.config.params.vectors.size
+                    }
+                    logger.info(f"Collection {coll}: {points_count} points, vector size: {info.config.params.vectors.size}")
+                except Exception as e:
+                    logger.error(f"Error getting info for collection {coll}: {e}")
+                    
+            return JSONResponse({
+                'status': 'success',
+                'collections': collections,
+                'collection_info': collection_info,
+                'results': []
+            })
+        
+        # For actual search, require both parameters
+        if not collection_name or not query:
+            return JSONResponse({
+                'status': 'error',
+                'message': 'Both collection and query are required for search'
+            })
+            
+        limit = int(form_data.get('limit', '5'))
+        logger.info(f"Searching collection '{collection_name}' for query: '{query}' (limit: {limit})")
+            
+        # Get embedding for query
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.embeddings.create(
+            model="text-embedding-3-large",
+            input=query
+        )
+        query_vector = response.data[0].embedding
+        logger.debug(f"Generated query vector of size {len(query_vector)}")
+        
+        # Get collection info before search
+        collection_info = qdrant.get_collection(collection_name)
+        logger.info(f"Collection {collection_name} has {collection_info.points_count} points")
+        
+        # Query Qdrant with lower score threshold
+        search_result = qdrant.search(
+            collection_name=collection_name,
+            query_vector=query_vector,
+            limit=limit,
+            score_threshold=0.1  # Lower threshold to catch more potential matches
+        )
+        
+        logger.info(f"Found {len(search_result)} results")
+        
+        # Format results with score interpretation
+        results = []
+        for hit in search_result:
+            score = round(hit.score, 3)
+            # Add score interpretation
+            if score >= 0.5:
+                relevance = "Very High"
+            elif score >= 0.3:
+                relevance = "High"
+            elif score >= 0.2:
+                relevance = "Medium"
+            elif score >= 0.1:
+                relevance = "Low"
+            else:
+                relevance = "Very Low"
+                
+            result = {
+                'score': score,
+                'relevance': relevance,
+                'filename': hit.payload.get('filename', 'N/A'),
+                'content': hit.payload.get('content', 'No content')[:500] + '...'  # First 500 chars
+            }
+            logger.debug(f"Result: score={score} ({relevance}), file={result['filename']}")
+            results.append(result)
+            
+        # Get list of available collections
+        collections = [c.name for c in qdrant.get_collections().collections]
+        collections.sort()  # Sort alphabetically
+            
+        return JSONResponse({
+            'status': 'success',
+            'results': results,
+            'collections': collections,
+            'query_info': {
+                'collection': collection_name,
+                'query': query,
+                'vector_size': len(query_vector),
+                'total_points': collection_info.points_count,
+                'score_guide': {
+                    '0.5+': 'Very High Relevance',
+                    '0.3-0.5': 'High Relevance',
+                    '0.2-0.3': 'Medium Relevance',
+                    '0.1-0.2': 'Low Relevance',
+                    '<0.1': 'Very Low Relevance'
+                }
+            }
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error executing Qdrant query: {str(e)}")
+        return JSONResponse({
+            'status': 'error',
+            'message': str(e)
+        })

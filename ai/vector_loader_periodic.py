@@ -12,6 +12,7 @@ import qdrant_client
 from qdrant_client.http import models as rest
 from dotenv import load_dotenv
 import tiktoken  # For counting tokens
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ------------------------------
 # Configure Logging
@@ -77,23 +78,17 @@ LOCATIONS = ['citywide'] + [f'district_{i}' for i in range(1, 12)]  # districts 
 # ------------------------------
 
 def split_text_into_chunks(text, max_tokens=8192):
-    """
-    Splits text into chunks that fit within the token limit.
-    Uses tiktoken to count tokens accurately.
-    """
+    """Splits text into chunks that fit within the token limit."""
     tokenizer = tiktoken.encoding_for_model(EMBEDDING_MODEL)
     tokens = tokenizer.encode(text)
     total_tokens = len(tokens)
-    logger.debug(f"Total tokens in text: {total_tokens}")
-
+    
     chunks = []
     for i in range(0, total_tokens, max_tokens):
         chunk_tokens = tokens[i:i + max_tokens]
         chunk_text = tokenizer.decode(chunk_tokens)
         chunks.append(chunk_text)
-        logger.debug(f"Created chunk {len(chunks)} with tokens {i} to {i + len(chunk_tokens)}")
-
-    logger.info(f"Split text into {len(chunks)} chunks.")
+    
     return chunks
 
 def get_embedding(text, retries=3, delay=5):
@@ -159,59 +154,202 @@ def recreate_collection(collection_name, vector_size):
         logger.error(f"Failed to recreate collection '{collection_name}': {e}")
         raise
 
-def process_directory(directory_path, collection_name, qdrant_client, vector_size):
-    """
-    Process all markdown files in a directory and load them into a Qdrant collection.
-    """
-    logger.info(f"Processing directory {directory_path} for collection {collection_name}")
+def parse_markdown_content(content):
+    """Parse markdown content to extract structured information."""
+    # Extract title (first h1)
+    title_match = re.search(r'^# (.+)$', content, re.MULTILINE)
+    title = title_match.group(1) if title_match else ""
     
-    # Gather all .md files in the directory (not including subdirectories)
+    # Extract query URL and description
+    query_url = ""
+    description = ""
+    query_match = re.search(r'\*\*Query URL:\*\* (.+?)(?=\n\n|\Z)', content)
+    desc_match = re.search(r'\*\*Description:\*\* (.+?)(?=\n\n|\Z)', content)
+    
+    if query_match:
+        query_url = query_match.group(1)
+    if desc_match:
+        description = desc_match.group(1)
+    
+    # Extract column metadata
+    column_metadata = []
+    column_section = re.search(r'## Column Metadata\n\n\|.+?\n\|[-\s\|]+\n((?:\|[^\n]+\n)+)', content)
+    if column_section:
+        table_rows = column_section.group(1).strip().split('\n')
+        for row in table_rows:
+            cells = [cell.strip() for cell in row.split('|')[1:-1]]
+            if len(cells) >= 3:  # Field Name, Description, Data Type
+                column_metadata.append({
+                    'name': cells[0],
+                    'description': cells[1],
+                    'type': cells[2] if len(cells) > 2 else ''
+                })
+
+    return {
+        'title': title,
+        'query_url': query_url,
+        'description': description,
+        'column_metadata': column_metadata
+    }
+
+def parse_file(md_file):
+    """Parse a single markdown file."""
+    try:
+        with open(md_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        parsed = parse_markdown_content(content)
+        # Add the full content to the parsed data
+        parsed['full_content'] = content
+        return content, parsed
+    except Exception as e:
+        logger.error(f"Error reading {md_file}: {e}")
+        return None, None
+
+def create_embedding_text(parsed):
+    """Create the text to be embedded."""
+    embedding_parts = []
+    
+    if parsed['title']:
+        embedding_parts.extend([
+            f"Title: {parsed['title']}",
+            f"This document primarily contains data about: {parsed['title']}"
+        ])
+    
+    if parsed['description']:
+        embedding_parts.extend([
+            f"Description: {parsed['description']}",
+            f"This dataset provides: {parsed['description']}"
+        ])
+    
+    if parsed['column_metadata']:
+        embedding_parts.append("The dataset contains the following data fields:")
+        for col in parsed['column_metadata']:
+            embedding_parts.append(f"- {col['name']}: {col['description']}")
+    
+    # Add the full content at the end
+    if parsed.get('full_content'):
+        embedding_parts.append("Full content:")
+        embedding_parts.append(parsed['full_content'])
+    
+    return "\n\n".join(embedding_parts)
+
+def create_payload(md_file, parsed):
+    """Create the payload for a point."""
+    return {
+        "filename": os.path.basename(md_file),
+        "filepath": md_file,
+        "title": parsed['title'],
+        "description": parsed['description'],
+        "query_url": parsed['query_url'],
+        "column_metadata": parsed['column_metadata'],
+        "column_names": [col['name'].lower() for col in parsed['column_metadata']]
+    }
+
+def get_embeddings_batch(texts, batch_size=20):
+    """Generate embeddings for multiple texts in batches, handling large texts via chunking."""
+    all_embeddings = []
+    
+    for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i:i + batch_size]
+        batch_embeddings = []
+        
+        # Process each text in the batch
+        for text in batch_texts:
+            # Split into chunks if needed
+            chunks = split_text_into_chunks(text)
+            chunk_embeddings = []
+            
+            # Get embeddings for chunks
+            try:
+                response = client.embeddings.create(
+                    model=EMBEDDING_MODEL,
+                    input=chunks
+                )
+                chunk_embeddings = [data.embedding for data in response.data]
+                
+                # Average the chunk embeddings
+                if chunk_embeddings:
+                    averaged_embedding = [sum(col) / len(col) for col in zip(*chunk_embeddings)]
+                    batch_embeddings.append(averaged_embedding)
+                else:
+                    batch_embeddings.append(None)
+                    
+            except Exception as e:
+                logger.error(f"Error in batch {i//batch_size + 1}: {e}")
+                batch_embeddings.append(None)
+        
+        all_embeddings.extend(batch_embeddings)
+        logger.debug(f"Processed batch {i//batch_size + 1}")
+    
+    return all_embeddings
+
+def process_directory(directory_path, collection_name, qdrant_client, vector_size):
+    """Process files in parallel with batched embeddings."""
     all_md_files = glob.glob(os.path.join(directory_path, '*.md'))
     if not all_md_files:
-        logger.warning(f"No .md files found under {directory_path}. Skipping collection.")
         return False
 
-    logger.info(f"Found {len(all_md_files)} .md files to process for {collection_name}")
-
-    # Create or recreate the collection
     recreate_collection(collection_name, vector_size)
-
-    # Build and upsert points
-    points_to_upsert = []
-    for idx, md_file in enumerate(all_md_files, start=1):
-        logger.info(f"Processing file {idx}/{len(all_md_files)}: {md_file}")
-        try:
-            with open(md_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
-            logger.error(f"Error reading {md_file}: {e}")
-            continue
-
-        embedding = get_embedding(content)
-        if not embedding:
-            logger.error(f"Failed to generate embedding for file {md_file}. Skipping.")
-            continue
-
-        payload = {
-            "filename": os.path.basename(md_file),
-            "filepath": md_file,
-            "content": content
+    
+    # Prepare all files first
+    file_contents = []
+    parsed_contents = []
+    
+    # Read and parse all files in parallel
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_file = {
+            executor.submit(parse_file, md_file): md_file 
+            for md_file in all_md_files
         }
+        
+        for future in as_completed(future_to_file):
+            md_file = future_to_file[future]
+            try:
+                content, parsed = future.result()
+                if content and parsed:
+                    file_contents.append(content)
+                    parsed_contents.append((md_file, parsed))
+            except Exception as e:
+                logger.error(f"Error processing {md_file}: {e}")
 
-        point_id = str(uuid.uuid4())
-        point = rest.PointStruct(id=point_id, vector=embedding, payload=payload)
-        points_to_upsert.append(point)
+    # Generate embeddings in batches
+    embedding_texts = [
+        create_embedding_text(parsed[1])  # Create the text to embed
+        for parsed in parsed_contents
+    ]
+    
+    embeddings = get_embeddings_batch(embedding_texts)
 
+    # Create points
+    points_to_upsert = []
+    for (md_file, parsed), embedding in zip(parsed_contents, embeddings):
+        if embedding is None:
+            continue
+            
+        payload = create_payload(md_file, parsed)
+        payload['content'] = parsed['full_content']  # Add full content to payload
+        points_to_upsert.append(
+            rest.PointStruct(
+                id=str(uuid.uuid4()),
+                vector=embedding,
+                payload=payload
+            )
+        )
+
+    # Batch upsert points
     if points_to_upsert:
         try:
-            qdrant_client.upsert(collection_name=collection_name, points=points_to_upsert)
-            logger.info(f"Successfully upserted {len(points_to_upsert)} documents into '{collection_name}'")
+            batch_size = 100
+            for i in range(0, len(points_to_upsert), batch_size):
+                batch = points_to_upsert[i:i + batch_size]
+                qdrant_client.upsert(
+                    collection_name=collection_name,
+                    points=batch
+                )
             return True
         except Exception as e:
-            logger.error(f"Error upserting points into '{collection_name}': {e}")
+            logger.error(f"Error upserting points: {e}")
             return False
-    
-    return False
 
 def clear_existing_collections(qdrant_client):
     """
