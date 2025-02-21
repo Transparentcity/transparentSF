@@ -365,6 +365,7 @@ def clear_existing_collections(qdrant_client):
             if collection_name != "SFPublicData":
                 logger.info(f"Deleting collection: {collection_name}")
                 qdrant_client.delete_collection(collection_name)
+                time.sleep(2)  # Wait for deletion to complete
         logger.info("Finished clearing existing collections")
     except Exception as e:
         logger.error(f"Error clearing collections: {e}")
