@@ -433,6 +433,17 @@ def load_vectors(base_path, timeframe=None):
         logger.error(f"Error in load_vectors: {e}")
         return False
 
+def retry_operation(operation, max_retries=3, delay=2):
+    """Retry an operation with exponential backoff."""
+    for attempt in range(max_retries):
+        try:
+            return operation()
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            logger.warning(f"Attempt {attempt + 1} failed: {e}")
+            time.sleep(delay * (2 ** attempt))
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Load vectors into Qdrant collections')
     parser.add_argument('--timeframe', choices=TIMEFRAMES, help='Specify timeframe to process (annual, monthly, or daily)')
