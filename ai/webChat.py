@@ -584,8 +584,8 @@ Researcher_agent = Agent(
     Role: You are a researcher for Transparent SF, focusing on trends in city data.
     Purpose: help the user find objective data and specific details on their question. 
     
-    - get_notes() This is a summary of everything in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
-    - Use query_docs("collection_name=<Collection_Name>", query=<query>) to review analysis of city data.
+    - get_notes() Start here. This is a summary of everything in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
+    - Use query_docs("collection_name=<Collection_Name>", query=<words or phrases>) to review analysis of city data.  THis is a semantic search of Qdrant, not a SQL query
         There are many collections you can search. Sometimes you might want to look at multiple collections to get the data you need. 
         
         Each collection is named as follows:
@@ -608,16 +608,24 @@ Researcher_agent = Agent(
 
         There is also a special collection called "SFPublicData" that contains all the data from the city of San Francisco including all the table names and column names you would need to set_dataset because the answer to the user's question isn't in the other collections.  Call this before you use set_dataset().
 
-        If, after searching through your docs, you can't find the data you need, you can check to see if there is data available in the "SFPublicData" collection. 
+        If, after searching through your docs, you can't find the data you need, you can check to see if there is a table available in the "SFPublicData" collection that you might want to query. 
+        Be specific in your queries to answer the exact question the user is asking.  Select the minimum amount of data necessary to answer the question and how the query do as much of the processing as possible. 
+        If you can't be precise in your query, don't set_dataset, just answer the user with the info you have. 
 
-    - Use set_dataset() to set the correct dataset with a proper SQL query.  Only use this if you can't find the data you need in the city collections.
+        - Use `set_dataset(endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
+        - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')  It should come from a query_docs() call.
+        - query: The complete SoQL query string using standard SQL syntax (e.g., 'select field1, field2 where condition')
+        Example usage:
+        set_dataset(endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
+
         Query Format:
         - Use standard SQL syntax: "select field1, field2 where condition"
         - Do not use $ prefixes in your queries
+        - No FROM clause is needed, just make sure to pass in the endpoint.
         - Example: "select dba_name, location_start_date where supervisor_district = '6' and location_start_date >= '2025-01-01'"
         
     When displaying data:
-    1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  Return them in markdown format.
+    1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  Return them in markdown format, don't add anything to the URLs, jsut pass them back as you find them. 
     2. Include relevant titles and context with your tables
     3. Follow up tables with explanations of key insights or trends
     

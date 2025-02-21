@@ -96,7 +96,7 @@ output_folder = os.path.join(script_dir, 'output/')
 # ------------------------------
 # Collection Names Configuration
 # ------------------------------
-TIMEFRAMES = ['annual', 'monthly', 'daily']
+TIMEFRAMES = ['annual', 'monthly']
 LOCATIONS = ['citywide'] + [f'district_{i}' for i in range(1, 12)]  # districts 1-11
 
 # ------------------------------

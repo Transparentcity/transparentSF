@@ -28,7 +28,7 @@ def trim_results_to_token_limit(results: List[Dict], max_tokens: int = 100000) -
             
     return trimmed_results
 
-def query_qdrant(query, collection_name, top_k=4, score_threshold=0.35):
+def query_qdrant(query, collection_name, top_k=4, score_threshold=0.25):
     try:
         embedded_query = get_embedding(query)
         if not embedded_query:
