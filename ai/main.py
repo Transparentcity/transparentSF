@@ -26,7 +26,10 @@ app.add_middleware(
     allow_origins=[
         "https://transparentsf.com",
         "https://*.transparentsf.com",
-        "https://*.replit.app"
+        "https://*.replit.app",
+        "http://localhost:8081",
+        "https://*.replit.dev",
+        "http://c8f21de5-50d5-4932-9f30-db3b51e8af74-00-3cldcjjo20ql9.riker.replit.dev"
     ],  # Only allow specific origins
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods
