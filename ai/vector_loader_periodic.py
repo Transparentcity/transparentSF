@@ -137,9 +137,22 @@ def recreate_collection(collection_name, vector_size):
         # Check if collection exists
         if qdrant.collection_exists(collection_name):
             logger.info(f"Collection '{collection_name}' exists, deleting...")
-            qdrant.delete_collection(collection_name)
+            try:
+                qdrant.delete_collection(collection_name)
+            except Exception as e:
+                # Check if it's just the cross-device link warning
+                if "Invalid cross-device link" in str(e):
+                    logger.info(f"Ignoring cross-device warning for {collection_name} deletion - continuing...")
+                else:
+                    logger.error(f"Error deleting collection '{collection_name}': {e}")
+                    raise
+            
+            # Wait and verify deletion
             time.sleep(2)  # Wait for deletion to complete
-            logger.info(f"Collection '{collection_name}' deleted.")
+            if not qdrant.collection_exists(collection_name):
+                logger.info(f"Collection '{collection_name}' deleted successfully.")
+            else:
+                logger.warning(f"Collection '{collection_name}' may still exist after deletion attempt.")
         
         # Create new collection
         logger.info(f"Creating collection '{collection_name}' with vector size {vector_size}")
@@ -357,18 +370,40 @@ def process_directory(directory_path, collection_name, qdrant_client, vector_siz
 def clear_existing_collections(qdrant_client):
     """
     Clear all existing collections except SFPublicData.
+    Handles cross-device link warnings gracefully.
     """
     try:
         collections = qdrant_client.get_collections().collections
         for collection in collections:
             collection_name = collection.name
             if collection_name != "SFPublicData":
-                logger.info(f"Deleting collection: {collection_name}")
-                qdrant_client.delete_collection(collection_name)
+                try:
+                    logger.info(f"Deleting collection: {collection_name}")
+                    qdrant_client.delete_collection(collection_name)
+                except Exception as e:
+                    if "Invalid cross-device link" in str(e):
+                        logger.info(f"Ignoring cross-device warning for {collection_name} deletion - continuing...")
+                    else:
+                        logger.error(f"Error deleting collection {collection_name}: {e}")
+                        continue
+                
+                # Wait and verify deletion
                 time.sleep(2)  # Wait for deletion to complete
-        logger.info("Finished clearing existing collections")
+                if not qdrant_client.collection_exists(collection_name):
+                    logger.info(f"Collection {collection_name} deleted successfully")
+                else:
+                    logger.warning(f"Collection {collection_name} may still exist after deletion attempt")
+        
+        # Verify final state
+        remaining = qdrant_client.get_collections().collections
+        remaining_names = [c.name for c in remaining if c.name != "SFPublicData"]
+        if remaining_names:
+            logger.warning(f"Collections remaining after cleanup: {remaining_names}")
+        else:
+            logger.info("All target collections cleared successfully")
+            
     except Exception as e:
-        logger.error(f"Error clearing collections: {e}")
+        logger.error(f"Error during collection cleanup: {e}")
         raise
 
 def get_directory_path(base_path, timeframe, location):
