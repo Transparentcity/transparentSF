@@ -21,13 +21,40 @@ log_dir = os.path.join(script_dir, 'logs')
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, 'vector_loader.log')
 
+# Create a custom formatter with colors
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with terminal colors"""
+    grey = "\x1b[38;20m"
+    yellow = "\x1b[33;20m"
+    red = "\x1b[31;20m"
+    bold_red = "\x1b[31;1m"
+    reset = "\x1b[0m"
+    format_str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+    FORMATS = {
+        logging.DEBUG: grey + format_str + reset,
+        logging.INFO: grey + format_str + reset,
+        logging.WARNING: yellow + format_str + reset,
+        logging.ERROR: red + format_str + reset,
+        logging.CRITICAL: bold_red + format_str + reset
+    }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+# Configure handlers
+file_handler = logging.FileHandler(log_file)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(ColoredFormatter())
+
+# Configure root logger
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),  # Log to file
-        logging.StreamHandler(sys.stdout)  # Also log to console
-    ]
+    handlers=[file_handler, console_handler]
 )
 
 logger = logging.getLogger(__name__)
@@ -77,17 +104,23 @@ LOCATIONS = ['citywide'] + [f'district_{i}' for i in range(1, 12)]  # districts 
 # ------------------------------
 
 def split_text_into_chunks(text, max_tokens=8192):
-    """Splits text into chunks that fit within the token limit."""
+    """
+    Splits text into chunks that fit within the token limit.
+    Uses tiktoken to count tokens accurately.
+    """
     tokenizer = tiktoken.encoding_for_model(EMBEDDING_MODEL)
     tokens = tokenizer.encode(text)
     total_tokens = len(tokens)
-    
+    logger.debug(f"Total tokens in text: {total_tokens}")
+
     chunks = []
     for i in range(0, total_tokens, max_tokens):
         chunk_tokens = tokens[i:i + max_tokens]
         chunk_text = tokenizer.decode(chunk_tokens)
         chunks.append(chunk_text)
-    
+        logger.debug(f"Created chunk {len(chunks)} with tokens {i} to {i + len(chunk_tokens)}")
+
+    logger.info(f"Split text into {len(chunks)} chunks.")
     return chunks
 
 def get_embedding(text, retries=3, delay=5):
@@ -133,268 +166,154 @@ def get_embedding(text, retries=3, delay=5):
 def recreate_collection(collection_name, vector_size):
     """Delete if exists and recreate the collection."""
     try:
-        # Check if collection exists
-        if qdrant.collection_exists(collection_name):
-            logger.info(f"Collection '{collection_name}' exists, deleting...")
-            try:
-                qdrant.delete_collection(collection_name)
-                time.sleep(2)  # Simple wait after deletion
-            except Exception as e:
-                if "Invalid cross-device link" in str(e):
-                    logger.info(f"Ignoring cross-device warning for {collection_name} deletion - continuing...")
-                else:
-                    logger.error(f"Error deleting collection '{collection_name}': {e}")
-                    raise
-        
-        # Simple create without retries - matching sfpublic approach
-        logger.info(f"Creating collection '{collection_name}' with vector size {vector_size}")
-        qdrant.create_collection(
+        existing = qdrant.get_collection(collection_name)
+        if existing:
+            qdrant.delete_collection(collection_name)
+            logger.info(f"Deleted existing collection '{collection_name}'.")
+    except Exception as e:
+        logger.warning(f"Collection '{collection_name}' does not exist or could not be deleted: {e}")
+    
+    try:
+        qdrant.recreate_collection(
             collection_name=collection_name,
             vectors_config=rest.VectorParams(
                 distance=rest.Distance.COSINE,
                 size=vector_size,
-            ),
-            timeout=60
+            )
         )
-        logger.info(f"Collection '{collection_name}' created successfully.")
-        
+        logger.info(f"Collection '{collection_name}' recreated with vector size {vector_size}.")
     except Exception as e:
         logger.error(f"Failed to recreate collection '{collection_name}': {e}")
         raise
 
-def parse_markdown_content(content):
-    """Parse markdown content to extract structured information."""
-    # Extract title (first h1)
-    title_match = re.search(r'^# (.+)$', content, re.MULTILINE)
-    title = title_match.group(1) if title_match else ""
+def extract_metadata_from_content(content):
+    """
+    Extract metadata like title, description, and data columns from markdown content.
+    """
+    metadata = {
+        "title": "",
+        "description": "",
+        "columns": [],
+        "time_period": "",
+        "data_source": "",
+        "analysis_type": "",
+        "key_findings": []
+    }
     
-    # Extract query URL and description
-    query_url = ""
-    description = ""
-    query_match = re.search(r'\*\*Query URL:\*\* (.+?)(?=\n\n|\Z)', content)
-    desc_match = re.search(r'\*\*Description:\*\* (.+?)(?=\n\n|\Z)', content)
+    # Try to extract title (first # heading)
+    title_match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+    if title_match:
+        metadata["title"] = title_match.group(1).strip()
     
-    if query_match:
-        query_url = query_match.group(1)
+    # Try to extract description (text after title before next heading)
+    desc_match = re.search(r'^#\s+.+\n\n(.*?)(?=\n#|\Z)', content, re.MULTILINE | re.DOTALL)
     if desc_match:
-        description = desc_match.group(1)
+        metadata["description"] = desc_match.group(1).strip()
     
-    # Extract column metadata
-    column_metadata = []
-    column_section = re.search(r'## Column Metadata\n\n\|.+?\n\|[-\s\|]+\n((?:\|[^\n]+\n)+)', content)
-    if column_section:
-        table_rows = column_section.group(1).strip().split('\n')
-        for row in table_rows:
-            cells = [cell.strip() for cell in row.split('|')[1:-1]]
-            if len(cells) >= 3:  # Field Name, Description, Data Type
-                column_metadata.append({
-                    'name': cells[0],
-                    'description': cells[1],
-                    'type': cells[2] if len(cells) > 2 else ''
-                })
-
-    return {
-        'title': title,
-        'query_url': query_url,
-        'description': description,
-        'column_metadata': column_metadata
-    }
-
-def parse_file(md_file):
-    """Parse a single markdown file."""
-    try:
-        with open(md_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        parsed = parse_markdown_content(content)
-        # Add the full content to the parsed data
-        parsed['full_content'] = content
-        return content, parsed
-    except Exception as e:
-        logger.error(f"Error reading {md_file}: {e}")
-        return None, None
-
-def create_embedding_text(parsed):
-    """Create the text to be embedded."""
-    embedding_parts = []
+    # Try to extract column names from any markdown tables
+    table_headers = re.findall(r'\|(.*?)\|[\r\n][-|\s]+[\r\n]', content)
+    if table_headers:
+        # Clean and split the header row
+        columns = [col.strip() for col in table_headers[0].split('|') if col.strip()]
+        metadata["columns"] = columns
     
-    if parsed['title']:
-        embedding_parts.extend([
-            f"Title: {parsed['title']}",
-            f"This document primarily contains data about: {parsed['title']}"
-        ])
+    # Try to extract time period
+    time_match = re.search(r'(?i)period:\s*(\d{4}(?:-\d{4})?|Q[1-4]\s*\d{4}|[A-Za-z]+\s*\d{4})', content)
+    if time_match:
+        metadata["time_period"] = time_match.group(1)
     
-    if parsed['description']:
-        embedding_parts.extend([
-            f"Description: {parsed['description']}",
-            f"This dataset provides: {parsed['description']}"
-        ])
+    # Try to extract key findings (bullet points after "Key Findings" heading)
+    findings_match = re.search(r'(?i)#*\s*key\s+findings\s*\n((?:\s*[-*]\s*[^\n]+\n*)+)', content)
+    if findings_match:
+        findings = re.findall(r'[-*]\s*([^\n]+)', findings_match.group(1))
+        metadata["key_findings"] = [f.strip() for f in findings]
     
-    if parsed['column_metadata']:
-        embedding_parts.append("The dataset contains the following data fields:")
-        for col in parsed['column_metadata']:
-            embedding_parts.append(f"- {col['name']}: {col['description']}")
-    
-    # Add the full content at the end
-    if parsed.get('full_content'):
-        embedding_parts.append("Full content:")
-        embedding_parts.append(parsed['full_content'])
-    
-    return "\n\n".join(embedding_parts)
-
-def create_payload(md_file, parsed):
-    """Create the payload for a point."""
-    return {
-        "filename": os.path.basename(md_file),
-        "filepath": md_file,
-        "title": parsed['title'],
-        "description": parsed['description'],
-        "query_url": parsed['query_url'],
-        "column_metadata": parsed['column_metadata'],
-        "column_names": [col['name'].lower() for col in parsed['column_metadata']]
-    }
-
-def get_embeddings_batch(texts, batch_size=20):
-    """Generate embeddings for multiple texts in batches, handling large texts via chunking."""
-    all_embeddings = []
-    
-    for i in range(0, len(texts), batch_size):
-        batch_texts = texts[i:i + batch_size]
-        batch_embeddings = []
-        
-        # Process each text in the batch
-        for text in batch_texts:
-            # Split into chunks if needed
-            chunks = split_text_into_chunks(text)
-            chunk_embeddings = []
-            
-            # Get embeddings for chunks
-            try:
-                response = client.embeddings.create(
-                    model=EMBEDDING_MODEL,
-                    input=chunks
-                )
-                chunk_embeddings = [data.embedding for data in response.data]
-                
-                # Average the chunk embeddings
-                if chunk_embeddings:
-                    averaged_embedding = [sum(col) / len(col) for col in zip(*chunk_embeddings)]
-                    batch_embeddings.append(averaged_embedding)
-                else:
-                    batch_embeddings.append(None)
-                    
-            except Exception as e:
-                logger.error(f"Error in batch {i//batch_size + 1}: {e}")
-                batch_embeddings.append(None)
-        
-        all_embeddings.extend(batch_embeddings)
-        logger.debug(f"Processed batch {i//batch_size + 1}")
-    
-    return all_embeddings
+    return metadata
 
 def process_directory(directory_path, collection_name, qdrant_client, vector_size):
-    """Process files sequentially."""
+    """
+    Process all markdown files in a directory and load them into a Qdrant collection.
+    """
+    logger.info(f"Processing directory {directory_path} for collection {collection_name}")
+    
+    # Gather all .md files in the directory (not including subdirectories)
     all_md_files = glob.glob(os.path.join(directory_path, '*.md'))
     if not all_md_files:
+        logger.warning(f"No .md files found under {directory_path}. Skipping collection.")
         return False
 
+    logger.info(f"Found {len(all_md_files)} .md files to process for {collection_name}")
+
+    # Create or recreate the collection
     recreate_collection(collection_name, vector_size)
-    
-    # Process files sequentially
-    file_contents = []
-    parsed_contents = []
-    
-    for md_file in all_md_files:
-        try:
-            content, parsed = parse_file(md_file)
-            if content and parsed:
-                file_contents.append(content)
-                parsed_contents.append((md_file, parsed))
-        except Exception as e:
-            logger.error(f"Error processing {md_file}: {e}")
 
-    # Generate embeddings for each file
+    # Build and upsert points
     points_to_upsert = []
-    for md_file, parsed in parsed_contents:
+    for idx, md_file in enumerate(all_md_files, start=1):
+        logger.info(f"Processing file {idx}/{len(all_md_files)}: {md_file}")
         try:
-            # Create embedding text and get embedding
-            embedding_text = create_embedding_text(parsed)
-            embedding = get_embedding(embedding_text)
-            
-            if embedding is None:
-                logger.error(f"Failed to generate embedding for {md_file}")
-                continue
-                
-            # Create payload and point
-            payload = create_payload(md_file, parsed)
-            payload['content'] = parsed['full_content']
-            
-            points_to_upsert.append(
-                rest.PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=embedding,
-                    payload=payload
-                )
-            )
-            logger.info(f"Successfully processed {md_file}")
-            
+            with open(md_file, 'r', encoding='utf-8') as f:
+                content = f.read()
         except Exception as e:
-            logger.error(f"Error processing {md_file}: {e}")
+            logger.error(f"Error reading {md_file}: {e}")
+            continue
 
-    # Batch upsert points
+        embedding = get_embedding(content)
+        if not embedding:
+            logger.error(f"Failed to generate embedding for file {md_file}. Skipping.")
+            continue
+
+        # Extract metadata from content
+        metadata = extract_metadata_from_content(content)
+        
+        # Create enhanced payload
+        payload = {
+            "filename": os.path.basename(md_file),
+            "filepath": md_file,
+            "content": content,
+            "title": metadata["title"],
+            "description": metadata["description"],
+            "columns": metadata["columns"],
+            "time_period": metadata["time_period"],
+            "key_findings": metadata["key_findings"],
+            "collection_type": collection_name.split('_')[0],  # annual/monthly/daily
+            "location": '_'.join(collection_name.split('_')[1:]),  # citywide or district_X
+            "last_updated": time.strftime('%Y-%m-%d %H:%M:%S'),
+            "file_size": os.path.getsize(md_file),
+            "embedding_model": EMBEDDING_MODEL
+        }
+
+        point_id = str(uuid.uuid4())
+        point = rest.PointStruct(id=point_id, vector=embedding, payload=payload)
+        points_to_upsert.append(point)
+        
+        logger.info(f"Extracted metadata for {os.path.basename(md_file)}: {metadata['title']}")
+
     if points_to_upsert:
         try:
-            batch_size = 100
-            for i in range(0, len(points_to_upsert), batch_size):
-                batch = points_to_upsert[i:i + batch_size]
-                qdrant_client.upsert(
-                    collection_name=collection_name,
-                    points=batch
-                )
-                logger.info(f"Uploaded batch {i//batch_size + 1} of points")
+            qdrant_client.upsert(collection_name=collection_name, points=points_to_upsert)
+            logger.info(f"Successfully upserted {len(points_to_upsert)} documents into '{collection_name}'")
             return True
         except Exception as e:
-            logger.error(f"Error upserting points: {e}")
+            logger.error(f"Error upserting points into '{collection_name}': {e}")
             return False
     
-    return True
+    return False
 
 def clear_existing_collections(qdrant_client):
     """
     Clear all existing collections except SFPublicData.
-    Handles cross-device link warnings gracefully.
     """
     try:
         collections = qdrant_client.get_collections().collections
         for collection in collections:
             collection_name = collection.name
             if collection_name != "SFPublicData":
-                try:
-                    logger.info(f"Deleting collection: {collection_name}")
-                    qdrant_client.delete_collection(collection_name)
-                except Exception as e:
-                    if "Invalid cross-device link" in str(e):
-                        logger.info(f"Ignoring cross-device warning for {collection_name} deletion - continuing...")
-                    else:
-                        logger.error(f"Error deleting collection {collection_name}: {e}")
-                        continue
-                
-                # Wait and verify deletion
-                time.sleep(2)  # Wait for deletion to complete
-                if not qdrant_client.collection_exists(collection_name):
-                    logger.info(f"Collection {collection_name} deleted successfully")
-                else:
-                    logger.warning(f"Collection {collection_name} may still exist after deletion attempt")
-        
-        # Verify final state
-        remaining = qdrant_client.get_collections().collections
-        remaining_names = [c.name for c in remaining if c.name != "SFPublicData"]
-        if remaining_names:
-            logger.warning(f"Collections remaining after cleanup: {remaining_names}")
-        else:
-            logger.info("All target collections cleared successfully")
-            
+                logger.info(f"Deleting collection: {collection_name}")
+                qdrant_client.delete_collection(collection_name)
+        logger.info("Finished clearing existing collections")
     except Exception as e:
-        logger.error(f"Error during collection cleanup: {e}")
+        logger.error(f"Error clearing collections: {e}")
         raise
 
 def get_directory_path(base_path, timeframe, location):
@@ -462,17 +381,6 @@ def load_vectors(base_path, timeframe=None):
     except Exception as e:
         logger.error(f"Error in load_vectors: {e}")
         return False
-
-def retry_operation(operation, max_retries=3, delay=2):
-    """Retry an operation with exponential backoff."""
-    for attempt in range(max_retries):
-        try:
-            return operation()
-        except Exception as e:
-            if attempt == max_retries - 1:
-                raise
-            logger.warning(f"Attempt {attempt + 1} failed: {e}")
-            time.sleep(delay * (2 ** attempt))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Load vectors into Qdrant collections')
