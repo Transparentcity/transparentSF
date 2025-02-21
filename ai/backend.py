@@ -22,6 +22,7 @@ import pandas as pd
 from pathlib import Path
 from openai import OpenAI
 from qdrant_client import QdrantClient
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -996,6 +997,47 @@ async def execute_qdrant_query(request: Request):
         
     except Exception as e:
         logger.exception(f"Error executing Qdrant query: {str(e)}")
+        return JSONResponse({
+            'status': 'error',
+            'message': str(e)
+        })
+
+
+@router.delete("/delete-collection/{collection_name}")
+async def delete_collection(collection_name: str):
+    """Delete a Qdrant collection."""
+    logger.debug(f"Delete collection called for: {collection_name}")
+    try:
+        # Connect to Qdrant
+        qdrant = QdrantClient(host='localhost', port=6333)
+        
+        # Check if collection exists
+        if not qdrant.collection_exists(collection_name):
+            return JSONResponse({
+                'status': 'error',
+                'message': f'Collection {collection_name} does not exist'
+            })
+            
+        # Delete collection
+        qdrant.delete_collection(collection_name)
+        time.sleep(2)  # Wait for deletion to complete
+        
+        # Verify deletion
+        if not qdrant.collection_exists(collection_name):
+            logger.info(f"Successfully deleted collection {collection_name}")
+            return JSONResponse({
+                'status': 'success',
+                'message': f'Collection {collection_name} deleted successfully'
+            })
+        else:
+            logger.error(f"Collection {collection_name} still exists after deletion attempt")
+            return JSONResponse({
+                'status': 'error',
+                'message': f'Failed to delete collection {collection_name}'
+            })
+            
+    except Exception as e:
+        logger.exception(f"Error deleting collection {collection_name}: {str(e)}")
         return JSONResponse({
             'status': 'error',
             'message': str(e)

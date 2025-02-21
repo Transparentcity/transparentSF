@@ -12,7 +12,6 @@ import qdrant_client
 from qdrant_client.http import models as rest
 from dotenv import load_dotenv
 import tiktoken  # For counting tokens
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ------------------------------
 # Configure Logging
@@ -139,22 +138,15 @@ def recreate_collection(collection_name, vector_size):
             logger.info(f"Collection '{collection_name}' exists, deleting...")
             try:
                 qdrant.delete_collection(collection_name)
+                time.sleep(2)  # Simple wait after deletion
             except Exception as e:
-                # Check if it's just the cross-device link warning
                 if "Invalid cross-device link" in str(e):
                     logger.info(f"Ignoring cross-device warning for {collection_name} deletion - continuing...")
                 else:
                     logger.error(f"Error deleting collection '{collection_name}': {e}")
                     raise
-            
-            # Wait and verify deletion
-            time.sleep(2)  # Wait for deletion to complete
-            if not qdrant.collection_exists(collection_name):
-                logger.info(f"Collection '{collection_name}' deleted successfully.")
-            else:
-                logger.warning(f"Collection '{collection_name}' may still exist after deletion attempt.")
         
-        # Create new collection
+        # Simple create without retries - matching sfpublic approach
         logger.info(f"Creating collection '{collection_name}' with vector size {vector_size}")
         qdrant.create_collection(
             collection_name=collection_name,
@@ -162,7 +154,7 @@ def recreate_collection(collection_name, vector_size):
                 distance=rest.Distance.COSINE,
                 size=vector_size,
             ),
-            timeout=60  # Increase timeout to allow for directory cleanup
+            timeout=60
         )
         logger.info(f"Collection '{collection_name}' created successfully.")
         
@@ -300,57 +292,53 @@ def get_embeddings_batch(texts, batch_size=20):
     return all_embeddings
 
 def process_directory(directory_path, collection_name, qdrant_client, vector_size):
-    """Process files in parallel with batched embeddings."""
+    """Process files sequentially."""
     all_md_files = glob.glob(os.path.join(directory_path, '*.md'))
     if not all_md_files:
         return False
 
     recreate_collection(collection_name, vector_size)
     
-    # Prepare all files first
+    # Process files sequentially
     file_contents = []
     parsed_contents = []
     
-    # Read and parse all files in parallel
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        future_to_file = {
-            executor.submit(parse_file, md_file): md_file 
-            for md_file in all_md_files
-        }
-        
-        for future in as_completed(future_to_file):
-            md_file = future_to_file[future]
-            try:
-                content, parsed = future.result()
-                if content and parsed:
-                    file_contents.append(content)
-                    parsed_contents.append((md_file, parsed))
-            except Exception as e:
-                logger.error(f"Error processing {md_file}: {e}")
+    for md_file in all_md_files:
+        try:
+            content, parsed = parse_file(md_file)
+            if content and parsed:
+                file_contents.append(content)
+                parsed_contents.append((md_file, parsed))
+        except Exception as e:
+            logger.error(f"Error processing {md_file}: {e}")
 
-    # Generate embeddings in batches
-    embedding_texts = [
-        create_embedding_text(parsed[1])  # Create the text to embed
-        for parsed in parsed_contents
-    ]
-    
-    embeddings = get_embeddings_batch(embedding_texts)
-
-    # Create points
+    # Generate embeddings for each file
     points_to_upsert = []
-    for (md_file, parsed), embedding in zip(parsed_contents, embeddings):
-        if embedding is None:
-            continue
+    for md_file, parsed in parsed_contents:
+        try:
+            # Create embedding text and get embedding
+            embedding_text = create_embedding_text(parsed)
+            embedding = get_embedding(embedding_text)
             
-        payload = create_payload(md_file, parsed)
-        payload['content'] = parsed['full_content']  # Add full content to payload
-        points_to_upsert.append(
-            rest.PointStruct(
-                id=str(uuid.uuid4()),
-                vector=embedding,
-                payload=payload
+            if embedding is None:
+                logger.error(f"Failed to generate embedding for {md_file}")
+                continue
+                
+            # Create payload and point
+            payload = create_payload(md_file, parsed)
+            payload['content'] = parsed['full_content']
+            
+            points_to_upsert.append(
+                rest.PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=embedding,
+                    payload=payload
+                )
             )
-        )
+            logger.info(f"Successfully processed {md_file}")
+            
+        except Exception as e:
+            logger.error(f"Error processing {md_file}: {e}")
 
     # Batch upsert points
     if points_to_upsert:
@@ -362,10 +350,13 @@ def process_directory(directory_path, collection_name, qdrant_client, vector_siz
                     collection_name=collection_name,
                     points=batch
                 )
+                logger.info(f"Uploaded batch {i//batch_size + 1} of points")
             return True
         except Exception as e:
             logger.error(f"Error upserting points: {e}")
             return False
+    
+    return True
 
 def clear_existing_collections(qdrant_client):
     """

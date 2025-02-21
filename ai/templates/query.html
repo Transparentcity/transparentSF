@@ -150,6 +150,51 @@
         .result-header {
             display: flex;
             justify-content: space-between;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .collection-select-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .delete-btn {
+            background-color: #dc3545;
+            margin-left: 10px;
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+        .collection-info {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .result-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .relevance {
+            font-style: italic;
+            color: #666;
+        }
+        .score-guide {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .score-guide ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        .score-guide li {
+            margin: 5px 0;
+        }
     </style>
 </head>
 <body>
@@ -181,21 +226,30 @@
         <div class="query-section">
             <h2>Semantic Search</h2>
             <form id="qdrantQueryForm">
-                <label for="collection">Collection:</label>
-                <select id="collection" name="collection" required>
-                    <option value="">Select a collection...</option>
-                </select>
-                
-                <label for="qdrantQuery">Search Query:</label>
-                <input type="text" id="qdrantQuery" name="query" placeholder="Enter semantic search query" required>
-                
-                <label for="limit">Results Limit:</label>
-                <select id="limit" name="limit">
-                    <option value="5">5</option>
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                </select>
-                
+                <div class="form-group">
+                    <div class="collection-select-container">
+                        <div style="flex-grow: 1;">
+                            <label for="collection">Collection:</label>
+                            <select id="collection" name="collection" required>
+                                <option value="">Loading collections...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <button type="button" id="deleteCollection" class="delete-btn" style="display: none;">
+                                Delete Collection
+                            </button>
+                        </div>
+                    </div>
+                    <div class="collection-info" id="collectionInfo"></div>
+                </div>
+                <div class="form-group">
+                    <label for="qdrantQuery">Search Query:</label>
+                    <input type="text" id="qdrantQuery" name="query" placeholder="Enter semantic search query" required>
+                </div>
+                <div class="form-group">
+                    <label for="limit">Results Limit:</label>
+                    <input type="number" id="limit" name="limit" value="5" min="1" max="20">
+                </div>
                 <button type="submit">Execute Semantic Search</button>
             </form>
             <div id="qdrantResults" class="results" style="display: none;"></div>
@@ -362,6 +416,62 @@
 
         // Load collections when page loads
         loadCollections();
+
+        // Show/hide delete button and update collection info when collection is selected
+        const collectionSelect = document.getElementById('collection');
+        const deleteBtn = document.getElementById('deleteCollection');
+        const resultsDiv = document.getElementById('qdrantResults');
+        const collectionInfo = document.getElementById('collectionInfo');
+        
+        collectionSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            deleteBtn.style.display = this.value ? 'block' : 'none';
+            
+            if (this.value) {
+                const points = selectedOption.getAttribute('data-points');
+                const vectorSize = selectedOption.getAttribute('data-vector-size');
+                collectionInfo.textContent = `Points: ${points}, Vector Size: ${vectorSize}`;
+            } else {
+                collectionInfo.textContent = '';
+            }
+        });
+
+        // Handle delete button click
+        deleteBtn.addEventListener('click', async function() {
+            const collection = collectionSelect.value;
+            if (!collection) return;
+
+            if (!confirm(`Are you sure you want to delete the collection "${collection}"? This action cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                deleteBtn.disabled = true;
+                deleteBtn.textContent = 'Deleting...';
+
+                const response = await fetch(`/backend/delete-collection/${encodeURIComponent(collection)}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    alert('Collection deleted successfully');
+                    await loadCollections();  // Reload collections list
+                    collectionSelect.value = '';  // Reset selection
+                    deleteBtn.style.display = 'none';
+                    collectionInfo.textContent = '';
+                    resultsDiv.style.display = 'none';
+                } else {
+                    alert(`Error: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Error deleting collection:', error);
+                alert('Error deleting collection');
+            } finally {
+                deleteBtn.disabled = false;
+                deleteBtn.textContent = 'Delete Collection';
+            }
+        });
     </script>
 </body>
 </html>
