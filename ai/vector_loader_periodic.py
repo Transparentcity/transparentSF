@@ -134,22 +134,25 @@ def get_embedding(text, retries=3, delay=5):
 def recreate_collection(collection_name, vector_size):
     """Delete if exists and recreate the collection."""
     try:
-        existing = qdrant.get_collection(collection_name)
-        if existing:
+        # Check if collection exists
+        if qdrant.collection_exists(collection_name):
+            logger.info(f"Collection '{collection_name}' exists, deleting...")
             qdrant.delete_collection(collection_name)
-            logger.info(f"Deleted existing collection '{collection_name}'.")
-    except Exception as e:
-        logger.warning(f"Collection '{collection_name}' does not exist or could not be deleted: {e}")
-    
-    try:
-        qdrant.recreate_collection(
+            time.sleep(2)  # Wait for deletion to complete
+            logger.info(f"Collection '{collection_name}' deleted.")
+        
+        # Create new collection
+        logger.info(f"Creating collection '{collection_name}' with vector size {vector_size}")
+        qdrant.create_collection(
             collection_name=collection_name,
             vectors_config=rest.VectorParams(
                 distance=rest.Distance.COSINE,
                 size=vector_size,
-            )
+            ),
+            timeout=60  # Increase timeout to allow for directory cleanup
         )
-        logger.info(f"Collection '{collection_name}' recreated with vector size {vector_size}.")
+        logger.info(f"Collection '{collection_name}' created successfully.")
+        
     except Exception as e:
         logger.error(f"Failed to recreate collection '{collection_name}': {e}")
         raise
