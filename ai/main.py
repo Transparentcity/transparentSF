@@ -31,9 +31,11 @@ app.add_middleware(
         "https://*.replit.dev",
         "http://c8f21de5-50d5-4932-9f30-db3b51e8af74-00-3cldcjjo20ql9.riker.replit.dev"
     ],  # Only allow specific origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_credentials=True,  # Required for cookies
+    allow_methods=["*"],    # Allows all methods
+    allow_headers=["*"],    # Allows all headers
+    expose_headers=["Set-Cookie"],  # Expose Set-Cookie header
+    max_age=3600,          # Cache preflight requests for 1 hour
 )
 
 # Initialize templates with absolute path

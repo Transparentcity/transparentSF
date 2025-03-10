@@ -16,7 +16,7 @@ from tools.genGhostPost import generate_ghost_post
 from pathlib import Path
 # Import FastAPI and related modules
 from fastapi import APIRouter, Request, Cookie
-from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uuid
@@ -126,6 +126,9 @@ data_folder = './data'  # Replace with the actual path
 
 # Initialize context_variables with an empty DataFrame
 combined_df = {"dataset": pd.DataFrame()}
+
+# Add environment check at the top with other configurations
+IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
 def load_and_combine_notes():
     logger = logging.getLogger(__name__)
@@ -625,10 +628,11 @@ Researcher_agent = Agent(
         - Example: "select dba_name, location_start_date where supervisor_district = '6' and location_start_date >= '2025-01-01'"
         
     When displaying data:
-    1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  Return them in markdown format, don't add anything to the URLs, jsut pass them back as you find them. 
-    2. Include relevant titles and context with your tables
-    3. Follow up tables with explanations of key insights or trends
-    
+    1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  Return them in the same markdown format you find in the docs, with no changes. 
+    2. Include relevant titles and context with your tables and charts. 
+    3. Follow up tables with explanations of key insights or trends. 
+    4. If you can't find the data you need, just say so.  Don't make up data or information. 
+    5. Don't speculate as to causes or "WHY" something is happening.  Just report on WHAT is happening. 
     
     """,
     functions=[get_notes, query_docs, set_dataset, transfer_to_analyst_agent, generate_ghost_post],
@@ -888,9 +892,28 @@ Message:
             media_type="text/plain"
         )
 
-        # Set the session_id as a cookie
-        response.set_cookie(key="session_id", value=session_id)
+        # Set cookie attributes based on environment
+        cookie_settings = {
+            "key": "session_id",
+            "value": session_id,
+            "httponly": True,
+            "max_age": 3600,
+            "path": "/"
+        }
 
+        # Add secure and samesite settings only in production
+        if IS_PRODUCTION:
+            cookie_settings.update({
+                "secure": True,
+                "samesite": "None"
+            })
+        else:
+            cookie_settings.update({
+                "secure": False,
+                "samesite": "Lax"
+            })
+
+        response.set_cookie(**cookie_settings)
         return response
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
@@ -906,8 +929,32 @@ async def reset_conversation(session_id: str = Cookie(None)):
             "agent": Researcher_agent,  # Reset to default agent
             "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
         }
-        return {"status": "success"}
-    return {"status": "error", "message": "No active session found"}
+        response = JSONResponse({"status": "success"})
+        
+        # Set cookie attributes based on environment
+        cookie_settings = {
+            "key": "session_id",
+            "value": session_id,
+            "httponly": True,
+            "max_age": 3600,
+            "path": "/"
+        }
+
+        # Add secure and samesite settings only in production
+        if IS_PRODUCTION:
+            cookie_settings.update({
+                "secure": True,
+                "samesite": "None"
+            })
+        else:
+            cookie_settings.update({
+                "secure": False,
+                "samesite": "Lax"
+            })
+
+        response.set_cookie(**cookie_settings)
+        return response
+    return JSONResponse({"status": "error", "message": "No active session found"})
 
 async def generate_response(user_input, session_data):
     logger.info(f"""
