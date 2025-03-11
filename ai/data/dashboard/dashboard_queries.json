@@ -43,6 +43,18 @@
                     "metric_query": "SELECT 'Total Bookings' as label, max(month_and_year_of_booking) as max_date, SUM(CASE WHEN month_and_year_of_booking >= this_year_start AND month_and_year_of_booking <= this_year_end THEN count_of_bookings END) as this_year, SUM(CASE WHEN month_and_year_of_booking >= last_year_start AND month_and_year_of_booking <= last_year_end THEN count_of_bookings END) as last_year, (SUM(CASE WHEN month_and_year_of_booking >= this_year_start AND month_and_year_of_booking <= this_year_end THEN count_of_bookings END) - SUM(CASE WHEN month_and_year_of_booking >= last_year_start AND month_and_year_of_booking <= last_year_end THEN count_of_bookings END)) as delta, ((SUM(CASE WHEN month_and_year_of_booking >= this_year_start AND month_and_year_of_booking <= this_year_end THEN count_of_bookings END) - SUM(CASE WHEN month_and_year_of_booking >= last_year_start AND month_and_year_of_booking <= last_year_end THEN count_of_bookings END)) * 100.0 / NULLIF(SUM(CASE WHEN month_and_year_of_booking >= last_year_start AND month_and_year_of_booking <= last_year_end THEN count_of_bookings END), 0)) as perc_diff"
                 }
             }
+        },
+        "DA": {
+            "endpoint": "ynfy-z5kt",
+            "queries": {
+                "⚖️ DA Felony Convictions": {
+                    "summary": "Total count of criminal cases that resulted in a conviction, including guilty pleas and trial convictions.",
+                    "definition": "Count of criminal cases prosecuted by the District Attorney's Office that resulted in a conviction. This includes cases where the defendant pleaded guilty or was found guilty at trial. Each case represents a unique defendant and incident combination.",
+                    "data_sf_url": "https://data.sfgov.org/Public-Safety/District-Attorney-Case-Resolutions/ynfy-z5kt",
+                    "ytd_query": "SELECT date_trunc_ymd(disposition_date) as date, COUNT(*) as value WHERE disposition_date >= last_year_start AND disposition_date <= current_date AND case_status LIKE '%Conviction%'and filed_case_type = 'Felony' GROUP BY date ORDER BY date",
+                    "metric_query": "SELECT 'Total Convictions' as label, max(disposition_date) as max_date, COUNT(CASE WHEN disposition_date >= this_year_start AND disposition_date <= this_year_end AND case_status LIKE '%Conviction%' and filed_case_type = 'Felony' THEN 1 END) as this_year, COUNT(CASE WHEN disposition_date >= last_year_start AND disposition_date <= last_year_end AND case_status LIKE '%Conviction%' and filed_case_type = 'Felony' THEN 1 END) as last_year, (COUNT(CASE WHEN disposition_date >= this_year_start AND disposition_date <= this_year_end AND case_status LIKE '%Conviction%' and filed_case_type = 'Felony' THEN 1 END) - COUNT(CASE WHEN disposition_date >= last_year_start AND disposition_date <= last_year_end AND case_status LIKE '%Conviction%' and filed_case_type = 'Felony' THEN 1 END)) as delta, ((COUNT(CASE WHEN disposition_date >= this_year_start AND disposition_date <= this_year_end AND case_status LIKE '%Conviction%' and filed_case_type = 'Felony' THEN 1 END) - COUNT(CASE WHEN disposition_date >= last_year_start AND disposition_date <= last_year_end AND case_status LIKE '%Conviction%' and filed_case_type = 'Felony' THEN 1 END)) * 100.0 / NULLIF(COUNT(CASE WHEN disposition_date >= last_year_start AND disposition_date <= last_year_end AND case_status LIKE '%Conviction%' and filed_case_type = 'Felony' THEN 1 END), 0)) as perc_diff"
+                }
+            }
         }
     },
     "safety": {

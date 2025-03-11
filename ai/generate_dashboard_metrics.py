@@ -20,9 +20,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 logs_dir = os.path.join(script_dir, 'logs')
 os.makedirs(logs_dir, exist_ok=True)
 
-# Configure logging
+# Configure logging with a single handler for both file and console
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
 # Remove any existing handlers
 for handler in logger.handlers[:]:
@@ -30,14 +31,12 @@ for handler in logger.handlers[:]:
 
 # Add file handler
 file_handler = logging.FileHandler(os.path.join(logs_dir, 'dashboard_metrics.log'))
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
 # Add console handler
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 def load_json_file(file_path):
@@ -72,25 +71,20 @@ def get_date_ranges(target_date=None):
         'last_year_end': last_year_end
     }
 
-def process_query_for_district(query, endpoint, date_ranges, district_number=None, query_name=None):
+def process_query_for_district(query, endpoint, date_ranges, query_name=None):
     """Process a single query and handle district-level aggregation from the same dataset."""
     try:
         logger.info(f"Processing query for endpoint {endpoint}, query_name: {query_name}")
         
         # Get date ranges if not provided
         if not date_ranges:
-            logger.info("No date ranges provided, generating new date ranges")
             date_ranges = get_date_ranges()
-        else:
-            logger.info(f"Using provided date ranges: {date_ranges}")
             
         modified_query = query
         
         # Replace date placeholders in the query
-        modified_query = modified_query.replace('this_year_start', f"'{date_ranges['this_year_start']}'")
-        modified_query = modified_query.replace('this_year_end', f"'{date_ranges['this_year_end']}'")
-        modified_query = modified_query.replace('last_year_start', f"'{date_ranges['last_year_start']}'")
-        modified_query = modified_query.replace('last_year_end', f"'{date_ranges['last_year_end']}'")
+        for key, value in date_ranges.items():
+            modified_query = modified_query.replace(key, f"'{value}'")
         
         # Handle cases where the query uses direct year comparisons
         this_year = datetime.strptime(date_ranges['this_year_end'], '%Y-%m-%d').year
@@ -100,19 +94,14 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
         
         # Define all possible date patterns we need to fix
         date_patterns = [
-            # Pattern 1: >= YYYY-01-01 AND < YYYY-01-01
             (f">= '{this_year}-01-01' AND < '{this_year}-01-01'",
              f">= '{this_year}-01-01' AND <= '{date_ranges['this_year_end']}'"),
             (f">= '{last_year}-01-01' AND < '{last_year}-01-01'",
              f">= '{last_year}-01-01' AND <= '{date_ranges['last_year_end']}'"),
-            
-            # Pattern 2: >= YYYY-01-01 AND <= YYYY-01-01
             (f">= '{this_year}-01-01' AND <= '{this_year}-01-01'",
              f">= '{this_year}-01-01' AND <= '{date_ranges['this_year_end']}'"),
             (f">= '{last_year}-01-01' AND <= '{last_year}-01-01'",
              f">= '{last_year}-01-01' AND <= '{date_ranges['last_year_end']}'"),
-
-            # Pattern 3: >= YYYY-01-01 AND date_issued < YYYY-01-01
             (f">= '{this_year}-01-01' AND date_issued < '{this_year}-01-01'",
              f">= '{this_year}-01-01' AND date_issued <= '{date_ranges['this_year_end']}'"),
             (f">= '{last_year}-01-01' AND date_issued < '{last_year}-01-01'",
@@ -125,21 +114,14 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
                 logger.info(f"Replacing date pattern: {pattern} -> {replacement}")
                 modified_query = modified_query.replace(pattern, replacement)
         
-        logger.info("Original query:")
-        logger.info(query)
-        logger.info("Modified query:")
-        logger.info(modified_query)
+        logger.info(f"Modified query: {modified_query}")
         
-        # Create context variables dictionary to store the dataset
+        # Execute the query
         context_variables = {}
-        
-        logger.info(f"Executing query against endpoint: {endpoint}")
-        # Execute the query once
         result = set_dataset(context_variables, endpoint=endpoint, query=modified_query)
         logger.info(f"Query execution result status: {result.get('status')}")
         
         if result.get('status') == 'success' and 'dataset' in context_variables:
-            # Store the queries for later use in the output
             query_info = {
                 'original_query': query,
                 'executed_query': modified_query
@@ -147,101 +129,69 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
             
             df = context_variables['dataset']
             logger.info(f"Dataset retrieved successfully - Shape: {df.shape}")
-            logger.debug(f"Dataset columns: {df.columns.tolist()}")
-            logger.debug(f"Data types: {df.dtypes}")
             
             results = {}
-            
-            # Check if this query contains supervisor_district
             has_district = 'supervisor_district' in df.columns
             logger.info(f"Query has district data: {has_district}")
             
-            # Get the max date from received_datetime or max_date
+            # Get the max date
             max_date = None
-            if 'received_datetime' in df.columns:
-                logger.info("Using received_datetime for max date calculation")
-                df['received_datetime'] = pd.to_datetime(df['received_datetime'], errors='coerce')
-                max_date = df['received_datetime'].max()
-            elif 'max_date' in df.columns:
-                logger.info("Using max_date column for max date calculation")
-                df['max_date'] = pd.to_datetime(df['max_date'], errors='coerce')
-                max_date = df['max_date'].max()
-            
-            if pd.notnull(max_date):
-                max_date = max_date.strftime('%Y-%m-%d')
-                logger.info(f"Max date determined: {max_date}")
-            else:
-                logger.warning("No valid max date found in dataset")
+            for date_col in ['received_datetime', 'max_date']:
+                if date_col in df.columns:
+                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+                    max_date = df[date_col].max()
+                    if pd.notnull(max_date):
+                        max_date = max_date.strftime('%Y-%m-%d')
+                        logger.info(f"Max date determined from {date_col}: {max_date}")
+                        break
             
             if has_district:
-                # Check if this is a response time metric
                 is_response_time = query_name and 'response time' in query_name.lower()
                 logger.info(f"Processing as response time metric: {is_response_time}")
                 
                 if is_response_time:
-                    # For response time metrics, we expect this_year and last_year columns
                     if 'this_year' not in df.columns or 'last_year' not in df.columns:
                         logger.error(f"Required columns not found in dataset. Available columns: {df.columns.tolist()}")
                         return None
                     
-                    logger.info("Converting response time columns to numeric")
-                    # Convert columns to numeric
-                    df['this_year'] = pd.to_numeric(df['this_year'], errors='coerce')
-                    df['last_year'] = pd.to_numeric(df['last_year'], errors='coerce')
+                    df[['this_year', 'last_year']] = df[['this_year', 'last_year']].apply(pd.to_numeric, errors='coerce')
                     
-                    # Calculate citywide median (district '0')
-                    logger.info("Calculating citywide averages")
+                    # Calculate citywide and district averages
                     results['0'] = {
                         'lastYear': int(df['last_year'].mean()) if pd.notnull(df['last_year'].mean()) else 0,
                         'thisYear': int(df['this_year'].mean()) if pd.notnull(df['this_year'].mean()) else 0,
                         'lastDataDate': max_date
                     }
-                    logger.debug(f"Citywide results: {results['0']}")
                     
-                    # Calculate district-level medians
-                    logger.info("Calculating district-level averages")
                     for district in range(1, 12):
                         district_df = df[df['supervisor_district'] == str(district)]
                         if not district_df.empty:
-                            district_data = {
+                            results[str(district)] = {
                                 'lastYear': int(district_df['last_year'].mean()) if pd.notnull(district_df['last_year'].mean()) else 0,
                                 'thisYear': int(district_df['this_year'].mean()) if pd.notnull(district_df['this_year'].mean()) else 0,
                                 'lastDataDate': max_date
                             }
-                            results[str(district)] = district_data
-                            logger.debug(f"District {district} results: {district_data}")
                 else:
-                    # For non-response time metrics, use the existing sum logic
-                    logger.info("Processing as non-response time metric")
-                    if not df.empty:
-                        # Convert columns to numeric if they exist
-                        if 'last_year' in df.columns and 'this_year' in df.columns:
-                            logger.info("Converting year columns to numeric")
-                            df['last_year'] = pd.to_numeric(df['last_year'], errors='coerce')
-                            df['this_year'] = pd.to_numeric(df['this_year'], errors='coerce')
-                            
-                            results['0'] = {
-                                'lastYear': int(df['last_year'].sum()),
-                                'thisYear': int(df['this_year'].sum()),
-                                'lastDataDate': max_date
-                            }
-                            logger.debug(f"Citywide results: {results['0']}")
-                            
-                            # Process each district's data
-                            logger.info("Processing district-level sums")
-                            for district in range(1, 12):
-                                district_df = df[df['supervisor_district'] == str(district)]
-                                if not district_df.empty:
-                                    district_data = {
-                                        'lastYear': int(district_df['last_year'].sum()),
-                                        'thisYear': int(district_df['this_year'].sum()),
-                                        'lastDataDate': max_date
-                                    }
-                                    results[str(district)] = district_data
-                                    logger.debug(f"District {district} results: {district_data}")
+                    # For non-response time metrics
+                    if not df.empty and 'last_year' in df.columns and 'this_year' in df.columns:
+                        df[['last_year', 'this_year']] = df[['last_year', 'this_year']].apply(pd.to_numeric, errors='coerce')
+                        
+                        results['0'] = {
+                            'lastYear': int(df['last_year'].sum()),
+                            'thisYear': int(df['this_year'].sum()),
+                            'lastDataDate': max_date
+                        }
+                        
+                        for district in range(1, 12):
+                            district_df = df[df['supervisor_district'] == str(district)]
+                            if not district_df.empty:
+                                results[str(district)] = {
+                                    'lastYear': int(district_df['last_year'].sum()),
+                                    'thisYear': int(district_df['this_year'].sum()),
+                                    'lastDataDate': max_date
+                                }
             else:
                 # For non-district queries, just return the total from first row
-                logger.info("Processing non-district query")
                 if not df.empty:
                     row = df.iloc[0].to_dict()
                     results['0'] = {
@@ -249,7 +199,6 @@ def process_query_for_district(query, endpoint, date_ranges, district_number=Non
                         'thisYear': int(float(row.get('this_year', 0))),
                         'lastDataDate': max_date
                     }
-                    logger.debug(f"Non-district results: {results['0']}")
             
             logger.info(f"Query processing completed successfully for {query_name}")
             return {
@@ -285,18 +234,12 @@ def process_ytd_trend_query(query, endpoint, date_ranges=None, target_date=None,
         
         logger.info(f"Modified query: {modified_query}")
         
-        # Create context variables dictionary to store the dataset
-        context_variables = {}
-        
         # Execute the query
+        context_variables = {}
         result = set_dataset(context_variables, endpoint=endpoint, query=modified_query)
-        logger.info(f"Query result status: {result.get('status')}")
         
         if result.get('status') == 'success' and 'dataset' in context_variables:
             df = context_variables['dataset']
-            logger.info(f"Retrieved dataset with shape: {df.shape}")
-            
-            # Convert date column to datetime
             df['date'] = pd.to_datetime(df['date'])
             
             # Get the last data date from the trend data
@@ -305,12 +248,14 @@ def process_ytd_trend_query(query, endpoint, date_ranges=None, target_date=None,
                 last_data_date_str = last_data_date.strftime('%Y-%m-%d')
                 logger.info(f"Found last data date from trend data: {last_data_date_str}")
                 
-                # If this date is earlier than this_year_end, update date_ranges
+                # Update date ranges if needed
                 if last_data_date_str < date_ranges['this_year_end']:
                     logger.info(f"Updating date ranges to use last data date: {last_data_date_str}")
-                    date_ranges['this_year_end'] = last_data_date_str
-                    date_ranges['last_year_end'] = last_data_date.replace(year=last_data_date.year-1).strftime('%Y-%m-%d')
-                    date_ranges['last_data_date'] = last_data_date_str
+                    date_ranges.update({
+                        'this_year_end': last_data_date_str,
+                        'last_year_end': last_data_date.replace(year=last_data_date.year-1).strftime('%Y-%m-%d'),
+                        'last_data_date': last_data_date_str
+                    })
             
             # Sort by date and convert Timestamp keys to string dates
             trend_data = {
@@ -332,7 +277,6 @@ def process_ytd_trend_query(query, endpoint, date_ranges=None, target_date=None,
             if 'error' in result:
                 logger.error(f"Error: {result['error']}")
             logger.error(f"Query URL: {result.get('queryURL')}")
-            logger.error(f"Context variables: {context_variables}")
             
     except Exception as e:
         logger.error(f"Error executing YTD trend query: {str(e)}")
@@ -341,7 +285,7 @@ def process_ytd_trend_query(query, endpoint, date_ranges=None, target_date=None,
     return None
 
 def generate_ytd_metrics(queries_data, output_dir, target_date=None):
-    """Generate a single YTD metrics file for all districts."""
+    """Generate YTD metrics files for each district."""
     
     # Initialize the metrics structure
     metrics = {
@@ -544,19 +488,33 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
     next_update = min(next_5am, next_11am)
     metrics['metadata']['next_update'] = next_update.isoformat()
     
-    # Save files
-    output_file = os.path.join(output_dir, 'ytd_metrics.json')
-    dashboard_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'dashboard')
-    dashboard_file = os.path.join(dashboard_dir, 'ytd_metrics.json')
+    # Create output directories
+    dashboard_dir = os.path.join(output_dir, 'dashboard')
     history_dir = os.path.join(output_dir, 'history')
+    os.makedirs(dashboard_dir, exist_ok=True)
     os.makedirs(history_dir, exist_ok=True)
-    history_file = os.path.join(history_dir, f'ytd_metrics_{datetime.now().strftime("%Y%m%d")}.json')
     
-    # Write to all locations
-    for file_path in [output_file, dashboard_file, history_file]:
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(metrics, f, indent=2)
-        logger.info(f"Metrics file saved to {file_path}")
+    # Save individual district files
+    for district_num in range(12):  # 0-11 for citywide and districts 1-11
+        district_str = str(district_num)
+        if district_str in metrics['districts']:
+            district_data = {
+                "metadata": metrics['metadata'],
+                "name": metrics['districts'][district_str]['name'],
+                "categories": metrics['districts'][district_str]['categories']
+            }
+            
+            # Save to dashboard directory
+            district_file = os.path.join(dashboard_dir, f'district_{district_str}.json')
+            with open(district_file, 'w', encoding='utf-8') as f:
+                json.dump(district_data, f, indent=2)
+            logger.info(f"District {district_str} metrics saved to {district_file}")
+            
+            # Save to history directory with timestamp
+            history_file = os.path.join(history_dir, f'district_{district_str}_{datetime.now().strftime("%Y%m%d")}.json')
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump(district_data, f, indent=2)
+            logger.info(f"District {district_str} metrics history saved to {history_file}")
     
     return metrics
 
@@ -569,70 +527,47 @@ def create_ytd_vector_collection(metrics):
         # Initialize OpenAI client
         openai_api_key = os.getenv("OPENAI_API_KEY")
         if not openai_api_key:
-            logger.error("OpenAI API key not found in environment variables.")
             raise ValueError("OpenAI API key not found in environment variables.")
         
         client = OpenAI(api_key=openai_api_key)
         EMBEDDING_MODEL = "text-embedding-3-large"
-        BATCH_SIZE = 100  # Batch size for embeddings and upserts
+        BATCH_SIZE = 100
         MAX_RETRIES = 3
 
         # Initialize Qdrant client
         qdrant = QdrantClient(host='localhost', port=6333)
-        logger.info("Connected to Qdrant")
-
+        
         # Get sample embedding to determine vector size
-        sample_text = "Sample text for vector size determination"
         sample_response = client.embeddings.create(
             model=EMBEDDING_MODEL,
-            input=sample_text
+            input="Sample text for vector size determination"
         )
         vector_size = len(sample_response.data[0].embedding)
-        logger.info(f"Vector size determined: {vector_size}")
-
-        # Attempt to recreate collection with retries
+        
+        # Create or recreate collection
+        def create_collection():
+            if qdrant.collection_exists(collection_name):
+                qdrant.delete_collection(collection_name)
+            qdrant.create_collection(
+                collection_name=collection_name,
+                vectors_config=rest.VectorParams(
+                    distance=rest.Distance.COSINE,
+                    size=vector_size
+                )
+            )
+        
+        # Attempt to create collection with retries
         for attempt in range(MAX_RETRIES):
             try:
-                # Check if collection exists
-                if qdrant.collection_exists(collection_name):
-                    logger.info(f"Attempting to delete existing {collection_name} collection (attempt {attempt + 1})")
-                    try:
-                        # Try to delete collection
-                        qdrant.delete_collection(collection_name)
-                        logger.info(f"Successfully deleted {collection_name} collection")
-                    except Exception as delete_error:
-                        logger.error(f"Error deleting collection: {str(delete_error)}")
-                        # If deletion failed, try to recreate with force flag
-                        logger.info("Attempting to recreate collection with force flag")
-                        qdrant.recreate_collection(
-                            collection_name=collection_name,
-                            vectors_config=rest.VectorParams(
-                                distance=rest.Distance.COSINE,
-                                size=vector_size
-                            )
-                        )
-                else:
-                    # Collection doesn't exist, create it normally
-                    logger.info(f"Creating new {collection_name} collection")
-                    qdrant.create_collection(
-                        collection_name=collection_name,
-                        vectors_config=rest.VectorParams(
-                            distance=rest.Distance.COSINE,
-                            size=vector_size
-                        )
-                    )
-                
-                # If we get here, collection creation was successful
-                logger.info("Collection creation/recreation successful")
+                create_collection()
                 break
-                
             except Exception as e:
                 logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
                 if attempt == MAX_RETRIES - 1:
                     raise Exception(f"Failed to create collection after {MAX_RETRIES} attempts")
-                time.sleep(2 ** attempt)  # Exponential backoff
+                time.sleep(2 ** attempt)
 
-        # Prepare batches of texts and their corresponding metadata
+        # Prepare data for embedding
         texts_to_embed = []
         metadata_batch = []
         
@@ -641,40 +576,9 @@ def create_ytd_vector_collection(metrics):
         for category in citywide_data['categories']:
             category_name = category['category']
             for metric in category['metrics']:
-                # Create text representation for embedding
-                metric_text = (
-                    f"Category: {category_name}\n"
-                    f"Metric Name: {metric['name']}\n"
-                    f"Description: {metric['metadata']['summary']}\n"
-                    f"Detailed Definition: {metric['metadata']['definition']}\n"
-                    f"This metric shows {metric['thisYear']} incidents in the current year"
-                    f" compared to {metric['lastYear']} incidents last year for {citywide_data['name']}.\n"
-                    f"The data is current as of {metric['lastDataDate']}.\n"
-                    f"This is a {category_name.lower()} metric related to "
-                    f"{' '.join(['public safety, emergency response, and first responders' if category_name == 'Safety' else '', 'law enforcement, police activity, and criminal statistics' if category_name == 'Crime' else '', 'business and economic development' if category_name == 'Economy' else '']).strip()}"
-                    f" in San Francisco.\n"
-                    f"{' '.join(['This metric helps track emergency response, public safety incidents, and first responder activity.' if category_name == 'Safety' else '', 'This metric helps track law enforcement activity, police incidents, and crime statistics.' if category_name == 'Crime' else '', 'This metric helps track business and economic activity.' if category_name == 'Economy' else '']).strip()}\n"
-                    f"Data Source: {metric['metadata']['data_sf_url']}\n"
-                    f"Query Context: {metric['queries'].get('metric_query', '')}\n"
-                    f"This data is specific to {citywide_data['name']} in San Francisco."
-                ).strip()
-
+                metric_text = create_metric_text(category_name, metric, citywide_data['name'])
                 texts_to_embed.append(metric_text)
-                metadata_batch.append({
-                    'category': category_name,
-                    'metric_name': metric['name'],
-                    'metric_id': metric['id'],
-                    'this_year': metric['thisYear'],
-                    'last_year': metric['lastYear'],
-                    'last_data_date': metric['lastDataDate'],
-                    'summary': metric['metadata']['summary'],
-                    'definition': metric['metadata']['definition'],
-                    'data_url': metric['metadata']['data_sf_url'],
-                    'district': '0',
-                    'district_name': citywide_data['name'],
-                    'trend_data': metric.get('trend_data', {}),
-                    'queries': metric['queries']
-                })
+                metadata_batch.append(create_metadata_dict(category_name, metric, '0', citywide_data['name']))
 
         # Process district metrics
         for district_num in range(1, 12):
@@ -684,119 +588,54 @@ def create_ytd_vector_collection(metrics):
                 for category in district_data['categories']:
                     category_name = category['category']
                     for metric in category['metrics']:
-                        metric_text = (
-                            f"Category: {category_name}\n"
-                            f"Metric Name: {metric['name']}\n"
-                            f"Description: {metric['metadata']['summary']}\n"
-                            f"Detailed Definition: {metric['metadata']['definition']}\n"
-                            f"This metric shows {metric['thisYear']} incidents in the current year"
-                            f" compared to {metric['lastYear']} incidents last year for {district_data['name']}.\n"
-                            f"The data is current as of {metric['lastDataDate']}.\n"
-                            f"This is a {category_name.lower()} metric related to "
-                            f"{' '.join(['public safety, emergency response, and first responders' if category_name == 'Safety' else '', 'law enforcement, police activity, and criminal statistics' if category_name == 'Crime' else '', 'business and economic development' if category_name == 'Economy' else '']).strip()}"
-                            f" in San Francisco.\n"
-                            f"{' '.join(['This metric helps track emergency response, public safety incidents, and first responder activity.' if category_name == 'Safety' else '', 'This metric helps track law enforcement activity, police incidents, and crime statistics.' if category_name == 'Crime' else '', 'This metric helps track business and economic activity.' if category_name == 'Economy' else '']).strip()}\n"
-                            f"Data Source: {metric['metadata']['data_sf_url']}\n"
-                            f"Query Context: {metric['queries'].get('metric_query', '')}\n"
-                            f"This data is specific to {district_data['name']} in San Francisco."
-                        ).strip()
-
+                        metric_text = create_metric_text(category_name, metric, district_data['name'])
                         texts_to_embed.append(metric_text)
-                        metadata_batch.append({
-                            'category': category_name,
-                            'metric_name': metric['name'],
-                            'metric_id': metric['id'],
-                            'this_year': metric['thisYear'],
-                            'last_year': metric['lastYear'],
-                            'last_data_date': metric['lastDataDate'],
-                            'summary': metric['metadata']['summary'],
-                            'definition': metric['metadata']['definition'],
-                            'data_url': metric['metadata']['data_sf_url'],
-                            'district': district_str,
-                            'district_name': district_data['name'],
-                            'trend_data': metric.get('trend_data', {}),
-                            'queries': metric['queries']
-                        })
+                        metadata_batch.append(create_metadata_dict(category_name, metric, district_str, district_data['name']))
 
         # Process in batches
         total_points = len(texts_to_embed)
         points_to_upsert = []
         
-        logger.info(f"Processing {total_points} points in batches of {BATCH_SIZE}")
-        
         for i in range(0, total_points, BATCH_SIZE):
-            try:
-                # Verify collection exists before processing batch
-                if not qdrant.collection_exists(collection_name):
-                    logger.error("Collection disappeared before batch processing!")
-                    # Try to recreate collection
-                    logger.info("Attempting to recreate collection")
-                    qdrant.create_collection(
-                        collection_name=collection_name,
-                        vectors_config=rest.VectorParams(
-                            distance=rest.Distance.COSINE,
-                            size=vector_size
-                        )
-                    )
-                
-                batch_texts = texts_to_embed[i:i + BATCH_SIZE]
-                batch_metadata = metadata_batch[i:i + BATCH_SIZE]
-                
-                # Get embeddings for the batch
-                response = client.embeddings.create(
-                    model=EMBEDDING_MODEL,
-                    input=batch_texts
+            batch_texts = texts_to_embed[i:i + BATCH_SIZE]
+            batch_metadata = metadata_batch[i:i + BATCH_SIZE]
+            
+            # Get embeddings for the batch
+            response = client.embeddings.create(
+                model=EMBEDDING_MODEL,
+                input=batch_texts
+            )
+            embeddings = [data.embedding for data in response.data]
+            
+            # Create points for the batch
+            batch_points = [
+                rest.PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=embedding,
+                    payload=metadata
                 )
-                embeddings = [data.embedding for data in response.data]
-                
-                # Create points for the batch
-                batch_points = [
-                    rest.PointStruct(
-                        id=str(uuid.uuid4()),
-                        vector=embedding,
-                        payload=metadata
-                    )
-                    for embedding, metadata in zip(embeddings, batch_metadata)
-                ]
-                points_to_upsert.extend(batch_points)
-                
-                # If we've accumulated enough points or this is the last batch, upsert them
-                if len(points_to_upsert) >= BATCH_SIZE or i + BATCH_SIZE >= total_points:
-                    logger.info(f"Upserting batch of {len(points_to_upsert)} points")
-                    
-                    # Retry upsert operation if it fails
-                    max_upsert_retries = 3
-                    for upsert_attempt in range(max_upsert_retries):
-                        try:
-                            # Verify collection still exists
-                            if not qdrant.collection_exists(collection_name):
-                                raise Exception("Collection disappeared before upsert!")
-                            
-                            # Try the upsert
-                            qdrant.upsert(
-                                collection_name=collection_name,
-                                points=points_to_upsert
-                            )
-                            logger.info(f"Successfully upserted batch of {len(points_to_upsert)} points")
-                            points_to_upsert = []  # Clear the batch
-                            break
-                        except Exception as upsert_error:
-                            logger.error(f"Upsert attempt {upsert_attempt + 1} failed: {str(upsert_error)}")
-                            if upsert_attempt == max_upsert_retries - 1:
-                                raise  # Re-raise the last error if all retries failed
-                            time.sleep(2 ** upsert_attempt)  # Exponential backoff
-                            
-                            # Check collection status
-                            try:
-                                collection_info = qdrant.get_collection(collection_name)
-                                logger.info(f"Collection status after failed upsert: {collection_info}")
-                            except Exception as info_error:
-                                logger.error(f"Failed to get collection info: {str(info_error)}")
-                
-            except Exception as batch_error:
-                logger.error(f"Error processing batch starting at index {i}: {str(batch_error)}")
-                raise
-                
+                for embedding, metadata in zip(embeddings, batch_metadata)
+            ]
+            points_to_upsert.extend(batch_points)
+            
+            # Upsert when batch is full or on last batch
+            if len(points_to_upsert) >= BATCH_SIZE or i + BATCH_SIZE >= total_points:
+                for upsert_attempt in range(MAX_RETRIES):
+                    try:
+                        if not qdrant.collection_exists(collection_name):
+                            create_collection()
+                        qdrant.upsert(
+                            collection_name=collection_name,
+                            points=points_to_upsert
+                        )
+                        points_to_upsert = []
+                        break
+                    except Exception as e:
+                        logger.error(f"Upsert attempt {upsert_attempt + 1} failed: {str(e)}")
+                        if upsert_attempt == MAX_RETRIES - 1:
+                            raise
+                        time.sleep(2 ** upsert_attempt)
+        
         logger.info("Successfully created YTD vector collection")
 
     except Exception as e:
@@ -804,32 +643,69 @@ def create_ytd_vector_collection(metrics):
         logger.error(traceback.format_exc())
         raise
 
+def create_metric_text(category_name, metric, district_name):
+    """Create text representation for embedding."""
+    category_descriptions = {
+        'Safety': 'public safety, emergency response, and first responders',
+        'Crime': 'law enforcement, police activity, and criminal statistics',
+        'Economy': 'business and economic development'
+    }
+    
+    category_help_text = {
+        'Safety': 'This metric helps track emergency response, public safety incidents, and first responder activity.',
+        'Crime': 'This metric helps track law enforcement activity, police incidents, and crime statistics.',
+        'Economy': 'This metric helps track business and economic activity.'
+    }
+    
+    return (
+        f"Category: {category_name}\n"
+        f"Metric Name: {metric['name']}\n"
+        f"Description: {metric['metadata']['summary']}\n"
+        f"Detailed Definition: {metric['metadata']['definition']}\n"
+        f"This metric shows {metric['thisYear']} incidents in the current year"
+        f" compared to {metric['lastYear']} incidents last year for {district_name}.\n"
+        f"The data is current as of {metric['lastDataDate']}.\n"
+        f"This is a {category_name.lower()} metric related to {category_descriptions.get(category_name, '')} in San Francisco.\n"
+        f"{category_help_text.get(category_name, '')}\n"
+        f"Data Source: {metric['metadata']['data_sf_url']}\n"
+        f"Query Context: {metric['queries'].get('metric_query', '')}\n"
+        f"This data is specific to {district_name} in San Francisco."
+    ).strip()
+
+def create_metadata_dict(category_name, metric, district, district_name):
+    """Create metadata dictionary for vector storage."""
+    return {
+        'category': category_name,
+        'metric_name': metric['name'],
+        'metric_id': metric['id'],
+        'this_year': metric['thisYear'],
+        'last_year': metric['lastYear'],
+        'last_data_date': metric['lastDataDate'],
+        'summary': metric['metadata']['summary'],
+        'definition': metric['metadata']['definition'],
+        'data_url': metric['metadata']['data_sf_url'],
+        'district': district,
+        'district_name': district_name,
+        'trend_data': metric.get('trend_data', {}),
+        'queries': metric['queries']
+    }
+
 def main():
     """Main function to generate YTD metrics."""
     try:
         # Define paths
         script_dir = os.path.dirname(os.path.abspath(__file__))
         data_dir = os.path.join(script_dir, 'data/dashboard')
-        output_dir = os.path.join(script_dir, 'output')  # Changed to use the output directory
-        
-        # Ensure output directory exists
+        output_dir = os.path.join(script_dir, 'output')
         os.makedirs(output_dir, exist_ok=True)
         
-        # Load queries file
-        queries_file = os.path.join(data_dir, 'dashboard_queries.json')
-        logger.info(f"Loading queries from {queries_file}")
-        queries_data = load_json_file(queries_file)
-        
-        # Generate single YTD metrics file
-        logger.info("Starting YTD metrics generation")
+        # Load queries and generate metrics
+        queries_data = load_json_file(os.path.join(data_dir, 'dashboard_queries.json'))
         metrics = generate_ytd_metrics(queries_data, output_dir)
-        logger.info("YTD metrics generation completed successfully")
-
-        # Create vector collection for YTD metrics
-        logger.info("Creating YTD vector collection")
+        
+        # Create vector collection
         create_ytd_vector_collection(metrics)
-        logger.info("YTD vector collection created successfully")
-
+        
         return metrics
     except Exception as e:
         logger.error(f"Error in main function: {str(e)}")

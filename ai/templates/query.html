@@ -105,6 +105,33 @@
             font-family: monospace;
             font-size: 14px;
             line-height: 1.4;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-width: 100%;
+        }
+        .content-preview {
+            max-height: 200px;
+            overflow: hidden;
+        }
+        .content-full {
+            display: none;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .see-more-btn {
+            background-color: #6c757d;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .see-more-btn:hover {
+            background-color: #5a6268;
         }
         .query-info {
             background-color: #e9ecef;
@@ -129,23 +156,6 @@
             color: #6c757d;
             font-style: italic;
             margin-bottom: 10px;
-        }
-        .content {
-            margin-top: 10px;
-            white-space: pre-wrap;
-            font-family: monospace;
-            font-size: 14px;
-            line-height: 1.4;
-            background-color: #f8f9fa;
-            padding: 10px;
-            border-radius: 4px;
-        }
-        .qdrant-result {
-            margin-bottom: 20px;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: white;
         }
         .result-header {
             display: flex;
@@ -248,7 +258,7 @@
                 </div>
                 <div class="form-group">
                     <label for="limit">Results Limit:</label>
-                    <input type="number" id="limit" name="limit" value="5" min="1" max="20">
+                    <input type="number" id="limit" name="limit" value="10" min="1" max="20">
                 </div>
                 <button type="submit">Execute Semantic Search</button>
             </form>
@@ -295,16 +305,19 @@
             html += `<div class="results-count">Found ${data.results.length} results:</div>`;
             
             // Show results
-            data.results.forEach(result => {
+            data.results.forEach((result, index) => {
                 html += `
                     <div class="qdrant-result">
-                        <div class="score">Similarity Score: ${result.score}</div>
+                        <div class="score">Similarity Score: ${result.score.toFixed(4)}</div>
                         <div class="filename">File: ${result.filename}</div>
-                        <div class="content">${result.content}</div>
+                        <div class="content content-preview" id="preview-${index}">${result.content.substring(0, 500)}${result.content.length > 500 ? '...' : ''}</div>
+                        <div class="content content-full" id="full-${index}">${result.content}</div>
+                        ${result.content.length > 500 ? `<button class="see-more-btn" onclick="toggleContent(${index})">See More</button>` : ''}
                     </div>
                 `;
             });
             
+            html += '</div>';
             return html;
         }
 
@@ -416,6 +429,23 @@
 
         // Load collections when page loads
         loadCollections();
+
+        // Function to toggle between preview and full content
+        function toggleContent(index) {
+            const preview = document.getElementById(`preview-${index}`);
+            const full = document.getElementById(`full-${index}`);
+            const button = document.querySelector(`#preview-${index} + .content-full + .see-more-btn`);
+            
+            if (full.style.display === 'none' || full.style.display === '') {
+                preview.style.display = 'none';
+                full.style.display = 'block';
+                if (button) button.textContent = 'See Less';
+            } else {
+                preview.style.display = 'block';
+                full.style.display = 'none';
+                if (button) button.textContent = 'See More';
+            }
+        }
 
         // Show/hide delete button and update collection info when collection is selected
         const collectionSelect = document.getElementById('collection');

@@ -942,7 +942,7 @@ async def execute_qdrant_query(request: Request):
             collection_name=collection_name,
             query_vector=query_vector,
             limit=limit,
-            score_threshold=0.1  # Lower threshold to catch more potential matches
+            score_threshold=0.05  # Lower threshold to catch more potential matches
         )
         
         logger.info(f"Found {len(search_result)} results")
@@ -960,14 +960,16 @@ async def execute_qdrant_query(request: Request):
                 relevance = "Medium"
             elif score >= 0.1:
                 relevance = "Low"
-            else:
+            elif score >= 0.05:
                 relevance = "Very Low"
+            else:
+                relevance = "Minimal"
                 
             result = {
                 'score': score,
                 'relevance': relevance,
                 'filename': hit.payload.get('filename', 'N/A'),
-                'content': hit.payload.get('content', 'No content')[:500] + '...'  # First 500 chars
+                'content': hit.payload.get('content', 'No content')  # Show full content
             }
             logger.debug(f"Result: score={score} ({relevance}), file={result['filename']}")
             results.append(result)
@@ -990,7 +992,8 @@ async def execute_qdrant_query(request: Request):
                     '0.3-0.5': 'High Relevance',
                     '0.2-0.3': 'Medium Relevance',
                     '0.1-0.2': 'Low Relevance',
-                    '<0.1': 'Very Low Relevance'
+                    '0.05-0.1': 'Very Low Relevance',
+                    '<0.05': 'Minimal Relevance'
                 }
             }
         })

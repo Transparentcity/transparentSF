@@ -132,28 +132,24 @@ IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
 def load_and_combine_notes():
     logger = logging.getLogger(__name__)
-    data_folder = Path('output/')
-    combined_text = ''
+    
+    script_dir = Path(__file__).parent
+    output_dir = script_dir / 'output'
+    combined_text = ""
     total_files = 0
     
-    logger.info("Starting to load and combine notes")
-    
-    # Recursively find all .txt files in the output directory
-    for file_path in data_folder.rglob('*.txt'):
+    # Find and load all summary text files
+    for summary_file in output_dir.rglob('*_summary.txt'):
         try:
-            logger.info(f"Loading file: {file_path}")
-            file_content = file_path.read_text(encoding='utf-8')
-            logger.info(f"File {file_path.name} size: {len(file_content)} characters")
-            combined_text += '\n' + file_content
-            total_files += 1
+            with open(summary_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                combined_text += f"\n{'='*80}\nSummary: {summary_file.name}\n{'='*80}\n\n{content}\n\n"
+                total_files += 1
         except Exception as e:
-            logger.error(f"Error reading file {file_path}: {e}")
-            continue
+            logger.error(f"Error reading summary file {summary_file}: {e}")
     
-    # Load current YTD metrics from dashboard directory
-    dashboard_dir = Path('ai/data/dashboard')
-    ytd_file = dashboard_dir / 'ytd_metrics.json'
-    
+    # Load YTD metrics
+    ytd_file = script_dir / 'output' / 'dashboard' / 'district_0.json'  # Use citywide data
     if ytd_file.exists():
         logger.info("Loading current YTD metrics")
         try:
@@ -164,26 +160,23 @@ def load_and_combine_notes():
             ytd_text = "\nYear-to-Date (YTD) Metrics Summary:\n\n"
             
             # Add citywide metrics
-            if "districts" in ytd_data and "0" in ytd_data["districts"]:
-                citywide = ytd_data["districts"]["0"]
-                ytd_text += f"Citywide Statistics:\n"
-                
-                for category in citywide.get("categories", []):
-                    ytd_text += f"\n{category['category']}:\n"
-                    for metric in category.get("metrics", []):
-                        name = metric.get("name", "")
-                        this_year = metric.get("thisYear", 0)
-                        last_year = metric.get("lastYear", 0)
-                        last_date = metric.get("lastDataDate", "")
-                        
-                        # Calculate percent change
-                        if last_year != 0:
-                            pct_change = ((this_year - last_year) / last_year) * 100
-                            change_text = f"({pct_change:+.1f}% vs last year)"
-                        else:
-                            change_text = "(no prior year data)"
-                        
-                        ytd_text += f"- {name}: {this_year:,} {change_text} as of {last_date}\n"
+            ytd_text += f"Citywide Statistics:\n"
+            for category in ytd_data.get("categories", []):
+                ytd_text += f"\n{category['category']}:\n"
+                for metric in category.get("metrics", []):
+                    name = metric.get("name", "")
+                    this_year = metric.get("thisYear", 0)
+                    last_year = metric.get("lastYear", 0)
+                    last_date = metric.get("lastDataDate", "")
+                    
+                    # Calculate percent change
+                    if last_year != 0:
+                        pct_change = ((this_year - last_year) / last_year) * 100
+                        change_text = f"({pct_change:+.1f}% vs last year)"
+                    else:
+                        change_text = "(no prior year data)"
+                    
+                    ytd_text += f"- {name}: {this_year:,} {change_text} as of {last_date}\n"
             
             combined_text += "\n" + ytd_text
             logger.info("Successfully added YTD metrics to notes")
@@ -587,7 +580,7 @@ Researcher_agent = Agent(
     Role: You are a researcher for Transparent SF, focusing on trends in city data.
     Purpose: help the user find objective data and specific details on their question. 
     
-    - get_notes() Start here. This is a summary of everything in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
+    - get_notes() ALWAYS Start here. This is a summary of all the analysis you have available to you in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
     - Use query_docs("collection_name=<Collection_Name>", query=<words or phrases>) to review analysis of city data.  THis is a semantic search of Qdrant, not a SQL query
         There are many collections you can search. Sometimes you might want to look at multiple collections to get the data you need. 
         
@@ -628,11 +621,12 @@ Researcher_agent = Agent(
         - Example: "select dba_name, location_start_date where supervisor_district = '6' and location_start_date >= '2025-01-01'"
         
     When displaying data:
-    1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  Return them in the same markdown format you find in the docs, with no changes. 
-    2. Include relevant titles and context with your tables and charts. 
-    3. Follow up tables with explanations of key insights or trends. 
-    4. If you can't find the data you need, just say so.  Don't make up data or information. 
-    5. Don't speculate as to causes or "WHY" something is happening.  Just report on WHAT is happening. 
+    1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  To better find charts add the term charts to your query.
+    2. Return them in the same markdown format you find in the docs, with no changes. DO NOT ADD or CHANGE THE URLS
+    3. Include relevant titles and context with your tables and charts. 
+    4. Follow up tables with explanations of key insights or trends. 
+    5. If you can't find the data you need, just say so.  Don't make up data or information. 
+    6. Don't speculate as to causes or "WHY" something is happening.  Just report on WHAT is happening. 
     
     """,
     functions=[get_notes, query_docs, set_dataset, transfer_to_analyst_agent, generate_ghost_post],

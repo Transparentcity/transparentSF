@@ -74,7 +74,8 @@ async def get_metrics(filename: str):
     if not filename.endswith('.json'):
         filename = f"{filename}.json"
     
-    file_path = os.path.join(output_dir, filename)
+    # All metrics files should be in the dashboard directory
+    file_path = os.path.join(output_dir, 'dashboard', filename)
     logger.debug(f"Attempting to read metrics from: {file_path}")
     
     try:

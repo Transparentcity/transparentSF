@@ -17,7 +17,7 @@ def trim_results_to_token_limit(results: List[Dict], max_tokens: int = 100000) -
     trimmed_results = []
     
     for result in results:
-        content = result.get('content', '')
+        content = result.payload.get('content', '')  # Access payload attribute directly
         tokens = estimate_tokens(content)
         
         if total_tokens + tokens <= max_tokens:
@@ -28,7 +28,7 @@ def trim_results_to_token_limit(results: List[Dict], max_tokens: int = 100000) -
             
     return trimmed_results
 
-def query_qdrant(query, collection_name, top_k=4, score_threshold=0.25):
+def query_qdrant(query, collection_name, top_k=3, score_threshold=0.25):
     try:
         embedded_query = get_embedding(query)
         if not embedded_query:
@@ -66,12 +66,9 @@ def query_docs(context_variables, collection_name, query):
     print(f"Searching collection '{collection_name}' with query: {query}")
     query_results = query_qdrant(query, collection_name=collection_name)
     
-    
     try:
         serialized_results = [article.payload for article in query_results]
-        
-        # print("first few characgters of results:")
-        # print(str(serialized_results[0])[:100])
+        # ...existing code...
     except Exception as e:
         print(f"Error serializing query results: {e}")
 
@@ -79,13 +76,16 @@ def query_docs(context_variables, collection_name, query):
         print("No results")
         return {"response": "No results found.", "results": []}
 
+    # Trim results to stay within token limit
+    trimmed_results = trim_results_to_token_limit(query_results)
+
     # Branch processing based on collection name
     if collection_name == "SFPublicData":
         # Process as docs
-        return process_as_docs(query_results)
+        return process_as_docs(trimmed_results)
     else:
         # Process as content or other type
-        return process_as_content(query_results)
+        return process_as_content(trimmed_results)
 
 def process_as_docs(query_results):
     output = []
@@ -156,9 +156,6 @@ def process_as_content(query_results):
             response += f"{i}. **Content:** {truncated_content}\n\n"
             output.append({"content": content})
 
-    # Add token limit check
-    output = trim_results_to_token_limit(output)
-    
     # Rebuild response with trimmed results if needed
     if len(output) < len(query_results):
         response = f"Top {len(output)} matches (results trimmed to stay within token limit):\n\n"
