@@ -74,22 +74,174 @@ async def get_metrics(filename: str):
     if not filename.endswith('.json'):
         filename = f"{filename}.json"
     
-    # All metrics files should be in the dashboard directory
-    file_path = os.path.join(output_dir, 'dashboard', filename)
-    logger.debug(f"Attempting to read metrics from: {file_path}")
+    # Check if this is a district file request (district_X.json)
+    if filename.startswith('district_') and '_' in filename:
+        # Extract district number
+        district_str = filename.split('_')[1].split('.')[0]
+        
+        # For backward compatibility, check if the file exists in the old location
+        old_file_path = os.path.join(output_dir, 'dashboard', filename)
+        if os.path.exists(old_file_path):
+            logger.debug(f"Serving metrics from old location: {old_file_path}")
+            try:
+                with open(old_file_path, 'r') as f:
+                    data = json.load(f)
+                    return JSONResponse(content=data)
+            except Exception as e:
+                logger.error(f"Error reading metrics file {old_file_path}: {str(e)}")
+                # Fall through to try the new location
+        
+        # Try to serve top_level.json from the district subfolder
+        new_file_path = os.path.join(output_dir, 'dashboard', district_str, 'top_level.json')
+        logger.debug(f"Attempting to read metrics from new location: {new_file_path}")
+        try:
+            with open(new_file_path, 'r') as f:
+                data = json.load(f)
+                return JSONResponse(content=data)
+        except FileNotFoundError:
+            logger.error(f"Metrics file not found in new location: {new_file_path}")
+            raise HTTPException(status_code=404, detail=f"Metrics file '{filename}' not found")
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON in metrics file: {new_file_path}")
+            raise HTTPException(status_code=500, detail=f"Invalid JSON in metrics file '{filename}'")
+        except Exception as e:
+            logger.error(f"Error reading metrics file {new_file_path}: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
+    
+    # Check if this is a metric ID request (metric_id.json)
+    # Format could be something like "crime_incidents_ytd.json"
+    elif '_' in filename and not filename.startswith('district_'):
+        # This is likely a metric file request
+        # We need to determine which district it belongs to
+        # First, try to find it in each district folder
+        for district_num in range(12):  # 0-11 for citywide and districts 1-11
+            district_str = str(district_num)
+            metric_file_path = os.path.join(output_dir, 'dashboard', district_str, filename)
+            if os.path.exists(metric_file_path):
+                logger.debug(f"Found metric file in district {district_str}: {metric_file_path}")
+                try:
+                    with open(metric_file_path, 'r') as f:
+                        data = json.load(f)
+                        return JSONResponse(content=data)
+                except Exception as e:
+                    logger.error(f"Error reading metric file {metric_file_path}: {str(e)}")
+                    # Continue to try other districts
+        
+        # If we get here, the metric file wasn't found in any district folder
+        logger.error(f"Metric file not found in any district folder: {filename}")
+        raise HTTPException(status_code=404, detail=f"Metric file '{filename}' not found")
+    
+    # For any other files, try the old location
+    else:
+        file_path = os.path.join(output_dir, 'dashboard', filename)
+        logger.debug(f"Attempting to read metrics from: {file_path}")
+        
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                return JSONResponse(content=data)
+        except FileNotFoundError:
+            logger.error(f"Metrics file not found: {file_path}")
+            raise HTTPException(status_code=404, detail=f"Metrics file '{filename}' not found")
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON in metrics file: {file_path}")
+            raise HTTPException(status_code=500, detail=f"Invalid JSON in metrics file '{filename}'")
+        except Exception as e:
+            logger.error(f"Error reading metrics file {file_path}: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/district/{district_id}/metric/{metric_id}")
+async def get_district_metric(district_id: str, metric_id: str):
+    """Serve a specific metric for a specific district."""
+    # Ensure metric_id ends with .json
+    if not metric_id.endswith('.json'):
+        metric_id = f"{metric_id}.json"
+    
+    # Construct the file path
+    file_path = os.path.join(output_dir, 'dashboard', district_id, metric_id)
+    logger.debug(f"Attempting to read district metric from: {file_path}")
     
     try:
         with open(file_path, 'r') as f:
             data = json.load(f)
             return JSONResponse(content=data)
     except FileNotFoundError:
-        logger.error(f"Metrics file not found: {file_path}")
-        raise HTTPException(status_code=404, detail=f"Metrics file '{filename}' not found")
+        logger.error(f"District metric file not found: {file_path}")
+        raise HTTPException(status_code=404, detail=f"Metric '{metric_id}' for district '{district_id}' not found")
     except json.JSONDecodeError:
-        logger.error(f"Invalid JSON in metrics file: {file_path}")
-        raise HTTPException(status_code=500, detail=f"Invalid JSON in metrics file '{filename}'")
+        logger.error(f"Invalid JSON in district metric file: {file_path}")
+        raise HTTPException(status_code=500, detail=f"Invalid JSON in metric file '{metric_id}' for district '{district_id}'")
     except Exception as e:
-        logger.error(f"Error reading metrics file {file_path}: {str(e)}")
+        logger.error(f"Error reading district metric file {file_path}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/district/{district_id}")
+async def get_district_top_level(district_id: str):
+    """Serve the top-level metrics for a specific district."""
+    # Construct the file path
+    file_path = os.path.join(output_dir, 'dashboard', district_id, 'top_level.json')
+    logger.debug(f"Attempting to read district top-level metrics from: {file_path}")
+    
+    try:
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            return JSONResponse(content=data)
+    except FileNotFoundError:
+        logger.error(f"District top-level file not found: {file_path}")
+        raise HTTPException(status_code=404, detail=f"Top-level metrics for district '{district_id}' not found")
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON in district top-level file: {file_path}")
+        raise HTTPException(status_code=500, detail=f"Invalid JSON in top-level file for district '{district_id}'")
+    except Exception as e:
+        logger.error(f"Error reading district top-level file {file_path}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/district/{district_id}/metrics")
+async def list_district_metrics(district_id: str):
+    """List all available metrics for a specific district."""
+    # Construct the directory path
+    dir_path = os.path.join(output_dir, 'dashboard', district_id)
+    logger.debug(f"Attempting to list metrics in directory: {dir_path}")
+    
+    try:
+        if not os.path.exists(dir_path):
+            logger.error(f"District directory not found: {dir_path}")
+            raise HTTPException(status_code=404, detail=f"District '{district_id}' not found")
+        
+        # Get all JSON files in the directory except top_level.json
+        metric_files = [f for f in os.listdir(dir_path) if f.endswith('.json') and f != 'top_level.json']
+        
+        # Extract metric IDs (remove .json extension)
+        metric_ids = [f[:-5] for f in metric_files]
+        
+        # Return the list of metric IDs
+        return JSONResponse(content={"metrics": metric_ids})
+    except Exception as e:
+        logger.error(f"Error listing district metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/districts")
+async def list_districts():
+    """List all available districts."""
+    # Construct the directory path
+    dir_path = os.path.join(output_dir, 'dashboard')
+    logger.debug(f"Attempting to list districts in directory: {dir_path}")
+    
+    try:
+        if not os.path.exists(dir_path):
+            logger.error(f"Dashboard directory not found: {dir_path}")
+            raise HTTPException(status_code=404, detail="Dashboard directory not found")
+        
+        # Get all subdirectories that are numeric (district IDs)
+        district_dirs = [d for d in os.listdir(dir_path) if os.path.isdir(os.path.join(dir_path, d)) and d.isdigit()]
+        
+        # Sort district IDs numerically
+        district_ids = sorted(district_dirs, key=int)
+        
+        # Return the list of district IDs
+        return JSONResponse(content={"districts": district_ids})
+    except Exception as e:
+        logger.error(f"Error listing districts: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 # Root route to serve index.html

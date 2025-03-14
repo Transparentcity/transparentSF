@@ -114,6 +114,7 @@ qdrant = qdrant_client.QdrantClient(host="localhost", port=6333)
 # Set embedding model
 EMBEDDING_MODEL = "text-embedding-3-large"
 # AGENT_MODEL = "gpt-3.5-turbo-16k"
+# AGENT_MODEL = "gpt-3.5-turbo-16k"
 AGENT_MODEL = "gpt-4o"
 
 # Set Qdrant collection
@@ -323,6 +324,87 @@ def transfer_to_researcher_agent(context_variables, *args, **kwargs):
     """
     return Researcher_agent
 
+def get_dashboard_metric(context_variables, district_number=0, metric_id=None):
+    """
+    Retrieves dashboard metric data for a specific district and metric.
+    
+    Args:
+        context_variables: The context variables dictionary
+        district_number: The district number (0 for citywide, 1-11 for specific districts). Can be int or string.
+        metric_id: The specific metric ID to retrieve. If None, returns the top_level.json file.
+    
+    Returns:
+        A dictionary containing the metric data or error message
+    """
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Convert district_number to int if it's a string
+        try:
+            district_number = int(district_number)
+        except (TypeError, ValueError):
+            return {"error": f"Invalid district number format: {district_number}. Must be a number between 0 and 11."}
+        
+        # Validate district number range
+        if district_number < 0 or district_number > 11:
+            return {"error": f"Invalid district number: {district_number}. Must be between 0 (citywide) and 11."}
+        
+        # Construct the base path - looking one level up from the script
+        script_dir = Path(__file__).parent
+        dashboard_dir = script_dir / 'output' / 'dashboard'
+        
+        logger.info(f"Looking for dashboard data in: {dashboard_dir}")
+        
+        # If metric_id is None, return the top-level district summary
+        if metric_id is None:
+            file_path = dashboard_dir / f"district_{district_number}.json"
+            logger.info(f"Fetching top-level dashboard data for district {district_number} from {file_path}")
+        else:
+            # Metric ID is provided, look in the district-specific folder
+            district_folder = dashboard_dir / str(district_number)
+            
+            # If metric_id doesn't end with .json, add it
+            if not metric_id.endswith('.json'):
+                metric_id = f"{metric_id}.json"
+                
+            file_path = district_folder / metric_id
+            logger.info(f"Fetching specific metric '{metric_id}' for district {district_number} from {file_path}")
+        
+        # Check if the file exists
+        if not file_path.exists():
+            # If specific metric file doesn't exist, list available metrics
+            if metric_id is not None:
+                available_metrics = []
+                district_folder = dashboard_dir / str(district_number)
+                if district_folder.exists():
+                    available_metrics = [f.name for f in district_folder.glob('*.json')]
+                
+                return {
+                    "error": f"Metric '{metric_id}' not found for district {district_number}",
+                    "available_metrics": available_metrics
+                }
+            else:
+                return {"error": f"Dashboard data not found for district {district_number}"}
+        
+        # Read and parse the JSON file
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Add metadata about the source
+        result = {
+            "source": str(file_path),
+            "district": district_number,
+            "metric_id": metric_id,
+            "data": data
+        }
+        
+        logger.info(f"Successfully retrieved dashboard metric data from {file_path}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error retrieving dashboard metric: {str(e)}", exc_info=True)
+        return {"error": f"Error retrieving dashboard metric: {str(e)}"}
+
 # Define the anomaly finder agent
 analyst_agent = Agent(
     model=AGENT_MODEL,
@@ -338,10 +420,13 @@ analyst_agent = Agent(
         Example usage:
         set_dataset(context_variables, endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
     - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
+    - Use `get_dashboard_metric(context_variables, district_number, metric_id)` to retrieve dashboard metric data:
+        - district_number: Integer from 0 (citywide) to 11 (specific district)
+        - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary.
 
     """,
     # functions=[get_notes, query_docs, transfer_to_researcher_agent],
-    functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, transfer_to_researcher_agent],
+    functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, get_dashboard_metric, transfer_to_researcher_agent],
     context_variables=context_variables,
     debug=True,
 )
@@ -364,11 +449,9 @@ You have access to the following columns: {column_list_str}. ANNOUNCE THESE TO T
 
 def load_and_combine_climate_data():
     data_folder = 'data/climate'
-    # gsf_file = os.path.join(data_folder, 'GSF.csv')
     vera_file = os.path.join(data_folder, 'cleaned_vcusNov19.csv')
     
     # Load the CSV files with detected encoding
-    # gsf_df = read_csv_with_encoding(gsf_file)
     vera_df = read_csv_with_encoding(vera_file)
     
     # Combine the DataFrames
@@ -484,6 +567,8 @@ Preview: {markdown[:500]}...
         logger.error(f"Error formatting table: {str(e)}", exc_info=True)
         return {"error": f"Error formatting table: {str(e)}"}
 
+# New function to get dashboard metric data
+
 # Add a new function to handle pagination
 def format_table_page(context_variables, page_number, title=None):
     """
@@ -568,6 +653,7 @@ function_mapping = {
     'query_docs': query_docs,
     'set_dataset': set_dataset,
     'generate_time_series_chart': generate_time_series_chart,
+    'get_dashboard_metric': get_dashboard_metric,
     'format_table': format_table,
     'format_table_page': format_table_page,
 }
@@ -614,6 +700,13 @@ Researcher_agent = Agent(
         Example usage:
         set_dataset(endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
 
+        - Use `get_dashboard_metric(district_number, metric_id)` to retrieve dashboard metric data:
+          - district_number: Integer from 0 (citywide) to 11 (specific district)
+          - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary.
+          Example usage:
+          get_dashboard_metric(0, "🚨_violent_crime_incidents_ytd") # Get citywide violent crime data
+          get_dashboard_metric(5) # Get all metrics for District 5
+
         Query Format:
         - Use standard SQL syntax: "select field1, field2 where condition"
         - Do not use $ prefixes in your queries
@@ -629,7 +722,7 @@ Researcher_agent = Agent(
     6. Don't speculate as to causes or "WHY" something is happening.  Just report on WHAT is happening. 
     
     """,
-    functions=[get_notes, query_docs, set_dataset, transfer_to_analyst_agent, generate_ghost_post],
+    functions=[get_notes, query_docs, set_dataset, get_dashboard_metric, transfer_to_analyst_agent, generate_ghost_post],
     context_variables=context_variables,
     debug=True
 )
@@ -754,9 +847,12 @@ function_mapping = {
     'get_columns': get_columns,
     'get_data_summary': get_data_summary,
     'anomaly_detection': anomaly_detection,
-    'query_docs': query_docs,  # Use the handler instead of direct query_docs
+    'query_docs': query_docs,
     'set_dataset': set_dataset,
-    'generate_category_chart': generate_time_series_chart,
+    'generate_time_series_chart': generate_time_series_chart,
+    'get_dashboard_metric': get_dashboard_metric,
+    'format_table': format_table,
+    'format_table_page': format_table_page,
 }
 
 
@@ -1098,3 +1194,4 @@ Total messages: {len(messages)}
 Timestamp: {datetime.datetime.now().isoformat()}
 ===============================
 """)
+

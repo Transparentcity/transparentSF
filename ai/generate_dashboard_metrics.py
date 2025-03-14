@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 import time
+import argparse
 
 # Create logs directory if it doesn't exist
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -60,7 +61,13 @@ def get_date_ranges(target_date=None):
     # Last year's range - use same day-of-year
     last_year = this_year - 1
     last_year_start = f"{last_year}-01-01"
-    last_year_end = target_date.replace(year=last_year).strftime('%Y-%m-%d')
+    
+    # For last year's end date, we need to handle leap years correctly
+    # If this year is a leap year and today is Feb 29, use Feb 28 for last year
+    if target_date.month == 2 and target_date.day == 29:
+        last_year_end = f"{last_year}-02-28"
+    else:
+        last_year_end = target_date.replace(year=last_year).strftime('%Y-%m-%d')
     
     logger.info(f"Date ranges: this_year={this_year_start} to {this_year_end}, last_year={last_year_start} to {last_year_end}")
     
@@ -71,15 +78,156 @@ def get_date_ranges(target_date=None):
         'last_year_end': last_year_end
     }
 
+def debug_query(query, endpoint, date_ranges, query_name=None):
+    """Debug a query by printing detailed information about the query and its execution."""
+    logger.info("=" * 80)
+    logger.info(f"DEBUG QUERY: {query_name}")
+    logger.info("-" * 80)
+    logger.info(f"Endpoint: {endpoint}")
+    logger.info(f"Date ranges: {date_ranges}")
+    
+    # Extract year from date ranges
+    this_year = datetime.strptime(date_ranges['this_year_end'], '%Y-%m-%d').year
+    last_year = this_year - 1
+    
+    # Check for hardcoded dates in the query
+    this_year_pattern = re.compile(f"'{this_year}-\\d{{2}}-\\d{{2}}'")
+    last_year_pattern = re.compile(f"'{last_year}-\\d{{2}}-\\d{{2}}'")
+    
+    this_year_dates = this_year_pattern.findall(query)
+    last_year_dates = last_year_pattern.findall(query)
+    
+    if this_year_dates:
+        logger.info(f"Found hardcoded this year dates: {this_year_dates}")
+    if last_year_dates:
+        logger.info(f"Found hardcoded last year dates: {last_year_dates}")
+    
+    # Check for date placeholders
+    placeholders = ['this_year_start', 'this_year_end', 'last_year_start', 'last_year_end']
+    for placeholder in placeholders:
+        if placeholder in query:
+            logger.info(f"Found placeholder: {placeholder} = {date_ranges.get(placeholder, 'Not in date_ranges')}")
+    
+    # Try to determine the actual last data date for this endpoint
+    try:
+        for date_col in ['date_issued', 'arrest_date', 'received_datetime', 'date']:
+            last_date_query = f"SELECT max({date_col}) as last_data_date"
+            context_variables = {}
+            last_date_result = set_dataset(context_variables, endpoint=endpoint, query=last_date_query)
+            
+            if last_date_result.get('status') == 'success' and 'dataset' in context_variables and not context_variables['dataset'].empty:
+                if not context_variables['dataset']['last_data_date'].iloc[0] is None:
+                    actual_last_date = pd.to_datetime(context_variables['dataset']['last_data_date'].iloc[0]).date()
+                    logger.info(f"Found actual last data date from {date_col}: {actual_last_date}")
+                    break
+    except Exception as e:
+        logger.warning(f"Error determining last data date: {str(e)}")
+    
+    # Now modify the query with the updated date ranges
+    modified_query = query
+    
+    # Replace date placeholders in the query
+    for key, value in date_ranges.items():
+        modified_query = modified_query.replace(key, f"'{value}'")
+    
+    # Check for hardcoded date patterns in the query and replace them
+    this_year_pattern = re.compile(f"'{this_year}-\\d{{2}}-\\d{{2}}'")
+    last_year_pattern = re.compile(f"'{last_year}-\\d{{2}}-\\d{{2}}'")
+    
+    # Find all hardcoded dates for this year and last year
+    this_year_dates = this_year_pattern.findall(modified_query)
+    last_year_dates = last_year_pattern.findall(modified_query)
+    
+    # Replace the latest this_year date with the actual max date
+    if this_year_dates:
+        latest_this_year_date = max(this_year_dates)
+        modified_query = modified_query.replace(latest_this_year_date, f"'{date_ranges['this_year_end']}'")
+        logger.info(f"Replaced hardcoded this year date {latest_this_year_date} with {date_ranges['this_year_end']}")
+    
+    # Replace the latest last_year date with the corresponding last year date
+    if last_year_dates:
+        # Filter out January 1st dates as these should remain as start dates
+        jan_first = f"'{last_year}-01-01'"
+        non_jan_first_dates = [date for date in last_year_dates if date != jan_first]
+        
+        if non_jan_first_dates:
+            latest_last_year_date = max(non_jan_first_dates)
+            modified_query = modified_query.replace(latest_last_year_date, f"'{date_ranges['last_year_end']}'")
+            logger.info(f"Replaced hardcoded last year date {latest_last_year_date} with {date_ranges['last_year_end']}")
+        else:
+            logger.info(f"No non-January 1st last year dates to replace. Keeping {jan_first} as the start date.")
+    
+    logger.info(f"Modified query: {modified_query}")
+    
+    # Execute the query
+    context_variables = {}
+    result = set_dataset(context_variables, endpoint=endpoint, query=modified_query)
+    logger.info(f"Query execution result status: {result.get('status')}")
+    
+    if result.get('status') == 'success' and 'dataset' in context_variables:
+        df = context_variables['dataset']
+        logger.info(f"Dataset retrieved successfully - Shape: {df.shape}")
+        logger.info(f"Columns: {df.columns.tolist()}")
+        
+        # Print the first few rows
+        if not df.empty:
+            logger.info("First few rows:")
+            logger.info(df.head().to_string())
+            
+            # Get the max date
+            for date_col in ['received_datetime', 'max_date', 'arrest_date']:
+                if date_col in df.columns:
+                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+                    max_date = df[date_col].max()
+                    if pd.notnull(max_date):
+                        max_date_str = max_date.strftime('%Y-%m-%d')
+                        logger.info(f"Max date determined from {date_col}: {max_date_str}")
+                        break
+    else:
+        logger.error("Query failed or no data returned")
+        if 'error' in result:
+            logger.error(f"Error: {result['error']}")
+        logger.error(f"Query URL: {result.get('queryURL')}")
+    
+    logger.info("=" * 80)
+    return
+
 def process_query_for_district(query, endpoint, date_ranges, query_name=None):
     """Process a single query and handle district-level aggregation from the same dataset."""
     try:
         logger.info(f"Processing query for endpoint {endpoint}, query_name: {query_name}")
         
+        # Debug the query if it's for "Arrests Presented to DA"
+        if query_name and "arrests presented" in query_name.lower():
+            debug_query(query, endpoint, date_ranges, query_name)
+        
         # Get date ranges if not provided
         if not date_ranges:
             date_ranges = get_date_ranges()
-            
+        
+        # IMPORTANT FIX: For housing units, we need to get the actual last data date
+        # This is to ensure we're using the actual last date, not just the first day of the month
+        if query_name and "housing units" in query_name.lower():
+            try:
+                # Try to get the actual last data date from the endpoint
+                actual_last_date_query = "SELECT max(date_issued) as last_data_date"
+                actual_date_context = {}
+                actual_date_result = set_dataset(actual_date_context, endpoint=endpoint, query=actual_last_date_query)
+                
+                if actual_date_result.get('status') == 'success' and 'dataset' in actual_date_context and not actual_date_context['dataset'].empty:
+                    actual_last_date = pd.to_datetime(actual_date_context['dataset']['last_data_date'].iloc[0])
+                    if pd.notnull(actual_last_date):
+                        actual_last_date_str = actual_last_date.strftime('%Y-%m-%d')
+                        logger.info(f"Found actual last data date for housing units: {actual_last_date_str}")
+                        
+                        # Update the date ranges with the actual last data date
+                        date_ranges['this_year_end'] = actual_last_date_str
+                        date_ranges['last_year_end'] = actual_last_date.replace(year=actual_last_date.year-1).strftime('%Y-%m-%d')
+                        logger.info(f"Updated date ranges for housing units: this_year_end={date_ranges['this_year_end']}, last_year_end={date_ranges['last_year_end']}")
+            except Exception as e:
+                logger.warning(f"Error getting actual last data date for housing units: {str(e)}")
+        
+        # Now modify the query with the date ranges
         modified_query = query
         
         # Replace date placeholders in the query
@@ -91,6 +239,34 @@ def process_query_for_district(query, endpoint, date_ranges, query_name=None):
         last_year = this_year - 1
         
         logger.info(f"Processing years: this_year={this_year}, last_year={last_year}")
+        
+        # Check for hardcoded date patterns in the query and replace them
+        # This is crucial for queries that have hardcoded dates like '2025-02-16'
+        this_year_pattern = re.compile(f"'{this_year}-\\d{{2}}-\\d{{2}}'")
+        last_year_pattern = re.compile(f"'{last_year}-\\d{{2}}-\\d{{2}}'")
+        
+        # Find all hardcoded dates for this year and last year
+        this_year_dates = this_year_pattern.findall(modified_query)
+        last_year_dates = last_year_pattern.findall(modified_query)
+        
+        # Replace the latest this_year date with the actual max date
+        if this_year_dates:
+            latest_this_year_date = max(this_year_dates)
+            modified_query = modified_query.replace(latest_this_year_date, f"'{date_ranges['this_year_end']}'")
+            logger.info(f"Replaced hardcoded this year date {latest_this_year_date} with {date_ranges['this_year_end']}")
+        
+        # Replace the latest last_year date with the corresponding last year date
+        if last_year_dates:
+            # Filter out January 1st dates as these should remain as start dates
+            jan_first = f"'{last_year}-01-01'"
+            non_jan_first_dates = [date for date in last_year_dates if date != jan_first]
+            
+            if non_jan_first_dates:
+                latest_last_year_date = max(non_jan_first_dates)
+                modified_query = modified_query.replace(latest_last_year_date, f"'{date_ranges['last_year_end']}'")
+                logger.info(f"Replaced hardcoded last year date {latest_last_year_date} with {date_ranges['last_year_end']}")
+            else:
+                logger.info(f"No non-January 1st last year dates to replace. Keeping {jan_first} as the start date.")
         
         # Define all possible date patterns we need to fix
         date_patterns = [
@@ -136,7 +312,7 @@ def process_query_for_district(query, endpoint, date_ranges, query_name=None):
             
             # Get the max date
             max_date = None
-            for date_col in ['received_datetime', 'max_date']:
+            for date_col in ['received_datetime', 'max_date', 'arrest_date']:
                 if date_col in df.columns:
                     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
                     max_date = df[date_col].max()
@@ -201,6 +377,16 @@ def process_query_for_district(query, endpoint, date_ranges, query_name=None):
                     }
             
             logger.info(f"Query processing completed successfully for {query_name}")
+            
+            # Print the final results if it's the specific metric we're debugging
+            if query_name and "arrests presented" in query_name.lower():
+                logger.info("=" * 80)
+                logger.info(f"FINAL RESULTS FOR: {query_name}")
+                logger.info("-" * 80)
+                for district, district_results in results.items():
+                    logger.info(f"District {district}: thisYear={district_results['thisYear']}, lastYear={district_results['lastYear']}, lastDataDate={district_results['lastDataDate']}")
+                logger.info("=" * 80)
+            
             return {
                 'results': results,
                 'queries': query_info
@@ -232,7 +418,38 @@ def process_ytd_trend_query(query, endpoint, date_ranges=None, target_date=None,
         modified_query = modified_query.replace("current_date", f"'{date_ranges['this_year_end']}'")
         modified_query = modified_query.replace("last_year_start", f"'{date_ranges['last_year_start']}'")
         
-        logger.info(f"Modified query: {modified_query}")
+        # Check for hardcoded date patterns in the query and replace them
+        this_year = datetime.strptime(date_ranges['this_year_end'], '%Y-%m-%d').year
+        last_year = this_year - 1
+        
+        # Use regex to find hardcoded dates
+        this_year_pattern = re.compile(f"'{this_year}-\\d{{2}}-\\d{{2}}'")
+        last_year_pattern = re.compile(f"'{last_year}-\\d{{2}}-\\d{{2}}'")
+        
+        # Find all hardcoded dates for this year and last year
+        this_year_dates = this_year_pattern.findall(modified_query)
+        last_year_dates = last_year_pattern.findall(modified_query)
+        
+        # Replace the latest this_year date with the actual max date
+        if this_year_dates:
+            latest_this_year_date = max(this_year_dates)
+            modified_query = modified_query.replace(latest_this_year_date, f"'{date_ranges['this_year_end']}'")
+            logger.info(f"Replaced hardcoded this year date {latest_this_year_date} with {date_ranges['this_year_end']}")
+        
+        # Replace the latest last_year date with the corresponding last year date
+        if last_year_dates:
+            # Filter out January 1st dates as these should remain as start dates
+            jan_first = f"'{last_year}-01-01'"
+            non_jan_first_dates = [date for date in last_year_dates if date != jan_first]
+            
+            if non_jan_first_dates:
+                latest_last_year_date = max(non_jan_first_dates)
+                modified_query = modified_query.replace(latest_last_year_date, f"'{date_ranges['last_year_end']}'")
+                logger.info(f"Replaced hardcoded last year date {latest_last_year_date} with {date_ranges['last_year_end']}")
+            else:
+                logger.info(f"No non-January 1st last year dates to replace. Keeping {jan_first} as the start date.")
+        
+        logger.info(f"Modified trend query: {modified_query}")
         
         # Execute the query
         context_variables = {}
@@ -251,11 +468,47 @@ def process_ytd_trend_query(query, endpoint, date_ranges=None, target_date=None,
                 # Update date ranges if needed
                 if last_data_date_str < date_ranges['this_year_end']:
                     logger.info(f"Updating date ranges to use last data date: {last_data_date_str}")
+                    
+                    # IMPORTANT FIX: For monthly data, we need to find the actual last data date
+                    # Check if this is a monthly dataset (date_trunc_ym in the query)
+                    is_monthly = 'date_trunc_ym' in query
+                    if is_monthly:
+                        # For monthly data, we need to find the actual last data date from the dataset
+                        # This is to ensure we're using the actual last date, not just the first day of the month
+                        try:
+                            # Try to get the actual last data date from the endpoint
+                            date_col = None
+                            for possible_col in ['date_issued', 'arrest_date', 'received_datetime', 'date']:
+                                if possible_col in endpoint:
+                                    date_col = possible_col
+                                    break
+                            
+                            if date_col:
+                                actual_last_date_query = f"SELECT max({date_col}) as last_data_date"
+                                actual_date_context = {}
+                                actual_date_result = set_dataset(actual_date_context, endpoint=endpoint, query=actual_last_date_query)
+                                
+                                if actual_date_result.get('status') == 'success' and 'dataset' in actual_date_context and not actual_date_context['dataset'].empty:
+                                    actual_last_date = pd.to_datetime(actual_date_context['dataset']['last_data_date'].iloc[0])
+                                    if pd.notnull(actual_last_date):
+                                        actual_last_date_str = actual_last_date.strftime('%Y-%m-%d')
+                                        logger.info(f"Found actual last data date from endpoint: {actual_last_date_str}")
+                                        
+                                        # Use this actual date instead of the first day of the month
+                                        last_data_date_str = actual_last_date_str
+                                        last_data_date = actual_last_date
+                        except Exception as e:
+                            logger.warning(f"Error getting actual last data date: {str(e)}")
+                            logger.warning("Falling back to trend data date")
+                    
                     date_ranges.update({
                         'this_year_end': last_data_date_str,
                         'last_year_end': last_data_date.replace(year=last_data_date.year-1).strftime('%Y-%m-%d'),
                         'last_data_date': last_data_date_str
                     })
+                    # Ensure last_year_start is always January 1st of the previous year
+                    date_ranges['last_year_start'] = f"{last_data_date.year-1}-01-01"
+                    logger.info(f"Ensuring last_year_start is January 1st: {date_ranges['last_year_start']}")
             
             # Sort by date and convert Timestamp keys to string dates
             trend_data = {
@@ -312,12 +565,17 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
         
         # Process each subcategory
         for subcategory_name, subcategory_data in top_category_data.items():
-            if isinstance(subcategory_data, dict) and 'endpoint' in subcategory_data and 'queries' in subcategory_data:
-                endpoint = subcategory_data['endpoint']
+            # Check if this is a valid subcategory with queries
+            if isinstance(subcategory_data, dict) and 'queries' in subcategory_data:
+                # Get the endpoint from the subcategory if it exists
+                endpoint = subcategory_data.get('endpoint', None)
+                
+                # Format the endpoint if it exists
                 if endpoint and not endpoint.startswith('http'):
                     endpoint = f"https://data.sfgov.org/resource/{endpoint}"
                 if endpoint and not endpoint.endswith('.json'):
                     endpoint = f"{endpoint}.json"
+                
                 # Get initial date ranges using yesterday as target
                 initial_date_ranges = get_date_ranges(target_date)
                 
@@ -333,6 +591,7 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                             "data_sf_url": "",
                             "ytd_query": ""
                         }
+                        query_endpoint = endpoint
                     else:
                         metric_query = query_data.get('metric_query', '')
                         ytd_query = query_data.get('ytd_query', '')
@@ -342,56 +601,47 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                             "data_sf_url": query_data.get('data_sf_url', ''),
                             "ytd_query": query_data.get('ytd_query', '')
                         }
+                        # Check if this query has its own endpoint
+                        if 'endpoint' in query_data:
+                            query_endpoint = query_data['endpoint']
+                            if query_endpoint and not query_endpoint.startswith('http'):
+                                query_endpoint = f"https://data.sfgov.org/resource/{query_endpoint}"
+                            if query_endpoint and not query_endpoint.endswith('.json'):
+                                query_endpoint = f"{query_endpoint}.json"
+                            logger.info(f"Using query-specific endpoint for {query_name}: {query_endpoint}")
+                        else:
+                            query_endpoint = endpoint
+                    
+                    # Skip this query if we don't have an endpoint
+                    if not query_endpoint:
+                        logger.warning(f"Skipping query {query_name} because no endpoint is defined")
+                        continue
                     
                     # Create a copy of initial date ranges for this metric
                     date_ranges = initial_date_ranges.copy()
                     trend_data = None
                     
-                    # Get the actual last data date first
-                    context_variables = {}
-                    last_date_query = "SELECT max(date_issued) as last_data_date"
-                    last_date_result = set_dataset(context_variables, endpoint=endpoint, query=last_date_query)
-                    
-                    actual_last_date = None
-                    if last_date_result.get('status') == 'success' and 'dataset' in context_variables and not context_variables['dataset'].empty:
-                        actual_last_date = pd.to_datetime(context_variables['dataset']['last_data_date'].iloc[0]).date()
-                        logger.info(f"Found actual last data date from data: {actual_last_date}")
-                    
                     # Process trend data to get truncated date
                     if ytd_query:
-                        trend_data = process_ytd_trend_query(ytd_query, endpoint, date_ranges=date_ranges, query_name=query_name)
+                        trend_data = process_ytd_trend_query(ytd_query, query_endpoint, date_ranges=date_ranges, query_name=query_name)
                         if trend_data and 'last_updated' in trend_data:
                             truncated_date = datetime.strptime(trend_data['last_updated'], '%Y-%m-%d').date()
                             logger.info(f"Found truncated date from trend data: {truncated_date}")
                             
-                            # If we have both actual and truncated dates, calculate the offset
-                            if actual_last_date:
-                                # For monthly truncation (date_trunc_ym)
-                                if 'date_trunc_ym' in ytd_query:
-                                    # If truncated to beginning of month, use actual last date
-                                    if truncated_date.day == 1:
-                                        logger.info(f"Monthly truncation detected - using actual last date: {actual_last_date}")
-                                        date_ranges['this_year_end'] = actual_last_date.strftime('%Y-%m-%d')
-                                        date_ranges['last_year_end'] = actual_last_date.replace(year=actual_last_date.year-1).strftime('%Y-%m-%d')
-                                        date_ranges['last_data_date'] = actual_last_date.strftime('%Y-%m-%d')
-                                # For daily truncation (date_trunc_y)
-                                elif 'date_trunc_y' in ytd_query:
-                                    # Calculate days truncated and add them back
-                                    days_truncated = (actual_last_date - truncated_date).days
-                                    adjusted_date = truncated_date + timedelta(days=days_truncated)
-                                    logger.info(f"Daily truncation detected - adding back {days_truncated} days to {truncated_date} = {adjusted_date}")
-                                    date_ranges['this_year_end'] = adjusted_date.strftime('%Y-%m-%d')
-                                    date_ranges['last_year_end'] = adjusted_date.replace(year=adjusted_date.year-1).strftime('%Y-%m-%d')
-                                    date_ranges['last_data_date'] = adjusted_date.strftime('%Y-%m-%d')
-                            else:
-                                # If we don't have actual_last_date, use the truncated date
-                                logger.info(f"No actual last date found, using truncated date: {truncated_date}")
-                                date_ranges['this_year_end'] = truncated_date.strftime('%Y-%m-%d')
-                                date_ranges['last_year_end'] = truncated_date.replace(year=truncated_date.year-1).strftime('%Y-%m-%d')
-                                date_ranges['last_data_date'] = truncated_date.strftime('%Y-%m-%d')
+                            # Use the truncated date from trend data
+                            logger.info(f"Using truncated date from trend data: {truncated_date}")
+                            
+                            # Fix: Use the actual last data date instead of the first day of the month
+                            # This ensures we capture all data for the month
+                            date_ranges['this_year_end'] = truncated_date.strftime('%Y-%m-%d')
+                            date_ranges['last_year_end'] = truncated_date.replace(year=truncated_date.year-1).strftime('%Y-%m-%d')
+                            date_ranges['last_data_date'] = truncated_date.strftime('%Y-%m-%d')
+                            # Ensure last_year_start is always January 1st of the previous year
+                            date_ranges['last_year_start'] = f"{truncated_date.year-1}-01-01"
+                            logger.info(f"Ensuring last_year_start is January 1st: {date_ranges['last_year_start']}")
                     
                     # Process metric query with the adjusted date ranges
-                    query_results = process_query_for_district(metric_query, endpoint, date_ranges, query_name=query_name)
+                    query_results = process_query_for_district(metric_query, query_endpoint, date_ranges, query_name=query_name)
                     if query_results:
                         results = query_results['results']
                         queries = query_results['queries']
@@ -498,17 +748,102 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
     for district_num in range(12):  # 0-11 for citywide and districts 1-11
         district_str = str(district_num)
         if district_str in metrics['districts']:
+            # Create district subfolder
+            district_dir = os.path.join(dashboard_dir, district_str)
+            os.makedirs(district_dir, exist_ok=True)
+            
+            # Create a copy of district data without trend data for top_level.json
             district_data = {
                 "metadata": metrics['metadata'],
                 "name": metrics['districts'][district_str]['name'],
-                "categories": metrics['districts'][district_str]['categories']
+                "categories": []
             }
             
-            # Save to dashboard directory
+            # Process each category
+            for category in metrics['districts'][district_str]['categories']:
+                category_copy = {
+                    "category": category['category'],
+                    "metrics": []
+                }
+                
+                # Process each metric
+                for metric in category['metrics']:
+                    # Create a copy of the metric without trend data for top_level.json
+                    metric_copy = metric.copy()
+                    if 'trend_data' in metric_copy:
+                        del metric_copy['trend_data']
+                    category_copy['metrics'].append(metric_copy)
+                    
+                    # Save individual metric file with trend data
+                    if 'trend_data' in metric and metric['trend_data']:
+                        metric_file = os.path.join(district_dir, f"{metric['id']}.json")
+                        metric_data = {
+                            "metadata": metrics['metadata'],
+                            "metric_id": metric['id'],
+                            "metric_name": metric['name'],
+                            "category": category['category'],
+                            "lastYear": metric['lastYear'],
+                            "thisYear": metric['thisYear'],
+                            "lastDataDate": metric['lastDataDate'],
+                            "trend_data": metric['trend_data'],
+                            "trend_last_updated": metric.get('trend_last_updated'),
+                            # Add summary, definition, and URL from metadata
+                            "summary": metric['metadata'].get('summary', ''),
+                            "definition": metric['metadata'].get('definition', ''),
+                            "data_sf_url": metric['metadata'].get('data_sf_url', ''),
+                            # Add executed queries for transparency and debugging
+                            "queries": {
+                                "metric_query": metric['queries'].get('metric_query', ''),
+                                "executed_metric_query": metric['queries'].get('executed_query', ''),
+                                "ytd_query": metric['queries'].get('ytd_query', ''),
+                                "executed_ytd_query": metric['queries'].get('executed_ytd_query', '')
+                            }
+                        }
+
+                        # Add district breakdown for citywide metrics (district 0)
+                        if district_str == '0':
+                            district_breakdown = {}
+                            # Look for this metric in each district's data
+                            for d_num in range(1, 12):
+                                d_str = str(d_num)
+                                if d_str in metrics['districts']:
+                                    # Find matching metric in district data
+                                    for d_cat in metrics['districts'][d_str]['categories']:
+                                        if d_cat['category'] == category['category']:
+                                            for d_metric in d_cat['metrics']:
+                                                if d_metric['id'] == metric['id']:
+                                                    district_breakdown[d_str] = {
+                                                        "thisYear": d_metric['thisYear'],
+                                                        "lastYear": d_metric['lastYear'],
+                                                        "lastDataDate": d_metric['lastDataDate']
+                                                    }
+                                                    break
+                            if district_breakdown:
+                                metric_data["district_breakdown"] = district_breakdown
+
+                        with open(metric_file, 'w', encoding='utf-8') as f:
+                            json.dump(metric_data, f, indent=2)
+                        logger.info(f"Metric {metric['id']} saved to {metric_file}")
+                    
+                    # Remove summary, definition, and URL from the top-level copy
+                    if 'metadata' in metric_copy:
+                        metric_copy['metadata'].pop('summary', None)
+                        metric_copy['metadata'].pop('definition', None)
+                        metric_copy['metadata'].pop('data_sf_url', None)
+                
+                district_data['categories'].append(category_copy)
+            
+            # Save top_level.json to district subfolder
+            top_level_file = os.path.join(district_dir, 'top_level.json')
+            with open(top_level_file, 'w', encoding='utf-8') as f:
+                json.dump(district_data, f, indent=2)
+            logger.info(f"District {district_str} top_level metrics saved to {top_level_file}")
+            
+            # For backward compatibility, also save the district file in the old location
             district_file = os.path.join(dashboard_dir, f'district_{district_str}.json')
             with open(district_file, 'w', encoding='utf-8') as f:
                 json.dump(district_data, f, indent=2)
-            logger.info(f"District {district_str} metrics saved to {district_file}")
+            logger.info(f"District {district_str} metrics saved to {district_file} (for backward compatibility)")
             
             # Save to history directory with timestamp
             history_file = os.path.join(history_dir, f'district_{district_str}_{datetime.now().strftime("%Y%m%d")}.json')
@@ -576,9 +911,20 @@ def create_ytd_vector_collection(metrics):
         for category in citywide_data['categories']:
             category_name = category['category']
             for metric in category['metrics']:
-                metric_text = create_metric_text(category_name, metric, citywide_data['name'])
-                texts_to_embed.append(metric_text)
-                metadata_batch.append(create_metadata_dict(category_name, metric, '0', citywide_data['name']))
+                try:
+                    # Validate required fields exist
+                    required_fields = ['name', 'id', 'thisYear', 'lastYear', 'lastDataDate', 'queries']
+                    missing_fields = [field for field in required_fields if field not in metric]
+                    if missing_fields:
+                        logger.warning(f"Skipping metric due to missing required fields: {missing_fields}")
+                        continue
+                        
+                    metric_text = create_metric_text(category_name, metric, citywide_data['name'])
+                    texts_to_embed.append(metric_text)
+                    metadata_batch.append(create_metadata_dict(category_name, metric, '0', citywide_data['name']))
+                except Exception as e:
+                    logger.error(f"Error processing citywide metric {metric.get('name', 'unknown')}: {str(e)}")
+                    continue
 
         # Process district metrics
         for district_num in range(1, 12):
@@ -588,9 +934,25 @@ def create_ytd_vector_collection(metrics):
                 for category in district_data['categories']:
                     category_name = category['category']
                     for metric in category['metrics']:
-                        metric_text = create_metric_text(category_name, metric, district_data['name'])
-                        texts_to_embed.append(metric_text)
-                        metadata_batch.append(create_metadata_dict(category_name, metric, district_str, district_data['name']))
+                        try:
+                            # Validate required fields exist
+                            required_fields = ['name', 'id', 'thisYear', 'lastYear', 'lastDataDate', 'queries']
+                            missing_fields = [field for field in required_fields if field not in metric]
+                            if missing_fields:
+                                logger.warning(f"Skipping district {district_str} metric due to missing required fields: {missing_fields}")
+                                continue
+                                
+                            metric_text = create_metric_text(category_name, metric, district_data['name'])
+                            texts_to_embed.append(metric_text)
+                            metadata_batch.append(create_metadata_dict(category_name, metric, district_str, district_data['name']))
+                        except Exception as e:
+                            logger.error(f"Error processing district {district_str} metric {metric.get('name', 'unknown')}: {str(e)}")
+                            continue
+
+        # Skip if no valid metrics were found
+        if not texts_to_embed:
+            logger.warning("No valid metrics found to embed. Skipping vector collection creation.")
+            return
 
         # Process in batches
         total_points = len(texts_to_embed)
@@ -641,7 +1003,7 @@ def create_ytd_vector_collection(metrics):
     except Exception as e:
         logger.error(f"Error creating YTD vector collection: {str(e)}")
         logger.error(traceback.format_exc())
-        raise
+        # Don't re-raise the exception to allow the script to continue with other operations
 
 def create_metric_text(category_name, metric, district_name):
     """Create text representation for embedding."""
@@ -657,23 +1019,35 @@ def create_metric_text(category_name, metric, district_name):
         'Economy': 'This metric helps track business and economic activity.'
     }
     
+    # Safely access metadata fields with defaults if they don't exist
+    metadata = metric.get('metadata', {})
+    summary = metadata.get('summary', 'No summary available')
+    definition = metadata.get('definition', 'No detailed definition available')
+    data_sf_url = metadata.get('data_sf_url', 'No data source URL available')
+    
     return (
         f"Category: {category_name}\n"
         f"Metric Name: {metric['name']}\n"
-        f"Description: {metric['metadata']['summary']}\n"
-        f"Detailed Definition: {metric['metadata']['definition']}\n"
+        f"Description: {summary}\n"
+        f"Detailed Definition: {definition}\n"
         f"This metric shows {metric['thisYear']} incidents in the current year"
         f" compared to {metric['lastYear']} incidents last year for {district_name}.\n"
         f"The data is current as of {metric['lastDataDate']}.\n"
         f"This is a {category_name.lower()} metric related to {category_descriptions.get(category_name, '')} in San Francisco.\n"
         f"{category_help_text.get(category_name, '')}\n"
-        f"Data Source: {metric['metadata']['data_sf_url']}\n"
+        f"Data Source: {data_sf_url}\n"
         f"Query Context: {metric['queries'].get('metric_query', '')}\n"
         f"This data is specific to {district_name} in San Francisco."
     ).strip()
 
 def create_metadata_dict(category_name, metric, district, district_name):
     """Create metadata dictionary for vector storage."""
+    # Safely access metadata fields with defaults if they don't exist
+    metadata = metric.get('metadata', {})
+    summary = metadata.get('summary', 'No summary available')
+    definition = metadata.get('definition', 'No detailed definition available')
+    data_url = metadata.get('data_sf_url', 'No data source URL available')
+    
     return {
         'category': category_name,
         'metric_name': metric['name'],
@@ -681,9 +1055,9 @@ def create_metadata_dict(category_name, metric, district, district_name):
         'this_year': metric['thisYear'],
         'last_year': metric['lastYear'],
         'last_data_date': metric['lastDataDate'],
-        'summary': metric['metadata']['summary'],
-        'definition': metric['metadata']['definition'],
-        'data_url': metric['metadata']['data_sf_url'],
+        'summary': summary,
+        'definition': definition,
+        'data_url': data_url,
         'district': district,
         'district_name': district_name,
         'trend_data': metric.get('trend_data', {}),
@@ -693,6 +1067,11 @@ def create_metadata_dict(category_name, metric, district, district_name):
 def main():
     """Main function to generate YTD metrics."""
     try:
+        # Parse command line arguments
+        parser = argparse.ArgumentParser(description='Generate YTD metrics for dashboard.')
+        parser.add_argument('--metric', type=str, help='Generate metrics for a specific metric only (e.g., "Arrests Presented to DA")')
+        args = parser.parse_args()
+        
         # Define paths
         script_dir = os.path.dirname(os.path.abspath(__file__))
         data_dir = os.path.join(script_dir, 'data/dashboard')
@@ -701,10 +1080,52 @@ def main():
         
         # Load queries and generate metrics
         queries_data = load_json_file(os.path.join(data_dir, 'dashboard_queries.json'))
+        
+        # If a specific metric was requested, filter the queries_data to only include that metric
+        if args.metric:
+            logger.info(f"Filtering for specific metric: {args.metric}")
+            filtered_queries_data = {}
+            metric_found = False
+            
+            for category, subcategories in queries_data.items():
+                for subcategory, subcategory_data in subcategories.items():
+                    if isinstance(subcategory_data, dict) and 'queries' in subcategory_data:
+                        for query_name, query_data in subcategory_data['queries'].items():
+                            if args.metric.lower() in query_name.lower():
+                                if category not in filtered_queries_data:
+                                    filtered_queries_data[category] = {}
+                                
+                                # Create a copy of the subcategory data with just this query
+                                filtered_subcategory = {'queries': {query_name: query_data}}
+                                
+                                # Copy endpoint from subcategory if it exists
+                                if 'endpoint' in subcategory_data:
+                                    filtered_subcategory['endpoint'] = subcategory_data['endpoint']
+                                
+                                # If the query has its own endpoint, use that
+                                if isinstance(query_data, dict) and 'endpoint' in query_data:
+                                    if 'endpoint' not in filtered_subcategory:
+                                        filtered_subcategory['endpoint'] = query_data['endpoint']
+                                
+                                filtered_queries_data[category][subcategory] = filtered_subcategory
+                                logger.info(f"Found matching metric: {query_name} in {category}/{subcategory}")
+                                metric_found = True
+            
+            if not metric_found:
+                logger.warning(f"No metrics found matching '{args.metric}'. Using all metrics.")
+                filtered_queries_data = queries_data
+            else:
+                queries_data = filtered_queries_data
+                logger.info(f"Filtered queries data to only include '{args.metric}'")
+        
         metrics = generate_ytd_metrics(queries_data, output_dir)
         
-        # Create vector collection
-        create_ytd_vector_collection(metrics)
+        # Try to create vector collection, but continue even if it fails
+        try:
+            create_ytd_vector_collection(metrics)
+        except Exception as e:
+            logger.error(f"Vector collection creation failed, but continuing with metrics generation: {str(e)}")
+            logger.error(traceback.format_exc())
         
         return metrics
     except Exception as e:
