@@ -932,7 +932,7 @@ Researcher_agent = Agent(
         get_dashboard_metric(0, 1) # Get citywide police incident data
 
     If you are ever asked to "Evaluate the recent monthly and annual trends" for the a dashboard metric, always use get_dashboard_metric() to get the data you need.
-    Structure your answer by grounding todays number first in historical (annaul) context, then tell the story of the more recent months.  Always ground recent changes in long term trends. 
+    Structure your answer by first restating the current year to date trends, and then ground them first in historical (annaul) context, Ideally, show an annual chart first, then tell the story of the more recent months and any changes in categories or recent anomalies that might help illuminate current trends.  Always ground recent changes in long term trends. 
     
     Never add or change any markdown links or HTML URLS in your response.  If there are relative Links or URLS beginning with "/", just leave them as is. 
 

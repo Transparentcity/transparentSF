@@ -33,7 +33,8 @@ app.add_middleware(
         "https://*.replit.app",
         "http://localhost:8081",
         "https://*.replit.dev",
-        "http://c8f21de5-50d5-4932-9f30-db3b51e8af74-00-3cldcjjo20ql9.riker.replit.dev"
+        "http://c8f21de5-50d5-4932-9f30-db3b51e8af74-00-3cldcjjo20ql9.riker.replit.dev",
+        "https://0ea7c615-87bb-43af-8dc3-9d1816811571-00-3jirn7oguyp0q.picard.replit.dev/",
     ],  # Only allow specific origins
     allow_credentials=True,  # Required for cookies
     allow_methods=["*"],    # Allows all methods
