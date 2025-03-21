@@ -182,6 +182,55 @@ def load_and_combine_notes():
             combined_text += "\n" + ytd_text
             logger.info("Successfully added YTD metrics to notes")
             
+            # Add district specific metrics from top_level.json files
+            dashboard_dir = script_dir / 'output' / 'dashboard'
+            district_metrics_text = "\n\nDistrict-Level Metrics Summary:\n"
+            districts_processed = 0
+            
+            # Process each district folder (0-11)
+            for district_num in range(1, 12):  # Skip district 0 (citywide) as already processed above
+                district_dir = dashboard_dir / str(district_num)
+                top_level_file = district_dir / 'top_level.json'
+                
+                if top_level_file.exists():
+                    try:
+                        with open(top_level_file, 'r', encoding='utf-8') as f:
+                            district_data = json.load(f)
+                        
+                        district_name = district_data.get("name", f"District {district_num}")
+                        district_metrics_text += f"\n{district_name}:\n"
+                        
+                        # Process each category
+                        for category in district_data.get("categories", []):
+                            category_name = category.get("category", "")
+                            district_metrics_text += f"\n  {category_name}:\n"
+                            
+                            # Get top 3 metrics for each category to avoid overloading
+                            metrics = category.get("metrics", [])[:3]
+                            for metric in metrics:
+                                name = metric.get("name", "")
+                                this_year = metric.get("thisYear", 0)
+                                last_year = metric.get("lastYear", 0)
+                                last_date = metric.get("lastDataDate", "")
+                                metric_id = metric.get("numeric_id", metric.get("id", ""))
+                                
+                                # Calculate percent change
+                                if last_year != 0:
+                                    pct_change = ((this_year - last_year) / last_year) * 100
+                                    change_text = f"({pct_change:+.1f}% vs last year)"
+                                else:
+                                    change_text = "(no prior year data)"
+                                
+                                district_metrics_text += f"  - {name} (ID: {metric_id}): {this_year:,} {change_text} as of {last_date}\n"
+                        
+                        districts_processed += 1
+                    except Exception as e:
+                        logger.error(f"Error processing district {district_num} top-level metrics: {e}")
+            
+            if districts_processed > 0:
+                combined_text += district_metrics_text
+                logger.info(f"Successfully added metrics from {districts_processed} districts")
+            
         except Exception as e:
             logger.error(f"Error processing YTD metrics: {e}")
     
@@ -398,6 +447,123 @@ def get_dashboard_metric(context_variables, district_number=0, metric_id=None):
             "data": data
         }
         
+        # NEW CODE: Try to find and add corresponding analysis files
+        analysis_content = {}
+        total_analysis_length = 0
+        max_tokens = 100000  # Approximate max tokens we want to allow
+        
+        # Get metric ID for analysis files
+        metric_id_number = None
+        
+        # Clean the metric_id to use as base filename
+        if metric_id:
+            base_metric_name = metric_id.replace('.json', '')
+            
+            # Try to extract the ID number from the data if we have a named metric
+            if isinstance(data, dict) and "id" in data:
+                # If the metric has an ID in its data, use that for analysis files
+                metric_id_number = str(data["id"])
+                logger.info(f"Found metric ID number {metric_id_number} from data")
+            elif base_metric_name.isdigit():
+                # If the metric_id itself is a number, use it directly
+                metric_id_number = base_metric_name
+                logger.info(f"Using metric_id as a number: {metric_id_number}")
+            else:
+                # Try to find the ID from the dashboard_queries_enhanced.json file
+                queries_file = script_dir / 'data' / 'dashboard' / 'dashboard_queries_enhanced.json'
+                if queries_file.exists():
+                    try:
+                        with open(queries_file, 'r', encoding='utf-8') as f:
+                            queries_data = json.load(f)
+                        
+                        # Look for the metric name in the queries data
+                        for item in queries_data:
+                            if isinstance(item, dict) and 'name' in item and 'id' in item:
+                                # Check if the name matches our metric name (with or without emoji)
+                                item_name = item['name'].lower()
+                                clean_metric_name = base_metric_name.lower()
+                                
+                                # Remove emojis and special characters for comparison
+                                import re
+                                clean_item_name = re.sub(r'[^\w\s]', '', item_name).strip()
+                                clean_base_name = re.sub(r'[^\w\s]', '', clean_metric_name).strip()
+                                
+                                if clean_item_name == clean_base_name or item_name == clean_metric_name:
+                                    metric_id_number = str(item['id'])
+                                    logger.info(f"Found metric ID {metric_id_number} from dashboard_queries_enhanced.json")
+                                    break
+                        
+                        if not metric_id_number:
+                            logger.info(f"Could not find metric ID for '{base_metric_name}' in dashboard_queries_enhanced.json")
+                    except Exception as e:
+                        logger.error(f"Error reading dashboard_queries_enhanced.json: {str(e)}")
+                else:
+                    logger.info(f"dashboard_queries_enhanced.json not found at {queries_file}")
+                
+                if not metric_id_number:
+                    logger.info(f"Could not determine metric ID number from {base_metric_name}")
+            
+            # Look for analysis files in monthly and annual folders
+            monthly_dir = script_dir / 'output' / 'monthly'
+            annual_dir = script_dir / 'output' / 'annual'
+            
+            # Only proceed if we have a metric ID number
+            if metric_id_number:
+                # Paths for analysis files using the ID number
+                monthly_analysis_path = monthly_dir / f"{district_number}/{metric_id_number}_month_analysis.md"
+                annual_analysis_path = annual_dir / f"{district_number}/{metric_id_number}_year_analysis.md"
+                
+                logger.info(f"Looking for monthly analysis at: {monthly_analysis_path}")
+                logger.info(f"Looking for annual analysis at: {annual_analysis_path}")
+                
+                # Read monthly analysis if it exists
+                if monthly_analysis_path.exists():
+                    try:
+                        with open(monthly_analysis_path, 'r', encoding='utf-8') as f:
+                            monthly_content = f.read()
+                            total_analysis_length += len(monthly_content.split())
+                            analysis_content["monthly_analysis"] = monthly_content
+                            logger.info(f"Found monthly analysis file ({len(monthly_content)} chars)")
+                    except Exception as e:
+                        logger.error(f"Error reading monthly analysis: {str(e)}")
+                
+                # Read annual analysis if it exists
+                if annual_analysis_path.exists():
+                    try:
+                        with open(annual_analysis_path, 'r', encoding='utf-8') as f:
+                            annual_content = f.read()
+                            total_analysis_length += len(annual_content.split())
+                            analysis_content["annual_analysis"] = annual_content
+                            logger.info(f"Found annual analysis file ({len(annual_content)} chars)")
+                    except Exception as e:
+                        logger.error(f"Error reading annual analysis: {str(e)}")
+            else:
+                logger.info("No metric ID number available for finding analysis files")
+            
+            # Check if we need to summarize (approximating tokens as words/0.75)
+            estimated_tokens = total_analysis_length / 0.75
+            if estimated_tokens > max_tokens and analysis_content:
+                logger.info(f"Analysis content too large (~{estimated_tokens:.0f} tokens). Summarizing...")
+                
+                # Create a simple summary by truncating and adding a note
+                for key in analysis_content:
+                    original_length = len(analysis_content[key])
+                    # Calculate how much to keep (proportional to original length)
+                    proportion = len(analysis_content[key]) / total_analysis_length
+                    max_chars = int((max_tokens * 0.75) * proportion * 4)  # Rough char estimate
+                    
+                    if len(analysis_content[key]) > max_chars:
+                        analysis_content[key] = (
+                            f"{analysis_content[key][:max_chars]}\n\n"
+                            f"[Note: Analysis truncated due to length. Original size: {original_length} characters]"
+                        )
+                        logger.info(f"Truncated {key} from {original_length} to {len(analysis_content[key])} chars")
+            
+            # Add analysis content to result if any was found
+            if analysis_content:
+                result["analysis"] = analysis_content
+                logger.info(f"Added analysis content with keys: {list(analysis_content.keys())}")
+        
         logger.info(f"Successfully retrieved dashboard metric data from {file_path}")
         return result
         
@@ -422,14 +588,38 @@ analyst_agent = Agent(
     - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
     - Use `get_dashboard_metric(context_variables, district_number, metric_id)` to retrieve dashboard metric data:
         - district_number: Integer from 0 (citywide) to 11 (specific district)
-        - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary.
-
+        - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary. Sometimes this will be passed in as a metric_id number, for that pass it as an integer..
     """,
     # functions=[get_notes, query_docs, transfer_to_researcher_agent],
     functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, get_dashboard_metric, transfer_to_researcher_agent],
     context_variables=context_variables,
     debug=True,
 )
+analyst_agent = Agent(
+    model=AGENT_MODEL,
+    name="Analyst",
+     instructions="""
+    **Function Usage:**
+
+    - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in. always pass the context_variables and the collection name is allways "SFPublicData"
+    - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
+    - Use `set_dataset(context_variables, endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
+        - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')  It should come from a query_docs() call.
+        - query: The complete SoQL query string using standard SQL syntax (e.g., 'select field1, field2 where condition')
+        Example usage:
+        set_dataset(context_variables, endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
+    - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
+    - Use `get_dashboard_metric(context_variables, district_number, metric_id)` to retrieve dashboard metric data:
+        - district_number: Integer from 0 (citywide) to 11 (specific district)
+        - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary. Sometimes this will be passed in as a metric_id number, for that pass it as an integer..
+    
+    """,
+    # functions=[get_notes, query_docs, transfer_to_researcher_agent],
+    functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, get_dashboard_metric, transfer_to_researcher_agent],
+    context_variables=context_variables,
+    debug=True,
+)
+
 
 def update_agent_instructions_with_columns(columns):
     """
@@ -659,6 +849,73 @@ function_mapping = {
 }
 
 
+# Researcher_agent = Agent(
+#     model=AGENT_MODEL,
+#     name="Researcher",
+#     instructions="""
+#     Role: You are a researcher for Transparent SF, focusing on trends in city data.
+#     Purpose: help the user find objective data and specific details on their question. 
+    
+#     - get_notes() ALWAYS Start here. This is a summary of all the analysis you have available to you in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
+#     - Use query_docs("collection_name=<Collection_Name>", query=<words or phrases>) to review analysis of city data.  THis is a semantic search of Qdrant, not a SQL query
+#         There are many collections you can search. Sometimes you might want to look at multiple collections to get the data you need. 
+        
+#         Each collection is named as follows:
+        
+#         timeframe_location
+    
+#         timeframes are one of the following:
+#         annual
+#         monthly
+    
+#         location is one of the following:
+#         citywide
+#         or
+#         district_<number>
+        
+#         So one example collection is "annual_citywide"
+#         another example is "monthly_district_1"
+
+#         There is a collection called "YTD" that contains the year to date metrics for the city of San Francisco.  Use this to get the latest metrics for the city.  It also includes details by date and has queries you can modift to get more details or data you need.
+
+#         There is also a special collection called "SFPublicData" that contains all the data from the city of San Francisco including all the table names and column names you would need to set_dataset because the answer to the user's question isn't in the other collections.  Call this before you use set_dataset().
+
+#         If, after searching through your docs, you can't find the data you need, you can check to see if there is a table available in the "SFPublicData" collection that you might want to query. 
+#         Be specific in your queries to answer the exact question the user is asking.  Select the minimum amount of data necessary to answer the question and how the query do as much of the processing as possible. 
+#         If you can't be precise in your query, don't set_dataset, just answer the user with the info you have. 
+
+#         - Use `set_dataset(endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
+#         - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')  It should come from a query_docs() call.
+#         - query: The complete SoQL query string using standard SQL syntax (e.g., 'select field1, field2 where condition')
+#         Example usage:
+#         set_dataset(endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
+
+#         - Use `get_dashboard_metric(district_number, metric_id)` to retrieve dashboard metric data:
+#           - district_number: Integer from 0 (citywide) to 11 (specific district)
+#           - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary.
+#           Example usage:
+#           get_dashboard_metric(0, "🚨_violent_crime_incidents_ytd") # Get citywide violent crime data
+#           get_dashboard_metric(5) # Get all metrics for District 5
+
+#         Query Format:
+#         - Use standard SQL syntax: "select field1, field2 where condition"
+#         - Do not use $ prefixes in your queries
+#         - No FROM clause is needed, just make sure to pass in the endpoint.
+#         - Example: "select dba_name, location_start_date where supervisor_district = '6' and location_start_date >= '2025-01-01'"
+        
+#     When displaying data:
+#     1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  To better find charts add the term charts to your query.
+#     2. Return them in the same markdown format you find in the docs, with no changes. DO NOT ADD or CHANGE THE URLS
+#     3. Include relevant titles and context with your tables and charts. 
+#     4. Follow up tables with explanations of key insights or trends. 
+#     5. If you can't find the data you need, just say so.  Don't make up data or information. 
+#     6. Don't speculate as to causes or "WHY" something is happening.  Just report on WHAT is happening. 
+    
+#     """,
+#     functions=[get_notes, query_docs, set_dataset, get_dashboard_metric, transfer_to_analyst_agent, generate_ghost_post],
+#     context_variables=context_variables,
+#     debug=True
+# )
 Researcher_agent = Agent(
     model=AGENT_MODEL,
     name="Researcher",
@@ -667,52 +924,18 @@ Researcher_agent = Agent(
     Purpose: help the user find objective data and specific details on their question. 
     
     - get_notes() ALWAYS Start here. This is a summary of all the analysis you have available to you in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
-    - Use query_docs("collection_name=<Collection_Name>", query=<words or phrases>) to review analysis of city data.  THis is a semantic search of Qdrant, not a SQL query
-        There are many collections you can search. Sometimes you might want to look at multiple collections to get the data you need. 
-        
-        Each collection is named as follows:
-        
-        timeframe_location
     
-        timeframes are one of the following:
-        annual
-        monthly
-    
-        location is one of the following:
-        citywide
-        or
-        district_<number>
-        
-        So one example collection is "annual_citywide"
-        another example is "monthly_district_1"
-
-        There is a collection called "YTD" that contains the year to date metrics for the city of San Francisco.  Use this to get the latest metrics for the city.  It also includes details by date and has queries you can modift to get more details or data you need.
-
-        There is also a special collection called "SFPublicData" that contains all the data from the city of San Francisco including all the table names and column names you would need to set_dataset because the answer to the user's question isn't in the other collections.  Call this before you use set_dataset().
-
-        If, after searching through your docs, you can't find the data you need, you can check to see if there is a table available in the "SFPublicData" collection that you might want to query. 
-        Be specific in your queries to answer the exact question the user is asking.  Select the minimum amount of data necessary to answer the question and how the query do as much of the processing as possible. 
-        If you can't be precise in your query, don't set_dataset, just answer the user with the info you have. 
-
-        - Use `set_dataset(endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
-        - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')  It should come from a query_docs() call.
-        - query: The complete SoQL query string using standard SQL syntax (e.g., 'select field1, field2 where condition')
+    - Use `get_dashboard_metric(district_number, metric_id)` to retrieve dashboard metric data:
+        - district_number: Integer from 0 (citywide) to 11 (specific district)
+        - metric_id: Optional. The specific metric ID to retrieve (e.g., '4' or '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary.
         Example usage:
-        set_dataset(endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
+        get_dashboard_metric(0, 1) # Get citywide police incident data
 
-        - Use `get_dashboard_metric(district_number, metric_id)` to retrieve dashboard metric data:
-          - district_number: Integer from 0 (citywide) to 11 (specific district)
-          - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary.
-          Example usage:
-          get_dashboard_metric(0, "🚨_violent_crime_incidents_ytd") # Get citywide violent crime data
-          get_dashboard_metric(5) # Get all metrics for District 5
+    If you are ever asked to "Evaluate the recent monthly and annual trends" for the a dashboard metric, always use get_dashboard_metric() to get the data you need.
+    Structure your answer by grounding todays number first in historical (annaul) context, then tell the story of the more recent months.  Always ground recent changes in long term trends. 
+    
+    Never add or change any markdown links or HTML URLS in your response.  If there are relative Links or URLS beginning with "/", just leave them as is. 
 
-        Query Format:
-        - Use standard SQL syntax: "select field1, field2 where condition"
-        - Do not use $ prefixes in your queries
-        - No FROM clause is needed, just make sure to pass in the endpoint.
-        - Example: "select dba_name, location_start_date where supervisor_district = '6' and location_start_date >= '2025-01-01'"
-        
     When displaying data:
     1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  To better find charts add the term charts to your query.
     2. Return them in the same markdown format you find in the docs, with no changes. DO NOT ADD or CHANGE THE URLS
@@ -722,11 +945,10 @@ Researcher_agent = Agent(
     6. Don't speculate as to causes or "WHY" something is happening.  Just report on WHAT is happening. 
     
     """,
-    functions=[get_notes, query_docs, set_dataset, get_dashboard_metric, transfer_to_analyst_agent, generate_ghost_post],
+    functions=[get_notes, get_dashboard_metric],
     context_variables=context_variables,
     debug=True
 )
-
 def set_dataset_in_context(context_variables, dataset):
     """
     Sets the dataset in the context variables and updates the agent's instructions with the column names.

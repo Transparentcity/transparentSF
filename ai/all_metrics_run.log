@@ -1,0 +1,355 @@
+2025-03-19 17:17:07,010 - root - INFO - Starting analysis for all metrics
+2025-03-19 17:17:07,011 - root - INFO - Loading enhanced dashboard queries from /Users/rg/Tsf/transparentSF/ai/data/dashboard/dashboard_queries_enhanced.json
+2025-03-19 17:17:07,011 - root - INFO - Found 17 metrics to analyze
+2025-03-19 17:17:07,011 - root - INFO - Processing metric 1/17: 1
+2025-03-19 17:17:07,011 - root - INFO - Running analysis for metric ID: 1, period: both
+2025-03-19 17:19:59,705 - root - INFO - Successfully completed analysis for metric ID: 1
+2025-03-19 17:20:00,710 - root - INFO - Processing metric 2/17: 2
+2025-03-19 17:20:00,711 - root - INFO - Running analysis for metric ID: 2, period: both
+2025-03-19 17:21:43,377 - root - INFO - Successfully completed analysis for metric ID: 2
+2025-03-19 17:21:44,382 - root - INFO - Processing metric 3/17: 3
+2025-03-19 17:21:44,383 - root - INFO - Running analysis for metric ID: 3, period: both
+2025-03-19 17:27:37,480 - root - INFO - Successfully completed analysis for metric ID: 3
+2025-03-19 17:27:38,491 - root - INFO - Processing metric 4/17: 4
+2025-03-19 17:27:38,492 - root - INFO - Running analysis for metric ID: 4, period: both
+2025-03-19 17:28:04,852 - root - INFO - Successfully completed analysis for metric ID: 4
+2025-03-19 17:28:05,862 - root - INFO - Processing metric 5/17: 5
+2025-03-19 17:28:05,863 - root - INFO - Running analysis for metric ID: 5, period: both
+2025-03-19 17:28:09,745 - root - INFO - Successfully completed analysis for metric ID: 5
+2025-03-19 17:28:10,756 - root - INFO - Processing metric 6/17: 6
+2025-03-19 17:28:10,757 - root - INFO - Running analysis for metric ID: 6, period: both
+2025-03-19 17:28:11,738 - root - INFO - Successfully completed analysis for metric ID: 6
+2025-03-19 17:28:12,749 - root - INFO - Processing metric 7/17: 7
+2025-03-19 17:28:12,750 - root - INFO - Running analysis for metric ID: 7, period: both
+2025-03-19 17:28:13,708 - root - INFO - Successfully completed analysis for metric ID: 7
+2025-03-19 17:28:14,719 - root - INFO - Processing metric 8/17: 8
+2025-03-19 17:28:14,719 - root - INFO - Running analysis for metric ID: 8, period: both
+2025-03-19 17:28:32,251 - root - INFO - Successfully completed analysis for metric ID: 8
+2025-03-19 17:28:33,261 - root - INFO - Processing metric 9/17: 9
+2025-03-19 17:28:33,262 - root - INFO - Running analysis for metric ID: 9, period: both
+2025-03-19 17:28:45,179 - root - INFO - Successfully completed analysis for metric ID: 9
+2025-03-19 17:28:46,190 - root - INFO - Processing metric 10/17: 10
+2025-03-19 17:28:46,190 - root - INFO - Running analysis for metric ID: 10, period: both
+2025-03-19 17:32:14,947 - root - INFO - Successfully completed analysis for metric ID: 10
+2025-03-19 17:32:15,953 - root - INFO - Processing metric 11/17: 11
+2025-03-19 17:32:15,953 - root - INFO - Running analysis for metric ID: 11, period: both
+2025-03-19 17:34:47,752 - root - INFO - Successfully completed analysis for metric ID: 11
+2025-03-19 17:34:48,758 - root - INFO - Processing metric 12/17: 12
+2025-03-19 17:34:48,758 - root - INFO - Running analysis for metric ID: 12, period: both
+2025-03-19 17:35:15,228 - root - INFO - Successfully completed analysis for metric ID: 12
+2025-03-19 17:35:16,239 - root - INFO - Processing metric 13/17: 13
+2025-03-19 17:35:16,239 - root - INFO - Running analysis for metric ID: 13, period: both
+2025-03-19 17:35:20,044 - root - INFO - Successfully completed analysis for metric ID: 13
+2025-03-19 17:35:21,055 - root - INFO - Processing metric 14/17: 14
+2025-03-19 17:35:21,056 - root - INFO - Running analysis for metric ID: 14, period: both
+2025-03-19 17:35:22,863 - root - INFO - Successfully completed analysis for metric ID: 14
+2025-03-19 17:35:23,874 - root - INFO - Processing metric 15/17: 15
+2025-03-19 17:35:23,875 - root - INFO - Running analysis for metric ID: 15, period: both
+2025-03-19 17:35:25,672 - root - INFO - Successfully completed analysis for metric ID: 15
+2025-03-19 17:35:26,682 - root - INFO - Processing metric 16/17: 16
+2025-03-19 17:35:26,683 - root - INFO - Running analysis for metric ID: 16, period: both
+2025-03-19 17:35:36,678 - root - INFO - Successfully completed analysis for metric ID: 16
+2025-03-19 17:35:37,689 - root - INFO - Processing metric 17/17: 17
+2025-03-19 17:35:37,690 - root - INFO - Running analysis for metric ID: 17, period: both
+2025-03-19 17:35:43,399 - root - INFO - Successfully completed analysis for metric ID: 17
+2025-03-19 17:35:44,408 - root - INFO - Completed all analyses. Successful: 17, Failed: 0
+2025-03-19 18:28:21,140 - root - INFO - Starting analysis for all metrics
+2025-03-19 18:28:21,140 - root - INFO - Loading enhanced dashboard queries from /Users/rg/Tsf/transparentSF/ai/data/dashboard/dashboard_queries_enhanced.json
+2025-03-19 18:28:21,141 - root - INFO - Found 17 metrics to analyze
+2025-03-19 18:28:21,141 - root - INFO - Processing metric 1/17: 1
+2025-03-19 18:28:21,141 - root - INFO - Running analysis for metric ID: 1, period: both
+2025-03-19 18:28:21,141 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both
+2025-03-19 18:30:51,614 - root - INFO - Successfully completed analysis for metric ID: 1
+2025-03-19 18:30:52,619 - root - INFO - Processing metric 2/17: 2
+2025-03-19 18:30:52,619 - root - INFO - Running analysis for metric ID: 2, period: both
+2025-03-19 18:30:52,619 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 2 --period both
+2025-03-19 18:32:26,081 - root - INFO - Successfully completed analysis for metric ID: 2
+2025-03-19 18:32:27,088 - root - INFO - Processing metric 3/17: 3
+2025-03-19 18:32:27,089 - root - INFO - Running analysis for metric ID: 3, period: both
+2025-03-19 18:32:27,089 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 3 --period both
+2025-03-19 18:37:41,826 - root - INFO - Successfully completed analysis for metric ID: 3
+2025-03-19 18:37:42,831 - root - INFO - Processing metric 4/17: 4
+2025-03-19 18:37:42,832 - root - INFO - Running analysis for metric ID: 4, period: both
+2025-03-19 18:37:42,832 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 4 --period both
+2025-03-19 18:37:51,529 - root - INFO - Successfully completed analysis for metric ID: 4
+2025-03-19 18:37:52,535 - root - INFO - Processing metric 5/17: 5
+2025-03-19 18:37:52,535 - root - INFO - Running analysis for metric ID: 5, period: both
+2025-03-19 18:37:52,536 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 5 --period both
+2025-03-19 18:37:56,729 - root - INFO - Successfully completed analysis for metric ID: 5
+2025-03-19 18:37:57,735 - root - INFO - Processing metric 6/17: 6
+2025-03-19 18:37:57,735 - root - INFO - Running analysis for metric ID: 6, period: both
+2025-03-19 18:37:57,735 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 6 --period both
+2025-03-19 18:37:58,738 - root - INFO - Successfully completed analysis for metric ID: 6
+2025-03-19 18:37:59,744 - root - INFO - Processing metric 7/17: 7
+2025-03-19 18:37:59,745 - root - INFO - Running analysis for metric ID: 7, period: both
+2025-03-19 18:37:59,745 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 7 --period both
+2025-03-19 18:38:00,697 - root - INFO - Successfully completed analysis for metric ID: 7
+2025-03-19 18:38:01,703 - root - INFO - Processing metric 8/17: 8
+2025-03-19 18:38:01,704 - root - INFO - Running analysis for metric ID: 8, period: both
+2025-03-19 18:38:01,704 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 8 --period both
+2025-03-19 18:38:16,804 - root - INFO - Successfully completed analysis for metric ID: 8
+2025-03-19 18:38:17,811 - root - INFO - Processing metric 9/17: 9
+2025-03-19 18:38:17,811 - root - INFO - Running analysis for metric ID: 9, period: both
+2025-03-19 18:38:17,811 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 9 --period both
+2025-03-19 18:38:29,864 - root - INFO - Successfully completed analysis for metric ID: 9
+2025-03-19 18:38:30,870 - root - INFO - Processing metric 10/17: 10
+2025-03-19 18:38:30,871 - root - INFO - Running analysis for metric ID: 10, period: both
+2025-03-19 18:38:30,871 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 10 --period both
+2025-03-19 18:40:43,161 - root - INFO - Successfully completed analysis for metric ID: 10
+2025-03-19 18:40:44,166 - root - INFO - Processing metric 11/17: 11
+2025-03-19 18:40:44,167 - root - INFO - Running analysis for metric ID: 11, period: both
+2025-03-19 18:40:44,167 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 11 --period both
+2025-03-19 18:41:21,584 - root - INFO - Successfully completed analysis for metric ID: 11
+2025-03-19 18:41:22,590 - root - INFO - Processing metric 12/17: 12
+2025-03-19 18:41:22,591 - root - INFO - Running analysis for metric ID: 12, period: both
+2025-03-19 18:41:22,591 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 12 --period both
+2025-03-19 18:42:39,944 - root - INFO - Successfully completed analysis for metric ID: 12
+2025-03-19 18:42:40,950 - root - INFO - Processing metric 13/17: 13
+2025-03-19 18:42:40,951 - root - INFO - Running analysis for metric ID: 13, period: both
+2025-03-19 18:42:40,951 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 13 --period both
+2025-03-19 18:42:44,650 - root - INFO - Successfully completed analysis for metric ID: 13
+2025-03-19 18:42:45,655 - root - INFO - Processing metric 14/17: 14
+2025-03-19 18:42:45,655 - root - INFO - Running analysis for metric ID: 14, period: both
+2025-03-19 18:42:45,656 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 14 --period both
+2025-03-19 18:42:47,486 - root - INFO - Successfully completed analysis for metric ID: 14
+2025-03-19 18:42:48,488 - root - INFO - Processing metric 15/17: 15
+2025-03-19 18:42:48,489 - root - INFO - Running analysis for metric ID: 15, period: both
+2025-03-19 18:42:48,489 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 15 --period both
+2025-03-19 18:42:50,290 - root - INFO - Successfully completed analysis for metric ID: 15
+2025-03-19 18:42:51,296 - root - INFO - Processing metric 16/17: 16
+2025-03-19 18:42:51,298 - root - INFO - Running analysis for metric ID: 16, period: both
+2025-03-19 18:42:51,298 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 16 --period both
+2025-03-19 18:43:00,292 - root - INFO - Successfully completed analysis for metric ID: 16
+2025-03-19 18:43:01,298 - root - INFO - Processing metric 17/17: 17
+2025-03-19 18:43:01,298 - root - INFO - Running analysis for metric ID: 17, period: both
+2025-03-19 18:43:01,298 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 17 --period both
+2025-03-19 18:43:05,901 - root - INFO - Successfully completed analysis for metric ID: 17
+2025-03-19 18:43:06,907 - root - INFO - Completed all analyses. Successful: 17, Failed: 0
+2025-03-19 19:19:57,966 - root - INFO - Starting analysis for all metrics
+2025-03-19 19:19:57,966 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 19:19:58,008 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 19:19:58,008 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 19:19:58,037 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 19:19:58,037 - root - INFO - Loading enhanced dashboard queries from /Users/rg/Tsf/transparentSF/ai/data/dashboard/dashboard_queries_enhanced.json
+2025-03-19 19:19:58,038 - root - INFO - Found 17 metrics to analyze
+2025-03-19 19:19:58,038 - root - INFO - Processing metric 1/17: 1
+2025-03-19 19:19:58,038 - root - INFO - Running analysis for metric ID: 1, period: both
+2025-03-19 19:19:58,038 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both
+2025-03-19 19:22:56,905 - root - INFO - Successfully completed analysis for metric ID: 1
+2025-03-19 19:22:57,910 - root - INFO - Processing metric 2/17: 2
+2025-03-19 19:22:57,911 - root - INFO - Running analysis for metric ID: 2, period: both
+2025-03-19 19:22:57,911 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 2 --period both
+2025-03-19 19:23:19,159 - root - INFO - Successfully completed analysis for metric ID: 2
+2025-03-19 19:23:20,165 - root - INFO - Processing metric 3/17: 3
+2025-03-19 19:23:20,166 - root - INFO - Running analysis for metric ID: 3, period: both
+2025-03-19 19:23:20,166 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 3 --period both
+2025-03-19 19:24:21,003 - root - INFO - Successfully completed analysis for metric ID: 3
+2025-03-19 19:24:22,005 - root - INFO - Processing metric 4/17: 4
+2025-03-19 19:24:22,006 - root - INFO - Running analysis for metric ID: 4, period: both
+2025-03-19 19:24:22,007 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 4 --period both
+2025-03-19 19:24:30,429 - root - INFO - Successfully completed analysis for metric ID: 4
+2025-03-19 19:24:31,435 - root - INFO - Processing metric 5/17: 5
+2025-03-19 19:24:31,435 - root - INFO - Running analysis for metric ID: 5, period: both
+2025-03-19 19:24:31,435 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 5 --period both
+2025-03-19 19:24:35,319 - root - INFO - Successfully completed analysis for metric ID: 5
+2025-03-19 19:24:36,325 - root - INFO - Processing metric 6/17: 6
+2025-03-19 19:24:36,326 - root - INFO - Running analysis for metric ID: 6, period: both
+2025-03-19 19:24:36,327 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 6 --period both
+2025-03-19 19:24:53,921 - root - INFO - Successfully completed analysis for metric ID: 6
+2025-03-19 19:24:54,927 - root - INFO - Processing metric 7/17: 7
+2025-03-19 19:24:54,928 - root - INFO - Running analysis for metric ID: 7, period: both
+2025-03-19 19:24:54,928 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 7 --period both
+2025-03-19 19:25:01,970 - root - INFO - Successfully completed analysis for metric ID: 7
+2025-03-19 19:25:02,976 - root - INFO - Processing metric 8/17: 8
+2025-03-19 19:25:02,976 - root - INFO - Running analysis for metric ID: 8, period: both
+2025-03-19 19:25:02,976 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 8 --period both
+2025-03-19 19:25:10,818 - root - INFO - Successfully completed analysis for metric ID: 8
+2025-03-19 19:25:11,823 - root - INFO - Processing metric 9/17: 9
+2025-03-19 19:25:11,824 - root - INFO - Running analysis for metric ID: 9, period: both
+2025-03-19 19:25:11,824 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 9 --period both
+2025-03-19 19:25:23,683 - root - INFO - Successfully completed analysis for metric ID: 9
+2025-03-19 19:25:24,694 - root - INFO - Processing metric 10/17: 10
+2025-03-19 19:25:24,695 - root - INFO - Running analysis for metric ID: 10, period: both
+2025-03-19 19:25:24,695 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 10 --period both
+2025-03-19 19:26:02,407 - root - INFO - Successfully completed analysis for metric ID: 10
+2025-03-19 19:26:03,413 - root - INFO - Processing metric 11/17: 11
+2025-03-19 19:26:03,413 - root - INFO - Running analysis for metric ID: 11, period: both
+2025-03-19 19:26:03,413 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 11 --period both
+2025-03-19 19:26:30,921 - root - INFO - Successfully completed analysis for metric ID: 11
+2025-03-19 19:26:31,926 - root - INFO - Processing metric 12/17: 12
+2025-03-19 19:26:31,926 - root - INFO - Running analysis for metric ID: 12, period: both
+2025-03-19 19:26:31,926 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 12 --period both
+2025-03-19 19:26:56,714 - root - INFO - Successfully completed analysis for metric ID: 12
+2025-03-19 19:26:57,720 - root - INFO - Processing metric 13/17: 13
+2025-03-19 19:26:57,720 - root - INFO - Running analysis for metric ID: 13, period: both
+2025-03-19 19:26:57,720 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 13 --period both
+2025-03-19 19:27:01,820 - root - INFO - Successfully completed analysis for metric ID: 13
+2025-03-19 19:27:02,826 - root - INFO - Processing metric 14/17: 14
+2025-03-19 19:27:02,826 - root - INFO - Running analysis for metric ID: 14, period: both
+2025-03-19 19:27:02,826 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 14 --period both
+2025-03-19 19:27:13,244 - root - INFO - Successfully completed analysis for metric ID: 14
+2025-03-19 19:27:14,250 - root - INFO - Processing metric 15/17: 15
+2025-03-19 19:27:14,250 - root - INFO - Running analysis for metric ID: 15, period: both
+2025-03-19 19:27:14,251 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 15 --period both
+2025-03-19 19:27:18,966 - root - INFO - Successfully completed analysis for metric ID: 15
+2025-03-19 19:27:19,969 - root - INFO - Processing metric 16/17: 16
+2025-03-19 19:27:19,969 - root - INFO - Running analysis for metric ID: 16, period: both
+2025-03-19 19:27:19,970 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 16 --period both
+2025-03-19 19:27:28,824 - root - INFO - Successfully completed analysis for metric ID: 16
+2025-03-19 19:27:29,829 - root - INFO - Processing metric 17/17: 17
+2025-03-19 19:27:29,829 - root - INFO - Running analysis for metric ID: 17, period: both
+2025-03-19 19:27:29,829 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 17 --period both
+2025-03-19 19:27:34,221 - root - INFO - Successfully completed analysis for metric ID: 17
+2025-03-19 19:27:35,227 - root - INFO - Completed all analyses. Successful: 17, Failed: 0
+2025-03-19 19:42:38,132 - root - INFO - Starting analysis for all metrics
+2025-03-19 19:42:38,132 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 19:42:38,264 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 19:42:38,265 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 19:42:38,292 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 19:42:38,292 - root - INFO - Loading enhanced dashboard queries from /Users/rg/Tsf/transparentSF/ai/data/dashboard/dashboard_queries_enhanced.json
+2025-03-19 19:42:38,293 - root - INFO - Found 17 metrics to analyze
+2025-03-19 19:42:38,293 - root - INFO - Processing metric 1/17: 1
+2025-03-19 19:42:38,293 - root - INFO - Metric 1 has supervisor_district field, processing by district
+2025-03-19 19:42:38,293 - root - INFO - Running analysis for metric ID: 1, period: both
+2025-03-19 19:42:38,293 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both
+2025-03-19 19:45:26,534 - root - INFO - Successfully completed analysis for metric ID: 1
+2025-03-19 19:45:27,539 - root - INFO - Running analysis for metric ID: 1, period: both for district 1
+2025-03-19 19:45:27,539 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both --district 1
+2025-03-19 19:47:58,431 - root - INFO - Successfully completed analysis for metric ID: 1 for district 1
+2025-03-19 19:47:59,437 - root - INFO - Running analysis for metric ID: 1, period: both for district 2
+2025-03-19 19:47:59,437 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both --district 2
+2025-03-19 19:50:31,194 - root - INFO - Successfully completed analysis for metric ID: 1 for district 2
+2025-03-19 19:50:32,200 - root - INFO - Running analysis for metric ID: 1, period: both for district 3
+2025-03-19 19:50:32,200 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both --district 3
+2025-03-19 20:03:43,620 - root - INFO - Starting analysis for all metrics
+2025-03-19 20:03:43,620 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 20:03:43,644 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 20:03:43,644 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 20:03:43,752 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 20:03:43,752 - root - INFO - Loading enhanced dashboard queries from /Users/rg/Tsf/transparentSF/ai/data/dashboard/dashboard_queries_enhanced.json
+2025-03-19 20:03:43,753 - root - INFO - Found 17 metrics to analyze
+2025-03-19 20:03:43,753 - root - INFO - Processing metric 1/17: 1
+2025-03-19 20:03:43,753 - root - INFO - Metric 1 has supervisor_district field, processing with district filtering
+2025-03-19 20:03:43,753 - root - INFO - Running analysis for metric ID: 1, period: both with district processing
+2025-03-19 20:03:43,753 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both --process-districts
+2025-03-19 20:22:01,093 - root - INFO - Successfully completed analysis for metric ID: 1 with district processing
+2025-03-19 20:22:02,099 - root - INFO - Processing metric 2/17: 2
+2025-03-19 20:22:02,100 - root - INFO - Metric 2 has supervisor_district field, processing with district filtering
+2025-03-19 20:22:02,101 - root - INFO - Running analysis for metric ID: 2, period: both with district processing
+2025-03-19 20:22:02,101 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 2 --period both --process-districts
+2025-03-19 20:24:46,608 - root - INFO - Successfully completed analysis for metric ID: 2 with district processing
+2025-03-19 20:24:47,613 - root - INFO - Processing metric 3/17: 3
+2025-03-19 20:24:47,614 - root - INFO - Metric 3 has supervisor_district field, processing with district filtering
+2025-03-19 20:24:47,614 - root - INFO - Running analysis for metric ID: 3, period: both with district processing
+2025-03-19 20:24:47,614 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 3 --period both --process-districts
+2025-03-19 20:29:39,215 - root - INFO - Starting analysis for all metrics
+2025-03-19 20:29:39,215 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 20:29:39,253 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 20:29:39,253 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 20:29:39,276 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 20:29:39,276 - root - INFO - Loading enhanced dashboard queries from /Users/rg/Tsf/transparentSF/ai/data/dashboard/dashboard_queries_enhanced.json
+2025-03-19 20:29:39,277 - root - INFO - Found 17 metrics to analyze
+2025-03-19 20:29:39,277 - root - INFO - Processing metric 1/17: 1
+2025-03-19 20:29:39,277 - root - INFO - Metric 1 has supervisor_district field, processing with district filtering
+2025-03-19 20:29:39,277 - root - INFO - Running analysis for metric ID: 1, period: both with district processing
+2025-03-19 20:29:39,277 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both --process-districts
+2025-03-19 20:35:02,227 - root - INFO - Starting analysis for all metrics
+2025-03-19 20:35:02,227 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 20:35:02,227 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 20:35:02,227 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 20:35:02,233 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 20:35:02,233 - root - INFO - Loading enhanced dashboard queries from /Users/rg/Tsf/transparentSF/ai/data/dashboard/dashboard_queries_enhanced.json
+2025-03-19 20:35:02,234 - root - INFO - Found 17 metrics to analyze
+2025-03-19 20:35:02,234 - root - INFO - Processing metric 1/17: 1
+2025-03-19 20:35:02,234 - root - INFO - Metric 1 has supervisor_district field, processing with district filtering
+2025-03-19 20:35:02,234 - root - INFO - Running analysis for metric ID: 1, period: both with district processing
+2025-03-19 20:35:02,234 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both --process-districts
+2025-03-19 20:47:50,145 - root - INFO - Starting analysis for all metrics
+2025-03-19 20:47:50,145 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 20:47:50,147 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/annual
+2025-03-19 20:47:50,147 - root - INFO - Clearing directory: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 20:47:50,184 - root - INFO - Directory cleared: /Users/rg/Tsf/transparentSF/ai/output/monthly
+2025-03-19 20:47:50,185 - root - INFO - Loading enhanced dashboard queries from /Users/rg/Tsf/transparentSF/ai/data/dashboard/dashboard_queries_enhanced.json
+2025-03-19 20:47:50,185 - root - INFO - Found 17 metrics to analyze
+2025-03-19 20:47:50,185 - root - INFO - Processing metric 1/17: 1
+2025-03-19 20:47:50,185 - root - INFO - Metric 1 has supervisor_district field, processing with district filtering
+2025-03-19 20:47:50,186 - root - INFO - Running analysis for metric ID: 1, period: both with district processing
+2025-03-19 20:47:50,186 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 1 --period both --process-districts
+2025-03-19 21:04:56,902 - root - INFO - Successfully completed analysis for metric ID: 1 with district processing
+2025-03-19 21:04:57,913 - root - INFO - Processing metric 2/17: 2
+2025-03-19 21:04:57,913 - root - INFO - Metric 2 has supervisor_district field, processing with district filtering
+2025-03-19 21:04:57,913 - root - INFO - Running analysis for metric ID: 2, period: both with district processing
+2025-03-19 21:04:57,913 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 2 --period both --process-districts
+2025-03-19 21:07:38,332 - root - INFO - Successfully completed analysis for metric ID: 2 with district processing
+2025-03-19 21:07:39,338 - root - INFO - Processing metric 3/17: 3
+2025-03-19 21:07:39,338 - root - INFO - Metric 3 has supervisor_district field, processing with district filtering
+2025-03-19 21:07:39,338 - root - INFO - Running analysis for metric ID: 3, period: both with district processing
+2025-03-19 21:07:39,338 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 3 --period both --process-districts
+2025-03-19 21:15:18,575 - root - INFO - Successfully completed analysis for metric ID: 3 with district processing
+2025-03-19 21:15:19,580 - root - INFO - Processing metric 4/17: 4
+2025-03-19 21:15:19,581 - root - INFO - Metric 4 has supervisor_district field, processing with district filtering
+2025-03-19 21:15:19,581 - root - INFO - Running analysis for metric ID: 4, period: both with district processing
+2025-03-19 21:15:19,581 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 4 --period both --process-districts
+2025-03-19 21:16:05,645 - root - INFO - Successfully completed analysis for metric ID: 4 with district processing
+2025-03-19 21:16:06,651 - root - INFO - Processing metric 5/17: 5
+2025-03-19 21:16:06,651 - root - INFO - Running analysis for metric ID: 5, period: both
+2025-03-19 21:16:06,651 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 5 --period both
+2025-03-19 21:16:10,972 - root - INFO - Successfully completed analysis for metric ID: 5
+2025-03-19 21:16:11,975 - root - INFO - Processing metric 6/17: 6
+2025-03-19 21:16:11,975 - root - INFO - Running analysis for metric ID: 6, period: both
+2025-03-19 21:16:11,975 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 6 --period both
+2025-03-19 21:16:28,251 - root - INFO - Successfully completed analysis for metric ID: 6
+2025-03-19 21:16:29,256 - root - INFO - Processing metric 7/17: 7
+2025-03-19 21:16:29,257 - root - INFO - Running analysis for metric ID: 7, period: both
+2025-03-19 21:16:29,257 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 7 --period both
+2025-03-19 21:16:39,265 - root - INFO - Successfully completed analysis for metric ID: 7
+2025-03-19 21:16:40,270 - root - INFO - Processing metric 8/17: 8
+2025-03-19 21:16:40,271 - root - INFO - Metric 8 has supervisor_district field, processing with district filtering
+2025-03-19 21:16:40,271 - root - INFO - Running analysis for metric ID: 8, period: both with district processing
+2025-03-19 21:16:40,271 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 8 --period both --process-districts
+2025-03-19 21:17:18,987 - root - INFO - Successfully completed analysis for metric ID: 8 with district processing
+2025-03-19 21:17:19,993 - root - INFO - Processing metric 9/17: 9
+2025-03-19 21:17:19,993 - root - INFO - Metric 9 has supervisor_district field, processing with district filtering
+2025-03-19 21:17:19,993 - root - INFO - Running analysis for metric ID: 9, period: both with district processing
+2025-03-19 21:17:19,993 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 9 --period both --process-districts
+2025-03-19 21:18:50,515 - root - INFO - Successfully completed analysis for metric ID: 9 with district processing
+2025-03-19 21:18:51,520 - root - INFO - Processing metric 10/17: 10
+2025-03-19 21:18:51,520 - root - INFO - Metric 10 has supervisor_district field, processing with district filtering
+2025-03-19 21:18:51,521 - root - INFO - Running analysis for metric ID: 10, period: both with district processing
+2025-03-19 21:18:51,521 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 10 --period both --process-districts
+2025-03-19 21:21:12,851 - root - INFO - Successfully completed analysis for metric ID: 10 with district processing
+2025-03-19 21:21:13,853 - root - INFO - Processing metric 11/17: 11
+2025-03-19 21:21:13,853 - root - INFO - Metric 11 has supervisor_district field, processing with district filtering
+2025-03-19 21:21:13,853 - root - INFO - Running analysis for metric ID: 11, period: both with district processing
+2025-03-19 21:21:13,853 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 11 --period both --process-districts
+2025-03-19 21:23:07,837 - root - INFO - Successfully completed analysis for metric ID: 11 with district processing
+2025-03-19 21:23:08,843 - root - INFO - Processing metric 12/17: 12
+2025-03-19 21:23:08,843 - root - INFO - Metric 12 has supervisor_district field, processing with district filtering
+2025-03-19 21:23:08,843 - root - INFO - Running analysis for metric ID: 12, period: both with district processing
+2025-03-19 21:23:08,843 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 12 --period both --process-districts
+2025-03-19 21:24:43,583 - root - INFO - Successfully completed analysis for metric ID: 12 with district processing
+2025-03-19 21:24:44,589 - root - INFO - Processing metric 13/17: 13
+2025-03-19 21:24:44,590 - root - INFO - Running analysis for metric ID: 13, period: both
+2025-03-19 21:24:44,591 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 13 --period both
+2025-03-19 21:24:48,548 - root - INFO - Successfully completed analysis for metric ID: 13
+2025-03-19 21:24:49,554 - root - INFO - Processing metric 14/17: 14
+2025-03-19 21:24:49,555 - root - INFO - Metric 14 has supervisor_district field, processing with district filtering
+2025-03-19 21:24:49,556 - root - INFO - Running analysis for metric ID: 14, period: both with district processing
+2025-03-19 21:24:49,557 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 14 --period both --process-districts
+2025-03-19 21:25:40,626 - root - INFO - Successfully completed analysis for metric ID: 14 with district processing
+2025-03-19 21:25:41,631 - root - INFO - Processing metric 15/17: 15
+2025-03-19 21:25:41,631 - root - INFO - Metric 15 has supervisor_district field, processing with district filtering
+2025-03-19 21:25:41,631 - root - INFO - Running analysis for metric ID: 15, period: both with district processing
+2025-03-19 21:25:41,632 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 15 --period both --process-districts
+2025-03-19 21:25:53,766 - root - INFO - Successfully completed analysis for metric ID: 15 with district processing
+2025-03-19 21:25:54,771 - root - INFO - Processing metric 16/17: 16
+2025-03-19 21:25:54,771 - root - INFO - Metric 16 has supervisor_district field, processing with district filtering
+2025-03-19 21:25:54,771 - root - INFO - Running analysis for metric ID: 16, period: both with district processing
+2025-03-19 21:25:54,771 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 16 --period both --process-districts
+2025-03-19 21:26:37,194 - root - INFO - Successfully completed analysis for metric ID: 16 with district processing
+2025-03-19 21:26:38,199 - root - INFO - Processing metric 17/17: 17
+2025-03-19 21:26:38,199 - root - INFO - Metric 17 has supervisor_district field, processing with district filtering
+2025-03-19 21:26:38,199 - root - INFO - Running analysis for metric ID: 17, period: both with district processing
+2025-03-19 21:26:38,199 - root - INFO - Running command: python /Users/rg/Tsf/transparentSF/ai/generate_metric_analysis.py 17 --period both --process-districts
+2025-03-19 21:26:48,982 - root - INFO - Successfully completed analysis for metric ID: 17 with district processing
+2025-03-19 21:26:49,988 - root - INFO - Completed all analyses. Successful: 17, Failed: 0

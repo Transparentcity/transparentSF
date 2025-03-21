@@ -85,6 +85,12 @@ def generate_time_series_chart(
 
         # Apply filter conditions if provided
         if filter_conditions:
+            # Convert time_series_field to string if we have string year filters
+            year_filters = [f for f in filter_conditions if f['field'].lower() == time_series_field.lower() and isinstance(f['value'], str) and f['value'].isdigit()]
+            if year_filters and 'year' in time_series_field.lower():
+                df[time_series_field] = df[time_series_field].astype(str)
+                logging.info(f"Converted {time_series_field} to string type for year comparisons")
+            
             data_records = df.to_dict('records')
             # Apply filter_data_by_date_and_conditions
             filtered_data = filter_data_by_date_and_conditions(
@@ -188,6 +194,7 @@ def generate_time_series_chart(
 
             # Exclude the last period for calculating the average of the rest across all groups
             rest_periods = aggregated_df[aggregated_df['time_period'] < last_time_period]
+            total_periods = 0  # Initialize with default value
             if rest_periods.empty:
                 average_of_rest = 0
             else:
@@ -382,7 +389,11 @@ def generate_time_series_chart(
         if output_dir:
             chart_dir = output_dir
         else:
-            chart_dir = os.path.join(script_dir, '..', 'output')
+            # Create subdirectory based on aggregation period
+            if aggregation_period == 'year':
+                chart_dir = os.path.join(script_dir, '..', 'output', 'annual')
+            else:
+                chart_dir = os.path.join(script_dir, '..', 'output', 'monthly')
         os.makedirs(chart_dir, exist_ok=True)
 
         # Use a short unique ID for the filename
@@ -615,8 +626,8 @@ def generate_time_series_chart(
             # First, find the 'output' directory in the path
             path_parts = image_path.split(os.sep)
             output_index = path_parts.index('output')
-            # Include all parts after 'output' except the filename
-            relative_path = os.path.join(*path_parts[output_index:-1])
+            # Include only the subdirectory, not 'output' itself
+            relative_path = os.path.join(*path_parts[output_index+1:-1])
             logging.debug(f"Using relative path: {relative_path}")
 
             # Prepare crosstabbed data
@@ -649,7 +660,7 @@ def generate_time_series_chart(
             # Create markdown content with full path
             markdown_content = f""" 
 {context_variables.get("chart_title", "Time Series Chart")}
-![Chart]/{relative_path}/{image_filename})
+![Chart](/{relative_path}/{image_filename})
 Caption: {caption}
 
 ### Data Table

@@ -9,6 +9,10 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from generate_dashboard_metrics import main as generate_metrics
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -149,6 +153,92 @@ async def get_metrics(filename: str):
         except Exception as e:
             logger.error(f"Error reading metrics file {file_path}: {str(e)}")
             raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/enhanced-queries")
+async def get_enhanced_queries():
+    """Serve the enhanced dashboard queries file."""
+    file_path = os.path.join(current_dir, "data", "dashboard", "dashboard_queries_enhanced.json")
+    logger.debug(f"Attempting to read enhanced queries from: {file_path}")
+    
+    try:
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            return JSONResponse(content=data)
+    except FileNotFoundError:
+        logger.error(f"Enhanced queries file not found: {file_path}")
+        raise HTTPException(status_code=404, detail="Enhanced queries file not found")
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON in enhanced queries file: {file_path}")
+        raise HTTPException(status_code=500, detail="Invalid JSON in enhanced queries file")
+    except Exception as e:
+        logger.error(f"Error reading enhanced queries file {file_path}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/metric-id-mapping")
+async def get_metric_id_mapping():
+    """Serve the metric ID mapping file."""
+    file_path = os.path.join(current_dir, "data", "dashboard", "metric_id_mapping.json")
+    logger.debug(f"Attempting to read metric ID mapping from: {file_path}")
+    
+    try:
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            return JSONResponse(content=data)
+    except FileNotFoundError:
+        logger.error(f"Metric ID mapping file not found: {file_path}")
+        raise HTTPException(status_code=404, detail="Metric ID mapping file not found")
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON in metric ID mapping file: {file_path}")
+        raise HTTPException(status_code=500, detail="Invalid JSON in metric ID mapping file")
+    except Exception as e:
+        logger.error(f"Error reading metric ID mapping file {file_path}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/metric/{metric_id}")
+async def get_metric_by_id(metric_id: int):
+    """Get metric details by its numeric ID."""
+    # First, load the metric ID mapping
+    mapping_file = os.path.join(current_dir, "data", "dashboard", "metric_id_mapping.json")
+    enhanced_queries_file = os.path.join(current_dir, "data", "dashboard", "dashboard_queries_enhanced.json")
+    
+    try:
+        # Load the mapping file
+        with open(mapping_file, 'r') as f:
+            mapping = json.load(f)
+        
+        # Check if the metric ID exists in the mapping
+        metric_id_str = str(metric_id)
+        if metric_id_str not in mapping:
+            logger.error(f"Metric ID {metric_id} not found in mapping")
+            raise HTTPException(status_code=404, detail=f"Metric ID {metric_id} not found")
+        
+        # Get the metric details from the mapping
+        metric_info = mapping[metric_id_str]
+        category = metric_info["category"]
+        subcategory = metric_info["subcategory"]
+        metric_name = metric_info["name"]
+        
+        # Load the enhanced queries file
+        with open(enhanced_queries_file, 'r') as f:
+            queries = json.load(f)
+        
+        # Get the metric details from the enhanced queries
+        if category in queries and subcategory in queries[category] and "queries" in queries[category][subcategory] and metric_name in queries[category][subcategory]["queries"]:
+            metric_data = queries[category][subcategory]["queries"][metric_name]
+            return JSONResponse(content=metric_data)
+        else:
+            logger.error(f"Metric {metric_name} not found in enhanced queries")
+            raise HTTPException(status_code=404, detail=f"Metric {metric_name} not found in enhanced queries")
+    
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {str(e)}")
+        raise HTTPException(status_code=404, detail="Required files not found")
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON: {str(e)}")
+        raise HTTPException(status_code=500, detail="Invalid JSON in required files")
+    except Exception as e:
+        logger.error(f"Error getting metric by ID: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/district/{district_id}/metric/{metric_id}")
 async def get_district_metric(district_id: str, metric_id: str):

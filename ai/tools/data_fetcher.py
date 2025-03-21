@@ -4,27 +4,32 @@ import re
 from urllib.parse import urljoin
 import pandas as pd
 import logging
+import json
 
 # Create a logger for this module
 logger = logging.getLogger(__name__)
 # Add these lines after the imports
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.INFO,  # Changed from DEBUG to INFO
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler()  # This will output to console
     ]
 )
+
 def clean_query_string(query):
     """
     Cleans the query string by removing unnecessary whitespace and line breaks.
     """
+    if not isinstance(query, str):
+        logger.error(f"Query is not a string. Type: {type(query)}, Value: {query}")
+        return str(query)
     cleaned = re.sub(r'\s+', ' ', query.replace('\n', ' ')).strip()
     logger.debug("Cleaned query string: %s", cleaned)
     return cleaned
 
 def fetch_data_from_api(query_object):
-    logger.info("Starting fetch_data_from_api with query_object: %s", query_object)
+    logger.info("Starting fetch_data_from_api with query_object: %s", json.dumps(query_object, indent=2))
     base_url = "https://data.sfgov.org/resource/"
     all_data = []
     limit = 5000
@@ -32,12 +37,17 @@ def fetch_data_from_api(query_object):
 
     endpoint = query_object.get('endpoint')
     query = query_object.get('query')
+    
+    if not endpoint:
+        logger.error("Missing endpoint in query_object")
+        return {'error': 'Endpoint is required'}
+    if not query:
+        logger.error("Missing query in query_object")
+        return {'error': 'Query is required'}
+
+    logger.info(f"Processing endpoint: {endpoint}")
     logger.info(f"Initial query string: {query}")
     
-    if not endpoint or not query:
-        logger.error("Invalid query object: %s", query_object)
-        return {'error': 'Invalid query object provided.'}
-
     cleaned_query = clean_query_string(query)
     logger.info(f"After clean_query_string: {cleaned_query}")
     
@@ -53,16 +63,16 @@ def fetch_data_from_api(query_object):
 
     has_limit = "limit" in cleaned_query.lower()
     url = urljoin(base_url, f"{endpoint if endpoint.endswith('.json') else endpoint + '.json'}")
+    logger.info(f"Full API URL: {url}")
     
     # Don't wrap the query in $query= here, just pass it directly
     params = {"$query": cleaned_query}
-    logger.info(f"Final request parameters: {params}")
+    logger.info(f"Request parameters: {json.dumps(params, indent=2)}")
 
     headers = {
         'Accept': 'application/json'
-        # Include 'X-App-Token' if you have an app token
-        # 'X-App-Token': 'YOUR_APP_TOKEN'
     }
+    logger.info(f"Request headers: {json.dumps(headers, indent=2)}")
 
     has_more_data = True
     while has_more_data:
@@ -121,51 +131,59 @@ def fetch_data_from_api(query_object):
 def set_dataset(context_variables, *args, **kwargs):
     """
     Fetches data from the API and sets it in the context variables.
-    Supports both:
-    - Named parameters: set_dataset(context_variables, endpoint="...", query="...")
-    - Args/kwargs syntax: set_dataset(context_variables, "endpoint.json", "$select=...")
-    - JSON format: {"args": "endpoint.json", "kwargs": "$select=..."}
     """
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    logger.debug("Starting set_dataset with args: %s, kwargs: %s", args, kwargs)
+    logger.info("=== Starting set_dataset ===")
+    logger.info(f"Args received: {args}")
+    logger.info(f"Kwargs received: {json.dumps(kwargs, indent=2)}")
+    logger.info(f"Context variables keys: {list(context_variables.keys())}")
 
-    # Handle the JSON format with "args" and "kwargs" keys
-    if 'args' in kwargs and 'kwargs' in kwargs:
-        endpoint = kwargs['args']
-        query = kwargs['kwargs']
-        logger.info(f"Using JSON format - Raw query: {query}")
-    # Handle the args/kwargs syntax
-    elif len(args) >= 1 and isinstance(args[0], str):
-        endpoint = args[0]
-        query = kwargs.get('kwargs') if 'kwargs' in kwargs else kwargs.get('query')
-        logger.info(f"Using args/kwargs syntax - Raw query: {query}")
-    else:
-        # Handle named parameters syntax
-        endpoint = kwargs.get('endpoint')
-        query = kwargs.get('query')
-        logger.info(f"Using named parameters - Raw query: {query}")
+    try:
+        # Handle the JSON format with "args" and "kwargs" keys
+        if 'args' in kwargs and 'kwargs' in kwargs:
+            endpoint = kwargs['args']
+            query = kwargs['kwargs']
+            logger.info(f"Using JSON format - Endpoint: {endpoint}, Query: {query}")
+        # Handle the args/kwargs syntax
+        elif len(args) >= 1 and isinstance(args[0], str):
+            endpoint = args[0]
+            query = kwargs.get('kwargs') if 'kwargs' in kwargs else kwargs.get('query')
+            logger.info(f"Using args/kwargs syntax - Endpoint: {endpoint}, Query: {query}")
+        else:
+            # Handle named parameters syntax
+            endpoint = kwargs.get('endpoint')
+            query = kwargs.get('query')
+            logger.info(f"Using named parameters - Endpoint: {endpoint}, Query: {query}")
 
-    if not endpoint or not query:
-        logger.error("Endpoint and query are required parameters.")
-        return {'error': 'Endpoint and query are required parameters.', 'queryURL': None}
+        if not endpoint:
+            logger.error("Missing endpoint parameter")
+            return {'error': 'Endpoint is required', 'queryURL': None}
+        if not query:
+            logger.error("Missing query parameter")
+            return {'error': 'Query is required', 'queryURL': None}
 
-    logger.info(f"Processing request with endpoint: {endpoint}, query: {query}")
-    query_object = {'endpoint': endpoint, 'query': query}
-    result = fetch_data_from_api(query_object)
-    if result and 'data' in result:
-        data = result['data']
-        if data:
-            df = pd.DataFrame(data)
-            context_variables['dataset'] = df
-            logger.info("Dataset successfully set with %d records.", len(df))
-            return {'status': 'success', 'queryURL': result.get('queryURL')}
+        logger.info(f"Final parameters - Endpoint: {endpoint}, Query: {query}")
+        query_object = {'endpoint': endpoint, 'query': query}
+        
+        result = fetch_data_from_api(query_object)
+        logger.info(f"API result status: {'success' if 'data' in result else 'error'}")
+        
+        if result and 'data' in result:
+            data = result['data']
+            if data:
+                df = pd.DataFrame(data)
+                context_variables['dataset'] = df
+                logger.info(f"Dataset successfully created with shape: {df.shape}")
+                return {'status': 'success', 'queryURL': result.get('queryURL')}
+            else:
+                logger.warning("API returned empty data")
+                return {'error': 'No data returned from the API', 'queryURL': result.get('queryURL')}
         elif 'error' in result:
-            logger.error("Failed to fetch data from the API: %s", result['error'])
+            logger.error(f"API returned error: {result['error']}")
             return {'error': result['error'], 'queryURL': result.get('queryURL')}
         else:
-            logger.warning("No data returned from the API.")
-            return {'error': 'No data returned from the API.', 'queryURL': result.get('queryURL')}
-    else:
-        logger.error("Invalid result format or error in result: %s", result)
-        return {'error': result.get('error', 'Invalid result format'), 'queryURL': result.get('queryURL')}
+            logger.error("Unexpected API response format")
+            return {'error': 'Unexpected API response format', 'queryURL': result.get('queryURL')}
+            
+    except Exception as e:
+        logger.exception("Unexpected error in set_dataset")
+        return {'error': f'Unexpected error: {str(e)}', 'queryURL': None}

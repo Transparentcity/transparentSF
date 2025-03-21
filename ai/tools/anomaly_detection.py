@@ -116,7 +116,7 @@ def generate_anomalies_summary(results):
 
     return {"anomalies": html_summary}
 
-def group_data_by_field_and_date(data_array, group_field, numeric_field, date_field, period_type='month'):
+def group_data_by_field_and_date(data_array, group_field, numeric_field, date_field, period_type='month', agg_function='sum'):
     logging.info("=== Starting Data Grouping ===")
     logging.info(f"First 5 records of raw data:")
     for i, item in enumerate(data_array[:5]):
@@ -129,7 +129,9 @@ def group_data_by_field_and_date(data_array, group_field, numeric_field, date_fi
     # Create a set to track all unique dates we see
     all_dates = set()
 
-    grouped = {}
+    # Dictionary to track the sum and count for calculating mean if needed
+    data_points = {}
+
     for item in data_array:
         group_value = item.get(group_field)
         date_obj = item.get(date_field)
@@ -164,10 +166,11 @@ def group_data_by_field_and_date(data_array, group_field, numeric_field, date_fi
 
         all_dates.add(date_key)
 
-        if group_value not in grouped:
-            grouped[group_value] = {}
-        if date_key not in grouped[group_value]:
-            grouped[group_value][date_key] = 0.0  # Initialize as float
+        # Initialize the data structure if needed
+        if group_value not in data_points:
+            data_points[group_value] = {}
+        if date_key not in data_points[group_value]:
+            data_points[group_value][date_key] = {'sum': 0.0, 'count': 0}
 
         # Convert numeric value to float, with error handling
         try:
@@ -177,8 +180,25 @@ def group_data_by_field_and_date(data_array, group_field, numeric_field, date_fi
             logging.warning(f"Invalid numeric value for record: {item}")
             numeric_value = 0.0
             
-        grouped[group_value][date_key] += numeric_value
+        # Update the sum and count
+        data_points[group_value][date_key]['sum'] += numeric_value
+        data_points[group_value][date_key]['count'] += 1
 
+    # Now apply the aggregation function to get the final grouped data
+    grouped = {}
+    for group_value, dates in data_points.items():
+        grouped[group_value] = {}
+        for date_key, values in dates.items():
+            if agg_function == 'mean':
+                # Avoid division by zero
+                if values['count'] > 0:
+                    grouped[group_value][date_key] = values['sum'] / values['count']
+                else:
+                    grouped[group_value][date_key] = 0.0
+            else:  # Default to sum
+                grouped[group_value][date_key] = values['sum']
+
+    logging.info(f"Using aggregation function: {agg_function}")
     logging.info("=== Grouping Complete ===")
     logging.info(f"Total groups found: {len(grouped)}")
     logging.info(f"All unique dates found in data: {sorted(list(all_dates))}")
@@ -229,8 +249,19 @@ def custom_parse_date(date_str, period_type='month'):
         return None
 
 def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None, end_date=None, date_field=None, period_type='month'):
-    # Initialize error log
-    error_log = []
+    # Initialize error counters
+    error_counts = {
+        'missing_date_field': 0,
+        'unrecognized_date_type': 0,
+        'invalid_date_format': 0,
+        'date_outside_range': 0,
+        'missing_condition_field': 0,
+        'missing_value': 0,
+        'invalid_numeric_date': 0,
+        'non_numeric_comparison': 0,
+        'comparison_error': 0
+    }
+    
     # Convert date strings to datetime.date objects
     def parse_filter_date(date_val):
         if isinstance(date_val, str):
@@ -292,7 +323,7 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
         if date_field and start_date and end_date:
             key_date_field = find_key(item, date_field)
             if key_date_field is None:
-                error_log.append(f"Record {idx} missing {date_field} information. Skipping.")
+                error_counts['missing_date_field'] += 1
                 continue
             date_value = item[key_date_field]
             
@@ -313,45 +344,33 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
                 # Format based on period_type
                 item_date = format_date(date_value, period_type)
             else:
-                error_log.append(f"Record {idx}: Unrecognized {date_field} type: {type(date_value)}. Skipping.")
+                error_counts['unrecognized_date_type'] += 1
                 continue
 
             # Update item with original date value
             item[date_field] = original_date
 
-            # Add logging for date value parsing
-            logging.debug(f"Record {idx}: Processing date value: {date_value} ({type(date_value)})")
-
             # Convert date_field value to datetime.date if necessary
             if isinstance(date_value, str):
                 item_date = custom_parse_date(date_value, period_type)
-                logging.debug(f"Record {idx}: Parsed string date to: {item_date}")
             elif isinstance(date_value, pd.Timestamp):
                 item_date = date_value.date()
-                logging.debug(f"Record {idx}: Converted Timestamp to date: {item_date}")
             elif isinstance(date_value, (datetime.date, datetime.datetime)):
                 item_date = date_value.date() if isinstance(date_value, datetime.datetime) else date_value
-                logging.debug(f"Record {idx}: Using existing date/datetime: {item_date}")
             elif isinstance(date_value, (int, float)):
                 try:
                     date_str = str(int(date_value))
                     item_date = datetime.datetime.strptime(date_str, "%Y%m%d").date()
-                    logging.debug(f"Record {idx}: Converted numeric date to: {item_date}")
-                except (ValueError, TypeError) as e:
-                    error_log.append(f"Record {idx}: Invalid numeric date for {date_field} {e}. Skipping.")
-                    logging.debug(f"Record {idx}: Failed to parse numeric date: {date_value}")
+                except (ValueError, TypeError):
+                    error_counts['invalid_numeric_date'] += 1
                     continue
             else:
-                error_log.append(f"Record {idx}: Unrecognized {date_field} type: {type(date_value)}. Skipping.")
-                logging.debug(f"Record {idx}: Unhandled date type: {type(date_value)}")
+                error_counts['unrecognized_date_type'] += 1
                 continue
 
             if item_date is None:
-                error_log.append(f"Record {idx}: Invalid date format for {date_field}. Skipping.")
+                error_counts['invalid_date_format'] += 1
                 continue
-
-            # Add logging for date comparison
-            logging.debug(f"Record {idx}: Comparing dates - Item: {item_date}, Range: {start_date} to {end_date}")
             
             # Convert start_date and end_date to first/last day of month if they're year-month dates
             if isinstance(start_date, str) and len(start_date.split('-')) == 2:
@@ -364,16 +383,32 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
             # Ensure item_date is a datetime.date object for comparison
             if isinstance(item_date, str):
                 if period_type == 'year':
-                    item_date = datetime.datetime.strptime(item_date, "%Y").date()
+                    try:
+                        item_date = datetime.datetime.strptime(item_date, "%Y").date()
+                    except ValueError:
+                        error_counts['invalid_date_format'] += 1
+                        continue
                 elif period_type == 'month':
-                    item_date = datetime.datetime.strptime(f"{item_date}-01", "%Y-%m").date()
+                    try:
+                        item_date = datetime.datetime.strptime(f"{item_date}-01", "%Y-%m-%d").date()
+                    except ValueError:
+                        error_counts['invalid_date_format'] += 1
+                        continue
                 else:  # day
-                    item_date = datetime.datetime.strptime(item_date, "%Y-%m-%d").date()
+                    try:
+                        item_date = datetime.datetime.strptime(item_date, "%Y-%m-%d").date()
+                    except ValueError:
+                        error_counts['invalid_date_format'] += 1
+                        continue
 
             # Perform date filtering based on actual date objects
-            if not (start_date <= item_date <= end_date):
-                logging.debug(f"Record {idx}: Date outside range - skipping")
-                continue  # Skip this record
+            try:
+                if not (start_date <= item_date <= end_date):
+                    error_counts['date_outside_range'] += 1
+                    continue  # Skip this record
+            except TypeError:
+                error_counts['comparison_error'] += 1
+                continue
 
             # Update item with formatted date string based on period_type
             item[date_field] = format_date(item_date, period_type)
@@ -388,14 +423,14 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
             
             if key_field is None:
                 meets_conditions = False
-                error_log.append(f"Record {idx}: Missing field '{field}' for condition '{field} {operator} {value}'. Skipping.")
+                error_counts['missing_condition_field'] += 1
                 break
             item_value = item[key_field]
 
             # If item_value is None, we can't compare
             if item_value is None:
                 meets_conditions = False
-                error_log.append(f"Record {idx}: Missing value for field '{field}'. Skipping.")
+                error_counts['missing_value'] += 1
                 break
 
             # Parse item_value if condition value is a date
@@ -410,16 +445,16 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
                         item_value = datetime.datetime.strptime(date_str, "%Y%m%d").date()
                     except (ValueError, TypeError):
                         meets_conditions = False
-                        error_log.append(f"Record {idx}: Invalid numeric date for field '{field}'. Skipping.")
+                        error_counts['invalid_numeric_date'] += 1
                         break
                 else:
                     meets_conditions = False
-                    error_log.append(f"Record {idx}: Unrecognized type for field '{field}': {type(item_value)}. Skipping.")
+                    error_counts['unrecognized_date_type'] += 1
                     break
 
                 if item_value is None:
                     meets_conditions = False
-                    error_log.append(f"Record {idx}: Invalid date for field '{field}'. Skipping.")
+                    error_counts['invalid_date_format'] += 1
                     break
 
                 # Perform date comparison
@@ -442,9 +477,9 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
                     elif operator == '!=' and not (item_value != value):
                         meets_conditions = False
                         break
-                except Exception as e:
+                except Exception:
                     meets_conditions = False
-                    error_log.append(f"Record {idx}: Error during date comparison for field '{field}': {e}. Skipping.")
+                    error_counts['comparison_error'] += 1
                     break
             else:
                 # Clean and convert values if numeric
@@ -481,7 +516,7 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
                     elif operator in ['<', '<=', '>', '>=']:
                         if not is_numeric:
                             meets_conditions = False
-                            error_log.append(f"Record {idx}: Cannot compare non-numeric values for field '{field}' with operator '{operator}'. Skipping.")
+                            error_counts['non_numeric_comparison'] += 1
                             break
                         if operator == '<' and not (item_value_float < value_float):
                             meets_conditions = False
@@ -495,9 +530,9 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
                         elif operator == '>=' and not (item_value_float >= value_float):
                             meets_conditions = False
                             break
-                except Exception as e:
+                except Exception:
                     meets_conditions = False
-                    error_log.append(f"Record {idx}: Error during comparison for field '{field}': {e}. Skipping.")
+                    error_counts['comparison_error'] += 1
                     break
 
         if meets_conditions:
@@ -510,17 +545,26 @@ def filter_data_by_date_and_conditions(data, filter_conditions, start_date=None,
         logging.info(f"  Records passing date filter: {len(filtered_data)}")
         logging.info(f"  Records filtered out by date: {len(data) - len(filtered_data)}")
 
-    # At the end of the loop, log the error summary
+    # Log error summary
     total_records = len(data)
     filtered_records = len(filtered_data)
     invalid_records = total_records - filtered_records
     logging.info(f"Total records processed: {total_records}")
     logging.info(f"Total records after filtering: {filtered_records}")
     logging.info(f"Total invalid records: {invalid_records}")
-    if error_log:
-        logging.info("Error details:")
-        for error in error_log:
-            logging.info(error)
+    
+    # Log error counts
+    if sum(error_counts.values()) > 0:
+        logging.info("Error count summary:")
+        for error_type, count in error_counts.items():
+            if count > 0:
+                logging.info(f"  {error_type}: {count}")
+        
+        # Log sample errors if there are any
+        if error_counts['non_numeric_comparison'] > 0:
+            logging.info("Sample non-numeric comparison errors may be caused by:")
+            for condition in filter_conditions:
+                logging.info(f"  Condition: {condition['field']} {condition['operator']} {condition['value']}")
 
     return filtered_data
 
@@ -547,13 +591,22 @@ def anomaly_detection(
     numeric_field=None,
     y_axis_label=None,
     title=None,
-    period_type='month'  # Add period_type parameter with default
+    period_type='month',  # Add period_type parameter with default
+    agg_function='sum',  # Add agg_function parameter with default 'sum'
+    output_dir=None  # Add output_dir parameter with default None
 ):
+    
+    # Set default output_dir based on period_type if not provided
+    if output_dir is None:
+        output_dir = 'monthly' if period_type == 'month' else 'annual' if period_type == 'year' else period_type
     
     data = context_variables.get("dataset")
     if data is None:
         logging.error("Dataset is not available.")
         return {"error": "Dataset is not available."}
+
+    # Log the aggregation function being used
+    logging.info(f"Using aggregation function: {agg_function}")
 
     data_records = data.to_dict('records')
     logging.info(f"Total records in the dataset: {len(data_records)}")
@@ -614,13 +667,14 @@ def anomaly_detection(
     )
 
     logging.info(f"Filtered data size: {len(recent_data)} records after applying filters.")
-    # Group data with period_type
+    # Group data with period_type and agg_function
     grouped_data = group_data_by_field_and_date(
         recent_data,
         group_field,
         numeric_field,
         date_field=date_field,
-        period_type=period_type
+        period_type=period_type,
+        agg_function=agg_function  # Pass the aggregation function
     )
     logging.info(f"Grouped data size: {len(grouped_data)} groups.")
     print(grouped_data)
@@ -681,12 +735,12 @@ def anomaly_detection(
                     try:
                         # Use appropriate date format based on period_type
                         if period_type == 'year':
-                            # For year period, just compare the years
-                            item_year = int(date_key)
-                            comp_start_year = comparison_period['start'].year
-                            comp_end_year = comparison_period['end'].year
-                            recent_start_year = recent_period['start'].year
-                            recent_end_year = recent_period['end'].year
+                            # For year period, just compare the years as strings
+                            item_year = date_key
+                            comp_start_year = str(comparison_period['start'].year)
+                            comp_end_year = str(comparison_period['end'].year)
+                            recent_start_year = str(recent_period['start'].year)
+                            recent_end_year = str(recent_period['end'].year)
                             
                             if comp_start_year <= item_year <= comp_end_year:
                                 comparison_counts.append(count)
@@ -774,7 +828,8 @@ def anomaly_detection(
         'title': title,
         'filter_conditions': filter_conditions,
         'numeric_field': numeric_field,
-        'period_type': period_type  # Add period_type to metadata
+        'period_type': period_type,  # Add period_type to metadata
+        'agg_function': agg_function  # Add agg_function to metadata
     }
 
     # Get script directory and set up output directory
@@ -803,4 +858,4 @@ def anomaly_detection(
     
     html_content, markdown_content = generate_anomalies_summary_with_charts(results, metadata, output_dir=output_dir)
     
-    return  {"anomalies":html_content, "anomalies_markdown":markdown_content}
+    return {"anomalies":html_content, "anomalies_markdown":markdown_content}

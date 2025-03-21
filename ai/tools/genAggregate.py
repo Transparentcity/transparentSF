@@ -98,7 +98,7 @@ def aggregate_data(
         'week': 'W',
         'month': 'ME',  # Changed from 'M' to 'ME'
         'quarter': 'Q',
-        'year': 'A'
+        'year': 'YE'  # Changed from 'A' to 'YE'
     }.get(aggregation_period.lower(), 'D')
 
     logging.debug("Resampling with rule: %s", resample_rule)

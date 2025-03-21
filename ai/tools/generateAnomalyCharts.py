@@ -26,6 +26,10 @@ def generate_anomalies_summary_with_charts(results, metadata, output_dir='static
         logging.warning("Metadata is missing 'title' or 'y_axis_label'. Default values will be used.")
     chart_counter=0
     
+    # Get the aggregation function from metadata
+    agg_function = metadata.get('agg_function', 'sum')
+    agg_function_display = 'Average' if agg_function == 'mean' else 'Total'
+    
     # Get script directory and set up output directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
     if output_dir == 'static':
@@ -42,7 +46,8 @@ def generate_anomalies_summary_with_charts(results, metadata, output_dir='static
     # Generate charts for each anomaly
     for item in sorted_anomalies:
         if item['out_of_bounds']:
-            chart_title = f"Anomaly in {metadata['y_axis_label']} in {item['group_value']} "
+            # Include aggregation function in chart title
+            chart_title = f"Anomaly in {agg_function_display} {metadata['y_axis_label']} in {item['group_value']} "
             try:
                 chart_html, chart_id = generate_chart_html(item, chart_title, metadata, chart_counter, output_dir)
                 all_charts_html.append(chart_html)
@@ -69,7 +74,7 @@ def generate_anomalies_summary_with_charts(results, metadata, output_dir='static
         })
     
     # Create title string for HTML and markdown
-    title_str = f"{metadata.get('numeric_field', '')} by {metadata.get('group_field', '')}"
+    title_str = f"{agg_function_display} {metadata.get('numeric_field', '')} by {metadata.get('group_field', '')}"
     title_str += f"<br>for {metadata['recent_period']['start'].strftime('%b-%y')} to {metadata['recent_period']['end'].strftime('%b-%y')} "
     title_str += f"<br>vs {metadata['comparison_period']['start'].strftime('%b-%y')} to {metadata['comparison_period']['end'].strftime('%b-%y')}"
     
@@ -348,9 +353,9 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
             )
         )
 
-    # Update the xaxis configuration based on date_field
+    # Update the xaxis configuration based on period_type
     xaxis_config = {}
-    if metadata.get('date_field') == 'year':
+    if period_type == 'year':
         xaxis_config = dict(
             tickformat='%Y',  # Show only year
             dtick='M12',      # One tick per year
@@ -428,48 +433,96 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
 
 def generate_markdown_summary(table_data, metadata, output_dir):
     """
-    Generate a concise Markdown summary of the anomalies including references to the saved PNG charts.
+    Generates a Markdown summary of the anomalies with links to chart images.
+
+    Parameters:
+    - table_data (list of dict): Data for all groups with anomaly status and chart_ids.
+    - metadata (dict): Contains comparison_period and recent_period information.
+    - output_dir (str): Directory to save the chart images.
+
+    Returns:
+    - str: Markdown summary of the anomalies.
     """
+    # Get the aggregation function from metadata
+    agg_function = metadata.get('agg_function', 'sum')
+    agg_function_display = 'Average' if agg_function == 'mean' else 'Total'
     
-    title = metadata.get('title', 'Anomaly Detection Charts')
-    y_axis_label = metadata.get('y_axis_label', 'Value')
-    numeric_field = metadata.get('numeric_field', 'Value')
-    group_field = metadata.get('group_field', 'Category')
-
-    md_lines = []
-    md_lines.append(f"# {y_axis_label} Summary\n")
-
-    if table_data:
+    summary = "## Anomaly Detection Summary\n\n"
+    
+    # Add metadata information
+    title = metadata.get('title', 'Anomaly Detection Results')
+    if title:
+        summary += f"### {title} ({agg_function_display})\n\n"
+    
+    # Periods information
+    summary += "**Period Information:**\n\n"
+    
+    # Format dates based on period_type
+    period_type = metadata.get('period_type', 'month')
+    if period_type == 'year':
+        date_format = '%Y'
+    else:  # month, day
+        date_format = '%b %Y'
+    
+    if 'recent_period' in metadata and 'comparison_period' in metadata:
+        recent_start = metadata['recent_period']['start'].strftime(date_format)
+        recent_end = metadata['recent_period']['end'].strftime(date_format)
+        comp_start = metadata['comparison_period']['start'].strftime(date_format)
+        comp_end = metadata['comparison_period']['end'].strftime(date_format)
         
-        md_lines.append(f"Searched for anomalies of {numeric_field} in {group_field} comparing {metadata['recent_period']['start']} to {metadata['recent_period']['end']} against {metadata['comparison_period']['start']} to {metadata['comparison_period']['end']}.")
-        md_lines.append("")
+        summary += f"- Recent Period: {recent_start} to {recent_end}\n"
+        summary += f"- Comparison Period: {comp_start} to {comp_end}\n\n"
+    
+    # Count anomalies
+    anomalies = [row for row in table_data if row.get('out_of_bounds', False)]
+    
+    if anomalies:
+        summary += f"**{len(anomalies)} Anomalies Detected:**\n\n"
         
-        # Convert table_data to DataFrame for markdown conversion
-        df = pd.DataFrame(table_data)
-        df = df[['group_value', 'recent_mean', 'comparison_mean', 'difference', 'percent_difference', 'std_dev', 'out_of_bounds']]
-        df.columns = ['Group', 'Recent Mean', 'Comparison Mean', 'Difference', '% Difference', 'Std Dev', 'Anomaly']
-        df['Anomaly'] = df['Anomaly'].map({True: '**Yes**', False: 'No'})
+        # Sort anomalies by percent difference
+        anomalies.sort(key=lambda x: abs(x.get('percent_difference', 0)), reverse=True)
         
-        # Format numeric columns
-        numeric_cols = ['Recent Mean', 'Comparison Mean', 'Difference', 'Std Dev']
-        for col in numeric_cols:
-            df[col] = df[col].map(lambda x: f"{x:,.0f}")
-        df['% Difference'] = df['% Difference'].map(lambda x: f"{x:.1f}%")
-        
-        # Add markdown table
-        md_lines.append(df.to_markdown(index=False))
-        md_lines.append("")
+        for i, anomaly in enumerate(anomalies, 1):
+            group = anomaly.get('group_value', 'Unknown')
+            recent = anomaly.get('recent_mean', 0)
+            comp = anomaly.get('comparison_mean', 0)
+            pct_diff = anomaly.get('percent_difference', 0)
+            direction = "increase" if recent > comp else "decrease"
+            
+            # Add chart reference if available
+            chart_id = anomaly.get('chart_id')
+            if chart_id:
+                # Get the chart image file path
+                img_path = os.path.join(output_dir, f"chart_{chart_id}.png")
+                rel_path = os.path.basename(img_path)
+                
+                # Add the anomaly description with link to chart
+                summary += f"{i}. **{group}**: {agg_function_display} {metadata.get('y_axis_label', 'Value')} {direction}d by **{abs(pct_diff):.1f}%** "
+                summary += f"(from {comp:.1f} to {recent:.1f})\n"
+                summary += f"   ![Anomaly Chart for {group}](/{os.path.basename(output_dir)}/{rel_path})\n\n"
+            else:
+                # Just add the anomaly description without chart
+                summary += f"{i}. **{group}**: {agg_function_display} {metadata.get('y_axis_label', 'Value')} {direction}d by **{abs(pct_diff):.1f}%** "
+                summary += f"(from {comp:.1f} to {recent:.1f})\n\n"
     else:
-        md_lines.append(f"No anomalies detected comparing {numeric_field} in {group_field} comparing {metadata['recent_period']['start']} to {metadata['recent_period']['end']} against {metadata['comparison_period']['start']} to {metadata['comparison_period']['end']}.")
-        md_lines.append("")
-
-    # Get the output directory name from the path
-    output_subdir = os.path.basename(output_dir)
-
-    # Add chart references for anomalies
-    for row in table_data:
-        if row['out_of_bounds'] and row['chart_id']:
-            md_lines.append(f"\n### {row['group_value']}")
-            md_lines.append(f"![Chart](../{output_subdir}/chart_{row['chart_id']}.png)")
-
-    return "\n".join(md_lines)
+        summary += "**No anomalies were detected.**\n\n"
+    
+    # Add summary table
+    if table_data:
+        summary += "### Summary Table\n\n"
+        summary += "| Group | Recent | Comparison | % Change | Anomaly |\n"
+        summary += "|-------|--------|------------|----------|--------|\n"
+        
+        # Sort table data by percent difference
+        sorted_data = sorted(table_data, key=lambda x: abs(x.get('percent_difference', 0)), reverse=True)
+        
+        for row in sorted_data:
+            group = row.get('group_value', 'Unknown')
+            recent = row.get('recent_mean', 0)
+            comp = row.get('comparison_mean', 0)
+            pct_diff = row.get('percent_difference', 0)
+            anomaly = "Yes" if row.get('out_of_bounds', False) else "No"
+            
+            summary += f"| {group} | {recent:.1f} | {comp:.1f} | {pct_diff:.1f}% | {anomaly} |\n"
+    
+    return summary

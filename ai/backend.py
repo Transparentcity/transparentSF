@@ -26,7 +26,7 @@ import time
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,  # Capture all levels
+    level=logging.INFO,  # Changed from DEBUG to INFO
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler("app_debug.log"),  # Log to file
@@ -43,15 +43,15 @@ templates = None  # Will be set by main.py
 script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the /ai directory
 output_dir = os.path.join(script_dir, 'output')  # /ai/output
 
-logger.debug(f"Script directory: {script_dir}")
-logger.debug(f"Output directory: {output_dir}")
+logger.info(f"Script directory: {script_dir}")
+logger.info(f"Output directory: {output_dir}")
 
 
 def set_templates(t):
     """Set the templates instance for this router"""
     global templates
     templates = t
-    logger.debug("Templates set in backend router")
+    logger.info("Templates set in backend router")
 
 
 def find_output_files_for_endpoint(endpoint: str, output_dir: str):
@@ -289,7 +289,7 @@ async def prep_data(filename: str):
 @router.get("/run_analysis/{endpoint}")
 async def run_analysis(endpoint: str, period_type: str = 'year'):
     """Run analysis for a given endpoint."""
-    logger.debug(f"Run analysis called for endpoint: {endpoint} with period_type: {period_type}")
+    logger.info(f"Run analysis called for endpoint: {endpoint} with period_type: {period_type}")
     
     # Remove .json extension if present
     endpoint = endpoint.replace('.json', '')
@@ -315,7 +315,7 @@ async def run_analysis(endpoint: str, period_type: str = 'year'):
         period_output_dir = os.path.join(output_dir, period_folder)
         os.makedirs(period_output_dir, exist_ok=True)
         
-        logger.debug(f"Attempting to run export_for_endpoint with endpoint: {endpoint} and period_type: {period_type}")
+        logger.info(f"Attempting to run export_for_endpoint with endpoint: {endpoint} and period_type: {period_type}")
         export_for_endpoint(endpoint, 
                           period_type=period_type,
                           output_folder=period_output_dir,
@@ -767,6 +767,78 @@ async def clear_html_files():
         })
 
 
+@router.post("/clear-period-files/{period_type}")
+async def clear_period_files(period_type: str):
+    """Delete all files from a specific period folder (monthly or annual)."""
+    logger.debug(f"Clear {period_type} files called")
+    
+    # Validate period_type
+    period_folder_map = {
+        'year': 'annual',
+        'month': 'monthly',
+        'day': 'daily',
+        'ytd': 'ytd'
+    }
+    
+    if period_type not in period_folder_map:
+        logger.error(f"Invalid period_type: {period_type}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Invalid period_type: {period_type}. Must be one of: {', '.join(period_folder_map.keys())}"
+        }, status_code=400)
+        
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        period_folder = period_folder_map[period_type]
+        output_dir = os.path.join(script_dir, 'output', period_folder)
+        
+        # Check if directory exists
+        if not os.path.exists(output_dir):
+            logger.debug(f"Directory does not exist: {output_dir}")
+            return JSONResponse({
+                "status": "success",
+                "message": f"No {period_folder} files to delete"
+            })
+        
+        # Count of deleted files
+        deleted_count = 0
+        
+        # Delete all files and subdirectories
+        for root, dirs, files in os.walk(output_dir, topdown=False):
+            for file in files:
+                file_path = os.path.join(root, file)
+                try:
+                    os.remove(file_path)
+                    deleted_count += 1
+                    logger.debug(f"Deleted file: {file_path}")
+                except Exception as e:
+                    logger.error(f"Error deleting file {file_path}: {str(e)}")
+            
+            # Delete empty directories
+            for dir in dirs:
+                dir_path = os.path.join(root, dir)
+                try:
+                    # Only remove if empty
+                    if not os.listdir(dir_path):
+                        os.rmdir(dir_path)
+                        logger.debug(f"Deleted directory: {dir_path}")
+                except Exception as e:
+                    logger.error(f"Error deleting directory {dir_path}: {str(e)}")
+        
+        logger.info(f"Successfully deleted {deleted_count} files from {period_folder} folder")
+        return JSONResponse({
+            "status": "success", 
+            "message": f"Successfully deleted {deleted_count} files from {period_folder} folder"
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error clearing {period_type} files: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        })
+
+
 @router.get("/generate_ytd_metrics")
 async def generate_ytd_metrics():
     """Generate YTD metrics on demand."""
@@ -780,6 +852,80 @@ async def generate_ytd_metrics():
         })
     except Exception as e:
         logger.exception(f"Error generating YTD metrics: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
+
+
+@router.get("/run_all_metrics")
+async def run_all_metrics(period_type: str = 'year'):
+    """Run analysis for all available endpoints."""
+    logger.info(f"Run all metrics called with period_type: {period_type}")
+    try:
+        # Load all datasets to get endpoints
+        datasets = load_and_sort_json()
+        
+        # Track results
+        results = {
+            "total": len(datasets),
+            "successful": 0,
+            "failed": 0,
+            "errors": []
+        }
+        
+        # Run analysis for each endpoint
+        for dataset in datasets:
+            endpoint = dataset['endpoint'].replace('.json', '')
+            try:
+                logger.info(f"Running analysis for endpoint: {endpoint}")
+                
+                # Create period-specific output folder
+                period_folder_map = {
+                    'year': 'annual',
+                    'month': 'monthly',
+                    'day': 'daily',
+                    'ytd': 'ytd'
+                }
+                
+                if period_type not in period_folder_map:
+                    raise ValueError(f"Invalid period_type: {period_type}. Must be one of: {', '.join(period_folder_map.keys())}")
+                    
+                period_folder = period_folder_map[period_type]
+                period_output_dir = os.path.join(output_dir, period_folder)
+                os.makedirs(period_output_dir, exist_ok=True)
+                
+                # Create logs directory if it doesn't exist
+                logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
+                os.makedirs(logs_dir, exist_ok=True)
+                
+                # Run analysis for this endpoint
+                export_for_endpoint(endpoint, 
+                                  period_type=period_type,
+                                  output_folder=period_output_dir,
+                                  log_file_path=os.path.join(logs_dir, 'processing_log.txt'))
+                
+                results["successful"] += 1
+                logger.info(f"Successfully processed endpoint: {endpoint}")
+            except Exception as e:
+                error_msg = f"Error processing endpoint {endpoint}: {str(e)}"
+                logger.error(error_msg)
+                results["failed"] += 1
+                results["errors"].append(error_msg)
+        
+        # Generate summary message
+        message = f"Processed {results['successful']} of {results['total']} endpoints successfully."
+        if results["failed"] > 0:
+            message += f" {results['failed']} endpoints failed."
+        
+        logger.info(message)
+        return JSONResponse({
+            "status": "success" if results["failed"] == 0 else "partial",
+            "message": message,
+            "results": results
+        })
+    except Exception as e:
+        logger.exception(f"Error running all metrics: {str(e)}")
         return JSONResponse({
             "status": "error",
             "message": str(e)
@@ -851,7 +997,7 @@ async def execute_query(request: Request):
 @router.get("/logs/{filename}")
 async def get_log_file(filename: str):
     """Serve a log file directly."""
-    logger.debug(f"Get log file called for: {filename}")
+    logger.info(f"Get log file called for: {filename}")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         logs_dir = os.path.join(script_dir, 'logs')

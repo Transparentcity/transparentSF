@@ -3,7 +3,7 @@ import json
 import logging
 import traceback
 from datetime import datetime, date, timedelta
-from tools.data_fetcher import set_dataset  # Import the set_dataset function
+from tools.data_fetcher import set_dataset  # Fixed import path
 import pandas as pd
 import re
 import uuid
@@ -15,6 +15,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 import time
 import argparse
+import sys
 
 # Create logs directory if it doesn't exist
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -41,9 +42,13 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 def load_json_file(file_path):
-    """Load and parse a JSON file."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    """Load a JSON file and return its contents."""
+    try:
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading JSON file {file_path}: {e}")
+        return None
 
 def get_date_ranges(target_date=None):
     """Calculate the date ranges for YTD comparisons."""
@@ -657,6 +662,16 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                             }
                         }
                         
+                        # Add location and category fields if available in the enhanced query data
+                        if isinstance(query_data, dict):
+                            if "location_fields" in query_data:
+                                metric_base["location_fields"] = query_data.get("location_fields", [])
+                            if "category_fields" in query_data:
+                                metric_base["category_fields"] = query_data.get("category_fields", [])
+                            # Also add the numeric ID if available
+                            if "id" in query_data and isinstance(query_data["id"], int):
+                                metric_base["numeric_id"] = query_data["id"]
+                        
                         # Get the last data date from metric results if available
                         metric_last_data_date = None
                         if '0' in results and results['0'].get('lastDataDate'):
@@ -739,7 +754,7 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
     metrics['metadata']['next_update'] = next_update.isoformat()
     
     # Create output directories
-    dashboard_dir = os.path.join(output_dir, 'dashboard')
+    dashboard_dir = output_dir  # Changed: Use output_dir directly as dashboard_dir
     history_dir = os.path.join(output_dir, 'history')
     os.makedirs(dashboard_dir, exist_ok=True)
     os.makedirs(history_dir, exist_ok=True)
@@ -776,7 +791,9 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                     
                     # Save individual metric file with trend data
                     if 'trend_data' in metric and metric['trend_data']:
-                        metric_file = os.path.join(district_dir, f"{metric['id']}.json")
+                        # Use numeric_id for filename if available, otherwise use string id
+                        file_id = str(metric['numeric_id']) if 'numeric_id' in metric else metric['id']
+                        metric_file = os.path.join(district_dir, f"{file_id}.json")
                         metric_data = {
                             "metadata": metrics['metadata'],
                             "metric_id": metric['id'],
@@ -799,6 +816,14 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                                 "executed_ytd_query": metric['queries'].get('executed_ytd_query', '')
                             }
                         }
+
+                        # Add location_fields, category_fields, and numeric_id if they exist in the metric
+                        if 'location_fields' in metric:
+                            metric_data['location_fields'] = metric['location_fields']
+                        if 'category_fields' in metric:
+                            metric_data['category_fields'] = metric['category_fields']
+                        if 'numeric_id' in metric:
+                            metric_data['numeric_id'] = metric['numeric_id']
 
                         # Add district breakdown for citywide metrics (district 0)
                         if district_str == '0':
@@ -823,7 +848,7 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
 
                         with open(metric_file, 'w', encoding='utf-8') as f:
                             json.dump(metric_data, f, indent=2)
-                        logger.info(f"Metric {metric['id']} saved to {metric_file}")
+                        logger.info(f"Metric {file_id} (original id: {metric['id']}) saved to {metric_file}")
                     
                     # Remove summary, definition, and URL from the top-level copy
                     if 'metadata' in metric_copy:
@@ -1048,7 +1073,8 @@ def create_metadata_dict(category_name, metric, district, district_name):
     definition = metadata.get('definition', 'No detailed definition available')
     data_url = metadata.get('data_sf_url', 'No data source URL available')
     
-    return {
+    # Create the base metadata dictionary
+    metadata_dict = {
         'category': category_name,
         'metric_name': metric['name'],
         'metric_id': metric['id'],
@@ -1063,75 +1089,73 @@ def create_metadata_dict(category_name, metric, district, district_name):
         'trend_data': metric.get('trend_data', {}),
         'queries': metric['queries']
     }
+    
+    # Add location and category fields if available
+    if 'location_fields' in metric:
+        metadata_dict['location_fields'] = metric['location_fields']
+    if 'category_fields' in metric:
+        metadata_dict['category_fields'] = metric['category_fields']
+    if 'numeric_id' in metric:
+        metadata_dict['numeric_id'] = metric['numeric_id']
+    
+    return metadata_dict
+
+def setup_logging():
+    """Configure logging for the dashboard metrics generation."""
+    # Create logs directory if it doesn't exist
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    logs_dir = os.path.join(script_dir, 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+    
+    # Configure logging with a single handler for both file and console
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    
+    # Remove any existing handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # Add file handler
+    file_handler = logging.FileHandler(os.path.join(logs_dir, 'dashboard_metrics.log'))
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    
+    # Add console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(console_handler)
+    
+    return logger
 
 def main():
-    """Main function to generate YTD metrics."""
-    try:
-        # Parse command line arguments
-        parser = argparse.ArgumentParser(description='Generate YTD metrics for dashboard.')
-        parser.add_argument('--metric', type=str, help='Generate metrics for a specific metric only (e.g., "Arrests Presented to DA")')
-        args = parser.parse_args()
-        
-        # Define paths
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = os.path.join(script_dir, 'data/dashboard')
-        output_dir = os.path.join(script_dir, 'output')
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Load queries and generate metrics
-        queries_data = load_json_file(os.path.join(data_dir, 'dashboard_queries.json'))
-        
-        # If a specific metric was requested, filter the queries_data to only include that metric
-        if args.metric:
-            logger.info(f"Filtering for specific metric: {args.metric}")
-            filtered_queries_data = {}
-            metric_found = False
-            
-            for category, subcategories in queries_data.items():
-                for subcategory, subcategory_data in subcategories.items():
-                    if isinstance(subcategory_data, dict) and 'queries' in subcategory_data:
-                        for query_name, query_data in subcategory_data['queries'].items():
-                            if args.metric.lower() in query_name.lower():
-                                if category not in filtered_queries_data:
-                                    filtered_queries_data[category] = {}
-                                
-                                # Create a copy of the subcategory data with just this query
-                                filtered_subcategory = {'queries': {query_name: query_data}}
-                                
-                                # Copy endpoint from subcategory if it exists
-                                if 'endpoint' in subcategory_data:
-                                    filtered_subcategory['endpoint'] = subcategory_data['endpoint']
-                                
-                                # If the query has its own endpoint, use that
-                                if isinstance(query_data, dict) and 'endpoint' in query_data:
-                                    if 'endpoint' not in filtered_subcategory:
-                                        filtered_subcategory['endpoint'] = query_data['endpoint']
-                                
-                                filtered_queries_data[category][subcategory] = filtered_subcategory
-                                logger.info(f"Found matching metric: {query_name} in {category}/{subcategory}")
-                                metric_found = True
-            
-            if not metric_found:
-                logger.warning(f"No metrics found matching '{args.metric}'. Using all metrics.")
-                filtered_queries_data = queries_data
-            else:
-                queries_data = filtered_queries_data
-                logger.info(f"Filtered queries data to only include '{args.metric}'")
-        
-        metrics = generate_ytd_metrics(queries_data, output_dir)
-        
-        # Try to create vector collection, but continue even if it fails
-        try:
-            create_ytd_vector_collection(metrics)
-        except Exception as e:
-            logger.error(f"Vector collection creation failed, but continuing with metrics generation: {str(e)}")
-            logger.error(traceback.format_exc())
-        
-        return metrics
-    except Exception as e:
-        logger.error(f"Error in main function: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise
+    """Main function to generate dashboard metrics."""
+    # Set up logging
+    setup_logging()
+    
+    # Define output directory
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "dashboard")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Load dashboard queries
+    dashboard_queries_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard", "dashboard_queries.json")
+    enhanced_queries_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard", "dashboard_queries_enhanced.json")
+    
+    # Try to load enhanced queries first, fall back to regular queries
+    if os.path.exists(enhanced_queries_path):
+        logging.info("Using enhanced dashboard queries")
+        dashboard_queries = load_json_file(enhanced_queries_path)
+    else:
+        logging.info("Using standard dashboard queries")
+        dashboard_queries = load_json_file(dashboard_queries_path)
+    
+    if not dashboard_queries:
+        logging.error("Failed to load dashboard queries")
+        return
+    
+    # Generate metrics
+    generate_ytd_metrics(dashboard_queries, output_dir)
+    
+    logging.info("Dashboard metrics generation complete")
 
 if __name__ == '__main__':
     main() 

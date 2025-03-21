@@ -25,3 +25,4 @@ ai/tools/__pycache__/generateAnomalyCharts.cpython-313.pyc
 qdrant_storage/raft_state.json
 qdrant_storage/aliases/data.json
 qdrant_storage/
+.venv/

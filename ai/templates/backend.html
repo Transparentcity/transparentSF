@@ -232,15 +232,28 @@
         /* Analysis buttons - Blue */
         #analyze-yearly-btn,
         #analyze-monthly-btn,
-        #analyze-ytd-btn {
-            background-color: #007bff;
-            border: 1px solid #0056b3;
+        #analyze-ytd-btn,
+        #run-all-metrics-btn {
+            background-color: #3498db;
+            color: white;
         }
 
         #analyze-yearly-btn:hover,
         #analyze-monthly-btn:hover,
-        #analyze-ytd-btn:hover {
-            background-color: #0056b3;
+        #analyze-ytd-btn:hover,
+        #run-all-metrics-btn:hover {
+            background-color: #2980b9;
+        }
+
+        /* Management buttons - Orange */
+        .management-btn {
+            background-color: #e67e22;
+            color: white;
+            border: 1px solid #d35400;
+        }
+
+        .management-btn:hover {
+            background-color: #d35400;
             transform: translateY(-1px);
         }
 
@@ -517,6 +530,12 @@
             <button id="analyze-yearly-btn">Analyze Yearly</button>
             <button id="analyze-monthly-btn">Analyze Monthly</button>
             <button id="analyze-ytd-btn">Analyze YTD</button>
+            <button id="run-all-metrics-btn">Run All Metrics</button>
+            
+            <hr style="margin: 10px 0; border: none; border-top: 1px solid #ddd;">
+            <!-- Management Buttons - Orange -->
+            <button id="clear-annual-btn" class="management-btn">Clear Annual Files</button>
+            <button id="clear-monthly-btn" class="management-btn">Clear Monthly Files</button>
             
             <!-- Action Buttons - Purple -->
             <button id="reload-vector-db-btn">Reload Vector DB</button>
@@ -1109,13 +1128,14 @@
             }
 
             // Add click handlers for analysis buttons
-            const analyzeButtons = ['analyze-yearly-btn', 'analyze-monthly-btn', 'analyze-ytd-btn'];
+            const analyzeButtons = ['analyze-yearly-btn', 'analyze-monthly-btn', 'analyze-ytd-btn', 'run-all-metrics-btn'];
             
             // Map button IDs to period types
             const buttonToPeriodType = {
                 'analyze-yearly-btn': 'year',
                 'analyze-monthly-btn': 'month',
-                'analyze-ytd-btn': 'ytd'
+                'analyze-ytd-btn': 'ytd',
+                'run-all-metrics-btn': 'year'
             };
             
             async function runAnalysis(buttonId) {
@@ -1123,7 +1143,8 @@
                 const buttonTexts = {
                     'analyze-yearly-btn': 'Analyze Yearly',
                     'analyze-monthly-btn': 'Analyze Monthly',
-                    'analyze-ytd-btn': 'Analyze YTD'
+                    'analyze-ytd-btn': 'Analyze YTD',
+                    'run-all-metrics-btn': 'Run All Metrics'
                 };
                 
                 const button = document.getElementById(buttonId);
@@ -1160,6 +1181,60 @@
                         button.textContent = 'Generation Failed ❌';
                         console.error('Error:', error);
                         alert(`Error generating YTD metrics: ${error.message}`);
+                        setTimeout(() => {
+                            button.textContent = originalText;
+                        }, 3000);
+                    } finally {
+                        button.disabled = false;
+                        button.classList.remove('button-loading');
+                    }
+                    return;
+                }
+                
+                // Special handling for Run All Metrics button
+                if (buttonId === 'run-all-metrics-btn') {
+                    button.disabled = true;
+                    const originalText = buttonTexts[buttonId];
+                    button.textContent = 'Running All Metrics...';
+                    button.classList.add('button-loading');
+                    
+                    try {
+                        const periodType = buttonToPeriodType[buttonId];
+                        const response = await fetch(`/backend/run_all_metrics?period_type=${periodType}`);
+                        const data = await response.json();
+                        
+                        if (data.status === 'success' || data.status === 'partial') {
+                            // Refresh all dataset rows to show updated links
+                            const rows = document.querySelectorAll('tr[data-endpoint]');
+                            for (const row of rows) {
+                                await updateRowOutputLinks(row);
+                            }
+                            
+                            let statusMessage = `${data.results.successful} of ${data.results.total} processed successfully`;
+                            if (data.results.failed > 0) {
+                                statusMessage += ` (${data.results.failed} failed)`;
+                                button.textContent = `${statusMessage} ⚠️`;
+                                button.style.color = '#ffc107';
+                            } else {
+                                button.textContent = `${statusMessage} ✅`;
+                            }
+                            
+                            setTimeout(() => {
+                                button.textContent = originalText;
+                                button.style.color = '';
+                            }, 5000);
+                        } else {
+                            button.textContent = 'Processing Failed ❌';
+                            console.error('Error:', data.message);
+                            alert(`Failed to run all metrics: ${data.message}`);
+                            setTimeout(() => {
+                                button.textContent = originalText;
+                            }, 3000);
+                        }
+                    } catch (error) {
+                        button.textContent = 'Processing Failed ❌';
+                        console.error('Error:', error);
+                        alert(`Error running all metrics: ${error.message}`);
                         setTimeout(() => {
                             button.textContent = originalText;
                         }, 3000);
@@ -1253,6 +1328,65 @@
                     btn.addEventListener('click', () => runAnalysis(btnId));
                 }
             });
+
+            // Add functionality for Clear Annual and Monthly Files buttons
+            const clearAnnualBtn = document.getElementById('clear-annual-btn');
+            const clearMonthlyBtn = document.getElementById('clear-monthly-btn');
+            
+            async function clearPeriodFiles(periodType, button) {
+                if (!confirm(`Are you sure you want to delete all ${periodType} analysis files? This action cannot be undone.`)) {
+                    return;
+                }
+                
+                const originalText = button.textContent;
+                button.disabled = true;
+                button.textContent = 'Clearing...';
+                button.classList.add('button-loading');
+                
+                try {
+                    const response = await fetch(`/backend/clear-period-files/${periodType}`, {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        button.textContent = `${data.message} ✅`;
+                        
+                        // Refresh all output links to reflect the changes
+                        const rows = document.querySelectorAll('tr[data-endpoint]');
+                        for (const row of rows) {
+                            await updateRowOutputLinks(row);
+                        }
+                    } else {
+                        button.textContent = 'Clearing Failed ❌';
+                        console.error('Error:', data.message);
+                        alert(`Failed to clear files: ${data.message}`);
+                    }
+                    
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                    }, 3000);
+                } catch (error) {
+                    button.textContent = 'Clearing Failed ❌';
+                    console.error('Error:', error);
+                    alert(`Error clearing files: ${error.message}`);
+                    
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                    }, 3000);
+                } finally {
+                    button.disabled = false;
+                    button.classList.remove('button-loading');
+                }
+            }
+            
+            if (clearAnnualBtn) {
+                clearAnnualBtn.addEventListener('click', () => clearPeriodFiles('year', clearAnnualBtn));
+            }
+            
+            if (clearMonthlyBtn) {
+                clearMonthlyBtn.addEventListener('click', () => clearPeriodFiles('month', clearMonthlyBtn));
+            }
 
             // Add reload vector DB button functionality
             const reloadVectorDbBtn = document.getElementById('reload-vector-db-btn');
