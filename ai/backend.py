@@ -863,67 +863,69 @@ async def run_all_metrics(period_type: str = 'year'):
     """Run analysis for all available endpoints."""
     logger.info(f"Run all metrics called with period_type: {period_type}")
     try:
-        # Load all datasets to get endpoints
-        datasets = load_and_sort_json()
+        # Run the run_all_metrics.py script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(script_dir, "run_all_metrics.py")
         
-        # Track results
-        results = {
-            "total": len(datasets),
-            "successful": 0,
-            "failed": 0,
-            "errors": []
-        }
+        # Create logs directory if it doesn't exist
+        logs_dir = os.path.join(script_dir, 'logs')
+        os.makedirs(logs_dir, exist_ok=True)
         
-        # Run analysis for each endpoint
-        for dataset in datasets:
-            endpoint = dataset['endpoint'].replace('.json', '')
-            try:
-                logger.info(f"Running analysis for endpoint: {endpoint}")
-                
-                # Create period-specific output folder
-                period_folder_map = {
-                    'year': 'annual',
-                    'month': 'monthly',
-                    'day': 'daily',
-                    'ytd': 'ytd'
+        # Run the script
+        logger.info(f"Running script: {script_path}")
+        
+        result = subprocess.run(["python", script_path], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            logger.info("All metrics processed successfully")
+            
+            # Parse the output to find success/failure counts
+            output = result.stdout
+            
+            # Try to extract success and failure counts from the last line
+            lines = output.strip().split('\n')
+            last_line = lines[-1] if lines else ""
+            
+            # Default values if parsing fails
+            successful = 0
+            failed = 0
+            total = 0
+            
+            # Try to parse the completion message: "Completed all analyses. Successful: X, Failed: Y"
+            if "Completed all analyses" in last_line:
+                parts = last_line.split()
+                for i, part in enumerate(parts):
+                    if part == "Successful:":
+                        try:
+                            successful = int(parts[i+1].rstrip(','))
+                        except (IndexError, ValueError):
+                            pass
+                    elif part == "Failed:":
+                        try:
+                            failed = int(parts[i+1])
+                        except (IndexError, ValueError):
+                            pass
+            
+            total = successful + failed
+            
+            # Return success with counts
+            return JSONResponse({
+                "status": "success" if failed == 0 else "partial",
+                "message": f"Processed {successful} of {total} metrics successfully. {failed} metrics failed.",
+                "results": {
+                    "total": total,
+                    "successful": successful,
+                    "failed": failed,
+                    "output": output
                 }
-                
-                if period_type not in period_folder_map:
-                    raise ValueError(f"Invalid period_type: {period_type}. Must be one of: {', '.join(period_folder_map.keys())}")
-                    
-                period_folder = period_folder_map[period_type]
-                period_output_dir = os.path.join(output_dir, period_folder)
-                os.makedirs(period_output_dir, exist_ok=True)
-                
-                # Create logs directory if it doesn't exist
-                logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
-                os.makedirs(logs_dir, exist_ok=True)
-                
-                # Run analysis for this endpoint
-                export_for_endpoint(endpoint, 
-                                  period_type=period_type,
-                                  output_folder=period_output_dir,
-                                  log_file_path=os.path.join(logs_dir, 'processing_log.txt'))
-                
-                results["successful"] += 1
-                logger.info(f"Successfully processed endpoint: {endpoint}")
-            except Exception as e:
-                error_msg = f"Error processing endpoint {endpoint}: {str(e)}"
-                logger.error(error_msg)
-                results["failed"] += 1
-                results["errors"].append(error_msg)
-        
-        # Generate summary message
-        message = f"Processed {results['successful']} of {results['total']} endpoints successfully."
-        if results["failed"] > 0:
-            message += f" {results['failed']} endpoints failed."
-        
-        logger.info(message)
-        return JSONResponse({
-            "status": "success" if results["failed"] == 0 else "partial",
-            "message": message,
-            "results": results
-        })
+            })
+        else:
+            logger.error(f"Error running all metrics: {result.stderr}")
+            return JSONResponse({
+                "status": "error",
+                "message": "Error running all metrics",
+                "error": result.stderr
+            }, status_code=500)
     except Exception as e:
         logger.exception(f"Error running all metrics: {str(e)}")
         return JSONResponse({

@@ -8,14 +8,20 @@ from pathlib import Path
 import logging
 
 # Configure logging
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGS_DIR = os.path.join(SCRIPT_DIR, 'logs')
+
+# Ensure logs directory exists
+os.makedirs(LOGS_DIR, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    filename='all_metrics_run.log'
+    filename=os.path.join(LOGS_DIR, 'metric_analysis.log'),
+    filemode='a'
 )
 
 # Path to the dashboard queries file
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DASHBOARD_QUERIES_PATH = os.path.join(SCRIPT_DIR, "data", "dashboard", "dashboard_queries_enhanced.json")
 DASHBOARD_QUERIES_FALLBACK = os.path.join(SCRIPT_DIR, "data", "dashboard", "dashboard_queries.json")
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, 'output')
@@ -144,9 +150,6 @@ def run_analysis(metric_id, period="both", process_districts=False):
 def main():
     """Main function to run all metric analyses."""
     logging.info("Starting analysis for all metrics")
-    
-    # Clear output directories before running analyses
-    clear_output_directories()
     
     # Load dashboard queries
     dashboard_queries = load_dashboard_queries()
