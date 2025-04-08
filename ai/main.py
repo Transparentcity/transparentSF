@@ -9,7 +9,10 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from generate_dashboard_metrics import main as generate_metrics
+from generate_weekly_analysis import run_weekly_analysis, generate_weekly_newsletter
 from dotenv import load_dotenv
+import re
+import glob
 
 # Load environment variables from .env file
 load_dotenv()
@@ -60,6 +63,16 @@ if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 app.mount("/output", StaticFiles(directory=output_dir), name="output")
 logger.debug(f"Output directory: {output_dir}")
+
+# Define OUTPUT_DIR constant for compatibility with other modules
+OUTPUT_DIR = output_dir
+
+# Mount weekly output directory
+weekly_dir = os.path.join(output_dir, "weekly")
+if not os.path.exists(weekly_dir):
+    os.makedirs(weekly_dir)
+app.mount("/weekly", StaticFiles(directory=weekly_dir), name="weekly")
+logger.debug(f"Weekly output directory: {weekly_dir}")
 
 # Mount logs directory
 logs_dir = os.path.join(current_dir, "logs")
@@ -314,26 +327,189 @@ async def list_district_metrics(district_id: str):
 @app.get("/api/districts")
 async def list_districts():
     """List all available districts."""
-    # Construct the directory path
-    dir_path = os.path.join(output_dir, 'dashboard')
-    logger.debug(f"Attempting to list districts in directory: {dir_path}")
-    
     try:
-        if not os.path.exists(dir_path):
-            logger.error(f"Dashboard directory not found: {dir_path}")
-            raise HTTPException(status_code=404, detail="Dashboard directory not found")
+        districts = []
+        dashboard_dir = os.path.join(output_dir, 'dashboard')
         
-        # Get all subdirectories that are numeric (district IDs)
-        district_dirs = [d for d in os.listdir(dir_path) if os.path.isdir(os.path.join(dir_path, d)) and d.isdigit()]
+        # Look for numbered directories (0-11) representing districts
+        for item in os.listdir(dashboard_dir):
+            item_path = os.path.join(dashboard_dir, item)
+            # Check if it's a directory and represents a district number
+            if os.path.isdir(item_path) and item.isdigit() and 0 <= int(item) <= 11:
+                district_id = item
+                # Load the district's top-level data for its name
+                top_level_path = os.path.join(item_path, 'top_level.json')
+                try:
+                    with open(top_level_path, 'r') as f:
+                        top_level_data = json.load(f)
+                        district_name = top_level_data.get('name', f"District {district_id}")
+                        districts.append({
+                            'id': district_id,
+                            'name': district_name
+                        })
+                except:
+                    # If we can't read top_level.json, just use the district number
+                    districts.append({
+                        'id': district_id,
+                        'name': f"District {district_id}"
+                    })
         
-        # Sort district IDs numerically
-        district_ids = sorted(district_dirs, key=int)
-        
-        # Return the list of district IDs
-        return JSONResponse(content={"districts": district_ids})
+        # Sort districts by ID, ensuring numeric sorting (district 0 is first, then 1-11)
+        districts.sort(key=lambda d: int(d['id']))
+        return JSONResponse(content=districts)
     except Exception as e:
         logger.error(f"Error listing districts: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/weekly-analysis")
+async def trigger_weekly_analysis(metrics: str = None, include_districts: bool = False):
+    """
+    Trigger weekly analysis on demand.
+    
+    Parameters:
+    - metrics: Optional comma-separated list of metric IDs to analyze
+    - include_districts: Whether to include district-level analysis
+    
+    Returns:
+    - Analysis results summary
+    """
+    try:
+        logger.info(f"Manually triggered weekly analysis with metrics={metrics}, include_districts={include_districts}")
+        
+        # Parse metrics list if provided
+        metrics_list = metrics.split(",") if metrics else None
+        
+        # Run the analysis
+        results = run_weekly_analysis(
+            metrics_list=metrics_list,
+            process_districts=include_districts
+        )
+        
+        # Generate a newsletter
+        newsletter_path = generate_weekly_newsletter(results)
+        
+        # Prepare the response
+        analyzed_metrics = []
+        for result in results:
+            analyzed_metrics.append({
+                'metric_id': result.get('metric_id', ''),
+                'query_name': result.get('query_name', ''),
+                'file_path': os.path.relpath(result.get('file_path', ''), OUTPUT_DIR) if result.get('file_path') else None
+            })
+        
+        response = {
+            'success': True,
+            'analyzed_metrics': analyzed_metrics,
+            'newsletter': os.path.relpath(newsletter_path, OUTPUT_DIR) if newsletter_path else None,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        return JSONResponse(content=response)
+    except Exception as e:
+        logger.error(f"Error running weekly analysis: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                'success': False,
+                'error': str(e)
+            }
+        )
+
+@app.get("/weekly-report")
+async def view_weekly_report(request: Request):
+    """Serve the weekly analysis report."""
+    try:
+        # Find the most recent newsletter file
+        newsletter_files = []
+        for file in os.listdir(weekly_dir):
+            if file.startswith("weekly_newsletter_") and file.endswith(".md"):
+                file_path = os.path.join(weekly_dir, file)
+                newsletter_files.append({
+                    'path': file_path,
+                    'modified': os.path.getmtime(file_path),
+                    'filename': file
+                })
+        
+        if not newsletter_files:
+            return templates.TemplateResponse("weekly.html", {
+                "request": request,
+                "newsletter_content": "No weekly reports found. Generate one using the API.",
+                "metrics": [],
+                "start_date": "",
+                "end_date": ""
+            })
+        
+        # Sort by modified time (newest first)
+        newsletter_files.sort(key=lambda x: x['modified'], reverse=True)
+        latest_newsletter = newsletter_files[0]
+        
+        # Read the newsletter content
+        with open(latest_newsletter['path'], 'r') as f:
+            newsletter_content = f.read()
+        
+        # Extract date from filename (format: weekly_newsletter_YYYY-MM-DD.md)
+        report_date_str = latest_newsletter['filename'].replace("weekly_newsletter_", "").replace(".md", "")
+        report_date = datetime.strptime(report_date_str, "%Y-%m-%d")
+        
+        # Calculate the start and end dates of the report period
+        end_date = report_date - timedelta(days=1)  # Report is generated for period ending yesterday
+        start_date = end_date - timedelta(days=6)  # 7-day period
+        
+        # Find all analysis files from the same time period
+        metrics = []
+        for file in os.listdir(weekly_dir):
+            if file.endswith(".md") and not file.startswith("weekly_newsletter_"):
+                # Extract the date from filename (format: metric_id_YYYY-MM-DD.md)
+                parts = file.split("_")
+                if len(parts) >= 2 and parts[-1].endswith(".md"):
+                    file_date_str = parts[-1].replace(".md", "")
+                    try:
+                        file_date = datetime.strptime(file_date_str, "%Y-%m-%d")
+                        # If the file was created on the same day as the newsletter
+                        if file_date.date() == report_date.date():
+                            metric_id = "_".join(parts[:-1])
+                            
+                            # Try to get metric details from the file
+                            file_path = os.path.join(weekly_dir, file)
+                            with open(file_path, 'r') as f:
+                                file_content = f.read()
+                                # Extract title from markdown (# Title)
+                                title_match = re.search(r'^# (.*?)$', file_content, re.MULTILINE)
+                                query_name = title_match.group(1) if title_match else metric_id
+                                
+                                # Extract summary if available
+                                summary_match = re.search(r'\*\*Analysis Type:\*\* Weekly\s*\n\s*\n\*\*Period:\*\* (.*?)\s*\n\s*\n\*\*Filters:\*\* (.*?)$', 
+                                                        file_content, re.MULTILINE)
+                                summary = summary_match.group(0) if summary_match else ""
+                            
+                            metrics.append({
+                                'metric_id': metric_id,
+                                'query_name': query_name,
+                                'file_path': os.path.relpath(file_path, weekly_dir),
+                                'summary': summary
+                            })
+                    except:
+                        # Skip files with invalid date format
+                        pass
+        
+        # Render the template with the data
+        return templates.TemplateResponse("weekly.html", {
+            "request": request,
+            "newsletter_content": newsletter_content,
+            "metrics": metrics,
+            "start_date": start_date.strftime("%B %d, %Y"),
+            "end_date": end_date.strftime("%B %d, %Y")
+        })
+        
+    except Exception as e:
+        logger.error(f"Error serving weekly report: {str(e)}")
+        return templates.TemplateResponse("weekly.html", {
+            "request": request,
+            "newsletter_content": f"Error loading weekly report: {str(e)}",
+            "metrics": [],
+            "start_date": "",
+            "end_date": ""
+        })
 
 # Root route to serve index.html
 @app.get("/")
@@ -395,6 +571,97 @@ async def schedule_metrics_generation():
             logger.error(f"Error in metrics generation scheduler: {str(e)}")
             await asyncio.sleep(300)  # Wait 5 minutes before retrying if there's an error
 
+async def schedule_weekly_analysis():
+    """Schedule weekly analysis to run every Thursday at 11 AM."""
+    while True:
+        try:
+            # Calculate time until next Thursday at 11 AM
+            now = datetime.now()
+            days_until_thursday = (3 - now.weekday()) % 7  # Thursday is weekday 3
+            
+            # If it's Thursday and already past 11 AM, schedule for next week
+            if days_until_thursday == 0 and now.hour >= 11:
+                days_until_thursday = 7
+                
+            target_run = now.replace(hour=11, minute=0, second=0, microsecond=0)
+            target_run += timedelta(days=days_until_thursday)
+            
+            # Wait until the scheduled time
+            wait_seconds = (target_run - now).total_seconds()
+            logger.info(f"Next weekly analysis scheduled for {target_run} (in {wait_seconds/3600:.2f} hours)")
+            await asyncio.sleep(wait_seconds)
+            
+            # Run weekly analysis
+            logger.info("Starting scheduled weekly analysis...")
+            try:
+                # Run analysis for default metrics with district processing
+                results = run_weekly_analysis(process_districts=True)
+                
+                # Generate the newsletter
+                newsletter_path = generate_weekly_newsletter(results)
+                
+                if newsletter_path:
+                    logger.info(f"Weekly analysis completed successfully, newsletter saved to {newsletter_path}")
+                else:
+                    logger.warning("Weekly analysis completed but no newsletter was generated")
+            except Exception as e:
+                logger.error(f"Error during weekly analysis: {str(e)}")
+                
+        except Exception as e:
+            logger.error(f"Error in weekly analysis scheduler: {str(e)}")
+            await asyncio.sleep(300)  # Wait 5 minutes before retrying if there's an error
+
+async def cleanup_logs():
+    """Delete log files older than 7 days to save disk space. Runs every Thursday after weekly analysis."""
+    while True:
+        try:
+            # Calculate time until next Thursday at 11:30 AM (after weekly analysis)
+            now = datetime.now()
+            days_until_thursday = (3 - now.weekday()) % 7  # Thursday is weekday 3
+            
+            # If it's Thursday and already past 11:30 AM, schedule for next week
+            if days_until_thursday == 0 and now.hour >= 11 and now.minute >= 30:
+                days_until_thursday = 7
+                
+            target_run = now.replace(hour=11, minute=30, second=0, microsecond=0)
+            target_run += timedelta(days=days_until_thursday)
+            
+            # Wait until the scheduled time
+            wait_seconds = (target_run - now).total_seconds()
+            logger.info(f"Next log cleanup scheduled for {target_run} (in {wait_seconds/3600:.2f} hours)")
+            await asyncio.sleep(wait_seconds)
+            
+            # Delete old log files
+            logger.info("Starting scheduled log cleanup...")
+            try:
+                # Get all log files
+                log_files = glob.glob(os.path.join(logs_dir, "*.log"))
+                
+                # Get cutoff date (7 days ago)
+                cutoff_date = datetime.now() - timedelta(days=7)
+                deleted_count = 0
+                
+                for log_file in log_files:
+                    # Get file modification time
+                    mod_time = datetime.fromtimestamp(os.path.getmtime(log_file))
+                    
+                    # If file is older than cutoff date, delete it
+                    if mod_time < cutoff_date:
+                        try:
+                            os.remove(log_file)
+                            deleted_count += 1
+                            logger.debug(f"Deleted old log file: {log_file}")
+                        except Exception as e:
+                            logger.error(f"Error deleting log file {log_file}: {str(e)}")
+                
+                logger.info(f"Log cleanup completed. Deleted {deleted_count} log files older than 7 days.")
+            except Exception as e:
+                logger.error(f"Error during log cleanup: {str(e)}")
+                
+        except Exception as e:
+            logger.error(f"Error in log cleanup scheduler: {str(e)}")
+            await asyncio.sleep(300)  # Wait 5 minutes before retrying if there's an error
+
 @app.on_event("startup")
 async def startup_event():
     # Existing startup code
@@ -412,6 +679,14 @@ async def startup_event():
     # Start the metrics generation scheduler
     asyncio.create_task(schedule_metrics_generation())
     logger.info("Started metrics generation scheduler")
+    
+    # Start the weekly analysis scheduler
+    asyncio.create_task(schedule_weekly_analysis())
+    logger.info("Started weekly analysis scheduler")
+    
+    # Start the log cleanup scheduler
+    asyncio.create_task(cleanup_logs())
+    logger.info("Started log cleanup scheduler")
 
 if __name__ == "__main__":
     import uvicorn

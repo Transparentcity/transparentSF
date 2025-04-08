@@ -114,6 +114,71 @@ This project is licensed under the ISC License. See the [LICENSE](LICENSE) file 
 - OpenAI for AI capabilities
 - Ghost CMS team for the content management platform
 
+## Weekly Metric Analysis
+
+The `generate_weekly_analysis.py` script allows you to analyze weekly trends in San Francisco data metrics. It compares the most recent week (last 7 complete days) with the previous 4 weeks to identify trends and anomalies.
+
+### Features
+
+- Time series analysis of weekly data
+- Trend comparison between recent week and prior 4 weeks
+- Anomaly detection for significant changes
+- Support for district-level analysis
+- Automated scheduling (runs every Thursday at 11am)
+- Weekly newsletter generation summarizing findings
+
+### Usage
+
+Run the script directly:
+
+```bash
+# Analyze a specific metric
+python ai/generate_weekly_analysis.py --metric_id police_reported_incidents
+
+# Analyze multiple metrics
+python ai/generate_weekly_analysis.py --metrics police_reported_incidents,311_cases,building_permits
+
+# Include district-level analysis
+python ai/generate_weekly_analysis.py --process-districts
+
+# Run as a scheduled task (every Thursday at 11am)
+python ai/generate_weekly_analysis.py --schedule
+```
+
+### Output
+
+The script generates:
+
+1. Analysis files for each metric (stored in `ai/output/weekly/`)
+2. Weekly newsletter summarizing findings
+3. Charts and visualizations for key trends
+
+## Monthly and Annual Analysis
+
+The `generate_metric_analysis.py` script provides monthly and annual analysis of San Francisco data metrics.
+
+```bash
+# Analyze a specific metric monthly, annually or both
+python ai/generate_metric_analysis.py metric_id --period monthly|annual|both
+
+# Include district-level analysis
+python ai/generate_metric_analysis.py metric_id --process-districts
+```
+
+## Requirements
+
+Install required packages:
+
+```bash
+pip install -r ai/requirements.txt
+```
+
+Additional requirements for the weekly analysis:
+- schedule
+- pandas
+- matplotlib
+- plotly
+
 ---
 
 **Need help?** Feel free to open an issue for support.

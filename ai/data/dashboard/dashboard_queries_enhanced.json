@@ -1,10 +1,10 @@
 {
     "crime": {
         "Crime": {
-            "endpoint": "wg3w-h783",
             "queries": {
                 "\ud83d\udc6e Total Police Incidents": {
                     "id": 1,
+                    "endpoint": "wg3w-h783",
                     "summary": "Total count of all police incident reports filed by officers or self-reported by members of the public using SFPD's online reporting system.",
                     "definition": "Total count of all police incident reports filed by officers or self-reported by members of the public using SFPD's online reporting system.",
                     "data_sf_url": "https://data.sfgov.org/Public-Safety/Police-Department-Incident-Reports-2018-to-Present/wg3w-h783",
@@ -17,33 +17,23 @@
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
                             "description": "Current Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/cqbw-m5m3  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
-                        },
-                        {
-                            "name": "Supervisor District 2012",
-                            "fieldName": "supervisor_district_2012",
-                            "description": "Previous 2012-2022 Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/keex-zmn4  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
-                        },
-                        {
-                            "name": "Latitude",
-                            "fieldName": "latitude",
-                            "description": "The latitude coordinate in WGS84, spatial reference is EPSG:4326"
-                        },
-                        {
-                            "name": "Longitude",
-                            "fieldName": "longitude",
-                            "description": "The longitude coordinate in WGS84, spatial reference is EPSG:4326"
-                        },
-                        {
-                            "name": "Point",
-                            "fieldName": "point",
-                            "description": "Geolocation in OGC WKT format (e.g, POINT(37.4,-122.3)"
                         }
                     ],
                     "category_fields": [
-                      {
+                        {
+                            "name": "Report Type Code",
+                            "fieldName": "report_type_code",
+                            "description": "A system code for report types, these have corresponding descriptions within the dataset."
+                        },
+                        {
                             "name": "Report Type Description",
                             "fieldName": "report_type_description",
                             "description": "The description of the report type, can be one of: Initial; Initial Supplement; Vehicle Initial; Vehicle Supplement; Coplogic Initial; Coplogic Supplement"
+                        },
+                        {
+                            "name": "Incident Code",
+                            "fieldName": "incident_code",
+                            "description": "Incident Codes are the system codes to describe a type of incident. A single incident report can have one or more incident types associated. In those cases you will see multiple rows representing a unique combination of the Incident ID and Incident Code."
                         },
                         {
                             "name": "Incident Category",
@@ -54,21 +44,12 @@
                             "name": "Incident Subcategory",
                             "fieldName": "incident_subcategory",
                             "description": "A subcategory mapped to the Incident Code that is used for statistics and reporting. Mappings are provided by the Crime Analysis Unit of the Police Department."
-                        },
-                        {
-                            "name": "Police District",
-                            "fieldName": "police_district",
-                            "description": "The Police District where the incident occurred.  District boundaries can be reviewed in the link below. Please note this field is entered by officers and not based on the point. Reference here: https://data.sfgov.org/d/wkhw-cjsf"
-                        },
-                        {
-                            "name": "Supervisor District",
-                            "fieldName": "supervisor_district",
-                            "description": "Current Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/cqbw-m5m3  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
                         }
                     ]
                 },
                 "\ud83d\udea8 Violent Crime Incidents": {
                     "id": 2,
+                    "endpoint": "wg3w-h783",
                     "summary": "Count of reported violent crime incidents, including assaults, homicides, rapes, robberies, human trafficking, weapons offenses, and offenses against family/children.",
                     "definition": "Count of reported violent crime incidents. Violent crimes are defined as incidents categorized as: Assault, Homicide, Rape, Robbery, Human Trafficking (Commercial Sex Acts and Involuntary Servitude), Offences Against The Family And Children, and Weapons Offenses.",
                     "data_sf_url": "https://data.sfgov.org/Public-Safety/Police-Department-Incident-Reports-2018-to-Present/wg3w-h783",
@@ -81,58 +62,45 @@
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
                             "description": "Current Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/cqbw-m5m3  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
-                        },
-                        {
-                            "name": "Supervisor District 2012",
-                            "fieldName": "supervisor_district_2012",
-                            "description": "Previous 2012-2022 Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/keex-zmn4  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
-                        },
-                        {
-                            "name": "Latitude",
-                            "fieldName": "latitude",
-                            "description": "The latitude coordinate in WGS84, spatial reference is EPSG:4326"
-                        },
-                        {
-                            "name": "Longitude",
-                            "fieldName": "longitude",
-                            "description": "The longitude coordinate in WGS84, spatial reference is EPSG:4326"
-                        },
-                        {
-                            "name": "Point",
-                            "fieldName": "point",
-                            "description": "Geolocation in OGC WKT format (e.g, POINT(37.4,-122.3)"
                         }
                     ],
                     "category_fields": [
                         {
-                            "name": "Report Type Description",
+                            "name": "report_type_code",
+                            "fieldName": "report_type_code",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "report_type_description",
                             "fieldName": "report_type_description",
-                            "description": "The description of the report type, can be one of: Initial; Initial Supplement; Vehicle Initial; Vehicle Supplement; Coplogic Initial; Coplogic Supplement"
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Incident Category",
+                            "name": "incident_category",
                             "fieldName": "incident_category",
-                            "description": "A category mapped on to the Incident Code used in statistics and reporting. Mappings provided by the Crime Analysis Unit of the Police Department."
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Incident Subcategory",
+                            "name": "incident_subcategory",
                             "fieldName": "incident_subcategory",
-                            "description": "A subcategory mapped to the Incident Code that is used for statistics and reporting. Mappings are provided by the Crime Analysis Unit of the Police Department."
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Police District",
-                            "fieldName": "police_district",
-                            "description": "The Police District where the incident occurred.  District boundaries can be reviewed in the link below. Please note this field is entered by officers and not based on the point. Reference here: https://data.sfgov.org/d/wkhw-cjsf"
+                            "name": "incident_description",
+                            "fieldName": "incident_description",
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Supervisor District",
+                            "name": "supervisor_district",
                             "fieldName": "supervisor_district",
-                            "description": "Current Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/cqbw-m5m3  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },
                 "\ud83c\udfe0 Property Crime Incidents": {
                     "id": 3,
+                    "endpoint": "wg3w-h783",
+                    "summary": "Property crimes are defined as incidents categorized as: Arson, Burglary, Forgery And Counterfeiting, Fraud, Larceny Theft, Motor Vehicle Theft, Stolen Property, Vandalism, Embezzlement, and Recovered Vehicle.",
                     "definition": "Property crimes are defined as incidents categorized as: Arson, Burglary, Forgery And Counterfeiting, Fraud, Larceny Theft, Motor Vehicle Theft, Stolen Property, Vandalism, Embezzlement, and Recovered Vehicle.",
                     "data_sf_url": "https://data.sfgov.org/Public-Safety/Police-Department-Incident-Reports-2018-to-Present/wg3w-h783",
                     "ytd_query": "SELECT date_trunc_ymd(Report_Datetime) as date, COUNT(*) as value WHERE Report_Datetime >= last_year_start AND Report_Datetime <= current_date AND Incident_Category IN ('Arson', 'Burglary', 'Forgery And Counterfeiting', 'Fraud', 'Larceny Theft', 'Motor Vehicle Theft', 'Stolen Property', 'Vandalism', 'Embezzlement', 'Recovered Vehicle') GROUP BY date ORDER BY date",
@@ -144,58 +112,44 @@
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
                             "description": "Current Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/cqbw-m5m3  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
-                        },
-                        {
-                            "name": "Supervisor District 2012",
-                            "fieldName": "supervisor_district_2012",
-                            "description": "Previous 2012-2022 Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/keex-zmn4  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
-                        },
-                        {
-                            "name": "Latitude",
-                            "fieldName": "latitude",
-                            "description": "The latitude coordinate in WGS84, spatial reference is EPSG:4326"
-                        },
-                        {
-                            "name": "Longitude",
-                            "fieldName": "longitude",
-                            "description": "The longitude coordinate in WGS84, spatial reference is EPSG:4326"
-                        },
-                        {
-                            "name": "Point",
-                            "fieldName": "point",
-                            "description": "Geolocation in OGC WKT format (e.g, POINT(37.4,-122.3)"
                         }
                     ],
                     "category_fields": [
                         {
-                            "name": "Report Type Description",
+                            "name": "report_type_code",
+                            "fieldName": "report_type_code",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "report_type_description",
                             "fieldName": "report_type_description",
-                            "description": "The description of the report type, can be one of: Initial; Initial Supplement; Vehicle Initial; Vehicle Supplement; Coplogic Initial; Coplogic Supplement"
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Incident Category",
+                            "name": "incident_category",
                             "fieldName": "incident_category",
-                            "description": "A category mapped on to the Incident Code used in statistics and reporting. Mappings provided by the Crime Analysis Unit of the Police Department."
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Incident Subcategory",
+                            "name": "incident_subcategory",
                             "fieldName": "incident_subcategory",
-                            "description": "A subcategory mapped to the Incident Code that is used for statistics and reporting. Mappings are provided by the Crime Analysis Unit of the Police Department."
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Police District",
-                            "fieldName": "police_district",
-                            "description": "The Police District where the incident occurred.  District boundaries can be reviewed in the link below. Please note this field is entered by officers and not based on the point. Reference here: https://data.sfgov.org/d/wkhw-cjsf"
+                            "name": "incident_description",
+                            "fieldName": "incident_description",
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Supervisor District",
+                            "name": "supervisor_district",
                             "fieldName": "supervisor_district",
-                            "description": "Current Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/cqbw-m5m3  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },
                 "\ud83d\udc8a Drug Crime Incidents": {
                     "id": 4,
+                    "endpoint": "wg3w-h783",
                     "summary": "Count of reported drug crime incidents, including drug offenses and drug violations.",
                     "definition": "Drug crimes are defined as incidents categorized as: Drug Offense and Drug Violation.",
                     "data_sf_url": "https://data.sfgov.org/Public-Safety/Police-Department-Incident-Reports-2018-to-Present/wg3w-h783",
@@ -208,63 +162,48 @@
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
                             "description": "Current Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/cqbw-m5m3  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
-                        },
-                        {
-                            "name": "Supervisor District 2012",
-                            "fieldName": "supervisor_district_2012",
-                            "description": "Previous 2012-2022 Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/keex-zmn4  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
-                        },
-                        {
-                            "name": "Latitude",
-                            "fieldName": "latitude",
-                            "description": "The latitude coordinate in WGS84, spatial reference is EPSG:4326"
-                        },
-                        {
-                            "name": "Longitude",
-                            "fieldName": "longitude",
-                            "description": "The longitude coordinate in WGS84, spatial reference is EPSG:4326"
-                        },
-                        {
-                            "name": "Point",
-                            "fieldName": "point",
-                            "description": "Geolocation in OGC WKT format (e.g, POINT(37.4,-122.3)"
                         }
                     ],
                     "category_fields": [
                         {
-                            "name": "Report Type Description",
+                            "name": "report_type_code",
+                            "fieldName": "report_type_code",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "report_type_description",
                             "fieldName": "report_type_description",
-                            "description": "The description of the report type, can be one of: Initial; Initial Supplement; Vehicle Initial; Vehicle Supplement; Coplogic Initial; Coplogic Supplement"
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Incident Category",
+                            "name": "incident_category",
                             "fieldName": "incident_category",
-                            "description": "A category mapped on to the Incident Code used in statistics and reporting. Mappings provided by the Crime Analysis Unit of the Police Department."
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Incident Subcategory",
+                            "name": "incident_subcategory",
                             "fieldName": "incident_subcategory",
-                            "description": "A subcategory mapped to the Incident Code that is used for statistics and reporting. Mappings are provided by the Crime Analysis Unit of the Police Department."
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Police District",
-                            "fieldName": "police_district",
-                            "description": "The Police District where the incident occurred.  District boundaries can be reviewed in the link below. Please note this field is entered by officers and not based on the point. Reference here: https://data.sfgov.org/d/wkhw-cjsf"
+                            "name": "incident_description",
+                            "fieldName": "incident_description",
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Supervisor District",
+                            "name": "supervisor_district",
                             "fieldName": "supervisor_district",
-                            "description": "Current Supervisor District: There are 11 members elected to the Board of Supervisors in San Francisco, each representing a geographic district. The Board of Supervisors is the legislative body for San Francisco. The districts are numbered 1 through 11.  Please reference the link below for additional info:  https://data.sfgov.org/d/cqbw-m5m3  Please note this boundary is assigned based on the intersection, it may differ from the boundary the incident actually occurred within."
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 }
             }
         },
         "jail": {
-            "endpoint": "pfbp-75pz",
             "queries": {
                 "\ud83d\udd12 Jail Bookings": {
                     "id": 5,
+                    "endpoint": "pfbp-75pz",
                     "summary": "Total count of individuals booked into San Francisco City and County Jail.",
                     "definition": "Tracks the total number of jail bookings. Each booking represents when an individual is processed into jail custody after arrest. The booking process includes recording personal information, fingerprinting, and photographing. A single person may have multiple bookings.",
                     "data_sf_url": "https://data.sfgov.org/Public-Safety/Sheriff-Jail-Bookings-by-Age-Group/pfbp-75pz",
@@ -293,34 +232,29 @@
                     "endpoint": "czsm-3ei3",
                     "ytd_query": "SELECT date_trunc_ymd(arrest_date) as date, COUNT(*) as value WHERE arrest_date >= last_year_start AND arrest_date <= current_date GROUP BY date ORDER BY date",
                     "metric_query": "SELECT 'Total Arrests Presented' as label, max(arrest_date) as max_date, COUNT(CASE WHEN arrest_date >= this_year_start AND arrest_date <= this_year_end THEN 1 END) as this_year, COUNT(CASE WHEN arrest_date >= last_year_start AND arrest_date <= last_year_end THEN 1 END) as last_year, (COUNT(CASE WHEN arrest_date >= this_year_start AND arrest_date <= this_year_end THEN 1 END) - COUNT(CASE WHEN arrest_date >= last_year_start AND arrest_date <= last_year_end THEN 1 END)) as delta, ((COUNT(CASE WHEN arrest_date >= this_year_start AND arrest_date <= this_year_end THEN 1 END) - COUNT(CASE WHEN arrest_date >= last_year_start AND arrest_date <= last_year_end THEN 1 END)) * 100.0 / NULLIF(COUNT(CASE WHEN arrest_date >= last_year_start AND arrest_date <= last_year_end THEN 1 END), 0)) as perc_diff",
-                    "url": "https://data.sfgov.org/Public-Safety/District-Attorney-Actions-Taken-on-Arrests-Present/czsm-3ei3",
-                    "title": "District Attorney Actions Taken on Arrests Presented",
-                    "description": "<strong>A. SUMMARY</strong>\n\n<strong><i>Please note that the \"Data Last Updated\" date on this page denotes the most recent DataSF update and does not reflect the most recent update to this dataset. To confirm the completeness of this dataset please contact the District Attorney's office at <u><a href=\u201dmailto:districtattorney@sfgov.org\u201d>districtattorney@sfgov.org</a></u>.</strong></i>\n\nThis dataset includes information on every arrest that has been presented to the SFDA since 2011 and the \u201caction\u201d decision made by the office on each, based on data from the SFDA\u2019s internal case management system.\n\nAfter law enforcement has made an arrest for suspected criminal activity, the arresting agency presents its evidence to the District Attorney\u2019s Office to determine what, if any, charges can be proven beyond a reasonable doubt. This prosecutorial decision to file or to reject arrest charges represents the first, and one of the most important, decisions of the District Attorney\u2019s Office. In addition to either filing new charges or declining to file charges (\u201cdischarging\u201d the arrest), the prosecutor may also take other actions, such as initiating a motion to revoke probation or parole, referring the case back to the arresting agency for further investigation, or referring the case to another criminal justice agency.\n\nMore information about this dataset can be found under the \u201cDistrict Attorney Actions on Arrests Presented\u201d section on the <u><a href=\"https://sfdistrictattorney.org/policy/data-dashboards/#sfda-actions-on-arrests-presented\">Data Dashboards page</a></u>\n\n<strong><i>Disclaimer: The San Francisco District Attorney's Office does not guarantee the accuracy, completeness, or timeliness of the information as the data is subject to change as modifications and updates are completed.</strong></i>\n\n<strong>B. HOW THE DATASET IS CREATED</strong>\n\nWhen an arrest is presented to the District Attorney\u2019s office, relevant data is manually entered into the District Attorney Office's case management system. Data reports are pulled from this system on a semi-regular basis, cleaned, anonymized, and added to Open Data.\n\n<strong>C. UPDATE PROCESS</strong>\n\nWe strive to update this dataset at the beginning of every week. However, the creation of this dataset requires a manual pull from the Office's case management system and is dependent on staff availability.\n\n<strong>D. HOW TO USE THIS DATASET</strong>\n\nPlease review the \u201cDistrict Attorney Actions on Arrests Presented\u201d section on the <u><a href=\"https://sfdistrictattorney.org/policy/data-dashboards/#sfda-actions-on-arrests-presented\">Data Dashboards page</a></u> for more information about this dataset. \n\n<strong>E. RELATED DATASETS</strong>\n\n<u><a href=\"https://data.sfgov.org/d/dcjk-vw8q\">District Attorney Cases Prosecuted</a></u> \n<u><a href=\"https://data.sfgov.org/d/ynfy-z5kt\">District Attorney Case Resolutions</a></u>",
+                    "dataset_title": "District Attorney Actions Taken on Arrests Presented",
+                    "dataset_category": "Public Safety",
+                    "location_fields": [],
                     "category_fields": [
                         {
                             "name": "arresting_agency",
                             "fieldName": "arresting_agency",
-                            "description": "Abbreviation for law enforcement agency that made the arrest "
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
                             "name": "crime_type",
                             "fieldName": "crime_type",
-                            "description": "Abbreviation for the most serious crime type among the charges filed by SFDA   "
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
                             "name": "booked_case_type",
                             "fieldName": "booked_case_type",
-                            "description": "Case type the arrest was booked as "
-                        },
-                        {
-                            "name": "dv_case",
-                            "fieldName": "dv_case",
-                            "description": "Indicator for domestic violence cases"
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
                             "name": "da_action_taken",
                             "fieldName": "da_action_taken",
-                            "description": "Action taken by District Attorney\u2019s office"
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },
@@ -332,29 +266,29 @@
                     "endpoint": "ynfy-z5kt",
                     "ytd_query": "SELECT date_trunc_ymd(disposition_date) as date, COUNT(*) as value WHERE disposition_date >= last_year_start AND disposition_date <= current_date AND case_status LIKE '%Conviction%'  GROUP BY date ORDER BY date",
                     "metric_query": "SELECT 'Total Convictions' as label, max(disposition_date) as max_date, COUNT(CASE WHEN disposition_date >= this_year_start AND disposition_date <= this_year_end AND case_status LIKE '%Conviction%' THEN 1 END) as this_year, COUNT(CASE WHEN disposition_date >= last_year_start AND disposition_date <= last_year_end AND case_status LIKE '%Conviction%' THEN 1 END) as last_year, (COUNT(CASE WHEN disposition_date >= this_year_start AND disposition_date <= this_year_end AND case_status LIKE '%Conviction%' THEN 1 END) - COUNT(CASE WHEN disposition_date >= last_year_start AND disposition_date <= last_year_end AND case_status LIKE '%Conviction%' THEN 1 END)) as delta, ((COUNT(CASE WHEN disposition_date >= this_year_start AND disposition_date <= this_year_end AND case_status LIKE '%Conviction%' THEN 1 END) - COUNT(CASE WHEN disposition_date >= last_year_start AND disposition_date <= last_year_end AND case_status LIKE '%Conviction%' THEN 1 END)) * 100.0 / NULLIF(COUNT(CASE WHEN disposition_date >= last_year_start AND disposition_date <= last_year_end AND case_status LIKE '%Conviction%' THEN 1 END), 0)) as perc_diff",
-                    "url": "https://data.sfgov.org/Public-Safety/District-Attorney-Case-Resolutions/ynfy-z5kt",
-                    "title": "District Attorney Case Resolutions",
-                    "description": "<strong>A. SUMMARY</strong>\n\n<strong><i>Please note that the \"Data Last Updated\" date on this page denotes the most recent DataSF update and does not reflect the most recent update to this dataset. To confirm the completeness of this dataset please contact the District Attorney's office at <u><a href=”mailto:districtattorney@sfgov.org”>districtattorney@sfgov.org</a></u>.</strong></i>\n\nThis data set includes all criminal cases prosecuted by the District Attorney’s Office that have reached a final resolution, or disposition. A case is resolved when a final determination has been made in court (i.e., an acquittal, conviction, dismissal, or a judge finds a defendant has successfully completed diversion).\n\nA case may also be resolved through other means. For example, a case may be re-indicted, a defendant may be released to another agency's custody, etc. Because of the case tracking systems used in the San Francisco Superior Court, these cases are assigned new court numbers and thus show up as distinct cases in the data available to the District Attorney’s Office. Lastly, sometimes a defendant will have multiple criminal cases related to the same incident or similar types of crimes. The defendant may plead guilty to one case, and in exchange, the other cases will be dropped. The San Francisco Superior Court codes these cases as \"1385 PC - Guilty Plea to Other Charge\".\n\nMore information about this dataset can be found under the “Case Resolutions” section on the <u><a href=\"https://sfdistrictattorney.org/policy/data-dashboards/#case-resolutions\">Data Dashboards page</a></u>\n\n<strong><i>Disclaimer: The San Francisco District Attorney's Office does not guarantee the accuracy, completeness, or timeliness of the information as the data is subject to change as modifications and updates are completed.</strong></i>\n\n<strong>B. HOW THE DATASET IS CREATED</strong>\n\nWhen a case prosecuted by the District Attorney’s Office reaches a final resolution, or disposition, relevant data is manually entered into the District Attorney Office's case management system. Data reports are pulled from this system on a semi-regular basis, cleaned, anonymized, and added to Open Data.\n\n<strong>C. UPDATE PROCESS</strong>\n\nWe strive to update this dataset at the beginning of every week. However, the creation of this dataset requires a manual pull from the Office's case management system and is dependent on staff availability.\n\n<strong>D. HOW TO USE THIS DATASET</strong>\n\nPlease review the “Case Resolutions” section on the <u><a href=\"https://sfdistrictattorney.org/policy/data-dashboards/#case-resolutions\">Data Dashboards page</a></u> for more information about this dataset.\n\n<strong>E. Related DATASETS</strong>\n\n<u><a href=\"https://data.sfgov.org/d/czsm-3ei3\">District Attorney Actions Taken on Arrests Presented</a></u> \n<u><a href=\"https://data.sfgov.org/d/dcjk-vw8q\">District Attorney Cases Prosecuted</a></u>",
+                    "dataset_title": "District Attorney Case Resolutions",
+                    "dataset_category": "Public Safety",
+                    "location_fields": [],
                     "category_fields": [
                         {
                             "name": "crime_type",
                             "fieldName": "crime_type",
-                            "description": "Abbreviation for the most serious crime type among the charges filed by SFDA   "
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
                             "name": "filed_case_type",
                             "fieldName": "filed_case_type",
-                            "description": "Abbreviation for the most serious case type among the charges filed by SFDA for a given court number"
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
                             "name": "disposition_description",
                             "fieldName": "disposition_description",
-                            "description": "Description of the disposition outcome expressed in the Disposition Code column"
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
                             "name": "case_status",
                             "fieldName": "case_status",
-                            "description": "Current status of the case at its current point in the criminal process"
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 }
@@ -363,10 +297,10 @@
     },
     "safety": {
         "fire": {
-            "endpoint": "wr8u-xric",
             "queries": {
                 "\ud83d\ude92 Fire Incidents YTD": {
                     "id": 8,
+                    "endpoint": "wr8u-xric",
                     "summary": "Count of all non-medical incidents to which the SF Fire Department responded.",
                     "definition": "Fire Incidents includes a summary of each (non-medical) incident to which the SF Fire Department responded. Each incident record includes the call number, incident number, address, number and type of each unit responding, call type (as determined by dispatch), prime situation (field observation), actions taken, and property loss.",
                     "data_sf_url": "https://data.sfgov.org/resource/wr8u-xric.json",
@@ -376,57 +310,8 @@
                     "dataset_category": "Public Safety",
                     "location_fields": [
                         {
-                            "name": "Address",
-                            "fieldName": "address",
-                            "description": ""
-                        },
-                        {
-                            "name": "point",
-                            "fieldName": "point",
-                            "description": ""
-                        }
-                    ],
-                    "category_fields": [
-                        {
-                            "name": "Structure Type",
-                            "fieldName": "structure_type",
-                            "description": ""
-                        },
-                        {
-                            "name": "Structure Status",
-                            "fieldName": "structure_status",
-                            "description": ""
-                        },
-                        {
-                            "name": "Detector Type",
-                            "fieldName": "detector_type",
-                            "description": ""
-                        },
-                        {
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
-                            "description": ""
-                        }
-                    ]
-                },
-                "\ud83d\udc94 Fire Fatalities YTD": {
-                    "id": 9,
-                    "summary": "Total count of fire-related fatalities, including both civilian and fire personnel fatalities.",
-                    "definition": "Combines both fire fatalities (fire personnel) and civilian fatalities that occurred during fire incidents. Data is collected and reported by the SF Fire Department for each incident.",
-                    "ytd_query": "SELECT date_trunc_ymd(incident_date) as date, sum(fire_fatalities + civilian_fatalities) as value WHERE incident_date >= last_year_start AND incident_date <= current_date GROUP BY date ORDER BY date",
-                    "data_sf_url": "https://data.sfgov.org/resource/wr8u-xric.json",
-                    "metric_query": "SELECT 'Total Fatalities' as label, max(incident_date) as max_date, SUM(CASE WHEN incident_date >= this_year_start AND incident_date <= this_year_end THEN fire_fatalities + civilian_fatalities END) as this_year, SUM(CASE WHEN incident_date >= last_year_start AND incident_date <= last_year_end THEN fire_fatalities + civilian_fatalities END) as last_year, (SUM(CASE WHEN incident_date >= this_year_start AND incident_date <= this_year_end THEN fire_fatalities + civilian_fatalities END) - SUM(CASE WHEN incident_date >= last_year_start AND incident_date <= last_year_end THEN fire_fatalities + civilian_fatalities END)) as delta, ((SUM(CASE WHEN incident_date >= this_year_start AND incident_date <= this_year_end THEN fire_fatalities + civilian_fatalities END) - SUM(CASE WHEN incident_date >= last_year_start AND incident_date <= last_year_end THEN fire_fatalities + civilian_fatalities END)) * 100.0 / NULLIF(SUM(CASE WHEN incident_date >= last_year_start AND incident_date <= last_year_end THEN fire_fatalities + civilian_fatalities END), 0)) as perc_diff, supervisor_district group by supervisor_district",
-                    "dataset_title": "Fire Incidents",
-                    "dataset_category": "Public Safety",
-                    "location_fields": [
-                        {
-                            "name": "Address",
-                            "fieldName": "address",
-                            "description": ""
-                        },
-                        {
-                            "name": "point",
-                            "fieldName": "point",
                             "description": ""
                         }
                     ],
@@ -450,15 +335,45 @@
                             "name": "Automatic Extinguishing Sytem Type",
                             "fieldName": "automatic_extinguishing_sytem_type",
                             "description": ""
-                        },
+                        }
+                    ]
+                },
+                "\ud83d\udc94 Fire Fatalities YTD": {
+                    "id": 9,
+                    "endpoint": "wr8u-xric",
+                    "summary": "Total count of fire-related fatalities, including both civilian and fire personnel fatalities.",
+                    "definition": "Combines both fire fatalities (fire personnel) and civilian fatalities that occurred during fire incidents. Data is collected and reported by the SF Fire Department for each incident.",
+                    "ytd_query": "SELECT date_trunc_ymd(incident_date) as date, sum(fire_fatalities + civilian_fatalities) as value WHERE incident_date >= last_year_start AND incident_date <= current_date GROUP BY date ORDER BY date",
+                    "data_sf_url": "https://data.sfgov.org/resource/wr8u-xric.json",
+                    "metric_query": "SELECT 'Total Fatalities' as label, max(incident_date) as max_date, SUM(CASE WHEN incident_date >= this_year_start AND incident_date <= this_year_end THEN fire_fatalities + civilian_fatalities END) as this_year, SUM(CASE WHEN incident_date >= last_year_start AND incident_date <= last_year_end THEN fire_fatalities + civilian_fatalities END) as last_year, (SUM(CASE WHEN incident_date >= this_year_start AND incident_date <= this_year_end THEN fire_fatalities + civilian_fatalities END) - SUM(CASE WHEN incident_date >= last_year_start AND incident_date <= last_year_end THEN fire_fatalities + civilian_fatalities END)) as delta, ((SUM(CASE WHEN incident_date >= this_year_start AND incident_date <= this_year_end THEN fire_fatalities + civilian_fatalities END) - SUM(CASE WHEN incident_date >= last_year_start AND incident_date <= last_year_end THEN fire_fatalities + civilian_fatalities END)) * 100.0 / NULLIF(SUM(CASE WHEN incident_date >= last_year_start AND incident_date <= last_year_end THEN fire_fatalities + civilian_fatalities END), 0)) as perc_diff, supervisor_district group by supervisor_district",
+                    "dataset_title": "Fire Incidents",
+                    "dataset_category": "Public Safety",
+                    "location_fields": [
                         {
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
                             "description": ""
+                        }
+                    ],
+                    "category_fields": [
+                        {
+                            "name": "Structure Type",
+                            "fieldName": "structure_type",
+                            "description": ""
                         },
                         {
-                            "name": "neighborhood_district",
-                            "fieldName": "neighborhood_district",
+                            "name": "Structure Status",
+                            "fieldName": "structure_status",
+                            "description": ""
+                        },
+                        {
+                            "name": "Detector Type",
+                            "fieldName": "detector_type",
+                            "description": ""
+                        },
+                        {
+                            "name": "Automatic Extinguishing Sytem Type",
+                            "fieldName": "automatic_extinguishing_sytem_type",
                             "description": ""
                         }
                     ]
@@ -466,10 +381,10 @@
             }
         },
         "emergency_response": {
-            "endpoint": "2zdj-bwza",
             "queries": {
                 "\ud83d\ude91 911 Response Time (mins) - Danger to life": {
                     "id": 10,
+                    "endpoint": "2zdj-bwza",
                     "summary": "Average response time in minutes for Priority A emergency calls.",
                     "definition": "Measures the time between when a 911 call is received and when the first unit arrives on scene for Priority A (highest priority, danger to life) calls. Data comes from the Department of Emergency Management's Computer Aided Dispatch (CAD) System. Only includes calls where both received and onscene times are recorded and valid.",
                     "data_sf_url": "https://data.sfgov.org/resource/2zdj-bwza.json",
@@ -479,72 +394,47 @@
                     "dataset_category": "Public Safety",
                     "location_fields": [
                         {
-                            "name": "dispatch_datetime",
-                            "fieldName": "dispatch_datetime",
-                            "description": "Date and time when the 911 operator dispatches the first unit to the location of the incident or, when onview_flag = Y, an officer initiates an on-view incident"
-                        },
-                        {
-                            "name": "enroute_datetime",
-                            "fieldName": "enroute_datetime",
-                            "description": "Date and time when the first unit acknowledges the dispatch and records that they are enroute to the location of the incident or, when onview_flag = Y, an officer initiates an on-view incident"
-                        },
-                        {
-                            "name": "onscene_datetime",
-                            "fieldName": "onscene_datetime",
-                            "description": "Date and time the first unit records arriving at the location of the incident or, when onview_flag = Y, an officer initiates an on-view incident"
-                        },
-                        {
-                            "name": "sensitive_call",
-                            "fieldName": "sensitive_call",
-                            "description": "Indicates whether the call is of a sensitive nature. Location information & call notes are not provided for sensitive calls. "
-                        },
-                        {
-                            "name": "intersection_name",
-                            "fieldName": "intersection_name",
-                            "description": "Name of intersection used to anonymize the incident location"
-                        },
-                        {
-                            "name": "intersection_id",
-                            "fieldName": "intersection_id",
-                            "description": "Unique ID for the intersection_point used to anonymize the incident location"
-                        },
-                        {
-                            "name": "intersection_point",
-                            "fieldName": "intersection_point",
-                            "description": "Geographic point representing the anonymized incident location (nearest intersection)"
-                        },
-                        {
                             "name": "supervisor_district",
                             "fieldName": "supervisor_district",
                             "description": "Supervisor District based on anonymized intersection coordinates"
-                        },
-                        {
-                            "name": "analysis_neighborhood",
-                            "fieldName": "analysis_neighborhood",
-                            "description": "Analysis Neighborhoods based on anonymized intersection coordinates"
-                        },
-                        {
-                            "name": "police_district",
-                            "fieldName": "police_district",
-                            "description": "Police District based on anonymized intersection coordinates"
                         }
                     ],
                     "category_fields": [
-                 
+                        {
+                            "name": "call_type_original",
+                            "fieldName": "call_type_original",
+                            "description": "Call type code as originally coded/selected by dispatcher"
+                        },
+                        {
+                            "name": "call_type_original_desc",
+                            "fieldName": "call_type_original_desc",
+                            "description": "Standard description of original call type"
+                        },
+                        {
+                            "name": "call_type_original_notes",
+                            "fieldName": "call_type_original_notes",
+                            "description": "Any notes regarding the original call type entered by the dispatcher"
+                        },
+                        {
+                            "name": "call_type_final",
+                            "fieldName": "call_type_final",
+                            "description": "Final call type code as coded/selected by dispatcher. For closed calls this is the last call type code. For open calls this code may continue to change."
+                        },
                         {
                             "name": "call_type_final_desc",
                             "fieldName": "call_type_final_desc",
                             "description": "Standard description of final call type"
                         },
                         {
-                            "name": "supervisor_district",
-                            "fieldName": "supervisor_district",
-                            "description": "Supervisor District based on anonymized intersection coordinates"
+                            "name": "call_type_final_notes",
+                            "fieldName": "call_type_final_notes",
+                            "description": "Any notes regarding the final call type entered by the dispatcher"
                         }
                     ]
                 },
                 "\ud83d\ude91 911 Response Time (mins) - Danger to property ": {
                     "id": 11,
+                    "endpoint": "2zdj-bwza",
                     "summary": "Average response time in minutes for Priority B emergency calls.",
                     "definition": "Measures the time between when a 911 call is received and when the first unit arrives on scene for Priority B (medium priority, danger to property) calls. Data comes from the Department of Emergency Management's Computer Aided Dispatch (CAD) System. Only includes calls where both received and onscene times are recorded and valid.",
                     "data_sf_url": "https://data.sfgov.org/resource/2zdj-bwza.json",
@@ -554,71 +444,47 @@
                     "dataset_category": "Public Safety",
                     "location_fields": [
                         {
-                            "name": "dispatch_datetime",
-                            "fieldName": "dispatch_datetime",
-                            "description": "Date and time when the 911 operator dispatches the first unit to the location of the incident or, when onview_flag = Y, an officer initiates an on-view incident"
-                        },
-                        {
-                            "name": "enroute_datetime",
-                            "fieldName": "enroute_datetime",
-                            "description": "Date and time when the first unit acknowledges the dispatch and records that they are enroute to the location of the incident or, when onview_flag = Y, an officer initiates an on-view incident"
-                        },
-                        {
-                            "name": "onscene_datetime",
-                            "fieldName": "onscene_datetime",
-                            "description": "Date and time the first unit records arriving at the location of the incident or, when onview_flag = Y, an officer initiates an on-view incident"
-                        },
-                        {
-                            "name": "sensitive_call",
-                            "fieldName": "sensitive_call",
-                            "description": "Indicates whether the call is of a sensitive nature. Location information & call notes are not provided for sensitive calls. "
-                        },
-                        {
-                            "name": "intersection_name",
-                            "fieldName": "intersection_name",
-                            "description": "Name of intersection used to anonymize the incident location"
-                        },
-                        {
-                            "name": "intersection_id",
-                            "fieldName": "intersection_id",
-                            "description": "Unique ID for the intersection_point used to anonymize the incident location"
-                        },
-                        {
-                            "name": "intersection_point",
-                            "fieldName": "intersection_point",
-                            "description": "Geographic point representing the anonymized incident location (nearest intersection)"
-                        },
-                        {
                             "name": "supervisor_district",
                             "fieldName": "supervisor_district",
                             "description": "Supervisor District based on anonymized intersection coordinates"
-                        },
-                        {
-                            "name": "analysis_neighborhood",
-                            "fieldName": "analysis_neighborhood",
-                            "description": "Analysis Neighborhoods based on anonymized intersection coordinates"
-                        },
-                        {
-                            "name": "police_district",
-                            "fieldName": "police_district",
-                            "description": "Police District based on anonymized intersection coordinates"
                         }
                     ],
                     "category_fields": [
+                        {
+                            "name": "call_type_original",
+                            "fieldName": "call_type_original",
+                            "description": "Call type code as originally coded/selected by dispatcher"
+                        },
+                        {
+                            "name": "call_type_original_desc",
+                            "fieldName": "call_type_original_desc",
+                            "description": "Standard description of original call type"
+                        },
+                        {
+                            "name": "call_type_original_notes",
+                            "fieldName": "call_type_original_notes",
+                            "description": "Any notes regarding the original call type entered by the dispatcher"
+                        },
+                        {
+                            "name": "call_type_final",
+                            "fieldName": "call_type_final",
+                            "description": "Final call type code as coded/selected by dispatcher. For closed calls this is the last call type code. For open calls this code may continue to change."
+                        },
                         {
                             "name": "call_type_final_desc",
                             "fieldName": "call_type_final_desc",
                             "description": "Standard description of final call type"
                         },
                         {
-                            "name": "supervisor_district",
-                            "fieldName": "supervisor_district",
-                            "description": "Supervisor District based on anonymized intersection coordinates"
+                            "name": "call_type_final_notes",
+                            "fieldName": "call_type_final_notes",
+                            "description": "Any notes regarding the final call type entered by the dispatcher"
                         }
                     ]
                 },
                 "\ud83d\ude91 911 Response Time (mins) - No danger to life or property": {
                     "id": 12,
+                    "endpoint": "2zdj-bwza",
                     "summary": "Average response time in minutes for Priority C emergency calls.",
                     "definition": "Measures the time between when a 911 call is received and when the first unit arrives on scene for Priority C (lowest priority, no danger to life or property) calls. Data comes from the Department of Emergency Management's Computer Aided Dispatch (CAD) System. Only includes calls where both received and onscene times are recorded and valid.",
                     "data_sf_url": "https://data.sfgov.org/resource/2zdj-bwza.json",
@@ -628,66 +494,41 @@
                     "dataset_category": "Public Safety",
                     "location_fields": [
                         {
-                            "name": "dispatch_datetime",
-                            "fieldName": "dispatch_datetime",
-                            "description": "Date and time when the 911 operator dispatches the first unit to the location of the incident or, when onview_flag = Y, an officer initiates an on-view incident"
-                        },
-                        {
-                            "name": "enroute_datetime",
-                            "fieldName": "enroute_datetime",
-                            "description": "Date and time when the first unit acknowledges the dispatch and records that they are enroute to the location of the incident or, when onview_flag = Y, an officer initiates an on-view incident"
-                        },
-                        {
-                            "name": "onscene_datetime",
-                            "fieldName": "onscene_datetime",
-                            "description": "Date and time the first unit records arriving at the location of the incident or, when onview_flag = Y, an officer initiates an on-view incident"
-                        },
-                        {
-                            "name": "sensitive_call",
-                            "fieldName": "sensitive_call",
-                            "description": "Indicates whether the call is of a sensitive nature. Location information & call notes are not provided for sensitive calls. "
-                        },
-                        {
-                            "name": "intersection_name",
-                            "fieldName": "intersection_name",
-                            "description": "Name of intersection used to anonymize the incident location"
-                        },
-                        {
-                            "name": "intersection_id",
-                            "fieldName": "intersection_id",
-                            "description": "Unique ID for the intersection_point used to anonymize the incident location"
-                        },
-                        {
-                            "name": "intersection_point",
-                            "fieldName": "intersection_point",
-                            "description": "Geographic point representing the anonymized incident location (nearest intersection)"
-                        },
-                        {
                             "name": "supervisor_district",
                             "fieldName": "supervisor_district",
                             "description": "Supervisor District based on anonymized intersection coordinates"
-                        },
-                        {
-                            "name": "analysis_neighborhood",
-                            "fieldName": "analysis_neighborhood",
-                            "description": "Analysis Neighborhoods based on anonymized intersection coordinates"
-                        },
-                        {
-                            "name": "police_district",
-                            "fieldName": "police_district",
-                            "description": "Police District based on anonymized intersection coordinates"
                         }
                     ],
                     "category_fields": [
+                        {
+                            "name": "call_type_original",
+                            "fieldName": "call_type_original",
+                            "description": "Call type code as originally coded/selected by dispatcher"
+                        },
+                        {
+                            "name": "call_type_original_desc",
+                            "fieldName": "call_type_original_desc",
+                            "description": "Standard description of original call type"
+                        },
+                        {
+                            "name": "call_type_original_notes",
+                            "fieldName": "call_type_original_notes",
+                            "description": "Any notes regarding the original call type entered by the dispatcher"
+                        },
+                        {
+                            "name": "call_type_final",
+                            "fieldName": "call_type_final",
+                            "description": "Final call type code as coded/selected by dispatcher. For closed calls this is the last call type code. For open calls this code may continue to change."
+                        },
                         {
                             "name": "call_type_final_desc",
                             "fieldName": "call_type_final_desc",
                             "description": "Standard description of final call type"
                         },
                         {
-                            "name": "supervisor_district",
-                            "fieldName": "supervisor_district",
-                            "description": "Supervisor District based on anonymized intersection coordinates"
+                            "name": "call_type_final_notes",
+                            "fieldName": "call_type_final_notes",
+                            "description": "Any notes regarding the final call type entered by the dispatcher"
                         }
                     ]
                 }
@@ -696,10 +537,10 @@
     },
     "economy": {
         "housing": {
-            "endpoint": "j67f-aayr",
             "queries": {
                 "\ud83c\udfe0 New Housing Units Completed": {
                     "id": 13,
+                    "endpoint": "j67f-aayr",
                     "summary": "Count of net new housing units from completed building permits.",
                     "definition": "Tracks net new housing units that have been certified for occupancy through building permits. Each record represents when new units were approved for occupancy via Initial TCO, Amended TCO, or Certificate of Final Completion (CFC).",
                     "data_sf_url": "https://data.sfgov.org/Housing-and-Buildings/Dwelling-Unit-Completion-Counts-by-Building-Permit/j67f-aayr",
@@ -707,18 +548,7 @@
                     "metric_query": "SELECT '\ud83c\udfd7\ufe0f\ud83c\udfe0 New Housing Units' as label, max(date_issued) as max_date, SUM(CASE WHEN date_issued >= this_year_start AND date_issued <= this_year_end THEN number_of_units_certified END) as this_year, SUM(CASE WHEN date_issued >= last_year_start AND date_issued <= last_year_end THEN number_of_units_certified END) as last_year, (SUM(CASE WHEN date_issued >= this_year_start AND date_issued <= this_year_end THEN number_of_units_certified END) - SUM(CASE WHEN date_issued >= last_year_start AND date_issued <= last_year_end THEN number_of_units_certified END)) as delta, ((SUM(CASE WHEN date_issued >= this_year_start AND date_issued <= this_year_end THEN number_of_units_certified END) - SUM(CASE WHEN date_issued >= last_year_start AND date_issued <= last_year_end THEN number_of_units_certified END)) * 100.0 / NULLIF(SUM(CASE WHEN date_issued >= last_year_start AND date_issued <= last_year_end THEN number_of_units_certified END), 0)) as perc_diff",
                     "dataset_title": "Dwelling Unit Completion Counts by Building Permit",
                     "dataset_category": "Housing and Buildings",
-                    "location_fields": [
-                        {
-                            "name": "Building Permit Application Number",
-                            "fieldName": "building_permit_application",
-                            "description": "Reference number identifying a building permit application. This field serves as the shared identifier for all records associated with a building permit application, which may include multiple addresses, documents, issuance dates, and unit counts."
-                        },
-                        {
-                            "name": "Building Address",
-                            "fieldName": "building_address",
-                            "description": "Address of residential units. Multiple addresses may be associated with one Building Permit Application Number. All addresses are in San Francisco, CA."
-                        }
-                    ],
+                    "location_fields": [],
                     "category_fields": [
                         {
                             "name": "Document Type",
@@ -730,10 +560,10 @@
             }
         },
         "business": {
-            "endpoint": "g8m3-pdis",
             "queries": {
                 "\ud83c\udfe2 New Business Registrations": {
                     "id": 14,
+                    "endpoint": "g8m3-pdis",
                     "summary": "Count of new business registrations in San Francisco.",
                     "definition": "Tracks new business registrations through the Treasurer & Tax Collector's Office. Each registered business may have multiple locations. Data is collected through business registration applications and account updates.",
                     "data_sf_url": "https://data.sfgov.org/resource/g8m3-pdis.json",
@@ -743,131 +573,27 @@
                     "dataset_category": "Economy and Community",
                     "location_fields": [
                         {
-                            "name": "Location Id",
-                            "fieldName": "ttxid",
-                            "description": "Location identifier"
-                        },
-                        {
-                            "name": "DBA Name",
-                            "fieldName": "dba_name",
-                            "description": "Doing Business As Name or Location Name"
-                        },
-                        {
-                            "name": "Street Address",
-                            "fieldName": "full_business_address",
-                            "description": "Business location street address"
-                        },
-                        {
-                            "name": "City",
-                            "fieldName": "city",
-                            "description": "Business location city"
-                        },
-                        {
-                            "name": "State",
-                            "fieldName": "state",
-                            "description": "Business location state"
-                        },
-                        {
-                            "name": "Source Zipcode",
-                            "fieldName": "business_zip",
-                            "description": "Business location zip code"
-                        },
-                        {
-                            "name": "Location Start Date",
-                            "fieldName": "location_start_date",
-                            "description": "Start date at the location"
-                        },
-                        {
-                            "name": "Location End Date",
-                            "fieldName": "location_end_date",
-                            "description": "End date at the location, if closed"
-                        },
-                        {
-                            "name": "Administratively Closed",
-                            "fieldName": "administratively_closed",
-                            "description": "Business locations marked as \u201cAdministratively Closed\u201d have not filed or communicated with TTX for 3 years, or were marked as closed following a notification from another City and County Department. "
-                        },
-                        {
-                            "name": "Mail Address",
-                            "fieldName": "mailing_address_1",
-                            "description": "Address for mailing"
-                        },
-                        {
-                            "name": "Mail City",
-                            "fieldName": "mail_city",
-                            "description": "Mailing address city\n"
-                        },
-                        {
-                            "name": "Mail Zipcode",
-                            "fieldName": "mail_zipcode",
-                            "description": "Mailing address zipcode"
-                        },
-                        {
-                            "name": "Mail State",
-                            "fieldName": "mail_state",
-                            "description": "Mailing address state\n"
-                        },
-                        {
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
                             "description": "The Supervisor District in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/xz9b-wyfc\n"
-                        },
-                        {
-                            "name": "Neighborhoods - Analysis Boundaries",
-                            "fieldName": "neighborhoods_analysis_boundaries",
-                            "description": "The Analysis Neighborhood in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/p5b7-5n3h\n"
-                        },
-                        {
-                            "name": "Business Corridor",
-                            "fieldName": "business_corridor",
-                            "description": "The Business Corridor in which the the business location falls, if it is in one. Not all business locations are in a corridor.\n\nBoundary reference: https://data.sfgov.org/d/h7xa-2xwk\n"
-                        },
-                        {
-                            "name": "Business Location",
-                            "fieldName": "location",
-                            "description": "The latitude and longitude of the business location for mapping purposes."
-                        },
-                        {
-                            "name": "SF Find Neighborhoods",
-                            "fieldName": ":@computed_region_6qbp_sg9q",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'SF Find Neighborhoods' (6qbp-sg9q) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Current Police Districts",
-                            "fieldName": ":@computed_region_qgnn_b9vv",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Current Police Districts' (qgnn-b9vv) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Current Supervisor Districts",
-                            "fieldName": ":@computed_region_26cr_cadq",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Current Supervisor Districts' (26cr-cadq) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Analysis Neighborhoods",
-                            "fieldName": ":@computed_region_ajp5_b2md",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Analysis Neighborhoods' (ajp5-b2md) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Neighborhoods",
-                            "fieldName": ":@computed_region_jwn9_ihcz",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Neighborhoods' (jwn9-ihcz) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
                         }
                     ],
                     "category_fields": [
                         {
-                            "name": "NAICS Code",
-                            "fieldName": "naic_code",
-                            "description": "The North American Industry Classification System (NAICS) is a standard used by Federal statistical agencies for the purpose of collecting, analyzing and publishing statistical data related to the U.S. business economy. A subset of these are options on the business registration form used in the administration of the City and County's tax code. The registrant indicates the business activity on the City and County's tax registration forms.\n\nSee NAICS Codes tab in the attached data dictionary under About > Attachments."
+                            "name": "naic_code_description",
+                            "fieldName": "naic_code_description",
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Supervisor District",
+                            "name": "supervisor_district",
                             "fieldName": "supervisor_district",
-                            "description": "The Supervisor District in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/xz9b-wyfc\n"
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },
                 "\ud83d\udeab Business Closures": {
-                    "id": 16,
+                    "id": 15,
+                    "endpoint": "g8m3-pdis",
                     "summary": "Count of business closures in San Francisco.",
                     "definition": "Tracks business closures through the Treasurer & Tax Collector's Office. Includes businesses that have formally closed or been administratively closed after 3 years of no filing or communication.",
                     "data_sf_url": "https://data.sfgov.org/resource/g8m3-pdis.json",
@@ -877,114 +603,9 @@
                     "dataset_category": "Economy and Community",
                     "location_fields": [
                         {
-                            "name": "Location Id",
-                            "fieldName": "ttxid",
-                            "description": "Location identifier"
-                        },
-                        {
-                            "name": "DBA Name",
-                            "fieldName": "dba_name",
-                            "description": "Doing Business As Name or Location Name"
-                        },
-                        {
-                            "name": "Street Address",
-                            "fieldName": "full_business_address",
-                            "description": "Business location street address"
-                        },
-                        {
-                            "name": "City",
-                            "fieldName": "city",
-                            "description": "Business location city"
-                        },
-                        {
-                            "name": "State",
-                            "fieldName": "state",
-                            "description": "Business location state"
-                        },
-                        {
-                            "name": "Source Zipcode",
-                            "fieldName": "business_zip",
-                            "description": "Business location zip code"
-                        },
-                        {
-                            "name": "Location Start Date",
-                            "fieldName": "location_start_date",
-                            "description": "Start date at the location"
-                        },
-                        {
-                            "name": "Location End Date",
-                            "fieldName": "location_end_date",
-                            "description": "End date at the location, if closed"
-                        },
-                        {
-                            "name": "Administratively Closed",
-                            "fieldName": "administratively_closed",
-                            "description": "Business locations marked as \u201cAdministratively Closed\u201d have not filed or communicated with TTX for 3 years, or were marked as closed following a notification from another City and County Department. "
-                        },
-                        {
-                            "name": "Mail Address",
-                            "fieldName": "mailing_address_1",
-                            "description": "Address for mailing"
-                        },
-                        {
-                            "name": "Mail City",
-                            "fieldName": "mail_city",
-                            "description": "Mailing address city\n"
-                        },
-                        {
-                            "name": "Mail Zipcode",
-                            "fieldName": "mail_zipcode",
-                            "description": "Mailing address zipcode"
-                        },
-                        {
-                            "name": "Mail State",
-                            "fieldName": "mail_state",
-                            "description": "Mailing address state\n"
-                        },
-                        {
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
                             "description": "The Supervisor District in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/xz9b-wyfc\n"
-                        },
-                        {
-                            "name": "Neighborhoods - Analysis Boundaries",
-                            "fieldName": "neighborhoods_analysis_boundaries",
-                            "description": "The Analysis Neighborhood in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/p5b7-5n3h\n"
-                        },
-                        {
-                            "name": "Business Corridor",
-                            "fieldName": "business_corridor",
-                            "description": "The Business Corridor in which the the business location falls, if it is in one. Not all business locations are in a corridor.\n\nBoundary reference: https://data.sfgov.org/d/h7xa-2xwk\n"
-                        },
-                        {
-                            "name": "Business Location",
-                            "fieldName": "location",
-                            "description": "The latitude and longitude of the business location for mapping purposes."
-                        },
-                        {
-                            "name": "SF Find Neighborhoods",
-                            "fieldName": ":@computed_region_6qbp_sg9q",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'SF Find Neighborhoods' (6qbp-sg9q) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Current Police Districts",
-                            "fieldName": ":@computed_region_qgnn_b9vv",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Current Police Districts' (qgnn-b9vv) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Current Supervisor Districts",
-                            "fieldName": ":@computed_region_26cr_cadq",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Current Supervisor Districts' (26cr-cadq) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Analysis Neighborhoods",
-                            "fieldName": ":@computed_region_ajp5_b2md",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Analysis Neighborhoods' (ajp5-b2md) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Neighborhoods",
-                            "fieldName": ":@computed_region_jwn9_ihcz",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Neighborhoods' (jwn9-ihcz) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
                         }
                     ],
                     "category_fields": [
@@ -992,16 +613,12 @@
                             "name": "NAICS Code",
                             "fieldName": "naic_code",
                             "description": "The North American Industry Classification System (NAICS) is a standard used by Federal statistical agencies for the purpose of collecting, analyzing and publishing statistical data related to the U.S. business economy. A subset of these are options on the business registration form used in the administration of the City and County's tax code. The registrant indicates the business activity on the City and County's tax registration forms.\n\nSee NAICS Codes tab in the attached data dictionary under About > Attachments."
-                        },
-                        {
-                            "name": "Supervisor District",
-                            "fieldName": "supervisor_district",
-                            "description": "The Supervisor District in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/xz9b-wyfc\n"
                         }
                     ]
                 },
                 "\ud83d\udecd\ufe0f New Retail Registrations": {
-                    "id": 15,
+                    "id": 16,
+                    "endpoint": "g8m3-pdis",
                     "summary": "Count of new retail business registrations in San Francisco.",
                     "definition": "Tracks new retail business registrations through the Treasurer & Tax Collector's Office. Uses NAICS code to identify retail businesses. Each registered business may have multiple locations.",
                     "data_sf_url": "https://data.sfgov.org/resource/g8m3-pdis.json",
@@ -1011,114 +628,9 @@
                     "dataset_category": "Economy and Community",
                     "location_fields": [
                         {
-                            "name": "Location Id",
-                            "fieldName": "ttxid",
-                            "description": "Location identifier"
-                        },
-                        {
-                            "name": "DBA Name",
-                            "fieldName": "dba_name",
-                            "description": "Doing Business As Name or Location Name"
-                        },
-                        {
-                            "name": "Street Address",
-                            "fieldName": "full_business_address",
-                            "description": "Business location street address"
-                        },
-                        {
-                            "name": "City",
-                            "fieldName": "city",
-                            "description": "Business location city"
-                        },
-                        {
-                            "name": "State",
-                            "fieldName": "state",
-                            "description": "Business location state"
-                        },
-                        {
-                            "name": "Source Zipcode",
-                            "fieldName": "business_zip",
-                            "description": "Business location zip code"
-                        },
-                        {
-                            "name": "Location Start Date",
-                            "fieldName": "location_start_date",
-                            "description": "Start date at the location"
-                        },
-                        {
-                            "name": "Location End Date",
-                            "fieldName": "location_end_date",
-                            "description": "End date at the location, if closed"
-                        },
-                        {
-                            "name": "Administratively Closed",
-                            "fieldName": "administratively_closed",
-                            "description": "Business locations marked as \u201cAdministratively Closed\u201d have not filed or communicated with TTX for 3 years, or were marked as closed following a notification from another City and County Department. "
-                        },
-                        {
-                            "name": "Mail Address",
-                            "fieldName": "mailing_address_1",
-                            "description": "Address for mailing"
-                        },
-                        {
-                            "name": "Mail City",
-                            "fieldName": "mail_city",
-                            "description": "Mailing address city\n"
-                        },
-                        {
-                            "name": "Mail Zipcode",
-                            "fieldName": "mail_zipcode",
-                            "description": "Mailing address zipcode"
-                        },
-                        {
-                            "name": "Mail State",
-                            "fieldName": "mail_state",
-                            "description": "Mailing address state\n"
-                        },
-                        {
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
                             "description": "The Supervisor District in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/xz9b-wyfc\n"
-                        },
-                        {
-                            "name": "Neighborhoods - Analysis Boundaries",
-                            "fieldName": "neighborhoods_analysis_boundaries",
-                            "description": "The Analysis Neighborhood in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/p5b7-5n3h\n"
-                        },
-                        {
-                            "name": "Business Corridor",
-                            "fieldName": "business_corridor",
-                            "description": "The Business Corridor in which the the business location falls, if it is in one. Not all business locations are in a corridor.\n\nBoundary reference: https://data.sfgov.org/d/h7xa-2xwk\n"
-                        },
-                        {
-                            "name": "Business Location",
-                            "fieldName": "location",
-                            "description": "The latitude and longitude of the business location for mapping purposes."
-                        },
-                        {
-                            "name": "SF Find Neighborhoods",
-                            "fieldName": ":@computed_region_6qbp_sg9q",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'SF Find Neighborhoods' (6qbp-sg9q) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Current Police Districts",
-                            "fieldName": ":@computed_region_qgnn_b9vv",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Current Police Districts' (qgnn-b9vv) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Current Supervisor Districts",
-                            "fieldName": ":@computed_region_26cr_cadq",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Current Supervisor Districts' (26cr-cadq) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Analysis Neighborhoods",
-                            "fieldName": ":@computed_region_ajp5_b2md",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Analysis Neighborhoods' (ajp5-b2md) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Neighborhoods",
-                            "fieldName": ":@computed_region_jwn9_ihcz",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Neighborhoods' (jwn9-ihcz) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
                         }
                     ],
                     "category_fields": [
@@ -1126,16 +638,12 @@
                             "name": "NAICS Code",
                             "fieldName": "naic_code",
                             "description": "The North American Industry Classification System (NAICS) is a standard used by Federal statistical agencies for the purpose of collecting, analyzing and publishing statistical data related to the U.S. business economy. A subset of these are options on the business registration form used in the administration of the City and County's tax code. The registrant indicates the business activity on the City and County's tax registration forms.\n\nSee NAICS Codes tab in the attached data dictionary under About > Attachments."
-                        },
-                        {
-                            "name": "Supervisor District",
-                            "fieldName": "supervisor_district",
-                            "description": "The Supervisor District in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/xz9b-wyfc\n"
                         }
                     ]
                 },
                 "\ud83c\udfea Retail Closures": {
                     "id": 17,
+                    "endpoint": "g8m3-pdis",
                     "summary": "Count of retail business closures in San Francisco.",
                     "definition": "Tracks retail business closures through the Treasurer & Tax Collector's Office. Uses NAICS code to identify retail businesses. Includes businesses that have formally closed or been administratively closed after 3 years of no filing or communication.",
                     "data_sf_url": "https://data.sfgov.org/resource/g8m3-pdis.json",
@@ -1145,114 +653,9 @@
                     "dataset_category": "Economy and Community",
                     "location_fields": [
                         {
-                            "name": "Location Id",
-                            "fieldName": "ttxid",
-                            "description": "Location identifier"
-                        },
-                        {
-                            "name": "DBA Name",
-                            "fieldName": "dba_name",
-                            "description": "Doing Business As Name or Location Name"
-                        },
-                        {
-                            "name": "Street Address",
-                            "fieldName": "full_business_address",
-                            "description": "Business location street address"
-                        },
-                        {
-                            "name": "City",
-                            "fieldName": "city",
-                            "description": "Business location city"
-                        },
-                        {
-                            "name": "State",
-                            "fieldName": "state",
-                            "description": "Business location state"
-                        },
-                        {
-                            "name": "Source Zipcode",
-                            "fieldName": "business_zip",
-                            "description": "Business location zip code"
-                        },
-                        {
-                            "name": "Location Start Date",
-                            "fieldName": "location_start_date",
-                            "description": "Start date at the location"
-                        },
-                        {
-                            "name": "Location End Date",
-                            "fieldName": "location_end_date",
-                            "description": "End date at the location, if closed"
-                        },
-                        {
-                            "name": "Administratively Closed",
-                            "fieldName": "administratively_closed",
-                            "description": "Business locations marked as \u201cAdministratively Closed\u201d have not filed or communicated with TTX for 3 years, or were marked as closed following a notification from another City and County Department. "
-                        },
-                        {
-                            "name": "Mail Address",
-                            "fieldName": "mailing_address_1",
-                            "description": "Address for mailing"
-                        },
-                        {
-                            "name": "Mail City",
-                            "fieldName": "mail_city",
-                            "description": "Mailing address city\n"
-                        },
-                        {
-                            "name": "Mail Zipcode",
-                            "fieldName": "mail_zipcode",
-                            "description": "Mailing address zipcode"
-                        },
-                        {
-                            "name": "Mail State",
-                            "fieldName": "mail_state",
-                            "description": "Mailing address state\n"
-                        },
-                        {
                             "name": "Supervisor District",
                             "fieldName": "supervisor_district",
                             "description": "The Supervisor District in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/xz9b-wyfc\n"
-                        },
-                        {
-                            "name": "Neighborhoods - Analysis Boundaries",
-                            "fieldName": "neighborhoods_analysis_boundaries",
-                            "description": "The Analysis Neighborhood in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/p5b7-5n3h\n"
-                        },
-                        {
-                            "name": "Business Corridor",
-                            "fieldName": "business_corridor",
-                            "description": "The Business Corridor in which the the business location falls, if it is in one. Not all business locations are in a corridor.\n\nBoundary reference: https://data.sfgov.org/d/h7xa-2xwk\n"
-                        },
-                        {
-                            "name": "Business Location",
-                            "fieldName": "location",
-                            "description": "The latitude and longitude of the business location for mapping purposes."
-                        },
-                        {
-                            "name": "SF Find Neighborhoods",
-                            "fieldName": ":@computed_region_6qbp_sg9q",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'SF Find Neighborhoods' (6qbp-sg9q) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Current Police Districts",
-                            "fieldName": ":@computed_region_qgnn_b9vv",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Current Police Districts' (qgnn-b9vv) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Current Supervisor Districts",
-                            "fieldName": ":@computed_region_26cr_cadq",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Current Supervisor Districts' (26cr-cadq) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Analysis Neighborhoods",
-                            "fieldName": ":@computed_region_ajp5_b2md",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Analysis Neighborhoods' (ajp5-b2md) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
-                        },
-                        {
-                            "name": "Neighborhoods",
-                            "fieldName": ":@computed_region_jwn9_ihcz",
-                            "description": "This column was automatically created in order to record in what polygon from the dataset 'Neighborhoods' (jwn9-ihcz) the point in column 'location' is located.  This enables the creation of region maps (choropleths) in the visualization canvas and data lens."
                         }
                     ],
                     "category_fields": [
@@ -1260,11 +663,6 @@
                             "name": "NAICS Code",
                             "fieldName": "naic_code",
                             "description": "The North American Industry Classification System (NAICS) is a standard used by Federal statistical agencies for the purpose of collecting, analyzing and publishing statistical data related to the U.S. business economy. A subset of these are options on the business registration form used in the administration of the City and County's tax code. The registrant indicates the business activity on the City and County's tax registration forms.\n\nSee NAICS Codes tab in the attached data dictionary under About > Attachments."
-                        },
-                        {
-                            "name": "Supervisor District",
-                            "fieldName": "supervisor_district",
-                            "description": "The Supervisor District in which the business location falls. Not applicable outside of San Francisco.\n\nBoundary reference: https://data.sfgov.org/d/xz9b-wyfc\n"
                         }
                     ]
                 }

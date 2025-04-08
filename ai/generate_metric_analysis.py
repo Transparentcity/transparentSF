@@ -11,7 +11,6 @@ from pathlib import Path
 from tools.data_fetcher import set_dataset
 from tools.genChart import generate_time_series_chart
 from tools.anomaly_detection import anomaly_detection
-from summarize_posts import create_document_summary
 
 # Configure logging
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -161,65 +160,76 @@ def get_time_ranges(period_type):
 
 def find_metric_in_queries(queries_data, metric_id):
     """Find a specific metric in the dashboard queries data structure."""
-    # Try to convert metric_id to int for numeric ID matching
-    numeric_id = None
-    try:
-        numeric_id = int(metric_id)
-    except (ValueError, TypeError):
-        pass
+    # Convert metric_id to string for consistent comparison
+    metric_id_str = str(metric_id)
+    logger.info(f"Searching for metric ID: {metric_id_str}")
+    
+    # Log the structure we're searching through
+    logger.info(f"Searching through queries data structure: {list(queries_data.keys())}")
         
     for top_category_name, top_category_data in queries_data.items():
+        logger.info(f"Checking top category: {top_category_name}")
         for subcategory_name, subcategory_data in top_category_data.items():
+            logger.info(f"Checking subcategory: {subcategory_name}")
             if isinstance(subcategory_data, dict) and 'queries' in subcategory_data:
                 for query_name, query_data in subcategory_data['queries'].items():
-                    # If numeric_id is available, check for numeric match first
-                    if numeric_id is not None and isinstance(query_data, dict) and query_data.get('id') == numeric_id:
-                        # Found a match by numeric ID
-                        # Check for endpoint at query level first, then fallback to subcategory level
-                        endpoint = None
-                        if isinstance(query_data, dict) and 'endpoint' in query_data:
-                            endpoint = query_data.get('endpoint')
-                            logging.info(f"Using query-level endpoint: {endpoint}")
-                        else:
-                            endpoint = subcategory_data.get('endpoint', None)
-                            logging.info(f"Using subcategory-level endpoint: {endpoint}")
-                            
-                        return {
-                            'top_category': top_category_name,
-                            'subcategory': subcategory_name,
-                            'query_name': query_name,
-                            'query_data': query_data,
-                            'endpoint': endpoint,
-                            'category_fields': query_data.get('category_fields', []) if isinstance(query_data, dict) else [],
-                            'location_fields': query_data.get('location_fields', []) if isinstance(query_data, dict) else [],
-                            'numeric_id': query_data.get('id', None) if isinstance(query_data, dict) else None,
-                            'metric_id': str(metric_id)  # Ensure we always have the metric_id from the search
-                        }
+                    # Log the query we're checking
+                    logger.info(f"Checking query: {query_name}")
+                    
+                    # Check for numeric ID match
+                    if isinstance(query_data, dict):
+                        query_id = query_data.get('id')
+                        # Convert query_id to string for comparison
+                        query_id_str = str(query_id) if query_id is not None else None
+                        logger.info(f"Comparing metric ID {metric_id_str} with query ID {query_id_str}")
                         
-                    # Check if this is the metric we're looking for by string ID
-                    current_id = query_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd"
-                    if current_id == metric_id:
-                        # Check for endpoint at query level first, then fallback to subcategory level
-                        endpoint = None
-                        if isinstance(query_data, dict) and 'endpoint' in query_data:
-                            endpoint = query_data.get('endpoint')
-                            logging.info(f"Using query-level endpoint: {endpoint}")
-                        else:
-                            endpoint = subcategory_data.get('endpoint', None)
-                            logging.info(f"Using subcategory-level endpoint: {endpoint}")
-                            
-                        # Return all the relevant information
-                        return {
-                            'top_category': top_category_name,
-                            'subcategory': subcategory_name,
-                            'query_name': query_name,
-                            'query_data': query_data,
-                            'endpoint': endpoint,
-                            'category_fields': query_data.get('category_fields', []) if isinstance(query_data, dict) else [],
-                            'location_fields': query_data.get('location_fields', []) if isinstance(query_data, dict) else [],
-                            'numeric_id': query_data.get('id', None) if isinstance(query_data, dict) else None,
-                            'metric_id': str(metric_id)  # Ensure we always have the metric_id from the search
-                        }
+                        if query_id_str == metric_id_str:
+                            # Found a match by numeric ID
+                            logger.info(f"Found match by numeric ID: {metric_id_str}")
+                            # Check for endpoint at query level first, then fallback to subcategory level
+                            endpoint = None
+                            if 'endpoint' in query_data:
+                                endpoint = query_data.get('endpoint')
+                                logger.info(f"Using query-level endpoint: {endpoint}")
+                            else:
+                                endpoint = subcategory_data.get('endpoint', None)
+                                logger.info(f"Using subcategory-level endpoint: {endpoint}")
+                                
+                            return {
+                                'top_category': top_category_name,
+                                'subcategory': subcategory_name,
+                                'query_name': query_name,
+                                'query_data': query_data,
+                                'endpoint': endpoint,
+                                'category_fields': query_data.get('category_fields', []) if isinstance(query_data, dict) else [],
+                                'location_fields': query_data.get('location_fields', []) if isinstance(query_data, dict) else [],
+                                'numeric_id': query_data.get('id', None) if isinstance(query_data, dict) else None,
+                                'metric_id': metric_id_str  # Ensure we always have the metric_id from the search
+                            }
+                    
+                    # For string IDs, try to match the query name
+                    if isinstance(metric_id, str):
+                        # Clean up the query name for comparison
+                        clean_query_name = query_name.lower().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "").replace("_ytd", "")
+                        clean_metric_id = metric_id.lower().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "").replace("_ytd", "")
+                        
+                        logger.info(f"Comparing string IDs - Query: {clean_query_name}, Metric: {clean_metric_id}")
+                        
+                        if clean_query_name == clean_metric_id:
+                            logger.info(f"Found match by string ID: {metric_id}")
+                            return {
+                                'top_category': top_category_name,
+                                'subcategory': subcategory_name,
+                                'query_name': query_name,
+                                'query_data': query_data,
+                                'endpoint': query_data.get('endpoint', subcategory_data.get('endpoint')),
+                                'category_fields': query_data.get('category_fields', []),
+                                'location_fields': query_data.get('location_fields', []),
+                                'numeric_id': query_data.get('id'),
+                                'metric_id': metric_id
+                            }
+    
+    logger.error(f"Metric with ID '{metric_id_str}' not found in dashboard queries")
     return None
 
 def detect_avg_aggregation(query):
@@ -598,6 +608,16 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
     
     return process_analysis_result
 
+def clean_metric_name(query_name):
+    """Clean the metric name by removing emojis and formatting it properly."""
+    # Remove emojis and other special characters
+    cleaned = re.sub(r'[^\w\s-]', '', query_name)
+    # Replace multiple spaces with single space
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    # Capitalize first letter of each word
+    cleaned = ' '.join(word.capitalize() for word in cleaned.split())
+    return cleaned
+
 def process_single_analysis(context_variables, category_fields, period_type, period_field, 
                            filter_conditions, query_name, period_desc, value_field,
                            recent_period, comparison_period, uses_avg, agg_functions, district=None, metric_id=None):
@@ -608,6 +628,10 @@ def process_single_analysis(context_variables, category_fields, period_type, per
     # Make a new context variables dictionary
     context = context_variables.copy()
     context['dataset'] = dataset
+    
+    # Clean the metric name for the y-axis label
+    y_axis_label = clean_metric_name(query_name)
+    context['y_axis_label'] = y_axis_label
     
     # Convert recent and comparison periods to string format for anomaly detection
     string_recent_period = {
@@ -738,7 +762,7 @@ def process_single_analysis(context_variables, category_fields, period_type, per
                 comparison_period=string_comparison_period,
                 date_field=period_field,
                 numeric_field=value_field,
-                y_axis_label=value_field,
+                y_axis_label=y_axis_label,
                 title=f"{query_name} - {value_field} by {category_field_display}",
                 period_type=period_type,
                 agg_function='mean' if uses_avg else 'sum',
@@ -1125,7 +1149,7 @@ def transform_query_for_period(original_query, date_field, category_fields, peri
         return modified_query
 
 def save_analysis_files(result, metric_id, period_type, output_dir=None, district=None):
-    """Save analysis results to markdown and HTML files."""
+    """Save analysis results to markdown files."""
     # Create output directory if it doesn't exist
     if output_dir is None:
         output_dir = OUTPUT_DIR
@@ -1152,18 +1176,6 @@ def save_analysis_files(result, metric_id, period_type, output_dir=None, distric
         file_metric_id = query_name.lower().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "")
         logging.warning(f"Missing metric_id for {query_name}, using sanitized query name: {file_metric_id}")
     
-    # Handle missing query_name
-    query_name = result.get('query_name', file_metric_id)
-    if not query_name:
-        query_name = file_metric_id
-    
-    # Generate filenames - district is now handled as a number (0 for citywide)
-    md_filename = f"{file_metric_id}_{period_type}_analysis.md"
-    html_filename = f"{file_metric_id}_{period_type}_analysis.html"
-    
-    # Log the filename being used
-    logging.info(f"Using filename base: {file_metric_id}_{period_type}_analysis")
-    
     # Create district subfolder using the district number - 0 for citywide
     if district is not None:
         district_dir = os.path.join(output_dir, dir_name, f"{district}")
@@ -1175,33 +1187,19 @@ def save_analysis_files(result, metric_id, period_type, output_dir=None, distric
         os.makedirs(district_dir, exist_ok=True)
         output_path = district_dir
     
-    # Create full paths
+    # Generate filename - just metric_id.md
+    md_filename = f"{file_metric_id}.md"
     md_path = os.path.join(output_path, md_filename)
-    html_path = os.path.join(output_path, html_filename)
     
-    # Log the file paths being used
-    logging.info(f"Saving analysis to: {md_path} and {html_path}")
+    # Log the file path being used
+    logging.info(f"Saving analysis to: {md_path}")
     
-    # Get markdown content
-    md_content = result.get('markdown_content', '')
-    if not md_content:
-        md_content = result.get('markdown', '')
-    
-    # Fix chart image paths - ensure correct format for image links
-    md_content = md_content.replace('![Chart]/', '![Chart](/')
+    # Get the markdown content
+    markdown_content = result.get('markdown', '')
     
     # Write markdown file
     with open(md_path, 'w') as f:
-        f.write(md_content)
-    
-    # Get HTML content
-    html_content = result.get('html_content', '')
-    if not html_content:
-        html_content = result.get('html', '')
-    
-    # Write HTML file
-    with open(html_path, 'w') as f:
-        f.write(html_content)
+        f.write(markdown_content)
     
     # Get district description based on district value
     if district == 0 or district is None:
@@ -1209,11 +1207,10 @@ def save_analysis_files(result, metric_id, period_type, output_dir=None, distric
     else:
         district_info = f" for District {district}"
         
-    logging.info(f"Saved {period_type} analysis for {query_name}{district_info} to {md_path} and {html_path}")
+    logging.info(f"Saved {period_type} analysis for {file_metric_id}{district_info} to {md_path}")
     
     return {
-        'md_path': md_path,
-        'html_path': html_path
+        'md_path': md_path
     }
 
 def main():
@@ -1246,23 +1243,42 @@ def main():
     dashboard_queries_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard", "dashboard_queries.json")
     enhanced_queries_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard", "dashboard_queries_enhanced.json")
     
+    # Log the paths we're trying to use
+    logger.info(f"Looking for enhanced queries at: {enhanced_queries_path}")
+    logger.info(f"Looking for standard queries at: {dashboard_queries_path}")
+    
     # Try to load enhanced queries first, fall back to regular queries
     if os.path.exists(enhanced_queries_path):
-        logger.info("Using enhanced dashboard queries")
+        logger.info("Found enhanced dashboard queries file")
         dashboard_queries = load_json_file(enhanced_queries_path)
+        if dashboard_queries:
+            logger.info("Successfully loaded enhanced dashboard queries")
+        else:
+            logger.error("Failed to load enhanced dashboard queries")
     else:
+        logger.warning(f"Enhanced queries file not found at {enhanced_queries_path}")
         logger.info("Using standard dashboard queries")
         dashboard_queries = load_json_file(dashboard_queries_path)
+        if dashboard_queries:
+            logger.info("Successfully loaded standard dashboard queries")
+        else:
+            logger.error("Failed to load standard dashboard queries")
     
     if not dashboard_queries:
         logger.error("Failed to load dashboard queries")
         return
+    
+    # Log the structure of the loaded queries
+    logger.info(f"Loaded queries structure: {list(dashboard_queries.keys())}")
     
     # Find the metric in the queries
     metric_info = find_metric_in_queries(dashboard_queries, metric_id)
     if not metric_info:
         logger.error(f"Metric with ID '{metric_id}' not found in dashboard queries")
         return
+    
+    # Log the found metric info
+    logger.info(f"Found metric: {metric_info.get('query_name')} with ID {metric_info.get('metric_id')} in category {metric_info.get('top_category')}")
     
     # Make sure metric_id is in the metric_info
     if 'metric_id' not in metric_info:

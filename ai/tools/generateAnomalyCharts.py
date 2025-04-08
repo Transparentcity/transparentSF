@@ -499,7 +499,7 @@ def generate_markdown_summary(table_data, metadata, output_dir):
                 # Add the anomaly description with link to chart
                 summary += f"{i}. **{group}**: {agg_function_display} {metadata.get('y_axis_label', 'Value')} {direction}d by **{abs(pct_diff):.1f}%** "
                 summary += f"(from {comp:.1f} to {recent:.1f})\n"
-                summary += f"   ![Anomaly Chart for {group}](/{os.path.basename(output_dir)}/{rel_path})\n\n"
+                summary += f"   ![Anomaly Chart for {group}](/output/{os.path.basename(output_dir)}/{rel_path})\n\n"
             else:
                 # Just add the anomaly description without chart
                 summary += f"{i}. **{group}**: {agg_function_display} {metadata.get('y_axis_label', 'Value')} {direction}d by **{abs(pct_diff):.1f}%** "

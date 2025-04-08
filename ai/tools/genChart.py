@@ -41,12 +41,17 @@ def generate_time_series_chart(
 
         # Retrieve title and y_axis_label from context_variables
         chart_title = context_variables.get("chart_title", "Time Series Chart")
-        field_name = numeric_fields[0].lower().replace('_', ' ')
-        logging.info(f"Checking field name '{field_name}' for y-axis label")
-        y_axis_label = context_variables.get("y_axis_label", 
-            "count" if field_name == "item count" 
-            else numeric_fields[0].capitalize())
-        logging.info(f"Selected y_axis_label: {y_axis_label}")
+
+        # Get y_axis_label from context_variables, with better fallback logic
+        y_axis_label = context_variables.get("y_axis_label")
+        if not y_axis_label:
+            # Try to get it from the first numeric field name
+            field_name = numeric_fields[0].lower().replace('_', ' ')
+            y_axis_label = "count" if field_name == "item count" else numeric_fields[0].capitalize()
+            logging.info(f"No y_axis_label provided in context_variables, using derived label: {y_axis_label}")
+        else:
+            logging.info(f"Using provided y_axis_label from context_variables: {y_axis_label}")
+
         noun = context_variables.get("noun", y_axis_label)
         # Create a copy of the dataset to avoid modifying the original data
         original_df = context_variables.get("dataset")
@@ -406,7 +411,7 @@ def generate_time_series_chart(
             if group_field:
                 group_field_original = column_mapping.get(group_field, group_field)
                 logging.debug(f"Original group field name from mapping: {group_field_original}")
-                fig = px.line(
+                fig = px.area(
                     aggregated_df,
                     x='time_period',
                     y=numeric_fields[0],
@@ -417,14 +422,10 @@ def generate_time_series_chart(
                         group_field: group_field_original.capitalize()
                     }
                 )
-                # Add markers to all lines
+                # Update area styling
                 fig.update_traces(
-                    mode='lines+markers',
-                    marker=dict(
-                        size=6,
-                        opacity=0.6,
-                        line=dict(width=1)
-                    )
+                    line=dict(width=1),
+                    opacity=0.8
                 )
             else:
                 fig = px.line(
@@ -449,8 +450,13 @@ def generate_time_series_chart(
             # Calculate y-axis range
             y_min = y_axis_min  # This will be 0 by default from the function parameters
             if y_axis_max is None:
-                # Find the maximum value in the numeric column and add 10% padding
-                y_max = aggregated_df[numeric_fields[0]].max() * 1.1
+                if group_field:
+                    # For stacked area charts, calculate the total height at each time period
+                    total_by_period = aggregated_df.groupby('time_period')[numeric_fields[0]].sum()
+                    y_max = total_by_period.max() * 1.1  # Add 10% padding to the maximum total
+                else:
+                    # For single line charts, use the raw maximum value
+                    y_max = aggregated_df[numeric_fields[0]].max() * 1.1
             else:
                 y_max = y_axis_max
 
@@ -518,11 +524,14 @@ def generate_time_series_chart(
                     textfont=dict(size=10, color='blue')
                 )
 
+            # Calculate bottom margin based on whether we have a group field
+            bottom_margin = 120 if group_field else 30  # More space for legend when we have groups
+
             fig.update_layout(
                 legend=dict(
                     orientation="h",    # Horizontal orientation
                     yanchor="bottom",
-                    y=-0.15,           # Places legend 25% below the plot
+                    y=-0.3,            # Places legend further below the plot
                     xanchor="center",
                     x=0.5,             # Centers the legend horizontally
                     font=dict(size=8),
@@ -558,7 +567,7 @@ def generate_time_series_chart(
                 paper_bgcolor='white',
                 font=dict(family="Arial", size=10, color="black"),
                 autosize=True,
-                margin=dict(l=50, r=50, t=80, b=30)  # Reduce bottom margin to 30
+                margin=dict(l=50, r=50, t=80, b=bottom_margin)  # Dynamic bottom margin
             )
 
             # Highlight the last data point (only if no group_field)
@@ -660,7 +669,7 @@ def generate_time_series_chart(
             # Create markdown content with full path
             markdown_content = f""" 
 {context_variables.get("chart_title", "Time Series Chart")}
-![Chart](/{relative_path}/{image_filename})
+![Chart](/output/{relative_path}/{image_filename})
 Caption: {caption}
 
 ### Data Table

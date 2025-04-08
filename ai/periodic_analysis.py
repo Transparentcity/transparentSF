@@ -286,8 +286,8 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
         date_field_name = period_type
 
     filter_conditions = [
-        {'field': date_field_name, 'operator': '<=', 'value': recent_period['end']},
-        {'field': date_field_name, 'operator': '>=', 'value': comparison_period['start']},
+        {'field': date_field_name, 'operator': '<=', 'value': recent_period['end'].isoformat()},
+        {'field': date_field_name, 'operator': '>=', 'value': comparison_period['start'].isoformat()},
     ]
     # Add filter conditions to log
     log_file.write(f"Filter conditions:\n")

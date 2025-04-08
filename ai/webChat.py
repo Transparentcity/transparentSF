@@ -365,13 +365,39 @@ def transfer_to_analyst_agent(context_variables, *args, **kwargs):
     """
     Transfers the conversation to the Anomaly Finder Agent.
     """
-    return analyst_agent
+    logger = logging.getLogger(__name__)
+    logger.info(f"Transferring to Analyst Agent. Context variables: {list(context_variables.keys())}")
+    
+    # Create a new instance of the analyst agent with the current context variables
+    new_analyst_agent = Agent(
+        model=AGENT_MODEL,
+        name="Analyst",
+        instructions=analyst_agent.instructions,
+        functions=analyst_agent.functions,
+        context_variables=context_variables,
+        debug=True,
+    )
+    
+    return new_analyst_agent
 
 def transfer_to_researcher_agent(context_variables, *args, **kwargs):
     """
     Transfers the conversation to the Data Agent.
     """
-    return Researcher_agent
+    logger = logging.getLogger(__name__)
+    logger.info(f"Transferring to Researcher Agent. Context variables: {list(context_variables.keys())}")
+    
+    # Create a new instance of the researcher agent with the current context variables
+    new_researcher_agent = Agent(
+        model=AGENT_MODEL,
+        name="Researcher",
+        instructions=Researcher_agent.instructions,
+        functions=Researcher_agent.functions,
+        context_variables=context_variables,
+        debug=True
+    )
+    
+    return new_researcher_agent
 
 def get_dashboard_metric(context_variables, district_number=0, metric_id=None):
     """
@@ -510,8 +536,8 @@ def get_dashboard_metric(context_variables, district_number=0, metric_id=None):
             # Only proceed if we have a metric ID number
             if metric_id_number:
                 # Paths for analysis files using the ID number
-                monthly_analysis_path = monthly_dir / f"{district_number}/{metric_id_number}_month_analysis.md"
-                annual_analysis_path = annual_dir / f"{district_number}/{metric_id_number}_year_analysis.md"
+                monthly_analysis_path = monthly_dir / f"{district_number}/{metric_id_number}.md"
+                annual_analysis_path = annual_dir / f"{district_number}/{metric_id_number}.md"
                 
                 logger.info(f"Looking for monthly analysis at: {monthly_analysis_path}")
                 logger.info(f"Looking for annual analysis at: {annual_analysis_path}")
@@ -572,6 +598,7 @@ def get_dashboard_metric(context_variables, district_number=0, metric_id=None):
         return {"error": f"Error retrieving dashboard metric: {str(e)}"}
 
 # Define the anomaly finder agent
+
 analyst_agent = Agent(
     model=AGENT_MODEL,
     name="Analyst",
@@ -583,29 +610,7 @@ analyst_agent = Agent(
     - Use `set_dataset(context_variables, endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
         - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')  It should come from a query_docs() call.
         - query: The complete SoQL query string using standard SQL syntax (e.g., 'select field1, field2 where condition')
-        Example usage:
-        set_dataset(context_variables, endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
-    - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
-    - Use `get_dashboard_metric(context_variables, district_number, metric_id)` to retrieve dashboard metric data:
-        - district_number: Integer from 0 (citywide) to 11 (specific district)
-        - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary. Sometimes this will be passed in as a metric_id number, for that pass it as an integer..
-    """,
-    # functions=[get_notes, query_docs, transfer_to_researcher_agent],
-    functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, get_dashboard_metric, transfer_to_researcher_agent],
-    context_variables=context_variables,
-    debug=True,
-)
-analyst_agent = Agent(
-    model=AGENT_MODEL,
-    name="Analyst",
-     instructions="""
-    **Function Usage:**
-
-    - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in. always pass the context_variables and the collection name is allways "SFPublicData"
-    - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
-    - Use `set_dataset(context_variables, endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
-        - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')  It should come from a query_docs() call.
-        - query: The complete SoQL query string using standard SQL syntax (e.g., 'select field1, field2 where condition')
+        - Remember to pass the fieldname into the query and not the column name.  
         Example usage:
         set_dataset(context_variables, endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
     - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
@@ -930,12 +935,24 @@ Researcher_agent = Agent(
         - metric_id: Optional. The specific metric ID to retrieve (e.g., '4' or '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary.
         Example usage:
         get_dashboard_metric(0, 1) # Get citywide police incident data
-
-    If you are ever asked to "Evaluate the recent monthly and annual trends" for the a dashboard metric, always use get_dashboard_metric() to get the data you need.
-    Structure your answer by first restating the current year to date trends, and then ground them first in historical (annaul) context, Ideally, show an annual chart first, then tell the story of the more recent months and any changes in categories or recent anomalies that might help illuminate current trends.  Always ground recent changes in long term trends. 
+    - Use `transfer_to_analyst_agent()` to transfer the conversation to the analyst agent only if asked. 
     
-    Never add or change any markdown links or HTML URLS in your response.  If there are relative Links or URLS beginning with "/", just leave them as is. 
+    If you are ever asked to "Evaluate the recent monthly and annual trends" for the a dashboard metric, always use get_dashboard_metric() to get the data you need.
+    
+    Review the data with an eye for explaining recent changes. 
+    Are there any recent anomalies that might help illuminate current trends?
+    Is the change happening in a paricular are of the city?
 
+    Summarize this down to a punchy markdown story with with supporting charts or tables.  
+    Do use good markdown text to format and tell the story. 
+    Do not re-state the data, but summarize it in a easy to understad way.
+    Ground the story in historical (annaul) context. 
+    
+    Always ground recent changes in long term trends. 
+    Don't draw conclusions, just report on the data.
+    Don't speculate as to causes or "WHY" something is happening.  Just report on WHAT is happening. 
+    Never add or change any markdown links or HTML URLS that you get from your tool calls in your response.  If there are relative Links or URLS beginning with "/", just leave them as is. 
+    
     When displaying data:
     1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  To better find charts add the term charts to your query.
     2. Return them in the same markdown format you find in the docs, with no changes. DO NOT ADD or CHANGE THE URLS
@@ -945,7 +962,7 @@ Researcher_agent = Agent(
     6. Don't speculate as to causes or "WHY" something is happening.  Just report on WHAT is happening. 
     
     """,
-    functions=[get_notes, get_dashboard_metric],
+    functions=[get_notes, get_dashboard_metric, transfer_to_analyst_agent],
     context_variables=context_variables,
     debug=True
 )
@@ -1350,8 +1367,24 @@ Arguments: {json.dumps(arguments_json, indent=2)}
 Function: {current_function_name}
 Result: {str(result)[:500]}{'...' if len(str(result)) > 500 else ''}
 """)
+                                # Check if this is an agent transfer function
+                                if current_function_name in ['transfer_to_analyst_agent', 'transfer_to_researcher_agent']:
+                                    # Update the current agent
+                                    session_data['agent'] = result
+                                    logger.info(f"""
+=== Agent Transfer ===
+New Agent: {result.name}
+""")
+                                    # Add a system message about the transfer
+                                    transfer_message = {
+                                        "type": "content",
+                                        "sender": "System",
+                                        "content": f"Transferring to {result.name} Agent..."
+                                    }
+                                    yield json.dumps(transfer_message) + "\n"
+                                    
                                 # If the result has content (like from format_table), send it as a message
-                                if isinstance(result, dict) and "content" in result:
+                                elif isinstance(result, dict) and "content" in result:
                                     message = {
                                         "type": "content",
                                         "sender": assistant_message["sender"],

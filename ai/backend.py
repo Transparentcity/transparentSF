@@ -23,6 +23,8 @@ from pathlib import Path
 from openai import OpenAI
 from qdrant_client import QdrantClient
 import time
+from tools.enhance_dashboard_queries import enhance_dashboard_queries  # Add this import
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -862,6 +864,63 @@ async def generate_ytd_metrics():
 async def run_all_metrics(period_type: str = 'year'):
     """Run analysis for all available endpoints."""
     logger.info(f"Run all metrics called with period_type: {period_type}")
+    
+    # Handle weekly analysis separately
+    if period_type == 'week':
+        try:
+            logger.info("Running weekly analysis for all default metrics")
+            
+            # Import necessary functions
+            from generate_weekly_analysis import run_weekly_analysis, generate_weekly_newsletter
+            
+            # Run the weekly analysis
+            results = run_weekly_analysis(process_districts=True)
+            
+            # Generate a newsletter
+            newsletter_path = generate_weekly_newsletter(results)
+            
+            if results:
+                successful = len(results)
+                failed = 0
+                
+                # Get the metric IDs for the successful analyses
+                metric_ids = [result.get('metric_id', 'unknown') for result in results]
+                
+                return JSONResponse({
+                    "status": "success",
+                    "message": f"Weekly analysis completed successfully for {successful} metrics.",
+                    "results": {
+                        "total": successful,
+                        "successful": successful,
+                        "failed": 0,
+                        "metrics": metric_ids,
+                        "newsletter_path": newsletter_path
+                    }
+                })
+            else:
+                return JSONResponse({
+                    "status": "error",
+                    "message": "Weekly analysis returned no results.",
+                    "results": {
+                        "total": 0,
+                        "successful": 0,
+                        "failed": 0
+                    }
+                })
+        except ImportError as e:
+            logger.error(f"Could not import weekly analysis functions: {str(e)}")
+            return JSONResponse({
+                "status": "error",
+                "message": f"Missing required module for weekly analysis: {str(e)}"
+            }, status_code=500)
+        except Exception as e:
+            logger.exception(f"Error running weekly analysis: {str(e)}")
+            return JSONResponse({
+                "status": "error",
+                "message": f"Error running weekly analysis: {str(e)}"
+            }, status_code=500)
+    
+    # For other period types, use the run_all_metrics.py script
     try:
         # Run the run_all_metrics.py script
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1193,3 +1252,490 @@ async def delete_collection(collection_name: str):
             'status': 'error',
             'message': str(e)
         })
+
+
+@router.get("/metric-control")
+async def metric_control(request: Request):
+    """Serve the metric control interface."""
+    logger.debug("Metric control route called")
+    if templates is None:
+        logger.error("Templates not initialized in backend router")
+        raise RuntimeError("Templates not initialized")
+    
+    return templates.TemplateResponse("metric_control.html", {
+        "request": request
+    })
+
+
+@router.get("/get-endpoint-columns/{endpoint}")
+async def get_endpoint_columns(endpoint: str):
+    """Get available columns for an endpoint."""
+    try:
+        # Load the dataset file
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        dataset_file = os.path.join(script_dir, "data", "datasets", "fixed", f"{endpoint}.json")
+        
+        if not os.path.exists(dataset_file):
+            raise HTTPException(status_code=404, detail=f"Dataset file not found for endpoint: {endpoint}")
+        
+        with open(dataset_file, 'r') as f:
+            dataset_data = json.load(f)
+        
+        # Extract column names from the dataset
+        columns = [col["fieldName"] for col in dataset_data.get("columns", [])]
+        
+        return JSONResponse({
+            "status": "success",
+            "columns": columns
+        })
+    except Exception as e:
+        logger.exception(f"Error getting columns for endpoint '{endpoint}': {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
+
+
+@router.get("/get-selected-columns/{endpoint}")
+async def get_selected_columns(endpoint: str):
+    """Get currently selected columns for an endpoint."""
+    try:
+        # Load the enhanced queries file
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        enhanced_queries_file = os.path.join(script_dir, "data", "dashboard", "dashboard_queries_enhanced.json")
+        
+        if not os.path.exists(enhanced_queries_file):
+            raise HTTPException(status_code=404, detail="Enhanced queries file not found")
+        
+        with open(enhanced_queries_file, 'r') as f:
+            enhanced_queries = json.load(f)
+        
+        # Find the metric with this endpoint
+        selected_columns = []
+        for category in enhanced_queries.values():
+            for subcategory in category.values():
+                for metric in subcategory.get("queries", {}).values():
+                    if metric.get("endpoint") == endpoint:
+                        # Get selected columns from the metric's category_fields
+                        category_fields = metric.get("category_fields", [])
+                        selected_columns = [field["fieldName"] for field in category_fields]
+                        break
+        
+        return JSONResponse({
+            "status": "success",
+            "columns": selected_columns
+        })
+    except Exception as e:
+        logger.exception(f"Error getting selected columns for endpoint '{endpoint}': {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
+
+
+@router.post("/update-selected-columns")
+async def update_selected_columns(request: Request):
+    """Update the selected columns for an endpoint."""
+    try:
+        # Get request data
+        data = await request.json()
+        endpoint = data.get("endpoint")
+        columns = data.get("columns", [])
+        metric_id = data.get("metric_id")  # Add metric_id to identify specific metric
+        
+        if not endpoint or not metric_id:
+            raise HTTPException(status_code=400, detail="Both endpoint and metric_id are required")
+        
+        # Load the enhanced queries file
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        enhanced_queries_file = os.path.join(script_dir, "data", "dashboard", "dashboard_queries_enhanced.json")
+        
+        if not os.path.exists(enhanced_queries_file):
+            raise HTTPException(status_code=404, detail="Enhanced queries file not found")
+        
+        with open(enhanced_queries_file, 'r') as f:
+            enhanced_queries = json.load(f)
+        
+        # Find and update the metric with this endpoint and metric_id
+        metric_updated = False
+        metric_found = False
+        
+        # Log the endpoint and metric_id we're looking for
+        logger.info(f"Looking for endpoint: {endpoint}, metric_id: {metric_id}")
+        
+        for category in enhanced_queries.values():
+            for subcategory in category.values():
+                for metric_name, metric in subcategory.get("queries", {}).items():
+                    metric_endpoint = metric.get("endpoint")
+                    current_metric_id = metric.get("id")
+                    logger.debug(f"Checking metric: {metric_name} with endpoint: {metric_endpoint}, id: {current_metric_id}")
+                    
+                    if metric_endpoint == endpoint and current_metric_id == metric_id:
+                        metric_found = True
+                        # Update the category_fields with selected columns
+                        metric["category_fields"] = [
+                            {
+                                "name": col,
+                                "fieldName": col,
+                                "description": f"Selected column for enhanced dashboard queries"
+                            }
+                            for col in columns
+                        ]
+                        metric_updated = True
+                        logger.info(f"Successfully updated category_fields for metric: {metric_name}")
+                        break
+        
+        if not metric_found:
+            logger.error(f"Metric with endpoint '{endpoint}' and id '{metric_id}' not found")
+            raise HTTPException(status_code=404, detail=f"No metric found with endpoint: {endpoint} and id: {metric_id}")
+        
+        if not metric_updated:
+            logger.error(f"Found metric but failed to update category_fields")
+            raise HTTPException(status_code=500, detail=f"Failed to update category_fields for endpoint: {endpoint} and id: {metric_id}")
+        
+        # Save the updated enhanced queries
+        with open(enhanced_queries_file, 'w') as f:
+            json.dump(enhanced_queries, f, indent=4)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": f"Updated category_fields for metric {metric_id} with endpoint {endpoint}"
+        })
+    except Exception as e:
+        logger.exception(f"Error updating category_fields: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
+
+
+@router.get("/run_specific_metric")
+async def run_specific_metric(metric_id: int, district_id: int = 0, period_type: str = 'year'):
+    """Run analysis for a specific metric."""
+    logger.info(f"Run specific metric called for metric_id: {metric_id}, district_id: {district_id}, period_type: {period_type}")
+    
+    # Validate period_type
+    period_folder_map = {
+        'year': 'annual',
+        'month': 'monthly',
+        'day': 'daily',
+        'ytd': 'ytd',
+        'week': 'weekly'
+    }
+    
+    if period_type not in period_folder_map:
+        logger.error(f"Invalid period_type: {period_type}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Invalid period_type: {period_type}. Must be one of: {', '.join(period_folder_map.keys())}"
+        }, status_code=400)
+    
+    try:
+        # Load the metric ID mapping to get the endpoint
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        mapping_file = os.path.join(script_dir, "data", "dashboard", "metric_id_mapping.json")
+        enhanced_queries_file = os.path.join(script_dir, "data", "dashboard", "dashboard_queries_enhanced.json")
+        
+        if not os.path.exists(mapping_file):
+            logger.error(f"Metric ID mapping file not found: {mapping_file}")
+            return JSONResponse({
+                "status": "error",
+                "message": "Metric ID mapping file not found"
+            }, status_code=404)
+        
+        if not os.path.exists(enhanced_queries_file):
+            logger.error(f"Enhanced queries file not found: {enhanced_queries_file}")
+            return JSONResponse({
+                "status": "error",
+                "message": "Enhanced queries file not found"
+            }, status_code=404)
+        
+        # Load both files
+        with open(mapping_file, 'r') as f:
+            mapping = json.load(f)
+            
+        with open(enhanced_queries_file, 'r') as f:
+            enhanced_queries = json.load(f)
+        
+        # Check if the metric ID exists in the mapping
+        metric_id_str = str(metric_id)
+        if metric_id_str not in mapping:
+            logger.error(f"Metric ID {metric_id} not found in mapping")
+            return JSONResponse({
+                "status": "error",
+                "message": f"Metric ID {metric_id} not found"
+            }, status_code=404)
+        
+        # Get the metric details from mapping
+        metric_info = mapping[metric_id_str]
+        metric_name = metric_info.get("name", "Unknown")
+        category = metric_info.get("category", "Uncategorized")
+        
+        # Find the metric in enhanced queries
+        from generate_metric_analysis import find_metric_in_queries
+        enhanced_metric_info = find_metric_in_queries(enhanced_queries, metric_id)
+        
+        if not enhanced_metric_info:
+            logger.error(f"Metric ID {metric_id} not found in enhanced queries")
+            return JSONResponse({
+                "status": "error",
+                "message": f"Metric ID {metric_id} not found in enhanced queries"
+            }, status_code=404)
+        
+        # Merge the metric info from mapping with the enhanced query info
+        metric_info.update(enhanced_metric_info)
+        
+        # Create logs directory if it doesn't exist
+        logs_dir = os.path.join(script_dir, 'logs')
+        os.makedirs(logs_dir, exist_ok=True)
+        
+        # Create period-specific output folder
+        period_folder = period_folder_map[period_type]
+        period_output_dir = os.path.join(output_dir, period_folder, str(district_id))
+        os.makedirs(period_output_dir, exist_ok=True)
+        
+        # Determine which script to run based on period_type
+        if period_type == 'ytd':
+            # For YTD metrics, use generate_dashboard_metrics.py
+            logger.info(f"Running YTD dashboard metrics generation for metric ID {metric_id}")
+            
+            # Check if we can import the specific metric generation function
+            try:
+                from generate_dashboard_metrics import generate_single_metric
+                
+                # Check if the function exists and call it
+                if callable(generate_single_metric):
+                    result = generate_single_metric(metric_id=metric_id, district_id=district_id)
+                    logger.info(f"YTD metrics generation completed for metric ID {metric_id}")
+                else:
+                    # Fall back to the main function if generate_single_metric isn't available
+                    from generate_dashboard_metrics import main as generate_all_metrics
+                    generate_all_metrics()
+                    logger.info(f"All YTD metrics generated (including metric ID {metric_id})")
+            except (ImportError, AttributeError) as e:
+                # If there's no generate_single_metric function, run the main function
+                logger.warning(f"Could not import specific metric generation function: {str(e)}")
+                from generate_dashboard_metrics import main as generate_all_metrics
+                generate_all_metrics()
+                logger.info(f"All YTD metrics generated (including metric ID {metric_id})")
+        
+        elif period_type == 'week':
+            # For weekly analysis, use generate_weekly_analysis.py
+            logger.info(f"Running weekly analysis for metric ID {metric_id}")
+            
+            try:
+                from generate_weekly_analysis import run_weekly_analysis, generate_weekly_newsletter
+                
+                # Run the analysis for the specific metric
+                results = run_weekly_analysis(
+                    metrics_list=[str(metric_id)],
+                    process_districts=(district_id == 0)  # Only process districts if district_id is 0 (citywide)
+                )
+                
+                # Generate a newsletter
+                newsletter_path = generate_weekly_newsletter(results)
+                
+                logger.info(f"Weekly analysis completed for metric ID {metric_id}")
+                
+            except ImportError as e:
+                logger.error(f"Could not import generate_weekly_analysis module: {str(e)}")
+                return JSONResponse({
+                    "status": "error",
+                    "message": f"Missing required module: {str(e)}"
+                }, status_code=500)
+            except Exception as e:
+                logger.error(f"Error in generate_weekly_analysis: {str(e)}")
+                return JSONResponse({
+                    "status": "error",
+                    "message": f"Error generating weekly analysis: {str(e)}"
+                }, status_code=500)
+                
+        else:
+            # For monthly/annual analysis, use generate_metric_analysis.py
+            logger.info(f"Running {period_type} analysis for metric ID {metric_id}")
+            
+            try:
+                from generate_metric_analysis import process_metric_analysis
+                
+                # Run the analysis for the specific metric
+                result = process_metric_analysis(
+                    metric_info=metric_info,
+                    period_type=period_type,
+                    process_districts=True  # Enable district processing
+                )
+                logger.info(f"{period_type.capitalize()} analysis completed for metric ID {metric_id}")
+                
+            except ImportError as e:
+                logger.error(f"Could not import generate_metric_analysis module: {str(e)}")
+                return JSONResponse({
+                    "status": "error",
+                    "message": f"Missing required module: {str(e)}"
+                }, status_code=500)
+            except Exception as e:
+                logger.error(f"Error in generate_metric_analysis: {str(e)}")
+                return JSONResponse({
+                    "status": "error",
+                    "message": f"Error generating metric analysis: {str(e)}"
+                }, status_code=500)
+        
+        # Check if expected output files exist
+        expected_file = os.path.join(output_dir, 'dashboard', str(district_id), f"{metric_id}.json") if period_type == 'ytd' else os.path.join(period_output_dir, f"{metric_id}.json")
+        
+        if os.path.exists(expected_file):
+            logger.info(f"Output file confirmed at: {expected_file}")
+        else:
+            logger.warning(f"Expected output file not found at: {expected_file}")
+        
+        return JSONResponse({
+            "status": "success",
+            "message": f"{period_type.capitalize()} analysis for metric ID {metric_id} completed successfully",
+            "details": {
+                "metric_id": metric_id,
+                "district_id": district_id,
+                "period_type": period_type,
+                "metric_name": metric_name,
+                "category": category,
+                "expected_file": expected_file
+            }
+        })
+    except Exception as e:
+        logger.exception(f"Error running specific metric analysis: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
+
+
+@router.get("/get_output_files")
+async def get_output_files(metric_id: str, district_id: str = '0', period_type: str = 'year'):
+    """
+    Get output files for a specific metric based on metric ID, district ID, and period type.
+    Returns files organized by folder type (dashboard, monthly, annual, ytd, weekly).
+    """
+    try:
+        logger.info(f"Fetching output files for metric ID: {metric_id}, district: {district_id}, period: {period_type}")
+        
+        # Define the directory structure
+        output_folder = os.path.join(script_dir, 'output')
+        district_dir = f"district_{district_id}"
+        
+        # Dictionary to store files by category
+        result = {
+            "dashboard": [],
+            "monthly": [],
+            "annual": [],
+            "ytd": [],
+            "weekly": []
+        }
+        
+        # Check both directory patterns for each output type
+        
+        # Check dashboard folder - both directory structures
+        dashboard_dir_new = os.path.join(output_folder, "dashboard", district_dir, metric_id)  # district_0/6/
+        dashboard_dir_old = os.path.join(output_folder, "dashboard", district_id)  # 0/
+        dashboard_file_old = os.path.join(dashboard_dir_old, f"{metric_id}.json")  # 0/6.json
+        
+        if os.path.exists(dashboard_dir_new):
+            result["dashboard"] = [f for f in os.listdir(dashboard_dir_new) if os.path.isfile(os.path.join(dashboard_dir_new, f))]
+            logger.debug(f"Found {len(result['dashboard'])} files in dashboard/district_{district_id}/{metric_id} folder")
+        elif os.path.exists(dashboard_dir_old):
+            # Check if the specific metric file exists in the old structure
+            if os.path.exists(dashboard_file_old):
+                result["dashboard"] = [f"{metric_id}.json"]
+                logger.debug(f"Found metric file at dashboard/{district_id}/{metric_id}.json")
+        
+        # Check monthly folder - both directory structures
+        monthly_dir_new = os.path.join(output_folder, "monthly", district_dir, metric_id)  # district_0/6/
+        monthly_dir_old = os.path.join(output_folder, "monthly", district_id)  # 0/
+        monthly_file_old = os.path.join(monthly_dir_old, f"{metric_id}.json")  # 0/6.json
+        
+        if os.path.exists(monthly_dir_new):
+            result["monthly"] = [f for f in os.listdir(monthly_dir_new) if os.path.isfile(os.path.join(monthly_dir_new, f))]
+            logger.debug(f"Found {len(result['monthly'])} files in monthly/district_{district_id}/{metric_id} folder")
+        elif os.path.exists(monthly_dir_old):
+            # Check if the specific metric file exists in the old structure
+            if os.path.exists(monthly_file_old):
+                result["monthly"] = [f"{metric_id}.json"]
+                logger.debug(f"Found metric file at monthly/{district_id}/{metric_id}.json")
+        
+        # Check annual folder - both directory structures
+        annual_dir_new = os.path.join(output_folder, "annual", district_dir, metric_id)  # district_0/6/
+        annual_dir_old = os.path.join(output_folder, "annual", district_id)  # 0/
+        annual_file_old = os.path.join(annual_dir_old, f"{metric_id}.json")  # 0/6.json
+        
+        if os.path.exists(annual_dir_new):
+            result["annual"] = [f for f in os.listdir(annual_dir_new) if os.path.isfile(os.path.join(annual_dir_new, f))]
+            logger.debug(f"Found {len(result['annual'])} files in annual/district_{district_id}/{metric_id} folder")
+        elif os.path.exists(annual_dir_old):
+            # Check if the specific metric file exists in the old structure
+            if os.path.exists(annual_file_old):
+                result["annual"] = [f"{metric_id}.json"]
+                logger.debug(f"Found metric file at annual/{district_id}/{metric_id}.json")
+        
+        # Check ytd folder - both directory structures
+        ytd_dir_new = os.path.join(output_folder, "ytd", district_dir, metric_id)  # district_0/6/
+        ytd_dir_old = os.path.join(output_folder, "ytd", district_id)  # 0/
+        ytd_file_old = os.path.join(ytd_dir_old, f"{metric_id}.json")  # 0/6.json
+        
+        if os.path.exists(ytd_dir_new):
+            result["ytd"] = [f for f in os.listdir(ytd_dir_new) if os.path.isfile(os.path.join(ytd_dir_new, f))]
+            logger.debug(f"Found {len(result['ytd'])} files in ytd/district_{district_id}/{metric_id} folder")
+        elif os.path.exists(ytd_dir_old):
+            # Check if the specific metric file exists in the old structure
+            if os.path.exists(ytd_file_old):
+                result["ytd"] = [f"{metric_id}.json"]
+                logger.debug(f"Found metric file at ytd/{district_id}/{metric_id}.json")
+        
+        # Check weekly folder
+        weekly_dir = os.path.join(output_folder, "weekly")
+        
+        # First try to find files with the metric ID in their filename
+        if os.path.exists(weekly_dir):
+            weekly_files = []
+            for file in os.listdir(weekly_dir):
+                # Look for files that start with the metric ID and have a date component
+                # Format: metric_id_YYYY-MM-DD.md
+                if file.startswith(f"{metric_id}_") and file.endswith(".md"):
+                    weekly_files.append(file)
+            result["weekly"] = weekly_files
+            logger.debug(f"Found {len(result['weekly'])} files in weekly folder matching metric ID {metric_id}")
+        
+        # Log the total number of files found
+        total_files = sum(len(files) for files in result.values())
+        logger.info(f"Found a total of {total_files} output files for metric {metric_id}")
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching output files: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to fetch output files: {str(e)}"}
+        )
+
+
+@router.post("/enhance_queries")
+async def enhance_queries():
+    """Enhance dashboard queries with IDs and category fields."""
+    try:
+        # Define file paths
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        queries_file = os.path.join(script_dir, "data", "dashboard", "dashboard_queries.json")
+        datasets_dir = os.path.join(script_dir, "..", "ai", "data", "datasets", "fixed")  # Updated path to include 'fixed'
+        output_file = os.path.join(script_dir, "data", "dashboard", "dashboard_queries_enhanced.json")
+        
+        # Ensure the datasets directory exists
+        os.makedirs(datasets_dir, exist_ok=True)
+        
+        # Run the enhancement process
+        enhance_dashboard_queries(queries_file, datasets_dir, output_file)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Dashboard queries have been enhanced successfully"
+        })
+    except Exception as e:
+        logger.exception(f"Error enhancing dashboard queries: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Error enhancing dashboard queries: {str(e)}"
+        }, status_code=500)
