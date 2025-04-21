@@ -102,6 +102,7 @@ def init_database():
                 y_axis_label TEXT,
                 period_type TEXT,
                 chart_title TEXT,
+                metadata JSONB,
                 filter_conditions JSONB,
                 district INTEGER DEFAULT 0,
                 group_field TEXT,

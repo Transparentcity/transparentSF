@@ -7,6 +7,7 @@ import os
 import json
 import psycopg2
 import psycopg2.extras
+from psycopg2.extras import Json
 import logging
 import pandas as pd
 from typing import Dict, List, Any, Optional, Union, Tuple
@@ -114,7 +115,7 @@ def store_time_series_in_db(connection, chart_data, metadata):
             for point in chart_data:
                 cursor.execute("""
                     INSERT INTO time_series_data (
-                        chart_id, time_period, value, group_value
+                        chart_id, time_period, numeric_value, group_value
                     ) VALUES (%s, %s, %s, %s)
                 """, (
                     chart_id,
