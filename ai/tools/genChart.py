@@ -19,11 +19,11 @@ logging.basicConfig(
 def store_chart_data(
     chart_data,
     metadata,
-    db_host='localhost',
-    db_port=5432, 
-    db_name='transparentsf',
-    db_user='postgres',
-    db_password='postgres'
+    db_host=None,
+    db_port=None, 
+    db_name=None,
+    db_user=None,
+    db_password=None
 ) -> Dict[str, Any]:
     """
     Main function to store chart data in the database.
@@ -31,11 +31,11 @@ def store_chart_data(
     Args:
         chart_data: List of data points for the chart
         metadata: Dictionary with metadata about the chart
-        db_host: Database host
-        db_port: Database port
-        db_name: Database name
-        db_user: Database user
-        db_password: Database password
+        db_host: Optional database host (defaults to env var)
+        db_port: Optional database port (defaults to env var)
+        db_name: Optional database name (defaults to env var)
+        db_user: Optional database user (defaults to env var)
+        db_password: Optional database password (defaults to env var)
         
     Returns:
         dict: Result with status and message
