@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Evals Interface</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            max-width: 100%;
+        }
+        
+        h1, h2, h3 {
+            color: #222;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .eval-form {
+            background: #f8f8f8;
+            padding: 20px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        select, input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .button-container {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 10px 15px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .predefined-queries {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .predefined-query {
+            background: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            transition: all 0.2s;
+        }
+        
+        .predefined-query:hover {
+            background: #e0e0e0;
+            border-color: #bbb;
+        }
+        
+        .results-container {
+            background: #f8f8f8;
+            padding: 20px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin-top: 20px;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #007BFF;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background-color: #ffeaea;
+            border: 1px solid #ffb0b0;
+            color: #d8000c;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        
+        .success {
+            background-color: #e7f7e7;
+            border: 1px solid #a3d9a3;
+            color: #006400;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        
+        .logs-list {
+            margin-top: 20px;
+        }
+        
+        .log-item {
+            background: white;
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .log-item:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .log-date {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .log-content {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .log-item-active {
+            background-color: #e6f3ff;
+            border-color: #a9d2ff;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 15px;
+        }
+        
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            background-color: #f0f0f0;
+            margin-right: 5px;
+            border-radius: 4px 4px 0 0;
+            border: 1px solid #ddd;
+            border-bottom: none;
+        }
+        
+        .tab-active {
+            background-color: white;
+            border-bottom: 1px solid white;
+            margin-bottom: -1px;
+            font-weight: 500;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content-active {
+            display: block;
+        }
+        
+        .json-formatter {
+            margin-top: 10px;
+            position: relative;
+            font-family: monospace;
+        }
+        
+        .json-formatter pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 500px;
+            white-space: pre-wrap;
+            font-size: 13px;
+        }
+        
+        .tool-call {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f8f8f8;
+        }
+        
+        .tool-call-header {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .tool-call-name {
+            color: #0066cc;
+        }
+        
+        .tool-call-timestamp {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .tool-call-arguments {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+        
+        .tool-call-response {
+            background-color: #e6f7ff;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Agent Evals Interface</h1>
+        
+        <div class="eval-form">
+            <h2>Run Eval</h2>
+            <div class="input-group">
+                <label for="query">Test Query:</label>
+                <textarea id="query" placeholder="Enter your query to test the agent..."></textarea>
+            </div>
+            
+            <div class="input-group">
+                <label>Predefined Test Queries:</label>
+                <div class="predefined-queries">
+                    <div class="predefined-query">Please search for a dataset about Police Misconduct</div>
+                    <div class="predefined-query">What are the names of the last 5 Retail businesses locations registered in SF?</div>
+                    <div class="predefined-query">Show me information about property assessments in SF</div>
+                    <div class="predefined-query">Hi, who is the mayor of SF?</div>
+                    <div class="predefined-query">What is happening with the weather in SF?</div>
+                </div>
+            </div>
+            
+            <div class="button-container">
+                <button id="run-eval-btn">Run Eval</button>
+                <button id="clear-results-btn">Clear Results</button>
+            </div>
+        </div>
+        
+        <div id="results-section" class="results-container" style="display: none;">
+            <h2>Current Eval Results</h2>
+            
+            <div class="tabs">
+                <div class="tab tab-active" data-tab="summary">Summary</div>
+                <div class="tab" data-tab="raw-log">Raw Log</div>
+            </div>
+            
+            <div id="summary-tab" class="tab-content tab-content-active">
+                <div id="eval-status"></div>
+                <div id="tool-calls-summary"></div>
+            </div>
+            
+            <div id="raw-log-tab" class="tab-content">
+                <div id="raw-log-content" class="log-content"></div>
+            </div>
+        </div>
+        
+        <div id="past-evals-section">
+            <h2>Past Evals</h2>
+            <button id="refresh-logs-btn">Refresh Logs</button>
+            <div id="logs-list" class="logs-list">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <span>Loading logs...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get DOM elements
+            const queryInput = document.getElementById('query');
+            const runEvalBtn = document.getElementById('run-eval-btn');
+            const clearResultsBtn = document.getElementById('clear-results-btn');
+            const refreshLogsBtn = document.getElementById('refresh-logs-btn');
+            const resultsSection = document.getElementById('results-section');
+            const evalStatus = document.getElementById('eval-status');
+            const toolCallsSummary = document.getElementById('tool-calls-summary');
+            const rawLogContent = document.getElementById('raw-log-content');
+            const logsList = document.getElementById('logs-list');
+            const tabs = document.querySelectorAll('.tab');
+            
+            // Initialize evals
+            loadEvalLogs();
+            
+            // Event listeners
+            runEvalBtn.addEventListener('click', runEval);
+            clearResultsBtn.addEventListener('click', clearResults);
+            refreshLogsBtn.addEventListener('click', loadEvalLogs);
+            
+            // Tab switching
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Remove active class from all tabs
+                    tabs.forEach(t => t.classList.remove('tab-active'));
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('tab-content-active');
+                    });
+                    
+                    // Add active class to clicked tab
+                    this.classList.add('tab-active');
+                    const tabContentId = this.getAttribute('data-tab') + '-tab';
+                    document.getElementById(tabContentId).classList.add('tab-content-active');
+                });
+            });
+            
+            // Event listeners for predefined queries
+            document.querySelectorAll('.predefined-query').forEach(query => {
+                query.addEventListener('click', function() {
+                    queryInput.value = this.textContent;
+                });
+            });
+            
+            async function runEval() {
+                const query = queryInput.value.trim();
+                if (!query) {
+                    alert('Please enter a query');
+                    return;
+                }
+                
+                // Disable button and show loading
+                runEvalBtn.disabled = true;
+                runEvalBtn.textContent = 'Running...';
+                resultsSection.style.display = 'block';
+                evalStatus.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <span>Running eval for: "${query}"</span>
+                    </div>
+                `;
+                toolCallsSummary.innerHTML = '';
+                rawLogContent.innerHTML = '';
+                
+                try {
+                    const response = await fetch(`/backend/run-evals?query=${encodeURIComponent(query)}`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        evalStatus.innerHTML = `
+                            <div class="success">
+                                <strong>Success!</strong> ${data.message}
+                            </div>
+                        `;
+                        
+                        // Process and format the log content
+                        processLogContent(data.log_content);
+                        
+                        // Show raw log
+                        rawLogContent.textContent = data.log_content;
+                        
+                        // Refresh logs list to include the new log
+                        loadEvalLogs();
+                    } else {
+                        evalStatus.innerHTML = `
+                            <div class="error">
+                                <strong>Error:</strong> ${data.message}
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    evalStatus.innerHTML = `
+                        <div class="error">
+                            <strong>Error:</strong> ${error.message}
+                        </div>
+                    `;
+                } finally {
+                    // Re-enable button
+                    runEvalBtn.disabled = false;
+                    runEvalBtn.textContent = 'Run Eval';
+                }
+            }
+            
+            function clearResults() {
+                resultsSection.style.display = 'none';
+                evalStatus.innerHTML = '';
+                toolCallsSummary.innerHTML = '';
+                rawLogContent.innerHTML = '';
+            }
+            
+            async function loadEvalLogs() {
+                try {
+                    logsList.innerHTML = `
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <span>Loading logs...</span>
+                        </div>
+                    `;
+                    
+                    const response = await fetch('/backend/list-eval-logs');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        if (data.files.length === 0) {
+                            logsList.innerHTML = '<p>No eval logs found.</p>';
+                            return;
+                        }
+                        
+                        let logsHtml = '';
+                        data.files.forEach(file => {
+                            const date = new Date(file.modified);
+                            const formattedDate = date.toLocaleString();
+                            
+                            logsHtml += `
+                                <div class="log-item" data-filename="${file.name}">
+                                    <span>${file.name}</span>
+                                    <span class="log-date">${formattedDate}</span>
+                                </div>
+                            `;
+                        });
+                        
+                        logsList.innerHTML = logsHtml;
+                        
+                        // Add event listeners to log items
+                        document.querySelectorAll('.log-item').forEach(item => {
+                            item.addEventListener('click', async function() {
+                                const filename = this.getAttribute('data-filename');
+                                await loadLogContent(filename);
+                                
+                                // Mark this item as active
+                                document.querySelectorAll('.log-item').forEach(i => {
+                                    i.classList.remove('log-item-active');
+                                });
+                                this.classList.add('log-item-active');
+                            });
+                        });
+                    } else {
+                        logsList.innerHTML = `<div class="error">${data.message}</div>`;
+                    }
+                } catch (error) {
+                    logsList.innerHTML = `<div class="error">${error.message}</div>`;
+                }
+            }
+            
+            async function loadLogContent(filename) {
+                try {
+                    resultsSection.style.display = 'block';
+                    evalStatus.innerHTML = `
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <span>Loading log: ${filename}</span>
+                        </div>
+                    `;
+                    toolCallsSummary.innerHTML = '';
+                    rawLogContent.innerHTML = '';
+                    
+                    const response = await fetch(`/backend/eval-log/${filename}`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        evalStatus.innerHTML = `
+                            <div class="success">
+                                <strong>Log:</strong> ${filename}
+                            </div>
+                        `;
+                        
+                        // Process and format the log content
+                        processLogContent(data.content);
+                        
+                        // Show raw log
+                        rawLogContent.textContent = data.content;
+                        
+                        // Switch to the summary tab
+                        document.querySelector('.tab[data-tab="summary"]').click();
+                    } else {
+                        evalStatus.innerHTML = `
+                            <div class="error">
+                                <strong>Error:</strong> ${data.message}
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    evalStatus.innerHTML = `
+                        <div class="error">
+                            <strong>Error:</strong> ${error.message}
+                        </div>
+                    `;
+                }
+            }
+            
+            function processLogContent(content) {
+                try {
+                    // Split by double newlines as each log entry is separated by them
+                    const logEntries = content.split('\n\n').filter(entry => entry.trim());
+                    
+                    let html = '';
+                    let query = '';
+                    let toolCalls = [];
+                    let toolResponses = {};
+                    let assistantMessages = [];
+                    
+                    // First, parse all entries
+                    logEntries.forEach(entry => {
+                        try {
+                            const logEntry = JSON.parse(entry);
+                            
+                            if (logEntry.type === 'user_query') {
+                                query = logEntry.content;
+                            } else if (logEntry.type === 'tool_call') {
+                                toolCalls.push({
+                                    timestamp: logEntry.timestamp,
+                                    function: logEntry.function,
+                                    arguments: logEntry.arguments
+                                });
+                            } else if (logEntry.type === 'tool_response') {
+                                toolResponses[logEntry.function] = logEntry.content;
+                            } else if (logEntry.type === 'assistant_message') {
+                                assistantMessages.push({
+                                    timestamp: logEntry.timestamp,
+                                    content: logEntry.content
+                                });
+                            }
+                        } catch (e) {
+                            console.error('Error parsing log entry:', e, entry);
+                        }
+                    });
+                    
+                    // Create the summary HTML
+                    html += `<h3>Query</h3>
+                    <div class="tool-call">
+                        <div class="tool-call-arguments">${query}</div>
+                    </div>`;
+                    
+                    if (assistantMessages.length > 0) {
+                        html += `<h3>Assistant Messages (${assistantMessages.length})</h3>`;
+                        assistantMessages.forEach(msg => {
+                            const date = new Date(msg.timestamp);
+                            html += `
+                            <div class="tool-call">
+                                <div class="tool-call-header">
+                                    <span class="tool-call-name">Message</span>
+                                    <span class="tool-call-timestamp">${date.toLocaleString()}</span>
+                                </div>
+                                <div class="tool-call-arguments">${msg.content}</div>
+                            </div>`;
+                        });
+                    }
+                    
+                    if (toolCalls.length > 0) {
+                        html += `<h3>Tool Calls (${toolCalls.length})</h3>`;
+                        toolCalls.forEach(call => {
+                            const date = new Date(call.timestamp);
+                            let argText = '';
+                            try {
+                                const argObj = JSON.parse(call.arguments);
+                                argText = JSON.stringify(argObj, null, 2);
+                            } catch (e) {
+                                argText = call.arguments;
+                            }
+                            
+                            let responseHtml = '';
+                            if (toolResponses[call.function]) {
+                                responseHtml = `
+                                <div class="tool-call-response">
+                                    ${toolResponses[call.function]}
+                                </div>`;
+                            }
+                            
+                            html += `
+                            <div class="tool-call">
+                                <div class="tool-call-header">
+                                    <span class="tool-call-name">${call.function}</span>
+                                    <span class="tool-call-timestamp">${date.toLocaleString()}</span>
+                                </div>
+                                <div class="tool-call-arguments">${argText}</div>
+                                ${responseHtml}
+                            </div>`;
+                        });
+                    } else {
+                        html += `<h3>No Tool Calls</h3>
+                        <p>The agent did not make any tool calls during this conversation.</p>`;
+                    }
+                    
+                    toolCallsSummary.innerHTML = html;
+                    
+                } catch (error) {
+                    console.error('Error processing log content:', error);
+                    toolCallsSummary.innerHTML = `<div class="error">Error processing log: ${error.message}</div>`;
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

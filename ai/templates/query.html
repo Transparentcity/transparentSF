@@ -205,11 +205,83 @@
         .score-guide li {
             margin: 5px 0;
         }
+        /* PostgreSQL Query Styles */
+        .sql-editor {
+            width: 100%;
+            min-height: 150px;
+            padding: 10px;
+            font-family: monospace;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            margin-bottom: 15px;
+        }
+        .query-params {
+            margin-bottom: 15px;
+        }
+        .param-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .param-row input {
+            flex: 1;
+        }
+        .add-param-btn {
+            background-color: #28a745;
+            margin-bottom: 10px;
+        }
+        .add-param-btn:hover {
+            background-color: #218838;
+        }
+        .remove-param-btn {
+            background-color: #dc3545;
+            padding: 8px 12px;
+        }
+        .remove-param-btn:hover {
+            background-color: #c82333;
+        }
+        .query-history {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .history-item {
+            padding: 5px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+        .history-item:hover {
+            background-color: #e9ecef;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Query Tool</h1>
+
+        <!-- PostgreSQL Query Section -->
+        <div class="query-section">
+            <h2>PostgreSQL Query</h2>
+            <form id="postgresQueryForm">
+                <div class="form-group">
+                    <label for="sqlQuery">SQL Query:</label>
+                    <textarea id="sqlQuery" name="sqlQuery" class="sql-editor" placeholder="Enter your SQL query here..." required></textarea>
+                </div>
+                <div class="query-params" id="queryParams">
+                    <h3>Query Parameters</h3>
+                    <button type="button" class="add-param-btn" onclick="addParameterRow()">Add Parameter</button>
+                    <div id="paramRows"></div>
+                </div>
+                <button type="submit">Execute PostgreSQL Query</button>
+            </form>
+            <div id="postgresResults" class="results" style="display: none;"></div>
+            <div class="query-history">
+                <h3>Query History</h3>
+                <div id="queryHistory"></div>
+            </div>
+        </div>
 
         <!-- API Query Section -->
         <div class="query-section">
@@ -502,6 +574,112 @@
                 deleteBtn.textContent = 'Delete Collection';
             }
         });
+
+        // PostgreSQL Query Functions
+        function addParameterRow() {
+            const paramRows = document.getElementById('paramRows');
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'param-row';
+            rowDiv.innerHTML = `
+                <input type="text" placeholder="Parameter name" required>
+                <input type="text" placeholder="Parameter value" required>
+                <button type="button" class="remove-param-btn" onclick="this.parentElement.remove()">Remove</button>
+            `;
+            paramRows.appendChild(rowDiv);
+        }
+
+        function formatPostgresResults(data) {
+            if (data.status === 'error') {
+                return `<div class="error">${data.message}</div>`;
+            }
+            
+            let html = `<div class="success">Query executed successfully. Found ${data.rowCount} rows.</div>`;
+            
+            if (data.query) {
+                html += `
+                    <div class="query-info">
+                        <strong>Executed Query:</strong><br>
+                        <pre>${data.query}</pre>
+                    </div>
+                `;
+            }
+            
+            if (data.results && data.results.length > 0) {
+                html += '<table><thead><tr>';
+                // Headers
+                Object.keys(data.results[0]).forEach(key => {
+                    html += `<th>${key}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+                
+                // Rows
+                data.results.forEach(row => {
+                    html += '<tr>';
+                    Object.values(row).forEach(value => {
+                        html += `<td>${value === null ? 'NULL' : value}</td>`;
+                    });
+                    html += '</tr>';
+                });
+                
+                html += '</tbody></table>';
+            } else {
+                html += '<div class="info">Query returned no results.</div>';
+            }
+            
+            return html;
+        }
+
+        // Handle PostgreSQL query form submission
+        document.getElementById('postgresQueryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resultsDiv = document.getElementById('postgresResults');
+            resultsDiv.innerHTML = 'Loading...';
+            resultsDiv.style.display = 'block';
+            
+            try {
+                const sqlQuery = document.getElementById('sqlQuery').value;
+                const params = {};
+                
+                // Gather parameters
+                document.querySelectorAll('.param-row').forEach(row => {
+                    const inputs = row.querySelectorAll('input');
+                    if (inputs[0].value && inputs[1].value) {
+                        params[inputs[0].value] = inputs[1].value;
+                    }
+                });
+                
+                const response = await fetch('/backend/execute-postgres-query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: sqlQuery,
+                        parameters: params
+                    })
+                });
+                
+                const data = await response.json();
+                resultsDiv.innerHTML = formatPostgresResults(data);
+                
+                // Add to query history
+                addToQueryHistory(sqlQuery);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        });
+
+        // Query history functions
+        function addToQueryHistory(query) {
+            const historyDiv = document.getElementById('queryHistory');
+            const historyItem = document.createElement('div');
+            historyItem.className = 'history-item';
+            historyItem.textContent = query.substring(0, 100) + (query.length > 100 ? '...' : '');
+            historyItem.onclick = () => {
+                document.getElementById('sqlQuery').value = query;
+            };
+            historyDiv.insertBefore(historyItem, historyDiv.firstChild);
+        }
     </script>
 </body>
 </html>

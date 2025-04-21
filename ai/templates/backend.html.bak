@@ -34,58 +34,31 @@
         }
         
         .logo-text {
-            font-weight: 400;
-            font-size: 20.4px;
+            font-weight: 500;
+            font-size: 24px;
             color: #222;
             margin-right: 6px;
         }
         
         .logo-box {
-            position: relative;
-            border: 0;
+            border: 3px solid #222;
             border-radius: 8px;
             padding: 0px 3px;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 36px;
-            width: 38px;
-            margin-top: 1px;
-            background-color: transparent;
-            overflow: hidden;
-        }
-        
-        .logo-box-top-right {
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 61.8%;
-            height: 61.8%;
-            border-top: 3px solid #222;
-            border-right: 3px solid #222;
-            border-top-right-radius: 8px;
-        }
-        
-        .logo-box-bottom-left {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 61.8%;
-            height: 61.8%;
-            border-bottom: 3px solid #222;
-            border-left: 3px solid #222;
-            border-bottom-left-radius: 8px;
+            height: 30px;
         }
         
         .logo-box-text {
             font-weight: 600;
-            font-size: 18.7px;
+            font-size: 22px;
             color: #222;
-            line-height: 22px;
+            line-height: 26px;
         }
         
         .beta-container {
-            background-color: #FFE5E5;
+            background-color: #F0F0F0;
             padding: 2px 6px;
             border-radius: 4px;
             display: inline-block;
@@ -525,8 +498,6 @@
         <div class="logo-container" style="cursor: pointer;" id="dashboard-logo">
             <div class="logo-text">Transparent</div>
             <div class="logo-box">
-                <div class="logo-box-top-right"></div>
-                <div class="logo-box-bottom-left"></div>
                 <div class="logo-box-text">SF</div>
             </div>
         </div>
@@ -536,13 +507,23 @@
     </div>
     <div class="container">
         <div class="sidebar">
+            <div id="disk-space-info" class="disk-space">
+                <h3>System Resources</h3>
+                <div class="disk-space-details">
+                    <div>Available: <span id="available-space">Loading...</span></div>
+                    <div>Total: <span id="total-space">Loading...</span></div>
+                    <div class="progress-bar">
+                        <div id="space-used-bar" class="progress"></div>
+                    </div>
+                </div>
+            </div>
+            
             <div class="nav-section">
-                <h3>Actions</h3>
+                <h3>Analytics</h3>
             </div>
             <!-- Analysis Buttons - Main blue -->
             <button id="analyze-ytd-btn" class="analysis-btn">Run Dashboard Metrics</button>
-            <button id="reload-vector-db-btn" class="management-btn">Reload Vector DB</button>
-            <button id="reload-sfpublic-btn" class="management-btn">Reload SF Public Data</button>
+            <button id="monthly-report-btn" class="analysis-btn" data-href="/backend/monthly-reports">Monthly Reports</button>
             
             <div class="nav-section">
                 <h3>Agents</h3>
@@ -553,11 +534,19 @@
             <div class="nav-section">
                 <h3>Tools</h3>
             </div>
-            <button data-href="/backend/monthly-reports" class="analysis-btn">Monthly Newsletters</button>
             <button data-href="/anomaly-analyzer" class="dashboard-btn">Anomaly Analyzer</button>
             <button data-href="/backend/metric-control" class="dashboard-btn">Metric Control</button>
             <button data-href="/backend/query" class="dashboard-btn">Query Tool</button>
             <button data-href="/backend/evals-interface" class="dashboard-btn">Agent Evals</button>
+            
+            <div class="sidebar-divider"></div>
+            
+            <div class="nav-section">
+                <h3>Data Management</h3>
+            </div>
+            <button data-href="/backend/datasets" class="management-btn">Datasets</button>
+            <button id="reload-vector-db-btn" class="management-btn">Reload Vector DB</button>
+            <button id="reload-sfpublic-btn" class="management-btn">Reload SF Public Data</button>
             
             <div class="sidebar-divider"></div>
             
@@ -815,8 +804,17 @@
                 };
             });
 
-            // Monthly report button handler - removed since we're using data-href now
-            
+            // Monthly report button handler
+            document.getElementById('monthly-report-btn').addEventListener('click', () => {
+                showLoading('Generating monthly report...');
+                document.getElementById('content-frame').src = '/backend/generate_monthly_report';
+                
+                // Hide loading when iframe loads
+                document.getElementById('content-frame').onload = function() {
+                    hideLoading();
+                };
+            });
+
             // Update reload functions to show loading state
             document.getElementById('reload-vector-db-btn').addEventListener('click', async () => {
                 const button = document.getElementById('reload-vector-db-btn');

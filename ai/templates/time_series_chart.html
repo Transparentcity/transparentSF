@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Series Chart | TransparentSF</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Plotly.js for visualizations -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        :root {
+            --spruce-green: #4A7463;
+            --soft-sand: #F6F1EA;
+            --warm-coral: #FF6B5A;
+            --sky-blue: #71B2CA;
+            --ink-black: #222222;
+        }
+        
+        body {
+            font-family: 'IBM Plex Sans', Arial, sans-serif;
+            color: var(--ink-black);
+            background-color: white;
+            padding: 20px;
+        }
+        
+        .chart-container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 0 auto;
+            box-shadow: none;
+            overflow: visible;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+            border: none;
+            box-sizing: border-box;
+        }
+        
+        /* Add corner shading elements */
+        .chart-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 61.8%;
+            height: 61.8%;
+            border-top: 2px solid rgba(0, 0, 0, 0.2);
+            border-right: 2px solid rgba(0, 0, 0, 0.2);
+            border-top-right-radius: 8px;
+            display: block;
+            pointer-events: none;
+        }
+        
+        .chart-container::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 61.8%;
+            height: 61.8%;
+            border-bottom: 2px solid rgba(0, 0, 0, 0.2);
+            border-left: 2px solid rgba(0, 0, 0, 0.2);
+            border-bottom-left-radius: 8px;
+            display: block;
+            pointer-events: none;
+        }
+        
+        .header {
+            color: var(--spruce-green);
+            margin-bottom: 20px;
+        }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 300px;
+            color: var(--spruce-green);
+        }
+        
+        .error-message {
+            color: var(--warm-coral);
+            padding: 15px;
+            background-color: rgba(255, 107, 90, 0.1);
+            border-radius: 5px;
+        }
+        
+        .metadata {
+            background-color: rgba(246, 241, 234, 0.7);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .chart-caption {
+            font-size: 12px;
+            padding: 8px;
+            background-color: rgba(246, 241, 234, 0.7);
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .badge {
+            background-color: var(--spruce-green);
+            color: white;
+            font-weight: normal;
+            padding: 5px 10px;
+        }
+        
+        #time-series-chart {
+            width: 100%;
+            height: 0;
+            padding-bottom: 80%; /* 480/600 = 0.8 = 80% aspect ratio */
+            position: relative;
+            overflow: visible;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+        }
+        
+        #time-series-plot {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100% !important;
+            height: 100% !important;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        /* Ensure Plotly elements are responsive */
+        .js-plotly-plot, .plot-container {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .main-svg {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+        }
+        
+        /* Ensure the container takes full height in chart section mode */
+        body.chart-section-mode {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        body.chart-section-mode .container {
+            height: 100%;
+            padding: 0;
+            margin: 0;
+            max-width: none;
+        }
+        
+        body.chart-section-mode .row,
+        body.chart-section-mode .col-12 {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="header">Time Series Chart</h1>
+                
+                <!-- Metadata will be displayed here -->
+                <div id="metadata" class="metadata"></div>
+                
+                <!-- Chart container -->
+                <div id="chart-section" class="chart-container">
+                    <div id="loading" class="loading">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <div id="error-message" class="error-message" style="display: none;"></div>
+                    <div id="time-series-chart"></div>
+                    <div id="datasf-link" class="mt-3" style="text-align: center;"></div>
+                </div>
+                
+                <div class="mt-3 d-flex justify-content-between">
+                    <a href="javascript:history.back()" class="btn btn-outline-secondary flex-grow-1 mx-1">Back</a>
+                    <button id="share-btn" class="btn btn-outline-success flex-grow-1 mx-1" onclick="copyShareLink()">
+                        <i class="fas fa-share-alt me-1"></i> Share
+                    </button>
+                    <button id="embed-btn" class="btn btn-outline-primary flex-grow-1 mx-1" onclick="showEmbedCode()">
+                        <i class="fas fa-code me-1"></i> Embed
+                    </button>
+                </div>
+                
+                <!-- Embed code modal -->
+                <div class="modal fade" id="embedModal" tabindex="-1" aria-labelledby="embedModalLabel" inert>
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="embedModalLabel">Embed Chart</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Copy and paste this code into your website or article:</p>
+                                <div class="input-group mb-3">
+                                    <textarea id="embedCode" class="form-control" rows="3" readonly></textarea>
+                                    <button class="btn btn-outline-primary" type="button" onclick="copyEmbedCode()">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="responsiveCheck" checked>
+                                    <label class="form-check-label" for="responsiveCheck">
+                                        Make responsive
+                                    </label>
+                                </div>
+                                <div class="form-group mb-3">
+                                    <label for="widthInput">Width:</label>
+                                    <input type="text" class="form-control" id="widthInput" value="100%">
+                                </div>
+                                <div class="form-group mb-3">
+                                    <label for="heightInput">Height:</label>
+                                    <input type="text" class="form-control" id="heightInput" value="600px">
+                                </div>
+                                <button class="btn btn-primary" onclick="updateEmbedCode()">Update Code</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Get parameters from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const metricId = urlParams.get('metric_id');
+        const district = urlParams.get('district') || '0';
+        const periodType = urlParams.get('period_type') || 'month';
+        const groups = urlParams.get('groups'); // Get groups parameter from URL
+        const groupField = urlParams.get('group_field'); // Get group_field parameter from URL
+        
+        // Elements
+        const loadingEl = document.getElementById('loading');
+        const errorMessageEl = document.getElementById('error-message');
+        const metadataEl = document.getElementById('metadata');
+        
+        // Function to show loading state
+        function showLoading() {
+            loadingEl.style.display = 'flex';
+            errorMessageEl.style.display = 'none';
+        }
+        
+        // Function to show error message
+        function showError(message) {
+            loadingEl.style.display = 'none';
+            errorMessageEl.style.display = 'block';
+            errorMessageEl.textContent = message;
+        }
+        
+        // Function to hide loading state
+        function hideLoading() {
+            loadingEl.style.display = 'none';
+        }
+        
+        // Function to format values for display
+        function formatValue(value) {
+            if (value === null || value === undefined || isNaN(value)) return '-';
+            return parseFloat(value).toLocaleString(undefined, {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            });
+        }
+        
+        // Function to render the time series chart
+        function renderTimeSeriesChart(data) {
+            console.log("Rendering time series chart for data:", data);
+            
+            // Check if we have valid data
+            if (!data || !data.data || !Array.isArray(data.data) || data.data.length === 0) {
+                showError('Invalid or incomplete time series data received.');
+                return;
+            }
+            
+            // Extract data from the API response format
+            const metadata = data.metadata || {};
+            const timeSeriesData = data.data;
+            
+            // Check if we have grouped data
+            const hasGroups = timeSeriesData.some(item => item.group_value);
+            
+            // Determine labels based on metadata
+            let yAxisLabel = metadata.y_axis_label || metadata.field_name || "Value";
+            let xAxisLabel = "Date";
+            
+            // Hide loading indicator
+            hideLoading();
+            
+            // Create a container for the chart
+            const chartElement = document.getElementById('time-series-chart');
+            chartElement.innerHTML = ''; // Clear existing content
+            chartElement.style.display = 'flex';
+            chartElement.style.justifyContent = 'center';
+            chartElement.style.alignItems = 'center';
+            chartElement.style.width = '100%';
+            chartElement.style.height = '100%';
+            
+            // Create a new div for the actual chart
+            const plotDiv = document.createElement('div');
+            plotDiv.id = 'time-series-plot';
+            plotDiv.style.width = '100%';
+            plotDiv.style.height = '100%';
+            plotDiv.style.maxWidth = '100%';
+            plotDiv.style.maxHeight = '100%';
+            chartElement.appendChild(plotDiv);
+            
+            // Create traces for the chart
+            const traces = [];
+            
+            // Initialize common variables that will be used later
+            let formattedDates = [];
+            let values = [];
+            let lastDate, lastValue;
+            
+            if (hasGroups) {
+                // Group data by group_value
+                const groupedData = {};
+                timeSeriesData.forEach(item => {
+                    const groupValue = item.group_value || 'Unknown';
+                    if (!groupedData[groupValue]) {
+                        groupedData[groupValue] = [];
+                    }
+                    groupedData[groupValue].push(item);
+                });
+                
+                // Define a color palette for groups
+                const colorPalette = [
+                    '#007BFF', // Bright Blue
+                    '#FF6B5A', // Warm Coral
+                    '#4A7463', // Spruce Green
+                    '#71B2CA', // Sky Blue
+                    '#FFC107', // Amber
+                    '#9C27B0', // Purple
+                    '#2196F3', // Light Blue
+                    '#E91E63', // Pink
+                    '#4CAF50', // Green
+                    '#FF5722'  // Deep Orange
+                ];
+                
+                // Create a trace for each group
+                let colorIndex = 0;
+                Object.entries(groupedData).forEach(([groupValue, groupItems]) => {
+                    const formattedDates = groupItems.map(item => {
+                        const dateStr = item.time_period;
+                        const dateParts = dateStr.split('-');
+                        const year = parseInt(dateParts[0]);
+                        const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
+                        const day = dateParts.length > 2 ? parseInt(dateParts[2]) : 1; // Default to 1st if no day
+                        return new Date(year, month, day);
+                    });
+                    
+                    const values = groupItems.map(item => item.numeric_value);
+                    
+                    // Add time series data for this group
+                    traces.push({
+                        x: formattedDates,
+                        y: values,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: groupValue,
+                        line: { color: colorPalette[colorIndex % colorPalette.length], width: 2 },
+                        marker: { color: colorPalette[colorIndex % colorPalette.length], size: 6 },
+                        showlegend: true,
+                        hovertemplate: '%{x|%B %Y}<br>%{y}<extra>Group: ' + groupValue + '</extra>',
+                        hoverlabel: {
+                            bgcolor: '#F6F1EA', // Soft Sand
+                            bordercolor: '#4A7463', // Spruce Green
+                            font: { 
+                                family: 'IBM Plex Sans, Arial, sans-serif',
+                                size: 10,
+                                color: '#222222' // Ink Black
+                            }
+                        }
+                    });
+                    
+                    colorIndex++;
+                });
+                
+                // Calculate overall mean for all groups combined
+                const allValues = timeSeriesData.map(item => item.numeric_value);
+                const mean = calculateMean(allValues);
+                
+                // Set the common formattedDates and values with data from all groups
+                // We'll use the first group's dates for the overall timeline
+                if (Object.values(groupedData).length > 0) {
+                    const firstGroupData = Object.values(groupedData)[0];
+                    formattedDates = firstGroupData.map(item => {
+                        const dateStr = item.time_period;
+                        const dateParts = dateStr.split('-');
+                        const year = parseInt(dateParts[0]);
+                        const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
+                        const day = dateParts.length > 2 ? parseInt(dateParts[2]) : 1; // Default to 1st if no day
+                        return new Date(year, month, day);
+                    });
+                    values = firstGroupData.map(item => item.numeric_value);
+                }
+                
+                // Add mean line
+                traces.push({
+                    x: [new Date(Math.min(...timeSeriesData.map(item => new Date(item.time_period).getTime()))), 
+                         new Date(Math.max(...timeSeriesData.map(item => new Date(item.time_period).getTime())))],
+                    y: [mean, mean],
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: `Average: ${formatValue(mean)}`, // Label with mean value
+                    line: { 
+                        color: 'rgba(0, 0, 0, 0.3)', // Faint Black
+                        width: 1,
+                        dash: 'dash' // Dashed line
+                    },
+                    showlegend: true
+                });
+            } else {
+                // Extract dates and values from the data array
+                formattedDates = timeSeriesData.map(item => {
+                    const dateStr = item.time_period;
+                    const dateParts = dateStr.split('-');
+                    const year = parseInt(dateParts[0]);
+                    const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
+                    const day = dateParts.length > 2 ? parseInt(dateParts[2]) : 1; // Default to 1st if no day
+                    return new Date(year, month, day);
+                });
+                
+                values = timeSeriesData.map(item => item.numeric_value);
+                
+                // Calculate mean and standard deviation
+                const mean = calculateMean(values);
+                const stdDev = calculateStandardDeviation(values, mean);
+                
+                // Add mean line
+                traces.push({
+                    x: formattedDates,
+                    y: formattedDates.map(() => mean),
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: `Average: ${formatValue(mean)}`, // Label with mean value
+                    line: { 
+                        color: 'rgba(0, 123, 255, 0.3)', // Faint Bright Blue
+                        width: 1,
+                        dash: 'solid' // Solid line
+                    },
+                    showlegend: true
+                });
+                
+                // Add time series data
+                traces.push({
+                    x: formattedDates,
+                    y: values,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'Time Series',
+                    line: { color: '#007BFF', width: 2 }, // Bright Blue
+                    marker: { color: '#007BFF', size: 6 }, // Bright Blue
+                    showlegend: true,
+                    hovertemplate: '%{x|%B %Y}<br>%{y}<extra></extra>', // Full month name and year
+                    hoverlabel: {
+                        bgcolor: '#F6F1EA', // Soft Sand
+                        bordercolor: '#4A7463', // Spruce Green
+                        font: { 
+                            family: 'IBM Plex Sans, Arial, sans-serif',
+                            size: 10,
+                            color: '#222222' // Ink Black
+                        }
+                    }
+                });
+            }
+            
+            // Get the metric name from metadata
+            const objectName = metadata.object_name || metadata.field_name || 'Time Series';
+            
+            // Create subtitle with district if present
+            const districtName = metadata.district === 0 ? 'Citywide' : `District ${metadata.district}`;
+            let subtitleText = `${districtName} - ${metadata.period_type || periodType} Data`;
+            
+            // Create xAxisYearLabels for year display
+            const years = [...new Set(formattedDates.map(d => d.getFullYear()))];
+            const yearDates = years.map(year => new Date(year, 0, 1));
+            const xAxisYearLabels = yearDates.map(d => d.getFullYear().toString());
+
+            // Determine if we're dealing with yearly data
+            const isYearlyData = metadata.period_type === 'yearly' || periodType === 'year';
+
+            // Configuration for the plot
+            const layout = {
+                title: {
+                    text: objectName,
+                    font: {
+                        family: 'Inter, Arial, sans-serif',
+                        size: 18,
+                        color: '#222222' // Ink Black
+                    },
+                    y: 0.98, // Move title up
+                    pad: { b: 20 } // Add padding below title
+                },
+                annotations: [
+                    {
+                        text: subtitleText,
+                        font: { 
+                            family: 'Inter, Arial, sans-serif',
+                            size: 14,
+                            color: '#222222' // Ink Black
+                        },
+                        showarrow: false,
+                        x: 0.5,
+                        y: 1.15,  // Move subtitle up significantly from 1.02 to 1.15
+                        xref: 'paper',
+                        yref: 'paper',
+                        align: 'center',
+                        html: true // Enable HTML formatting
+                    }
+                ],
+                xaxis: {
+                    title: {
+                        text: '', // Remove the "Date" label
+                        font: { 
+                            family: 'IBM Plex Sans, Arial, sans-serif',
+                            size: 12,
+                            color: '#222222' // Ink Black
+                        },
+                        standoff: 40 // Push the axis title further away from the axis
+                    },
+                    showgrid: false,
+                    tickformat: isYearlyData ? '%Y' : '%b %Y',
+                    tickfont: { 
+                        family: 'IBM Plex Sans, Arial, sans-serif',
+                        size: 11,
+                        color: '#222222' // Ink Black
+                    },
+                    // Custom tick labels - Use actual data points for ticks, not the padded range
+                    tickmode: 'array',
+                    tickvals: isYearlyData ? yearDates : formattedDates,
+                    ticktext: isYearlyData ? xAxisYearLabels : formattedDates.map((d, index) => {
+                        const month = d.getMonth();
+                        const year = d.getFullYear();
+                        
+                        // Show only the first letter of the month capitalized
+                        const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                        let label = fullMonths[month].charAt(0);
+                        
+                        // If this is the first month of a year in our dataset, add year below
+                        if (index === 0 || formattedDates[index - 1].getFullYear() !== year) {
+                            label += `<br>${year}`;
+                        } else {
+                            // Add empty line to maintain vertical spacing
+                            label += "<br> ";
+                        }
+                        
+                        return label;
+                    }),
+                    tickangle: 0, // Keep tick labels horizontal
+                    // Add a secondary axis below for the years
+                    dividercolor: 'transparent',
+                    dividerwidth: 0,
+                    ticklen: 4, // Add tick marks for months too
+                    tickcolor: '#222222', // Match font color
+                    // Ensure all months are displayed with padding on both sides
+                    range: [
+                        // Start with the first month in the data with 30 days padding before
+                        new Date(formattedDates[0].getTime() - 30 * 24 * 60 * 60 * 1000),
+                        // End with the last month in the data with 30 days padding after
+                        new Date(formattedDates[formattedDates.length - 1].getTime() + 30 * 24 * 60 * 60 * 1000)
+                    ],
+                    showline: true,
+                    linecolor: '#e5e7eb',
+                    linewidth: 1,
+                    // Create space between month and year labels
+                    tickpadding: 15
+                },
+                yaxis: {
+                    title: {
+                        text: yAxisLabel,
+                        font: { 
+                            family: 'IBM Plex Sans, Arial, sans-serif',
+                            size: 12,
+                            color: '#222222' // Ink Black
+                        }
+                    },
+                    showgrid: true,
+                    gridcolor: 'rgba(232, 233, 235, 0.5)', // Cloud Gray with transparency
+                    zeroline: false,
+                    rangemode: 'tozero',
+                    tickfont: { 
+                        family: 'IBM Plex Sans, Arial, sans-serif',
+                        size: 10,
+                        color: '#222222' // Ink Black
+                    }
+                },
+                showlegend: true,
+                legend: {
+                    orientation: 'h',
+                    x: 0.5,
+                    y: -0.15, // Move legend up from -0.22 to -0.15
+                    xanchor: 'center',
+                    yanchor: 'top',
+                    font: { 
+                        family: 'IBM Plex Sans, Arial, sans-serif',
+                        size: 10,
+                        color: '#222222' // Ink Black
+                    },
+                    bgcolor: 'rgba(246, 241, 234, 0.7)' // Soft Sand with transparency
+                },
+                margin: { t: 70, b: 120, l: 60, r: 60 }, // Reduced top margin from 100 to 60
+                height: null, // Remove fixed height
+                width: null, // Remove fixed width
+                autosize: true, // Enable autosize
+                paper_bgcolor: 'rgba(255, 255, 255, 0.9)', // Slightly transparent white
+                plot_bgcolor: 'rgba(255, 255, 255, 0.9)', // Slightly transparent white
+                hovermode: 'closest',
+                responsive: true, // Ensure the chart is responsive
+                hoverlabel: {
+                    bgcolor: '#F6F1EA', // Soft Sand
+                    bordercolor: '#4A7463', // Spruce Green
+                    font: { 
+                        family: 'IBM Plex Sans, Arial, sans-serif',
+                        size: 10,
+                        color: '#222222' // Ink Black
+                    }
+                },
+                // Add a second x-axis for years
+                xaxis2: {
+                    showgrid: false,
+                    zeroline: false,
+                    showticklabels: !isYearlyData, // Hide tick labels for yearly data
+                    type: 'date',
+                    tickmode: 'array',
+                    tickvals: yearDates,
+                    ticktext: xAxisYearLabels,
+                    position: 0.95, // Position year labels much lower
+                    anchor: 'free',
+                    showline: false,
+                    tickfont: {
+                        size: 12,
+                    },
+                    side: 'bottom',
+                    overlaying: 'x'
+                }
+            };
+            
+            // Add annotation for the most recent data point
+            lastDate = formattedDates[formattedDates.length - 1];
+            lastValue = values[values.length - 1];
+            
+            // Format date properly for display
+            const month = lastDate.getMonth();
+            const year = lastDate.getFullYear();
+            const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const formattedDate = isYearlyData ? `${year}` : `${fullMonths[month]} ${year}`;
+            
+            // Add to existing annotations array
+            layout.annotations.push({
+                text: `${formattedDate}:<br>${formatValue(lastValue)}`,
+                x: lastDate,
+                y: lastValue,
+                arrowhead: 2,
+                ax: -50,
+                ay: 20,
+                bgcolor: 'rgba(0, 123, 255, 0.7)', // Bright Blue with transparency
+                bordercolor: '#007BFF', // Bright Blue
+                borderwidth: 1,
+                font: { 
+                    family: 'IBM Plex Sans, Arial, sans-serif',
+                    size: 12, // Increased font size
+                    color: '#222222' // Ink Black
+                },
+                showarrow: true,
+                arrowcolor: '#007BFF', // Bright Blue
+                arrowwidth: 1,
+                arrowside: 'end',
+                axref: 'pixel',
+                ayref: 'pixel'
+            });
+            
+            // Add filter conditions as an annotation if available
+            if (metadata.filter_conditions) {
+                // Format the filter conditions properly
+                let filterText = '';
+                
+                // Check if filter_conditions is an array
+                if (Array.isArray(metadata.filter_conditions)) {
+                    // Format each filter condition in the array
+                    filterText = metadata.filter_conditions.map(filter => {
+                        // Format each filter condition
+                        let conditionText = '';
+                        
+                        if (filter.field) {
+                            conditionText += filter.field;
+                        }
+                        
+                        if (filter.operator) {
+                            conditionText += ` ${filter.operator} `;
+                        }
+                        
+                        if (filter.value) {
+                            // Format date values if needed
+                            if (filter.is_date && typeof filter.value === 'string') {
+                                // Try to format the date nicely
+                                try {
+                                    const dateParts = filter.value.split('-');
+                                    if (dateParts.length >= 2) {
+                                        const year = dateParts[0];
+                                        const month = parseInt(dateParts[1]);
+                                        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                                      'July', 'August', 'September', 'October', 'November', 'December'];
+                                        conditionText += `${months[month-1]} ${year}`;
+                                    } else {
+                                        conditionText += filter.value;
+                                    }
+                                } catch (e) {
+                                    conditionText += filter.value;
+                                }
+                            } else {
+                                conditionText += filter.value;
+                            }
+                        }
+                        
+                        return conditionText;
+                    }).join(' AND ');
+                } else if (typeof metadata.filter_conditions === 'string') {
+                    filterText = metadata.filter_conditions;
+                } else if (typeof metadata.filter_conditions === 'object') {
+                    // If it's an object, convert it to a readable string
+                    try {
+                        // Try to parse if it's a JSON string
+                        if (typeof metadata.filter_conditions === 'string') {
+                            const parsedFilters = JSON.parse(metadata.filter_conditions);
+                            filterText = Object.entries(parsedFilters)
+                                .map(([key, value]) => `${key}: ${value}`)
+                                .join(', ');
+                        } else {
+                            // If it's already an object
+                            filterText = Object.entries(metadata.filter_conditions)
+                                .map(([key, value]) => `${key}: ${value}`)
+                                .join(', ');
+                        }
+                    } catch (e) {
+                        // If parsing fails, use a fallback
+                        filterText = JSON.stringify(metadata.filter_conditions);
+                    }
+                }
+                
+                layout.annotations.push({
+                    text: `<b>Filters:</b> ${filterText}`,
+                    font: { 
+                        family: 'IBM Plex Sans, Arial, sans-serif',
+                        size: 7, // Decreased font size from 8 to 7
+                        color: '#999999' // Lighter grey color
+                    },
+                    showarrow: false,
+                    x: 0.5,
+                    y: -0.35, // Move filters up from -0.45 to -0.35
+                    xref: 'paper',
+                    yref: 'paper',
+                    align: 'center',
+                    html: true // Enable HTML formatting
+                });
+            }
+            
+            // Add DataSF link if available
+            if (metadata.executed_query_url) {
+                // Create the link element
+                const datasfLink = document.createElement('a');
+                datasfLink.href = metadata.executed_query_url;
+                datasfLink.target = '_blank';
+                datasfLink.style.color = '#71B2CA';
+                datasfLink.style.textDecoration = 'none';
+                datasfLink.style.position = 'absolute';
+                datasfLink.style.bottom = '10px'; // Move DataSF link down from 20px to 10px
+                datasfLink.style.left = '50%';
+                datasfLink.style.transform = 'translateX(-50%)';
+                datasfLink.style.fontSize = '12px';
+                datasfLink.style.zIndex = '1000';
+                datasfLink.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                datasfLink.style.padding = '5px 10px';
+                datasfLink.style.borderRadius = '4px';
+                datasfLink.innerHTML = 'Source: DataSF <i class="fas fa-external-link-alt"></i>';
+                
+                // Add the link directly to the chart container
+                const chartContainer = document.getElementById('chart-section');
+                if (chartContainer) {
+                    // Remove any existing DataSF links first
+                    const existingLinks = chartContainer.querySelectorAll('a[href*="datasf"]');
+                    existingLinks.forEach(link => link.remove());
+                    
+                    // Add the new link
+                    chartContainer.appendChild(datasfLink);
+                    console.log('DataSF link added to chart container with URL:', metadata.executed_query_url);
+                } else {
+                    console.error('Chart container not found');
+                }
+            }
+            
+            // Add a note about the data source if no DataSF link is available
+            if (!metadata.executed_query_url) {
+                const chartContainer = document.getElementById('chart-section');
+                if (chartContainer) {
+                    // Remove any existing source notes first
+                    const existingNotes = chartContainer.querySelectorAll('span[data-source-note]');
+                    existingNotes.forEach(note => note.remove());
+                    
+                    // Create and add the source note
+                    const sourceNote = document.createElement('span');
+                    sourceNote.setAttribute('data-source-note', 'true');
+                    sourceNote.style.color = '#999999';
+                    sourceNote.style.fontSize = '12px';
+                    sourceNote.style.position = 'absolute';
+                    sourceNote.style.bottom = '10px';
+                    sourceNote.style.left = '50%';
+                    sourceNote.style.transform = 'translateX(-50%)';
+                    sourceNote.style.zIndex = '10';
+                    sourceNote.textContent = 'Source: TransparentSF';
+                    
+                    chartContainer.appendChild(sourceNote);
+                    console.log('Source note added to chart container');
+                }
+            }
+            
+            const config = {
+                responsive: true,
+                displayModeBar: false,
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'time_series_chart',
+                    height: 480,
+                    width: 600,
+                    scale: 1
+                }
+            };
+            
+            // Create the plot
+            Plotly.newPlot('time-series-plot', traces, layout, config).then(() => {
+                // Add window resize handler for responsiveness
+                window.addEventListener('resize', () => {
+                    const plotElement = document.getElementById('time-series-plot');
+                    if (plotElement) {
+                        Plotly.Plots.resize(plotElement);
+                    }
+                });
+                
+                // Set initial dimensions
+                const plotElement = document.getElementById('time-series-plot');
+                if (plotElement) {
+                    // No need to set explicit dimensions as we're using aspect ratio
+                    Plotly.Plots.resize(plotElement);
+                }
+            });
+            
+            // Display metadata after rendering chart
+            displayMetadata(data);
+        }
+        
+        // Function to calculate mean
+        function calculateMean(values) {
+            const sum = values.reduce((acc, val) => acc + val, 0);
+            return sum / values.length;
+        }
+        
+        // Function to calculate standard deviation
+        function calculateStandardDeviation(values, mean) {
+            const squareDiffs = values.map(value => {
+                const diff = value - mean;
+                return diff * diff;
+            });
+            
+            const avgSquareDiff = calculateMean(squareDiffs);
+            return Math.sqrt(avgSquareDiff);
+        }
+        
+        // Function to display metadata
+        function displayMetadata(data) {
+            // Get metadata fields
+            const metadata = data.metadata || {};
+            const metricName = metadata.object_name || metadata.field_name || 'Unknown Metric';
+            const districtName = metadata.district === 0 ? 'Citywide' : `District ${metadata.district}`;
+            
+            // Format the date range
+            const timeSeriesData = data.data || [];
+            if (timeSeriesData.length === 0) {
+                metadataEl.innerHTML = '<p>No data available</p>';
+                return;
+            }
+            
+            // Check if we have grouped data
+            const hasGroups = timeSeriesData.some(item => item.group_value);
+            let groupCounts = '';
+            
+            if (hasGroups) {
+                // Count items per group
+                const groupCounter = {};
+                timeSeriesData.forEach(item => {
+                    const groupValue = item.group_value || 'Unknown';
+                    groupCounter[groupValue] = (groupCounter[groupValue] || 0) + 1;
+                });
+                
+                // Format group counts
+                groupCounts = '<div class="mt-3"><strong>Groups:</strong> ';
+                for (const [group, count] of Object.entries(groupCounter)) {
+                    groupCounts += `<span class="badge bg-secondary me-2">${group} (${count})</span>`;
+                }
+                groupCounts += '</div>';
+            }
+            
+            const startDate = new Date(timeSeriesData[0].time_period);
+            const endDate = new Date(timeSeriesData[timeSeriesData.length - 1].time_period);
+            
+            const formatDate = (date) => {
+                const month = date.getMonth();
+                const year = date.getFullYear();
+                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                return `${months[month]} ${year}`;
+            };
+            
+            const dateRange = `${formatDate(startDate)} - ${formatDate(endDate)}`;
+            
+            // Calculate statistics
+            const values = timeSeriesData.map(item => item.numeric_value);
+            const mean = calculateMean(values);
+            const stdDev = calculateStandardDeviation(values, mean);
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            
+            // Create HTML for metadata
+            let html = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>${metricName}</h5>
+                        <p><strong>District:</strong> ${districtName}</p>
+                        <p><strong>Period:</strong> ${dateRange}</p>
+                        ${hasGroups && metadata.group_field ? `<p><strong>Group Field:</strong> ${metadata.group_field}</p>` : ''}
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Mean:</strong> ${formatValue(mean)}</p>
+                        <p><strong>Standard Deviation:</strong> ${formatValue(stdDev)}</p>
+                        <p><strong>Range:</strong> ${formatValue(min)} - ${formatValue(max)}</p>
+                    </div>
+                </div>
+                ${groupCounts}
+            `;
+            
+            // Set HTML
+            metadataEl.innerHTML = html;
+            
+            // If groups are present, add a filter control
+            if (hasGroups) {
+                const groupFilterDiv = document.createElement('div');
+                groupFilterDiv.className = 'mt-3 p-3 bg-light rounded';
+                groupFilterDiv.innerHTML = `
+                    <h6>Filter by Groups</h6>
+                    <div id="group-checkboxes" class="mb-2"></div>
+                    <div class="d-flex gap-2">
+                        <button id="apply-group-filter" class="btn btn-sm btn-primary">Apply Filter</button>
+                        <button id="clear-group-filter" class="btn btn-sm btn-outline-secondary">Clear Filter</button>
+                    </div>
+                `;
+                
+                metadataEl.appendChild(groupFilterDiv);
+                
+                // Add checkboxes for each group
+                const checkboxesDiv = document.getElementById('group-checkboxes');
+                const uniqueGroups = Object.keys(groupCounter);
+                
+                uniqueGroups.forEach(group => {
+                    const isChecked = !groups || groups.split(',').includes(group);
+                    const checkbox = document.createElement('div');
+                    checkbox.className = 'form-check form-check-inline';
+                    checkbox.innerHTML = `
+                        <input class="form-check-input group-checkbox" type="checkbox" id="group-${group}" 
+                               value="${group}" ${isChecked ? 'checked' : ''}>
+                        <label class="form-check-label" for="group-${group}">${group}</label>
+                    `;
+                    checkboxesDiv.appendChild(checkbox);
+                });
+                
+                // Add event listeners for filter buttons
+                document.getElementById('apply-group-filter').addEventListener('click', applyGroupFilter);
+                document.getElementById('clear-group-filter').addEventListener('click', clearGroupFilter);
+            }
+        }
+        
+        // Function to apply group filter
+        function applyGroupFilter() {
+            const checkboxes = document.querySelectorAll('.group-checkbox:checked');
+            const selectedGroups = Array.from(checkboxes).map(cb => cb.value);
+            
+            if (selectedGroups.length === 0) {
+                alert('Please select at least one group to filter by.');
+                return;
+            }
+            
+            // Build new URL with selected groups
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('groups', selectedGroups.join(','));
+            
+            // Make sure group_field is also set if not already present
+            if (groupField && !urlParams.has('group_field')) {
+                urlParams.set('group_field', groupField);
+            }
+            
+            // Redirect to the same page with updated parameters
+            window.location.href = `${window.location.pathname}?${urlParams.toString()}`;
+        }
+        
+        // Function to clear group filter
+        function clearGroupFilter() {
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.delete('groups');
+            
+            // Redirect to the same page with updated parameters
+            window.location.href = `${window.location.pathname}?${urlParams.toString()}`;
+        }
+        
+        // Function to fetch time series data
+        async function fetchTimeSeriesData() {
+            // Check if metric ID is provided
+            if (!metricId) {
+                showError('No metric ID provided. Please specify a metric ID in the URL.');
+                return;
+            }
+            
+            try {
+                // Show loading indicator
+                showLoading();
+                
+                // Construct API URL with all parameters
+                let apiUrl = `/api/chart-by-metric?metric_id=${metricId}&district=${district}&period_type=${periodType}`;
+                
+                // Add groups parameter if present
+                if (groups) {
+                    apiUrl += `&groups=${encodeURIComponent(groups)}`;
+                }
+                
+                // Add group_field parameter if present
+                if (groupField) {
+                    apiUrl += `&group_field=${encodeURIComponent(groupField)}`;
+                }
+                
+                // Fetch time series data
+                console.log(`Fetching time series data with URL: ${apiUrl}`);
+                const response = await fetch(apiUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch time series data: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log("Received data:", data);
+                
+                if (data.status === 'error') {
+                    throw new Error(data.message || 'Failed to load time series data');
+                }
+                
+                // Render the chart
+                renderTimeSeriesChart(data);
+                
+            } catch (error) {
+                console.error('Error fetching time series data:', error);
+                hideLoading();
+                showError(`Error loading time series data: ${error.message}`);
+            }
+        }
+        
+        // Load data when the page loads
+        document.addEventListener('DOMContentLoaded', fetchTimeSeriesData);
+
+        // Function to handle chart section visibility
+        function handleChartSection() {
+            const isChartSection = window.location.hash === '#chart-section';
+            const header = document.querySelector('.header');
+            const metadata = document.getElementById('metadata');
+            const buttons = document.querySelector('.mt-3');
+            const embedModal = document.getElementById('embedModal');
+            const datasfLink = document.getElementById('datasf-link');
+            const shareBtn = document.getElementById('share-btn');
+            const embedBtn = document.getElementById('embed-btn');
+            const backButton = document.querySelector('a[href="javascript:history.back()"]');
+            
+            // Add or remove chart-section-mode class on body
+            document.body.classList.toggle('chart-section-mode', isChartSection);
+            
+            if (isChartSection) {
+                // Hide non-chart elements
+                if (header) header.style.display = 'none';
+                if (metadata) metadata.style.display = 'none';
+                if (buttons) buttons.style.display = 'none';
+                if (embedModal) embedModal.style.display = 'none';
+                if (datasfLink) datasfLink.style.display = 'none';
+                if (shareBtn) shareBtn.style.display = 'none';
+                if (embedBtn) embedBtn.style.display = 'none';
+                if (backButton) backButton.style.display = 'none';
+                
+                // Set chart container to maintain aspect ratio
+                const chartContainer = document.getElementById('chart-section');
+                if (chartContainer) {
+                    chartContainer.style.margin = '0 auto';
+                    chartContainer.style.maxWidth = '600px';
+                    chartContainer.style.width = '100%';
+                    chartContainer.style.display = 'flex';
+                    chartContainer.style.justifyContent = 'center';
+                    chartContainer.style.alignItems = 'center';
+                    
+                    // Add permalink button to chart section
+                    let permalinkBtn = document.getElementById('chart-section-permalink');
+                    if (!permalinkBtn) {
+                        permalinkBtn = document.createElement('button');
+                        permalinkBtn.id = 'chart-section-permalink';
+                        permalinkBtn.className = 'btn btn-sm btn-link';
+                        permalinkBtn.style.position = 'absolute';
+                        permalinkBtn.style.bottom = '5px';
+                        permalinkBtn.style.right = '5px';
+                        permalinkBtn.style.zIndex = '1000';
+                        permalinkBtn.style.fontSize = '12px';
+                        permalinkBtn.style.color = '#888888';
+                        permalinkBtn.style.textDecoration = 'none';
+                        permalinkBtn.style.border = 'none';
+                        permalinkBtn.style.background = 'none';
+                        permalinkBtn.style.padding = '0';
+                        permalinkBtn.style.cursor = 'pointer';
+                        permalinkBtn.innerHTML = '<i class="fas fa-share-alt me-1"></i>Share';
+                        permalinkBtn.onclick = function() {
+                            const fullUrl = window.location.href.split('#')[0];
+                            if (navigator.share) {
+                                navigator.share({
+                                    title: 'TransparentSF Chart',
+                                    text: 'Check out this chart from TransparentSF',
+                                    url: fullUrl
+                                }).catch(err => {
+                                    console.error('Error sharing:', err);
+                                    // Fallback to copying to clipboard
+                                    copyToClipboard(fullUrl);
+                                });
+                            } else {
+                                // Fallback to copying to clipboard
+                                copyToClipboard(fullUrl);
+                            }
+                        };
+                        chartContainer.appendChild(permalinkBtn);
+                    }
+                }
+                
+                // Hide the chart caption
+                const chartCaption = document.querySelector('.chart-caption');
+                if (chartCaption) {
+                    chartCaption.style.display = 'none';
+                }
+                
+                // Update chart size to fit container
+                const plotElement = document.getElementById('time-series-plot');
+                if (plotElement) {
+                    Plotly.Plots.resize(plotElement);
+                }
+                
+                // Send chart height to parent window
+                const sendHeight = () => {
+                    const chartElement = document.getElementById('time-series-chart');
+                    if (chartElement) {
+                        // Calculate height based on the 5:4 aspect ratio
+                        const width = chartElement.offsetWidth;
+                        const height = width * 0.8; // 480/600 = 0.8
+                        window.parent.postMessage({
+                            type: 'chartHeight',
+                            height: height
+                        }, window.location.origin);
+                    }
+                };
+                
+                // Send height initially and after any changes
+                sendHeight();
+                const observer = new ResizeObserver(sendHeight);
+                const chartElement = document.getElementById('time-series-chart');
+                if (chartElement) {
+                    observer.observe(chartElement);
+                }
+            } else {
+                // Show all elements
+                if (header) header.style.display = 'block';
+                if (metadata) metadata.style.display = 'block';
+                if (buttons) buttons.style.display = 'block';
+                if (embedModal) embedModal.style.display = 'block';
+                if (datasfLink) datasfLink.style.display = 'block';
+                if (shareBtn) shareBtn.style.display = 'block';
+                if (embedBtn) embedBtn.style.display = 'block';
+                if (backButton) backButton.style.display = 'block';
+                
+                // Remove permalink button if it exists
+                const permalinkBtn = document.getElementById('chart-section-permalink');
+                if (permalinkBtn) {
+                    permalinkBtn.remove();
+                }
+                
+                // Show the chart caption
+                const chartCaption = document.querySelector('.chart-caption');
+                if (chartCaption) {
+                    chartCaption.style.display = 'block';
+                }
+                
+                // Reset chart container styles
+                const chartContainer = document.getElementById('chart-section');
+                if (chartContainer) {
+                    chartContainer.style.margin = '';
+                    chartContainer.style.maxWidth = '';
+                    chartContainer.style.width = '';
+                    chartContainer.style.display = '';
+                    chartContainer.style.justifyContent = '';
+                    chartContainer.style.alignItems = '';
+                }
+            }
+        }
+
+        // Handle initial load and hash changes
+        handleChartSection();
+        window.addEventListener('hashchange', handleChartSection);
+
+        // Function to copy the current URL to clipboard
+        function copyShareLink() {
+            const url = window.location.href;
+            navigator.clipboard.writeText(url).then(() => {
+                const shareBtn = document.getElementById('share-btn');
+                const originalText = shareBtn.innerHTML;
+                
+                // Change button text to indicate success
+                shareBtn.innerHTML = '<i class="fas fa-check me-1"></i> Copied!';
+                shareBtn.classList.remove('btn-outline-success');
+                shareBtn.classList.add('btn-success');
+                
+                // Change back after 2 seconds
+                setTimeout(() => {
+                    shareBtn.innerHTML = originalText;
+                    shareBtn.classList.remove('btn-success');
+                    shareBtn.classList.add('btn-outline-success');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                alert('Failed to copy the link. Please try again.');
+            });
+        }
+        
+        // Function to show the embed code modal
+        function showEmbedCode() {
+            // Generate the initial embed code
+            updateEmbedCode();
+            
+            // Show the modal
+            const embedModal = document.getElementById('embedModal');
+            embedModal.removeAttribute('inert');
+            const modal = new bootstrap.Modal(embedModal);
+            modal.show();
+        }
+        
+        // Function to update the embed code based on current settings
+        function updateEmbedCode() {
+            const width = document.getElementById('widthInput').value;
+            const height = document.getElementById('heightInput').value;
+            const isResponsive = document.getElementById('responsiveCheck').checked;
+            
+            let embedCode = `<iframe src="${window.location.href}"`;
+            
+            if (isResponsive) {
+                embedCode += ` style="width: 100%; height: 100%; border: none;"`;
+            } else {
+                embedCode += ` width="${width}" height="${height}"`;
+            }
+            
+            embedCode += ` frameborder="0" scrolling="no"></iframe>`;
+            
+            if (isResponsive) {
+                embedCode = `<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">\n  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">\n    ${embedCode}\n  </div>\n</div>`;
+            }
+            
+            document.getElementById('embedCode').value = embedCode;
+        }
+        
+        // Function to copy the embed code to clipboard
+        function copyEmbedCode() {
+            const embedCode = document.getElementById('embedCode');
+            embedCode.select();
+            document.execCommand('copy');
+            
+            // Show a brief success message
+            const copyBtn = document.querySelector('#embedModal .btn-outline-primary');
+            const originalHtml = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<i class="fas fa-check"></i>';
+            
+            setTimeout(() => {
+                copyBtn.innerHTML = originalHtml;
+            }, 2000);
+        }
+        
+        // Add event listener to handle modal closing
+        document.addEventListener('DOMContentLoaded', function() {
+            const embedModal = document.getElementById('embedModal');
+            embedModal.addEventListener('hidden.bs.modal', function() {
+                embedModal.setAttribute('inert', '');
+            });
+        });
+
+        // Function to copy text to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const permalinkBtn = document.getElementById('chart-section-permalink');
+                if (permalinkBtn) {
+                    const originalHtml = permalinkBtn.innerHTML;
+                    permalinkBtn.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                    setTimeout(() => {
+                        permalinkBtn.innerHTML = originalHtml;
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+    </script>
+</body>
+</html> 

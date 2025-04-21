@@ -50,7 +50,7 @@ def load_json_file(file_path):
         print(f"Error loading JSON file {file_path}: {e}")
         return None
 
-def get_date_ranges(target_date=None):
+def get_date_ranges(target_date=None, query=None):
     """Calculate the date ranges for YTD comparisons."""
     # If no target_date provided, use yesterday
     if target_date is None:
@@ -61,7 +61,38 @@ def get_date_ranges(target_date=None):
     # This year's range
     this_year = target_date.year
     this_year_start = f"{this_year}-01-01"
-    this_year_end = target_date.strftime('%Y-%m-%d')
+    
+    # Check if query contains date_trunc_ym in GROUP BY
+    is_monthly_query = query and 'date_trunc_ym' in query and 'GROUP BY' in query
+    
+    if is_monthly_query:
+        # For monthly queries, set end date to last day of previous month
+        if target_date.month == 1:
+            # If we're in January, use December of previous year
+            end_year = target_date.year - 1
+            end_month = 12
+        else:
+            end_year = target_date.year
+            end_month = target_date.month - 1
+            
+        # Calculate last day of the month
+        if end_month == 12:
+            last_day = 31
+        elif end_month in [4, 6, 9, 11]:
+            last_day = 30
+        elif end_month == 2:
+            # Handle leap years
+            if end_year % 4 == 0 and (end_year % 100 != 0 or end_year % 400 == 0):
+                last_day = 29
+            else:
+                last_day = 28
+        else:
+            last_day = 31
+            
+        this_year_end = f"{end_year}-{end_month:02d}-{last_day}"
+        logger.info(f"Using last day of previous month for end date: {this_year_end}")
+    else:
+        this_year_end = target_date.strftime('%Y-%m-%d')
     
     # Last year's range - use same day-of-year
     last_year = this_year - 1
@@ -72,7 +103,12 @@ def get_date_ranges(target_date=None):
     if target_date.month == 2 and target_date.day == 29:
         last_year_end = f"{last_year}-02-28"
     else:
-        last_year_end = target_date.replace(year=last_year).strftime('%Y-%m-%d')
+        # For last year's end date, use the same logic as this year's end date
+        if is_monthly_query:
+            # Use the same month/day as this_year_end but for last year
+            last_year_end = f"{last_year}-{end_month:02d}-{last_day}"
+        else:
+            last_year_end = target_date.replace(year=last_year).strftime('%Y-%m-%d')
     
     logger.info(f"Date ranges: this_year={this_year_start} to {this_year_end}, last_year={last_year_start} to {last_year_end}")
     
@@ -208,29 +244,7 @@ def process_query_for_district(query, endpoint, date_ranges, query_name=None):
         
         # Get date ranges if not provided
         if not date_ranges:
-            date_ranges = get_date_ranges()
-        
-        # IMPORTANT FIX: For housing units, we need to get the actual last data date
-        # This is to ensure we're using the actual last date, not just the first day of the month
-        if query_name and "housing units" in query_name.lower():
-            try:
-                # Try to get the actual last data date from the endpoint
-                actual_last_date_query = "SELECT max(date_issued) as last_data_date"
-                actual_date_context = {}
-                actual_date_result = set_dataset(actual_date_context, endpoint=endpoint, query=actual_last_date_query)
-                
-                if actual_date_result.get('status') == 'success' and 'dataset' in actual_date_context and not actual_date_context['dataset'].empty:
-                    actual_last_date = pd.to_datetime(actual_date_context['dataset']['last_data_date'].iloc[0])
-                    if pd.notnull(actual_last_date):
-                        actual_last_date_str = actual_last_date.strftime('%Y-%m-%d')
-                        logger.info(f"Found actual last data date for housing units: {actual_last_date_str}")
-                        
-                        # Update the date ranges with the actual last data date
-                        date_ranges['this_year_end'] = actual_last_date_str
-                        date_ranges['last_year_end'] = actual_last_date.replace(year=actual_last_date.year-1).strftime('%Y-%m-%d')
-                        logger.info(f"Updated date ranges for housing units: this_year_end={date_ranges['this_year_end']}, last_year_end={date_ranges['last_year_end']}")
-            except Exception as e:
-                logger.warning(f"Error getting actual last data date for housing units: {str(e)}")
+            date_ranges = get_date_ranges(query=query)
         
         # Now modify the query with the date ranges
         modified_query = query
@@ -315,9 +329,9 @@ def process_query_for_district(query, endpoint, date_ranges, query_name=None):
             has_district = 'supervisor_district' in df.columns
             logger.info(f"Query has district data: {has_district}")
             
-            # Get the max date
+            # Get the max date from the dataset
             max_date = None
-            for date_col in ['received_datetime', 'max_date', 'arrest_date']:
+            for date_col in ['max_date', 'received_datetime', 'arrest_date']:
                 if date_col in df.columns:
                     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
                     max_date = df[date_col].max()
@@ -327,7 +341,7 @@ def process_query_for_district(query, endpoint, date_ranges, query_name=None):
                         break
             
             if has_district:
-                is_response_time = query_name and 'response time' in query_name.lower()
+                is_response_time = query_name and ('response time' in query_name.lower() or 'response (minutes)' in query_name.lower())
                 logger.info(f"Processing as response time metric: {is_response_time}")
                 
                 if is_response_time:
@@ -416,8 +430,8 @@ def process_ytd_trend_query(query, endpoint, date_ranges=None, target_date=None,
         
         # Get date ranges if not provided
         if not date_ranges:
-            date_ranges = get_date_ranges(target_date)
-        
+            date_ranges = get_date_ranges(target_date=target_date, query=query)
+            
         # Replace date placeholders with actual dates
         modified_query = query.replace("date_trunc_y(date_sub_y(current_date, 1))", f"'{date_ranges['last_year_start']}'")
         modified_query = modified_query.replace("current_date", f"'{date_ranges['this_year_end']}'")
@@ -581,10 +595,7 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                 if endpoint and not endpoint.endswith('.json'):
                     endpoint = f"{endpoint}.json"
                 
-                # Get initial date ranges using yesterday as target
-                initial_date_ranges = get_date_ranges(target_date)
-                
-                # Now process each query in the subcategory
+                # Process each query in the subcategory
                 for query_name, query_data in subcategory_data['queries'].items():
                     # Extract queries and metadata
                     if isinstance(query_data, str):
@@ -622,28 +633,68 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                         logger.warning(f"Skipping query {query_name} because no endpoint is defined")
                         continue
                     
+                    # Get initial date ranges using yesterday as target
+                    initial_date_ranges = get_date_ranges(target_date=target_date, query=metric_query)
+                    
                     # Create a copy of initial date ranges for this metric
                     date_ranges = initial_date_ranges.copy()
                     trend_data = None
                     
-                    # Process trend data to get truncated date
+                    # Process metric query first to get max date
+                    query_results = process_query_for_district(metric_query, query_endpoint, date_ranges=date_ranges, query_name=query_name)
+                    if query_results and 'results' in query_results and '0' in query_results['results']:
+                        max_date = query_results['results']['0'].get('lastDataDate')
+                        if max_date:
+                            logger.info(f"Found max date from metric query: {max_date}")
+                            
+                            # Convert max_date to datetime for manipulation
+                            max_date_dt = datetime.strptime(max_date, '%Y-%m-%d')
+                            today = datetime.now()
+                            
+                            # If max_date is in the future, set it to last day of previous month
+                            if max_date_dt > today:
+                                logger.info(f"Max date {max_date} is in the future, adjusting to last day of previous month")
+                                if today.month == 1:
+                                    # If we're in January, use December of previous year
+                                    end_year = today.year - 1
+                                    end_month = 12
+                                else:
+                                    end_year = today.year
+                                    end_month = today.month - 1
+                                    
+                                # Calculate last day of the month
+                                if end_month == 12:
+                                    last_day = 31
+                                elif end_month in [4, 6, 9, 11]:
+                                    last_day = 30
+                                elif end_month == 2:
+                                    # Handle leap years
+                                    if end_year % 4 == 0 and (end_year % 100 != 0 or end_year % 400 == 0):
+                                        last_day = 29
+                                    else:
+                                        last_day = 28
+                                else:
+                                    last_day = 31
+                                    
+                                max_date = f"{end_year}-{end_month:02d}-{last_day}"
+                                logger.info(f"Adjusted max date to last day of previous month: {max_date}")
+                            
+                            # Update date ranges with the max date
+                            date_ranges['this_year_end'] = max_date
+                            max_date_dt = datetime.strptime(max_date, '%Y-%m-%d')
+                            
+                            # For last year's end date, use the same day-of-month but in previous year
+                            last_year_end = max_date_dt.replace(year=max_date_dt.year-1)
+                            date_ranges['last_year_end'] = last_year_end.strftime('%Y-%m-%d')
+                            
+                            date_ranges['last_data_date'] = max_date
+                            # Ensure last_year_start is always January 1st of the previous year
+                            date_ranges['last_year_start'] = f"{max_date_dt.year-1}-01-01"
+                            logger.info(f"Updated date ranges with max date: {date_ranges}")
+                    
+                    # Now process trend data with the updated date ranges
                     if ytd_query:
                         trend_data = process_ytd_trend_query(ytd_query, query_endpoint, date_ranges=date_ranges, query_name=query_name)
-                        if trend_data and 'last_updated' in trend_data:
-                            truncated_date = datetime.strptime(trend_data['last_updated'], '%Y-%m-%d').date()
-                            logger.info(f"Found truncated date from trend data: {truncated_date}")
-                            
-                            # Use the truncated date from trend data
-                            logger.info(f"Using truncated date from trend data: {truncated_date}")
-                            
-                            # Fix: Use the actual last data date instead of the first day of the month
-                            # This ensures we capture all data for the month
-                            date_ranges['this_year_end'] = truncated_date.strftime('%Y-%m-%d')
-                            date_ranges['last_year_end'] = truncated_date.replace(year=truncated_date.year-1).strftime('%Y-%m-%d')
-                            date_ranges['last_data_date'] = truncated_date.strftime('%Y-%m-%d')
-                            # Ensure last_year_start is always January 1st of the previous year
-                            date_ranges['last_year_start'] = f"{truncated_date.year-1}-01-01"
-                            logger.info(f"Ensuring last_year_start is January 1st: {date_ranges['last_year_start']}")
                     
                     # Process metric query with the adjusted date ranges
                     query_results = process_query_for_district(metric_query, query_endpoint, date_ranges, query_name=query_name)
@@ -1127,15 +1178,13 @@ def setup_logging():
     
     return logger
 
-def main():
-    """Main function to generate dashboard metrics."""
-    # Set up logging
-    setup_logging()
+def process_single_metric(metric_id, period_type='ytd'):
+    """Process a single metric and generate its dashboard files.
     
-    # Define output directory
-    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "dashboard")
-    os.makedirs(output_dir, exist_ok=True)
-    
+    Args:
+        metric_id (str or int): The ID of the metric to process (e.g., "arrests_presented_to_da_ytd" or 13)
+        period_type (str): The type of period to process ('ytd', 'month', 'year', 'week')
+    """
     # Load dashboard queries
     dashboard_queries_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard", "dashboard_queries.json")
     enhanced_queries_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard", "dashboard_queries_enhanced.json")
@@ -1150,10 +1199,224 @@ def main():
     
     if not dashboard_queries:
         logging.error("Failed to load dashboard queries")
-        return
+        return None
     
-    # Generate metrics
-    generate_ytd_metrics(dashboard_queries, output_dir)
+    # Find the metric in the queries data
+    metric_data = None
+    category_name = None
+    subcategory_name = None
+    query_name = None
+    
+    # Convert metric_id to string for comparison
+    metric_id_str = str(metric_id)
+    
+    for cat_name, cat_data in dashboard_queries.items():
+        for subcat_name, subcat_data in cat_data.items():
+            if isinstance(subcat_data, dict) and 'queries' in subcat_data:
+                for q_name, query_data in subcat_data['queries'].items():
+                    # Check if this is a numeric ID match
+                    if isinstance(query_data, dict) and 'id' in query_data and str(query_data['id']) == metric_id_str:
+                        metric_data = query_data
+                        category_name = cat_name
+                        subcategory_name = subcat_name
+                        query_name = q_name
+                        logging.info(f"Found metric by numeric ID: {metric_id_str}")
+                        break
+                    
+                    # Also check the string ID format
+                    query_id = q_name.lower().replace(" ", "_").replace("-", "_").replace("_ytd", "") + "_ytd"
+                    if query_id == metric_id_str:
+                        metric_data = query_data
+                        category_name = cat_name
+                        subcategory_name = subcat_name
+                        query_name = q_name
+                        logging.info(f"Found metric by string ID: {metric_id_str}")
+                        break
+                if metric_data:
+                    break
+        if metric_data:
+            break
+    
+    if not metric_data:
+        logging.error(f"Metric {metric_id} not found in queries data")
+        return None
+    
+    # Create a minimal queries data structure with just this metric
+    single_metric_queries = {
+        category_name: {
+            subcategory_name: {
+                "queries": {
+                    query_name: metric_data
+                }
+            }
+        }
+    }
+    
+    # Determine the output directory based on period_type
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    period_folder_map = {
+        'ytd': 'dashboard',
+        'month': 'monthly',
+        'year': 'annual',
+        'week': 'weekly'
+    }
+    
+    if period_type not in period_folder_map:
+        logging.error(f"Invalid period_type: {period_type}")
+        return None
+        
+    period_folder = period_folder_map[period_type]
+    output_dir = os.path.join(script_dir, 'output', period_folder)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Set target date to yesterday
+    target_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    # Process the single metric
+    metrics_result = generate_ytd_metrics(single_metric_queries, output_dir, target_date)
+    
+    if not metrics_result:
+        return None
+    
+    # Now we need to recreate top_level.json files from all individual metric files
+    for district_num in range(12):  # 0-11 for citywide and districts 1-11
+        district_str = str(district_num)
+        district_dir = os.path.join(output_dir, district_str)
+        
+        # Skip if this district wasn't processed
+        if not os.path.exists(district_dir):
+            continue
+        
+        # Initialize the district data structure
+        district_data = {
+            "metadata": metrics_result['metadata'],
+            "name": f"{'Citywide' if district_str == '0' else f'District {district_str}'}",
+            "categories": []
+        }
+        
+        # Get all metric files in the district directory and sort them numerically
+        metric_files = [f for f in os.listdir(district_dir) if f.endswith('.json') and f != 'top_level.json']
+        
+        # Sort files numerically by the numeric part of the filename
+        def get_numeric_key(filename):
+            # Remove .json extension and try to convert to int
+            try:
+                return int(filename.replace('.json', ''))
+            except ValueError:
+                # If conversion fails, return a large number to put non-numeric files at the end
+                return float('inf')
+        
+        metric_files.sort(key=get_numeric_key)
+        
+        # Process each metric file in numeric order
+        for metric_file in metric_files:
+            try:
+                with open(os.path.join(district_dir, metric_file), 'r', encoding='utf-8') as f:
+                    metric_data = json.load(f)
+                
+                # Find or create category
+                category = next(
+                    (cat for cat in district_data['categories'] 
+                     if cat['category'] == metric_data['category']),
+                    None
+                )
+                
+                if not category:
+                    category = {
+                        "category": metric_data['category'],
+                        "metrics": []
+                    }
+                    district_data['categories'].append(category)
+                
+                # Create metric entry for top_level.json
+                metric_entry = {
+                    "name": metric_data['metric_name'],
+                    "id": metric_data['metric_id'],
+                    "lastYear": metric_data['lastYear'],
+                    "thisYear": metric_data['thisYear'],
+                    "lastDataDate": metric_data['lastDataDate'],
+                    "metadata": {
+                        "ytd_query": metric_data['queries'].get('ytd_query', ''),
+                        "metric_query": metric_data['queries'].get('metric_query', '')
+                    }
+                }
+                
+                # Add numeric_id if it exists
+                if 'numeric_id' in metric_data:
+                    metric_entry['numeric_id'] = metric_data['numeric_id']
+                
+                # Add location_fields and category_fields if they exist
+                if 'location_fields' in metric_data:
+                    metric_entry['location_fields'] = metric_data['location_fields']
+                if 'category_fields' in metric_data:
+                    metric_entry['category_fields'] = metric_data['category_fields']
+                
+                category['metrics'].append(metric_entry)
+                
+            except Exception as e:
+                logging.error(f"Error processing metric file {metric_file}: {str(e)}")
+                continue
+        
+        # Save top_level.json
+        top_level_file = os.path.join(district_dir, 'top_level.json')
+        with open(top_level_file, 'w', encoding='utf-8') as f:
+            json.dump(district_data, f, indent=2)
+        logging.info(f"Created new top_level.json for district {district_str}")
+        
+        # For backward compatibility, also save the district file in the old location
+        district_file = os.path.join(output_dir, f'district_{district_str}.json')
+        with open(district_file, 'w', encoding='utf-8') as f:
+            json.dump(district_data, f, indent=2)
+        logging.info(f"Created new district_{district_str}.json for backward compatibility")
+        
+        # Save to history directory with timestamp
+        history_dir = os.path.join(output_dir, 'history')
+        os.makedirs(history_dir, exist_ok=True)
+        history_file = os.path.join(history_dir, f'district_{district_str}_{datetime.now().strftime("%Y%m%d")}.json')
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(district_data, f, indent=2)
+        logging.info(f"Created new history file for district {district_str}")
+    
+    return metrics_result
+
+def main():
+    """Main function to generate dashboard metrics."""
+    # Set up logging
+    setup_logging()
+    
+    # Define output directory
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "dashboard")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate dashboard metrics')
+    parser.add_argument('--metric-id', help='ID of a single metric to process (e.g., "arrests_presented_to_da_ytd")')
+    parser.add_argument('--period-type', help='Type of period to process (e.g., "ytd", "month", "year", "week")')
+    parser.add_argument('--target-date', help='Target date for metrics calculation in YYYY-MM-DD format. Defaults to yesterday if not provided.')
+    args = parser.parse_args()
+    
+    if args.metric_id:
+        # Process single metric
+        process_single_metric(args.metric_id, args.period_type)
+    else:
+        # Load dashboard queries
+        dashboard_queries_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard", "dashboard_queries.json")
+        enhanced_queries_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dashboard", "dashboard_queries_enhanced.json")
+        
+        # Try to load enhanced queries first, fall back to regular queries
+        if os.path.exists(enhanced_queries_path):
+            logging.info("Using enhanced dashboard queries")
+            dashboard_queries = load_json_file(enhanced_queries_path)
+        else:
+            logging.info("Using standard dashboard queries")
+            dashboard_queries = load_json_file(dashboard_queries_path)
+        
+        if not dashboard_queries:
+            logging.error("Failed to load dashboard queries")
+            return
+        
+        # Generate all metrics
+        generate_ytd_metrics(dashboard_queries, output_dir, args.target_date)
     
     logging.info("Dashboard metrics generation complete")
 

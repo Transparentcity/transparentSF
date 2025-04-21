@@ -15,7 +15,7 @@ from tools.data_fetcher import set_dataset
 from tools.genChart import generate_time_series_chart
 from tools.anomaly_detection import anomaly_detection
 
-# Configure logging
+# Get script directory and ensure logs directory exists
 script_dir = os.path.dirname(os.path.abspath(__file__))
 logs_dir = os.path.join(script_dir, 'logs')
 os.makedirs(logs_dir, exist_ok=True)
@@ -28,31 +28,63 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 WEEKLY_DIR = os.path.join(OUTPUT_DIR, 'weekly')
 os.makedirs(WEEKLY_DIR, exist_ok=True)
 
+# Define default metrics to use if none are specified
+DEFAULT_METRICS = [
+    "1",   # Total Police Incidents 
+    "2",   # Arrests Presented
+    "3",   # Arrests Booked
+    "4",   # Police Response Times
+    "5",   # 311 Cases
+    "6",   # DPW Service Requests
+    "8",   # Building Permits
+    "14"   # Public Works Projects
+]
+
 # Configure root logger first
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.INFO)
+
+# Create formatter for consistent log formatting
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# Remove any existing handlers from root logger
+# Remove any existing handlers from root logger to avoid duplicate logs
 for handler in root_logger.handlers[:]:
     root_logger.removeHandler(handler)
 
+# Log file path for weekly analysis
+log_file_path = os.path.join(logs_dir, 'weekly_metric_analysis.log')
+
 # Add file handler to root logger
-root_file_handler = logging.FileHandler(os.path.join(logs_dir, 'weekly_metric_analysis.log'))
-root_file_handler.setFormatter(formatter)
-root_logger.addHandler(root_file_handler)
+try:
+    root_file_handler = logging.FileHandler(log_file_path)
+    root_file_handler.setFormatter(formatter)
+    root_file_handler.setLevel(logging.INFO)
+    root_logger.addHandler(root_file_handler)
+except Exception as e:
+    print(f"Error setting up file handler for {log_file_path}: {str(e)}")
+    # Continue without file handler, just console output
+    
+# Add console handler to root logger for terminal output
+try:
+    root_console_handler = logging.StreamHandler()
+    root_console_handler.setFormatter(formatter)
+    root_console_handler.setLevel(logging.INFO)
+    root_logger.addHandler(root_console_handler)
+except Exception as e:
+    print(f"Error setting up console handler: {str(e)}")
 
-# Add console handler to root logger
-root_console_handler = logging.StreamHandler()
-root_console_handler.setFormatter(formatter)
-root_logger.addHandler(root_console_handler)
-
-# Now configure the module logger
-logger = logging.getLogger(__name__)
+# Create module logger
+logger = logging.getLogger('generate_weekly_analysis')
 logger.setLevel(logging.INFO)
+logger.propagate = True  # Ensure logs propagate to root logger
 
 # Log a message to confirm logging is set up
+logger.info("==========================================================")
 logger.info("Logging configured for generate_weekly_analysis.py")
+logger.info(f"Log file: {log_file_path}")
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Current working directory: {os.getcwd()}")
+logger.info("==========================================================")
 
 def load_json_file(file_path):
     """Load a JSON file and return its contents."""
@@ -108,8 +140,9 @@ def find_metric_in_queries(queries_data, metric_id):
                                 'endpoint': endpoint,
                                 'category_fields': query_data.get('category_fields', []) if isinstance(query_data, dict) else [],
                                 'location_fields': query_data.get('location_fields', []) if isinstance(query_data, dict) else [],
-                                'numeric_id': query_data.get('id', None) if isinstance(query_data, dict) else None,
-                                'metric_id': metric_id_str  # Ensure we always have the metric_id from the search
+                                'numeric_id': query_id,
+                                'id': metric_id_str,  # Ensure we set both id and metric_id for consistent access
+                                'metric_id': metric_id_str
                             }
                     
                     # For string IDs, try to match the query name
@@ -122,6 +155,7 @@ def find_metric_in_queries(queries_data, metric_id):
                         
                         if clean_query_name == clean_metric_id:
                             logger.info(f"Found match by string ID: {metric_id}")
+                            numeric_id = query_data.get('id') if isinstance(query_data, dict) else None
                             return {
                                 'top_category': top_category_name,
                                 'subcategory': subcategory_name,
@@ -130,8 +164,9 @@ def find_metric_in_queries(queries_data, metric_id):
                                 'endpoint': query_data.get('endpoint', subcategory_data.get('endpoint')),
                                 'category_fields': query_data.get('category_fields', []),
                                 'location_fields': query_data.get('location_fields', []),
-                                'numeric_id': query_data.get('id'),
-                                'metric_id': metric_id
+                                'numeric_id': numeric_id,
+                                'id': str(numeric_id) if numeric_id is not None else metric_id,
+                                'metric_id': str(numeric_id) if numeric_id is not None else metric_id
                             }
     
     logger.error(f"Metric with ID '{metric_id_str}' not found in dashboard queries")
@@ -161,34 +196,49 @@ def get_weekly_time_ranges():
     """
     Calculate recent and comparison periods for weekly analysis.
     
-    The recent period is the last complete 7 days (excluding today).
-    The comparison period is the previous 4 weeks (28 days) before the recent period.
+    Finds the last complete week and the 6 preceding weeks, treating Jan 1 as the
+    first day of the first week of the year.
     
     Returns:
         tuple: (recent_period, comparison_period) each containing start and end dates
     """
     today = date.today()
     
-    # Recent period: last 7 complete days (excluding today)
-    recent_end = today - timedelta(days=1)  # Yesterday
-    recent_start = recent_end - timedelta(days=6)  # 7 days including yesterday
+    # Find the first day of the year
+    first_day = date(today.year, 1, 1)
+    # Calculate day of the year (0-indexed)
+    day_of_year = (today - first_day).days
     
-    # Comparison period: previous 4 weeks (28 days) before recent period
-    comparison_end = recent_start - timedelta(days=1)  # Day before recent period
-    comparison_start = comparison_end - timedelta(days=27)  # 28 days before
+    # Calculate the current week number (1-indexed)
+    current_week = (day_of_year // 7) + 1
+    
+    # Find the end of the last complete week
+    # Week starts on day 0, 7, 14, etc.
+    last_complete_week_end = first_day + timedelta(days=(current_week - 1) * 7 - 1)
+    
+    # If this date is in the future, use the previous week
+    if last_complete_week_end >= today:
+        last_complete_week_end = first_day + timedelta(days=(current_week - 2) * 7 - 1)
+    
+    # Last complete week's start date (7 days)
+    last_complete_week_start = last_complete_week_end - timedelta(days=6)
+    
+    # Comparison period: 6 weeks before the last complete week
+    comparison_weeks_start = last_complete_week_start - timedelta(days=42)  # 6 weeks * 7 days
+    comparison_weeks_end = last_complete_week_start - timedelta(days=1)
     
     recent_period = {
-        'start': recent_start,
-        'end': recent_end
+        'start': last_complete_week_start,
+        'end': last_complete_week_end
     }
     
     comparison_period = {
-        'start': comparison_start,
-        'end': comparison_end
+        'start': comparison_weeks_start,
+        'end': comparison_weeks_end
     }
     
-    logger.info(f"Recent period: {recent_start} to {recent_end}")
-    logger.info(f"Comparison period: {comparison_start} to {comparison_end}")
+    logger.info(f"Recent period (last complete week): {last_complete_week_start} to {last_complete_week_end}")
+    logger.info(f"Comparison period (previous 6 weeks): {comparison_weeks_start} to {comparison_weeks_end}")
     
     return recent_period, comparison_period
 
@@ -201,14 +251,14 @@ def extract_date_field_from_query(query):
     
     for field in date_fields_to_check:
         if field in query:
-            logging.info(f"Found date field in query: {field}")
+            logger.info(f"Found date field in query: {field}")
             return field
     
     # Try to find date_trunc patterns
     date_trunc_match = re.search(r'date_trunc_[ymd]+ *\( *([^\)]+) *\)', query)
     if date_trunc_match:
         field = date_trunc_match.group(1).strip()
-        logging.info(f"Found date field from date_trunc: {field}")
+        logger.info(f"Found date field from date_trunc: {field}")
         return field
     
     return None
@@ -218,8 +268,8 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
     Transform a query for weekly analysis by:
     1. Replacing date placeholders
     2. Using appropriate date ranges for recent and comparison periods
-    3. Adding category fields to GROUP BY
-    4. Creating a week-level granularity for weekly analysis
+    3. Adding category fields to the SELECT clause
+    4. Retrieving daily data for later aggregation by week
     5. Adding district filter if specified
     
     Args:
@@ -233,11 +283,45 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
     Returns:
         str: Transformed SQL query
     """
-    # Format date strings for SQL
-    recent_start = recent_period['start'].isoformat()
-    recent_end = recent_period['end'].isoformat()
-    comparison_start = comparison_period['start'].isoformat()
-    comparison_end = comparison_period['end'].isoformat()
+    # Ensure we have valid date ranges
+    if not recent_period or not comparison_period:
+        logger.error("Missing date periods in transform_query_for_weekly")
+        # Create default periods
+        today = date.today()
+        if not recent_period:
+            recent_period = {
+                'start': today - timedelta(days=7),
+                'end': today
+            }
+            logger.warning(f"Using default recent_period: {recent_period}")
+        
+        if not comparison_period:
+            comparison_period = {
+                'start': today - timedelta(days=49),  # 7 weeks ago
+                'end': today - timedelta(days=8)
+            }
+            logger.warning(f"Using default comparison_period: {comparison_period}")
+    
+    # Verify the date fields exist in the period dictionaries
+    for period, name in [(recent_period, 'recent_period'), (comparison_period, 'comparison_period')]:
+        for field in ['start', 'end']:
+            if field not in period or period[field] is None:
+                period[field] = date.today() if field == 'end' else date.today() - timedelta(days=7)
+                logger.warning(f"Missing {field} in {name}, using default: {period[field]}")
+    
+    # Format date strings for SQL - with error handling
+    try:
+        recent_start = recent_period['start'].isoformat()
+        recent_end = recent_period['end'].isoformat()
+        comparison_start = comparison_period['start'].isoformat()
+        comparison_end = comparison_period['end'].isoformat()
+    except (AttributeError, TypeError) as e:
+        logger.error(f"Error formatting dates: {str(e)}")
+        # Use string fallbacks
+        recent_start = "2023-01-01" if not isinstance(recent_period.get('start'), date) else recent_period['start'].isoformat()
+        recent_end = "2023-01-07" if not isinstance(recent_period.get('end'), date) else recent_period['end'].isoformat()
+        comparison_start = "2022-12-01" if not isinstance(comparison_period.get('start'), date) else comparison_period['start'].isoformat()
+        comparison_end = "2022-12-31" if not isinstance(comparison_period.get('end'), date) else comparison_period['end'].isoformat()
     
     # Replace any date placeholders in the original query
     modified_query = original_query
@@ -264,7 +348,7 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
     
     # If it's a YTD query, we'll modify it to work with our weekly analysis
     if is_ytd_query:
-        logging.info("Using YTD query format as basis for weekly analysis")
+        logger.info("Using YTD query format as basis for weekly analysis")
         
         # Extract the core table and WHERE conditions from the original query
         # This pattern looks for date_trunc, field selection, conditions
@@ -279,9 +363,8 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
             # Remove current_date references and replace with our recent_end
             where_part = re.sub(r'<=\s*current_date', f"<= '{recent_end}'", where_part)
             
-            # For weekly analysis, get the start of the week
-            # Using date_trunc_ymd alone since we can't use date_add_d in SoQL
-            date_trunc = f"date_trunc_ymd({date_field_match})"
+            # Keep the actual date instead of transforming to week
+            date_select = f"{date_field_match} as actual_date"
             
             # Build the category fields part of the SELECT and GROUP BY
             category_select = ""
@@ -301,13 +384,13 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
             period_type_select = f", CASE WHEN {date_field_match} >= '{recent_start}' AND {date_field_match} <= '{recent_end}' THEN 'recent' ELSE 'comparison' END as period_type"
             
             # Build the complete transformed query
-            group_by_clause = "GROUP BY week_start, period_type"
+            group_by_clause = "GROUP BY actual_date, period_type"
             if group_by_fields:
                 group_by_clause += ", " + ", ".join(group_by_fields)
                 
             transformed_query = f"""
             SELECT 
-                {date_trunc} as week_start,
+                {date_select},
                 {value_part}
                 {period_type_select}
                 {category_select}
@@ -319,13 +402,13 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
                     ({date_field_match} >= '{recent_start}' AND {date_field_match} <= '{recent_end}')
                 )
             {group_by_clause}
-            ORDER BY week_start
+            ORDER BY actual_date
             """
             
             return transformed_query
         else:
             # If we can't parse the YTD query, fall back to the regular transform
-            logging.warning("Could not extract components from YTD query, falling back to standard transformation")
+            logger.warning("Could not extract components from YTD query, falling back to standard transformation")
 
     # Try to extract the FROM clause
     from_match = re.search(r'FROM\s+(.*?)(?:WHERE|GROUP BY|ORDER BY|LIMIT|$)', modified_query, re.IGNORECASE | re.DOTALL)
@@ -337,7 +420,7 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
         if table_match:
             from_clause = table_match.group(1).strip()
         else:
-            logging.warning("Could not extract FROM clause from query, using modified query with replaced placeholders")
+            logger.warning("Could not extract FROM clause from query, using modified query with replaced placeholders")
             return modified_query
     else:
         from_clause = from_match.group(1).strip()
@@ -356,10 +439,10 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
         )
         """
         
-        # Add district filter if specified
-        if district is not None and 'supervisor_district' in modified_query:
+        # Add district filter if specified and we are not processing multiple districts
+        if district is not None and isinstance(district, int) and district > 0 and 'supervisor_district' in modified_query:
             where_clause = where_clause.rstrip() + f" AND supervisor_district = '{district}'\n"
-            logging.info(f"Added district filter to WHERE clause: supervisor_district = '{district}'")
+            logger.info(f"Added district filter to WHERE clause: supervisor_district = '{district}'")
     else:
         # Create a new WHERE clause with just date filters for both periods
         where_clause = f"""
@@ -370,10 +453,10 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
         )
         """
         
-        # Add district filter if specified
-        if district is not None and 'supervisor_district' in modified_query:
+        # Add district filter if specified and we are not processing multiple districts
+        if district is not None and isinstance(district, int) and district > 0 and 'supervisor_district' in modified_query:
             where_clause = where_clause.rstrip() + f" AND supervisor_district = '{district}'\n"
-            logging.info(f"Added district filter to new WHERE clause: supervisor_district = '{district}'")
+            logger.info(f"Added district filter to new WHERE clause: supervisor_district = '{district}'")
     
     # If we have a valid FROM clause, proceed with transformation
     if from_clause:
@@ -391,179 +474,334 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
                 category_select += f", {field_name}"
                 category_fields_list.append(field_name)
         
-        # For weekly analysis, use date_trunc_ymd to get the start of the week
-        # SoQL doesn't support date_add_d, so we'll use a simpler approach
-        date_transform = f"""
-        date_trunc_ymd({date_field}) as week_start
-        """
+        # Keep the actual date instead of transforming to week
+        date_select = f"{date_field} as actual_date"
 
-        # Build the GROUP BY clause with category fields
-        group_by = "GROUP BY week_start"
+        # Build the GROUP BY clause with category fields (if any)
+        group_by = "GROUP BY actual_date"
         for field_name in category_fields_list:
             group_by += f", {field_name}"
         
         # Add period_type to distinguish recent from comparison
         period_type_select = f", CASE WHEN {date_field} >= '{recent_start}' AND {date_field} <= '{recent_end}' THEN 'recent' ELSE 'comparison' END as period_type"
         
-        # Build the complete transformed query with weekly aggregation
+        # Build the complete transformed query with daily data
         transformed_query = f"""
         SELECT 
-            {date_transform},
+            {date_select},
             COUNT(*) as value
             {period_type_select}
             {category_select}
         FROM {from_clause}
         {where_clause}
         {group_by}, period_type
-        ORDER BY week_start
+        ORDER BY actual_date
         """
         
         return transformed_query
     else:
         # If we couldn't extract or infer the FROM clause, return the modified query
-        logging.warning("Could not determine FROM clause, using modified query with replaced placeholders")
+        logger.warning("Could not determine FROM clause, using modified query with replaced placeholders")
         return modified_query
 
 def process_weekly_analysis(metric_info, process_districts=False):
-    """Process weekly metric analysis with optional district processing."""
-    # Extract metric information
-    metric_id = metric_info.get('metric_id', '')
-    query_name = metric_info.get('query_name', metric_id)
-    definition = metric_info.get('definition', '')
-    summary = metric_info.get('summary', '')
+    """
+    Process weekly analysis for a given metric
+    
+    Args:
+        metric_info (dict): Metric information including query data
+        process_districts (bool): Whether to process district-level data
+        
+    Returns:
+        dict: Analysis results
+    """
+    # Extract query data
+    if not metric_info:
+        logger.error("No metric info provided")
+        return None
+    
+    # Get the query name from metric_info, checking both 'name' and 'query_name' fields
+    query_name = metric_info.get('name', metric_info.get('query_name', 'Unknown Metric'))
     endpoint = metric_info.get('endpoint', '')
-    data_sf_url = metric_info.get('data_sf_url', '')
+    district_field = metric_info.get('district_field', 'supervisor_district')
     
-    # Get time ranges for weekly analysis
-    recent_period, comparison_period = get_weekly_time_ranges()
-    
-    # Create context variables and set the dataset
+    # Initialize the context variables for storing data
     context_variables = {}
     
-    # Get the query from metric_info
-    original_query = None
-    if isinstance(metric_info.get('query_data'), dict):
-        # First check if there's a YTD query available to use as the basis
+    # Define default metrics if needed
+    if 'category_fields' in metric_info:
+        category_fields = metric_info['category_fields']
+    else:
+        # Default category fields for analysis
+        category_fields = DEFAULT_METRICS
+    
+    # Get date ranges for recent and comparison periods
+    recent_period, comparison_period = get_weekly_time_ranges()
+    
+    # Extract query data based on the structure
+    if 'query_data' in metric_info and isinstance(metric_info['query_data'], dict):
+        # Try to find YTD query first as it's usually better for weekly analysis
         if 'ytd_query' in metric_info['query_data']:
             original_query = metric_info['query_data'].get('ytd_query', '')
-            logging.info(f"Using YTD query as the basis for weekly analysis")
+            logger.info(f"Using YTD query as the basis for weekly analysis")
         # Also check for queries dictionary that might contain a YTD query
         elif 'queries' in metric_info['query_data'] and isinstance(metric_info['query_data']['queries'], dict):
             if 'ytd_query' in metric_info['query_data']['queries']:
                 original_query = metric_info['query_data']['queries'].get('ytd_query', '')
-                logging.info(f"Using YTD query from queries dictionary")
+                logger.info(f"Using YTD query from queries dictionary")
             elif 'executed_ytd_query' in metric_info['query_data']['queries']:
                 original_query = metric_info['query_data']['queries'].get('executed_ytd_query', '')
-                logging.info(f"Using executed YTD query from queries dictionary")
+                logger.info(f"Using executed YTD query from queries dictionary")
         
         # If no YTD query is found, fall back to the metric query
         if not original_query:
             original_query = metric_info['query_data'].get('metric_query', '')
-            logging.info(f"No YTD query found, using regular metric query")
+            logger.info(f"No YTD query found, using regular metric query")
     else:
         original_query = metric_info.get('query_data', '')
-        logging.info(f"Using provided query data directly")
+        logger.info(f"Using provided query data directly")
     
     if not original_query:
-        logging.error(f"No query found for {query_name}")
+        logger.error(f"No query found for {query_name}")
         return None
     
-    logging.info(f"Original query: {original_query}")
+    logger.info(f"Original query: {original_query}")
     
     # Check if the query uses AVG() aggregation
     uses_avg = detect_avg_aggregation(original_query)
-    logging.info(f"Query uses AVG() aggregation: {uses_avg}")
+    logger.info(f"Query uses AVG() aggregation: {uses_avg}")
     
     # Define value_field
-    value_field = 'value'
+    value_field = 'value'  # Default
     
-    # Extract category fields from metric_info
-    category_fields = metric_info.get('category_fields', [])
-    # Only use category fields that are explicitly defined - no default
+    # Handle category fields
     if not category_fields:
         category_fields = []
-        logging.info("No category fields defined for this metric. Not using any default fields.")
+        logger.info("No category fields defined for this metric. Not using any default fields.")
     
     # Check if supervisor_district exists in category_fields
     has_district = False
     for field in category_fields:
-        if (isinstance(field, dict) and field.get('fieldName') == 'supervisor_district') or field == 'supervisor_district':
+        if isinstance(field, dict) and field.get('fieldName') == district_field:
+            has_district = True
+            break
+        elif field == district_field:
             has_district = True
             break
     
-    # If process_districts is True, make sure supervisor_district is used as a category field
-    if process_districts and not has_district and 'supervisor_district' in original_query:
+    # If processing districts and supervisor_district not in category_fields, add it
+    if process_districts and not has_district:
         # Add supervisor_district as a category field
         category_fields.append('supervisor_district')
-        logging.info("Added supervisor_district to category fields for district processing")
+        logger.info("Added supervisor_district to category fields for district processing")
         has_district = True
     
     # Determine the date field to use from the query
     date_field = extract_date_field_from_query(original_query)
     if not date_field:
-        logging.warning(f"No date field found in query for {query_name}")
+        logger.warning(f"No date field found in query for {query_name}")
         date_field = 'date'  # Default to 'date'
     
-    logging.info(f"Using date field: {date_field}")
+    logger.info(f"Using date field: {date_field}")
     
     # Transform the query for weekly analysis
     transformed_query = transform_query_for_weekly(
-        original_query, 
-        date_field, 
-        category_fields, 
-        recent_period, 
-        comparison_period
+        original_query=original_query,
+        date_field=date_field,
+        category_fields=category_fields,
+        recent_period=recent_period,
+        comparison_period=comparison_period,
+        district=None  # We'll handle district filtering later
     )
     
-    logging.info(f"Transformed query: {transformed_query}")
+    logger.info(f"Transformed query: {transformed_query}")
     
     # Log the set_dataset call details
-    logging.info(f"Calling set_dataset with endpoint: {endpoint}")
+    logger.info(f"Calling set_dataset with endpoint: {endpoint}")
     
     # Set the dataset using the endpoint and transformed query
     result = set_dataset(context_variables=context_variables, endpoint=endpoint, query=transformed_query)
     
     if 'error' in result:
-        logging.error(f"Error setting dataset for {query_name}: {result['error']}")
-        return None
+        logger.error(f"Error setting dataset for {query_name}: {result['error']}")
+        # If error contains "no-such-column: supervisor_district", we can proceed without filtering by district
+        if 'supervisor_district' in str(result.get('error', '')).lower() and 'no-such-column' in str(result.get('error', '')).lower():
+            logger.warning(f"Supervisor district field not found in dataset. Proceeding without district filtering.")
+            # Try again with a modified query without the supervisor_district field
+            # Remove supervisor_district from category fields
+            cleaned_category_fields = [field for field in category_fields if (isinstance(field, str) and field != 'supervisor_district') or 
+                                      (isinstance(field, dict) and field.get('fieldName') != 'supervisor_district')]
+            
+            # Transform the query again without supervisor_district
+            transformed_query = transform_query_for_weekly(
+                original_query=original_query,
+                date_field=date_field,
+                category_fields=cleaned_category_fields,
+                recent_period=recent_period,
+                comparison_period=comparison_period,
+                district=None
+            )
+            
+            logger.info(f"Retrying with modified query without supervisor_district: {transformed_query}")
+            result = set_dataset(context_variables=context_variables, endpoint=endpoint, query=transformed_query)
+            
+            if 'error' in result:
+                logger.error(f"Error setting dataset (second attempt) for {query_name}: {result['error']}")
+                return None
+        else:
+            return None
     
     # Get the dataset from context_variables
     if 'dataset' not in context_variables:
-        logging.error(f"No dataset found in context for {query_name}")
+        logger.error(f"No dataset found in context for {query_name}")
         return None
     
     dataset = context_variables['dataset']
     
     # Log available columns in dataset
-    logging.info(f"Available columns in dataset: {dataset.columns.tolist()}")
+    logger.info(f"Available columns in dataset: {dataset.columns.tolist()}")
+    
+    # Check if supervisor_district is actually in the dataset columns
+    dataset_columns = [col.lower() for col in dataset.columns.tolist()]
+    if 'supervisor_district' not in dataset_columns and district_field.lower() not in dataset_columns:
+        logger.warning(f"supervisor_district field not found in dataset columns. Removing it from category fields.")
+        # Remove supervisor_district from category fields
+        category_fields = [field for field in category_fields if (isinstance(field, str) and field.lower() != 'supervisor_district') or 
+                          (isinstance(field, dict) and field.get('fieldName', '').lower() != 'supervisor_district')]
+        # Set process_districts to False since we don't have district information
+        process_districts = False
+        has_district = False
     
     # Create or update value field if needed
     if value_field not in dataset.columns:
         if 'this_year' in dataset.columns:
             # Use this_year as the value field
             dataset[value_field] = dataset['this_year']
-            logging.info(f"Created {value_field} from this_year column")
+            logger.info(f"Created {value_field} from this_year column")
         elif dataset.select_dtypes(include=['number']).columns.tolist():
             # Use the first numeric column as the value field
-            numeric_cols = dataset.select_dtypes(include=['number']).columns.tolist()
-            # Filter out date-related columns
-            numeric_cols = [col for col in numeric_cols if not any(date_term in col.lower() for date_term in ['year', 'month', 'day', 'date', 'week'])]
-            
+            numeric_cols = [col for col in dataset.columns if 
+                            col not in ['actual_date', 'date', 'period_type', 'day', 'week'] and
+                            pd.api.types.is_numeric_dtype(dataset[col])]
             if numeric_cols:
                 dataset[value_field] = dataset[numeric_cols[0]]
-                logging.info(f"Created {value_field} from {numeric_cols[0]} column")
+                logger.info(f"Created {value_field} from {numeric_cols[0]} column")
             else:
                 # If no suitable numeric column, use 1 as the value
                 dataset[value_field] = 1
-                logging.info(f"Created {value_field} with default value 1")
+                logger.info(f"Created {value_field} with default value 1")
         else:
             # If no numeric columns, use 1 as the value
             dataset[value_field] = 1
-            logging.info(f"Created {value_field} with default value 1")
+            logger.info(f"Created {value_field} with default value 1")
+    
+    # Make sure actual_date field exists (our time series field)
+    time_field = 'actual_date'
+    if time_field not in dataset.columns:
+        if 'day' in dataset.columns:
+            # If the query returned 'day' instead of 'actual_date', use that
+            time_field = 'day'
+            logger.info(f"Using 'day' field instead of 'actual_date'")
+        elif 'max_date' in dataset.columns:
+            try:
+                # Convert max_date to datetime if it's not already
+                dataset['max_date'] = pd.to_datetime(dataset['max_date'])
+                
+                # Calculate start of week (Sunday)
+                dataset[time_field] = dataset['max_date']
+                logger.info(f"Created '{time_field}' field from max_date column")
+            except Exception as e:
+                logger.error(f"Error creating '{time_field}' field from max_date: {e}")
+                # Use current date's week start
+                today = datetime.now()
+                dataset[time_field] = today
+                logger.info(f"Created '{time_field}' field with current week start")
+        else:
+            # Try to create actual_date field from any date-like column
+            date_columns = [col for col in dataset.columns if 'date' in col.lower() and col != 'period_type']
+            if date_columns:
+                try:
+                    date_col = date_columns[0]
+                    dataset[time_field] = pd.to_datetime(dataset[date_col])
+                    logger.info(f"Created '{time_field}' field from {date_col} column")
+                except Exception as e:
+                    logger.error(f"Error creating '{time_field}' field from {date_col}: {e}")
+                    # Use current date's week start
+                    today = datetime.now()
+                    dataset[time_field] = today
+                    logger.info(f"Created '{time_field}' field with current week start")
+            else:
+                # Use current date
+                today = datetime.now()
+                dataset[time_field] = today
+                logger.info(f"No date columns found. Created '{time_field}' field with current date")
+    
+    # Ensure time field is in datetime format for processing
+    try:
+        dataset[time_field] = pd.to_datetime(dataset[time_field])
+        logger.info(f"Converted {time_field} to datetime format for processing")
+    except Exception as e:
+        logger.error(f"Error converting {time_field} to datetime: {e}")
+    
+    # Post-process daily data into weekly data
+    logger.info("Processing daily data into weekly aggregations")
+    try:
+        # Create a first_day_of_year column for reference
+        dataset['first_day_of_year'] = dataset[time_field].dt.year.apply(lambda x: pd.Timestamp(year=x, month=1, day=1))
+        
+        # Create week number relative to start of year
+        dataset['week_number'] = ((dataset[time_field] - dataset['first_day_of_year']).dt.days / 7).astype(int) + 1
+        
+        # Create a week_id column (YYYY-WXX format)
+        dataset['week_id'] = dataset[time_field].dt.strftime('%Y-W%W')
+        
+        # Create a week_starting_date column with the first day of each week (Sunday)
+        dataset['week_starting_date'] = dataset[time_field].dt.to_period('W-SUN').dt.start_time
+        
+        # Group by week and other relevant columns
+        group_cols = ['week_id', 'week_starting_date', 'period_type']
+        
+        # Add category fields to groupby if they exist in the dataset
+        for field in category_fields:
+            if isinstance(field, dict):
+                field_name = field.get('fieldName', '')
+            else:
+                field_name = field
+                
+            if field_name and field_name in dataset.columns:
+                group_cols.append(field_name)
+        
+        # Perform the aggregation
+        logger.info(f"Aggregating data by week using columns: {group_cols}")
+        
+        # Define aggregation based on whether we're using AVG or not
+        if uses_avg:
+            # For AVG, we need to take the mean
+            weekly_dataset = dataset.groupby(group_cols).agg({value_field: 'mean'}).reset_index()
+        else:
+            # For COUNT and SUM, we sum the values
+            weekly_dataset = dataset.groupby(group_cols).agg({value_field: 'sum'}).reset_index()
+        
+        # Replace the daily dataset with the weekly aggregated one
+        logger.info(f"Original dataset shape: {dataset.shape}, Weekly aggregated shape: {weekly_dataset.shape}")
+        context_variables['dataset'] = weekly_dataset
+        dataset = weekly_dataset
+        
+        # Use week_starting_date as the time field for charting and analysis
+        time_field = 'week_starting_date'
+        
+        context_variables['dataset'] = dataset
+        
+        logger.info("Successfully aggregated daily data into weekly format")
+    except Exception as e:
+        logger.error(f"Error during weekly aggregation: {str(e)}")
+        logger.error(traceback.format_exc())
+        # Continue with the daily data if aggregation fails
+        logger.warning("Continuing with daily data due to aggregation failure")
     
     # Define aggregation functions based on whether the query uses AVG()
     agg_functions = {value_field: 'mean'} if uses_avg else {value_field: 'sum'}
-    logging.info(f"Using '{list(agg_functions.values())[0]}' aggregation for field {value_field}")
+    logger.info(f"Using '{list(agg_functions.values())[0]}' aggregation for field {value_field}")
     
     # Validate category fields - ensure they exist in the dataset
     valid_category_fields = []
@@ -572,299 +810,445 @@ def process_weekly_analysis(metric_info, process_districts=False):
             field_name = field.get('fieldName', '')
         else:
             field_name = field
-        
+            
         if field_name and field_name in dataset.columns:
             valid_category_fields.append(field)
-            logging.info(f"Validated category field: {field_name}")
+            logger.info(f"Validated category field: {field_name}")
         else:
-            logging.warning(f"Category field {field_name} not found in dataset. Ignoring.")
+            logger.warning(f"Category field {field_name} not found in dataset. Ignoring.")
     
     # Update category_fields with only valid fields
     category_fields = valid_category_fields
     
-    # Make sure week_start field exists (our time series field)
-    time_field = 'week_start'
-    if time_field not in dataset.columns:
-        if 'day' in dataset.columns:
-            # If the query returned 'day' instead of 'week_start', use that
-            time_field = 'day'
-            logging.info(f"Using 'day' field instead of 'week_start'")
-        elif 'max_date' in dataset.columns:
-            try:
-                # Convert max_date to datetime and create week_start field
-                dataset['max_date'] = pd.to_datetime(dataset['max_date'])
-                # Calculate start of week (Sunday)
-                dataset[time_field] = dataset['max_date'] - pd.to_timedelta(dataset['max_date'].dt.dayofweek, unit='d')
-                dataset[time_field] = dataset[time_field].dt.strftime('%Y-%m-%d')
-                logging.info(f"Created '{time_field}' field from max_date column")
-            except Exception as e:
-                logging.error(f"Error creating '{time_field}' field from max_date: {e}")
-                # Use current date's week start
-                today = datetime.now()
-                week_start = today - timedelta(days=today.weekday())
-                dataset[time_field] = week_start.strftime('%Y-%m-%d')
-                logging.info(f"Created '{time_field}' field with current week start")
-        else:
-            # Try to create week_start field from any date-like column
-            date_columns = [col for col in dataset.columns if any(date_term in col.lower() for date_term in ['date', 'time', 'day'])]
-            if date_columns:
-                try:
-                    date_col = date_columns[0]
-                    dataset[date_col] = pd.to_datetime(dataset[date_col])
-                    # Calculate start of week (Sunday)
-                    dataset[time_field] = dataset[date_col] - pd.to_timedelta(dataset[date_col].dt.dayofweek, unit='d')
-                    dataset[time_field] = dataset[time_field].dt.strftime('%Y-%m-%d')
-                    logging.info(f"Created '{time_field}' field from {date_col} column")
-                except Exception as e:
-                    logging.error(f"Error creating '{time_field}' field from {date_col}: {e}")
-                    # Use current date's week start
-                    today = datetime.now()
-                    week_start = today - timedelta(days=today.weekday())
-                    dataset[time_field] = week_start.strftime('%Y-%m-%d')
-                    logging.info(f"Created '{time_field}' field with current week start")
-            else:
-                # Use current date's week start
-                today = datetime.now()
-                week_start = today - timedelta(days=today.weekday())
-                dataset[time_field] = week_start.strftime('%Y-%m-%d')
-                logging.info(f"No date columns found. Created '{time_field}' field with current week start")
-                
-    # Ensure time field is in the correct format for filtering
-    try:
-        # Convert to datetime then back to string format to standardize
-        dataset[time_field] = pd.to_datetime(dataset[time_field]).dt.strftime('%Y-%m-%d')
-    except Exception as e:
-        logging.error(f"Error standardizing {time_field} field format: {e}")
-    
-    # Set up filter conditions for date filtering (using the time field)
-    filter_conditions = [
-        {'field': time_field, 'operator': '<=', 'value': recent_period['end'].isoformat()},
-        {'field': time_field, 'operator': '>=', 'value': comparison_period['start'].isoformat()},
-    ]
-    
-    # Update the dataset in context_variables
-    context_variables['dataset'] = dataset
-    
-    # Initialize lists to store markdown and HTML content
-    all_markdown_contents = []
+    # Initialize lists to store HTML contents for embedding in the final output
     all_html_contents = []
     
-    # Process the overall (citywide) analysis
-    # Clean the metric name for the y-axis label
-    y_axis_label = query_name.replace("📊", "").strip()
-    context_variables['y_axis_label'] = y_axis_label
+    if time_field in dataset.columns:
+        try:
+            if pd.api.types.is_datetime64_dtype(dataset[time_field]) or isinstance(dataset[time_field].iloc[0], (datetime, pd.Timestamp)):
+                # If it's already a datetime, keep it that way
+                pass
+            else:
+                # Otherwise try to convert to datetime
+                dataset[time_field] = pd.to_datetime(dataset[time_field])
+        except Exception as e:
+            logger.error(f"Error standardizing {time_field} field format: {e}")
     
-    # Convert recent and comparison periods to string format for anomaly detection
-    string_recent_period = {
-        'start': recent_period['start'].strftime('%Y-%m-%d'),
-        'end': recent_period['end'].strftime('%Y-%m-%d')
-    }
-    
-    string_comparison_period = {
-        'start': comparison_period['start'].strftime('%Y-%m-%d'),
-        'end': comparison_period['end'].strftime('%Y-%m-%d')
-    }
+    # Set up filter conditions for date filtering (using the actual time field)
+    filter_conditions = [
+        {
+            'field': time_field,
+            'operator': '>=',
+            'value': comparison_period['start'].isoformat(),
+            'is_date': True
+        },
+        {
+            'field': time_field,
+            'operator': '<=', 
+            'value': recent_period['end'].isoformat(),
+            'is_date': True
+        }
+    ]
     
     # Generate main time series chart
-    logging.info(f"Generating main time series chart for {query_name}")
+    logger.info(f"Generating main time series chart for {query_name}")
     main_chart_title = f'{query_name} <br> Weekly Trend'
     
-    # Create a separate context for the main chart
-    main_context = context_variables.copy()
-    main_context['chart_title'] = main_chart_title
-    main_context['noun'] = query_name
-    
     try:
-        # Generate time series chart - now using week_start directly without extra aggregation
+        # Prepare context for the chart
+        context_variables['y_axis_label'] = query_name
+        context_variables['chart_title'] = main_chart_title
+        context_variables['noun'] = query_name
+        
+        # Generate the time series chart
         chart_result = generate_time_series_chart(
-            context_variables=main_context,
+            context_variables=context_variables,
             time_series_field=time_field,
             numeric_fields=value_field,
-            aggregation_period=None,  # No need for further aggregation since data is already weekly
-            max_legend_items=10,
+            aggregation_period='month',
             filter_conditions=filter_conditions,
-            show_average_line=True,
-            agg_functions=agg_functions,
-            return_html=True,
-            output_dir=WEEKLY_DIR
+            agg_functions=agg_functions
         )
         
-        logging.info(f"Successfully generated main time series chart for {query_name}")
+        logger.info(f"Successfully generated main time series chart for {query_name}")
         
         # Append chart HTML to content lists if available
         if chart_result:
-            if isinstance(chart_result, tuple):
-                markdown_content, html_content = chart_result
-                all_markdown_contents.append(markdown_content)
-                all_html_contents.append(html_content)
-            elif isinstance(chart_result, dict) and 'html' in chart_result:
-                all_html_contents.append(chart_result['html'])
+            if isinstance(chart_result, dict) and 'chart_html' in chart_result:
+                all_html_contents.append(str(chart_result['chart_html']))
             else:
                 all_html_contents.append(str(chart_result))
         else:
-            logging.warning(f"No main chart result returned for {query_name}")
+            logger.warning(f"No main chart result returned for {query_name}")
     except Exception as e:
-        logging.error(f"Error generating main time series chart for {query_name}: {str(e)}")
-        logging.error(traceback.format_exc())
+        logger.error(f"Error generating main time series chart for {query_name}: {str(e)}")
+        logger.error(traceback.format_exc())
     
-    # Process by category fields
-    for category_field in category_fields:
-        # Get the actual field name
-        if isinstance(category_field, dict):
-            category_field_name = category_field.get('fieldName', '')
-            category_field_display = category_field.get('name', category_field_name)
-        else:
-            category_field_name = category_field
-            category_field_display = category_field
+    # Process each category field for charts
+    charts = {}
+    for field in category_fields:
+        # Skip supervisor_district field if process_districts is already handling it
+        if (isinstance(field, str) and field.lower() == 'supervisor_district') or \
+           (isinstance(field, dict) and field.get('fieldName', '').lower() == 'supervisor_district'):
+            if process_districts:
+                logger.info(f"Skipping individual processing for supervisor_district field as it will be handled in district processing")
+                continue
         
-        # Skip if category field is not in dataset
-        if category_field_name not in dataset.columns:
-            logging.warning(f"Category field '{category_field_name}' not found in dataset for {query_name}")
+        field_name = field if isinstance(field, str) else field.get('fieldName', '')
+        if not field_name or field_name.lower() not in [col.lower() for col in dataset.columns]:
+            logger.warning(f"Field {field_name} not found in dataset columns. Skipping.")
             continue
         
-        logging.info(f"Processing category field: {category_field_name} for {query_name}")
+        logger.info(f"Processing category field: {field_name} for {query_name}")
         
         try:
-            # Generate time series chart for each category field
-            chart_title = f"{query_name} <br> {value_field} by Week by {category_field_display}"
-            category_context = context_variables.copy()
-            category_context['chart_title'] = chart_title
+            # Generate chart for this category field
+            context_variables['chart_title'] = f"{query_name} <br> {value_field} by Week by {field_name}"
             
-            # Generate the chart with grouping by category field
             cat_chart_result = generate_time_series_chart(
-                context_variables=category_context,
+                context_variables=context_variables,
                 time_series_field=time_field,
                 numeric_fields=value_field,
-                aggregation_period=None,  # Data is already weekly
-                max_legend_items=10,
-                group_field=category_field_name,
+                aggregation_period='month',
                 filter_conditions=filter_conditions,
-                show_average_line=False,
                 agg_functions=agg_functions,
-                return_html=True,
-                output_dir=WEEKLY_DIR
+                group_field=field_name
             )
             
-            logging.info(f"Successfully generated chart for {category_field_name} for {query_name}")
+            logger.info(f"Successfully generated chart for {field_name} for {query_name}")
             
             # Append chart result to content lists
             if cat_chart_result:
-                if isinstance(cat_chart_result, tuple):
-                    markdown_content, html_content = cat_chart_result
-                    all_markdown_contents.append(markdown_content)
-                    all_html_contents.append(html_content)
-                elif isinstance(cat_chart_result, dict) and 'html' in cat_chart_result:
-                    all_html_contents.append(cat_chart_result['html'])
+                if isinstance(cat_chart_result, dict) and 'chart_html' in cat_chart_result:
+                    all_html_contents.append(str(cat_chart_result['chart_html']))
                 else:
                     all_html_contents.append(str(cat_chart_result))
             else:
-                logging.warning(f"No chart result returned for {category_field_name} for {query_name}")
+                logger.warning(f"No chart result returned for {field_name} for {query_name}")
         except Exception as e:
-            logging.error(f"Error generating chart for {category_field_name} for {query_name}: {str(e)}")
-            logging.error(traceback.format_exc())
+            logger.error(f"Error generating chart for {field_name} for {query_name}: {str(e)}")
+            logger.error(traceback.format_exc())
         
         try:
-            # Detect anomalies
+            # Run anomaly detection
             anomaly_results = anomaly_detection(
-                context_variables=context_variables,
-                group_field=category_field_name,
-                filter_conditions=filter_conditions,
-                min_diff=2,
-                recent_period=string_recent_period,
-                comparison_period=string_comparison_period,
+                df=dataset,
+                value_field=value_field,
+                category_field=field_name,
                 date_field=time_field,
-                numeric_field=value_field,
-                y_axis_label=y_axis_label,
-                title=f"{query_name} - {value_field} by {category_field_display}",
-                period_type='week',
-                agg_function='mean' if uses_avg else 'sum',
-                output_dir='weekly'
+                recent_period=recent_period,
+                comparison_period=comparison_period,
+                agg_function=list(agg_functions.values())[0]
             )
             
-            # Get markdown and HTML content from anomaly results
-            if anomaly_results:
-                markdown_content = anomaly_results.get('markdown', anomaly_results.get('anomalies_markdown', 'No anomalies detected.'))
-                html_content = anomaly_results.get('html', anomaly_results.get('anomalies', 'No anomalies detected.'))
+            # Add anomaly text to the content
+            if anomaly_results and 'html_content' in anomaly_results:
+                # Convert HTML content to Markdown instead of using raw HTML
+                html_content = anomaly_results['html_content']
                 
-                # Append content to lists
-                all_markdown_contents.append(markdown_content)
-                all_html_contents.append(html_content)
+                # Create a markdown version of the anomaly content
+                markdown_content = f"### Anomalies by {field_name}\n\n"
+                markdown_content += f"Recent Period: {recent_period['start']} to {recent_period['end']}\n\n"
+                markdown_content += f"Comparison Period: {comparison_period['start']} to {comparison_period['end']}\n\n"
+                
+                # If we have formatted anomalies, create a markdown table
+                if 'anomalies' in anomaly_results and anomaly_results['anomalies']:
+                    # Add markdown table header
+                    markdown_content += f"| {field_name} | Recent Period | Comparison Period | Change | % Change |\n"
+                    markdown_content += "|" + "---|" * 5 + "\n"
+                    
+                    # Add rows for each anomaly
+                    for anomaly in anomaly_results['anomalies']:
+                        markdown_content += f"| {anomaly['category']} | {anomaly['recent']:.1f} | {anomaly['comparison']:.1f} | {anomaly['abs_change']:.1f} | {anomaly['pct_change']:.1f}% |\n"
+                else:
+                    markdown_content += "No significant anomalies detected.\n"
+                
+                # Add the markdown content instead of HTML
+                all_html_contents.append(markdown_content)
         except Exception as e:
-            logging.error(f"Error detecting anomalies for {category_field_name} for {query_name}: {str(e)}")
-            logging.error(traceback.format_exc())
+            logger.error(f"Error detecting anomalies for {field_name} for {query_name}: {str(e)}")
+            logger.error(traceback.format_exc())
+    
+    # Process district-level data if requested and if supervisor_district field exists
+    if process_districts and has_district:
+        # Check that supervisor_district column actually exists before proceeding
+        district_col = None
+        for col in dataset.columns:
+            if col.lower() == 'supervisor_district' or col.lower() == district_field.lower():
+                district_col = col
+                break
+                
+        if not district_col:
+            logger.warning(f"Cannot process districts: supervisor_district or {district_field} column not found in dataset")
+        else:
+            logger.info(f"Processing district-level data using column: {district_col}")
+            
+            # Get all unique district values
+            districts = dataset[district_col].unique()
+            logger.info(f"Found {len(districts)} unique districts to process: {districts}")
+            
+            # Process each district separately
+            for district in districts:
+                if district is None or (isinstance(district, str) and district.strip() == ''):
+                    logger.info(f"Skipping empty/null district value")
+                    continue
+                    
+                logger.info(f"Processing data for district: {district}")
+                
+                try:
+                    # Filter data for this district
+                    district_dataset = dataset[dataset[district_col] == district].copy()
+                    
+                    if district_dataset.empty:
+                        logger.warning(f"No data for district {district} - skipping")
+                        continue
+                        
+                    # Create a separate context with just this district's data
+                    district_context = context_variables.copy()
+                    district_context['dataset'] = district_dataset
+                    district_context['chart_title'] = f"{query_name} - District {district}"
+                    
+                    # Create a district-specific HTML content list
+                    district_html_contents = []
+                    
+                    # Generate chart for this district
+                    district_chart_result = generate_time_series_chart(
+                        context_variables=district_context,
+                        time_series_field=time_field,
+                        numeric_fields=value_field,
+                        aggregation_period='month',
+                        filter_conditions=filter_conditions,
+                        agg_functions=agg_functions
+                    )
+                    
+                    logger.info(f"Successfully generated chart for district {district}")
+                    
+                    # Save district-specific analysis
+                    if district_chart_result:
+                        # Convert district to integer if possible for file naming
+                        try:
+                            district_num = int(district)
+                        except (ValueError, TypeError):
+                            district_num = str(district).replace(' ', '_')
+                            
+                        # Add district chart to district content list
+                        district_html_contents.append(f"## District {district}\n\n")
+                        if isinstance(district_chart_result, dict) and 'chart_html' in district_chart_result:
+                            district_html_contents.append(str(district_chart_result['chart_html']))
+                        else:
+                            district_html_contents.append(str(district_chart_result))
+                            
+                        # Try to detect anomalies for this district
+                        try:
+                            district_anomalies = anomaly_detection(
+                                df=district_dataset,
+                                value_field=value_field,
+                                category_field=None,  # No need for category field since we're already filtering by district
+                                date_field=time_field,
+                                recent_period=recent_period,
+                                comparison_period=comparison_period
+                            )
+                            
+                            if district_anomalies:
+                                # Convert HTML to markdown for district anomalies too
+                                district_html_contents.append(f"### Anomalies for District {district}\n\n")
+                                
+                                # If we have HTML content, convert it to markdown
+                                if 'html_content' in district_anomalies:
+                                    # Create markdown version
+                                    markdown_content = f"Recent Period: {recent_period['start']} to {recent_period['end']}\n\n"
+                                    markdown_content += f"Comparison Period: {comparison_period['start']} to {comparison_period['end']}\n\n"
+                                    
+                                    # If we have formatted anomalies, create a markdown table
+                                    if 'anomalies' in district_anomalies and district_anomalies['anomalies']:
+                                        # Add markdown table header
+                                        if district_anomalies['anomalies'][0].get('category'):
+                                            # With category field
+                                            category_field = next(key for key in district_anomalies['anomalies'][0].keys() if key == 'category')
+                                            markdown_content += f"| {category_field} | Recent Period | Comparison Period | Change | % Change |\n"
+                                            markdown_content += "|" + "---|" * 5 + "\n"
+                                            
+                                            # Add rows for each anomaly
+                                            for anomaly in district_anomalies['anomalies']:
+                                                markdown_content += f"| {anomaly['category']} | {anomaly['recent']:.1f} | {anomaly['comparison']:.1f} | {anomaly['abs_change']:.1f} | {anomaly['pct_change']:.1f}% |\n"
+                                        else:
+                                            # Without category field
+                                            markdown_content += "| Metric | Recent Period | Comparison Period | Change | % Change |\n"
+                                            markdown_content += "|" + "---|" * 5 + "\n"
+                                            
+                                            # Add one row for the district level
+                                            anomaly = district_anomalies['anomalies'][0]
+                                            markdown_content += f"| District {district} | {anomaly['recent']:.1f} | {anomaly['comparison']:.1f} | {anomaly['abs_change']:.1f} | {anomaly['pct_change']:.1f}% |\n"
+                                    else:
+                                        markdown_content += "No significant anomalies detected for this district.\n"
+                                    
+                                    district_html_contents.append(markdown_content)
+                                else:
+                                    district_html_contents.append("No significant anomalies detected for this district.\n")
+                        except Exception as e:
+                            logger.error(f"Error detecting anomalies for district {district}: {str(e)}")
+                            
+                        # Create district-specific result and save it
+                        district_content = "\n\n".join(district_html_contents)
+                        district_result = {
+                            'metric_id': metric_info.get('id', ''),
+                            'name': f"{query_name} - District {district}",
+                            'content': district_content,
+                            'html_contents': district_html_contents,
+                            'date_range': f"{recent_period['start']} to {recent_period['end']}"
+                        }
+                        
+                        # Get numeric metric ID
+                        numeric_id = metric_info.get('numeric_id') or metric_info.get('id')
+                        if not numeric_id and 'metric_id' in metric_info:
+                            numeric_id = metric_info['metric_id']
+                        
+                        # Save the district-specific result to files
+                        try:
+                            save_weekly_analysis(district_result, numeric_id, district=district_num)
+                            logger.info(f"Saved district-specific analysis for district {district}")
+                        except Exception as e:
+                            logger.error(f"Error saving district-specific analysis for district {district}: {str(e)}")
+                            logger.error(traceback.format_exc())
+                            
+                        # Add a reference to this district's analysis in the main content
+                        numeric_id = metric_info.get('numeric_id') or metric_info.get('id') 
+                        if not numeric_id and 'metric_id' in metric_info:
+                            numeric_id = metric_info['metric_id']
+                            
+                        if not numeric_id or (isinstance(numeric_id, str) and numeric_id.strip() == ''):
+                            # Use sanitized query name if no ID available
+                            metric_file_id = query_name.lower().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "")
+                        else:
+                            metric_file_id = numeric_id
+                            
+                        all_html_contents.append(f"## [District {district} Analysis](/{district_num}/{metric_file_id}.md)\n\n")
+                    else:
+                        logger.warning(f"No chart result returned for district {district}")
+                        
+                except Exception as e:
+                    logger.error(f"Error processing district {district}: {str(e)}")
+                    logger.error(traceback.format_exc())
     
     # Combine all markdown content
-    query_string = ", ".join([f"{cond['field']} {cond['operator']} {cond['value']}" for cond in filter_conditions])
-    combined_markdown = f"# {metric_id} - {query_name}\n\n**Analysis Type:** Weekly\n\n**Period:** {recent_period['start']} to {recent_period['end']}\n\n**Filters:** {query_string}\n\n{''.join(all_markdown_contents)}"
+    all_content = "\n\n".join(all_html_contents)
     
-    # Combine all HTML content - ensure all items are strings
-    html_content_strings = []
-    for content in all_html_contents:
-        if isinstance(content, str):
-            html_content_strings.append(content)
-        elif isinstance(content, tuple):
-            html_content_strings.append(content[0] if content else "")
-        else:
-            html_content_strings.append(str(content) if content else "")
-    
-    combined_html = f"<h1>{metric_id} - {query_name}</h1>\n<p><strong>Analysis Type:</strong> Weekly</p>\n<p><strong>Period:</strong> {recent_period['start']} to {recent_period['end']}</p>\n<p><strong>Filters:</strong> {query_string}</p>\n{''.join(html_content_strings)}"
-    
-    # Save the analysis files
-    save_result = save_weekly_analysis(
-        {
-            'query_name': query_name,
-            'markdown': combined_markdown,
-            'html': combined_html,
-            'metric_id': metric_id
-        },
-        metric_id
-    )
-    
+    # Return the result object
     return {
-        'query_name': query_name,
-        'metric_id': metric_id,
-        'markdown': combined_markdown,
-        'html': combined_html,
-        'file_path': save_result.get('md_path', '')
+        'metric_id': metric_info.get('id', ''),
+        'name': query_name,
+        'content': all_content,
+        'html_contents': all_html_contents,
+        'date_range': f"{recent_period['start']} to {recent_period['end']}"
     }
 
-def save_weekly_analysis(result, metric_id, output_dir=None):
-    """Save weekly analysis results to markdown files."""
+def save_weekly_analysis(result, metric_id, district=None):
+    """Save weekly analysis results to markdown files following the directory structure used
+    in generate_metric_analysis.py."""
     # Create output directory if it doesn't exist
-    if output_dir is None:
-        output_dir = WEEKLY_DIR
+    os.makedirs(WEEKLY_DIR, exist_ok=True)
     
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Use result's metric_id if available, otherwise fallback to the provided metric_id
-    file_metric_id = result.get('metric_id', metric_id)
+    # Use the numeric metric_id if available
+    # First try from the input parameter
+    file_metric_id = metric_id
     
     # Ensure we have a valid metric_id
-    if not file_metric_id or file_metric_id.strip() == '':
-        # Generate a sanitized metric ID from the query name if no metric_id is available
-        query_name = result.get('query_name', '')
-        file_metric_id = query_name.lower().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "")
-        logging.warning(f"Missing metric_id for {query_name}, using sanitized query name: {file_metric_id}")
+    if not file_metric_id or (isinstance(file_metric_id, str) and file_metric_id.strip() == ''):
+        # Try to get it from the result object
+        file_metric_id = result.get('metric_id', '')
+        
+        if not file_metric_id or (isinstance(file_metric_id, str) and file_metric_id.strip() == ''):
+            # As a last resort, generate a sanitized metric ID from the query name
+            query_name = result.get('name', '')
+            if query_name:
+                file_metric_id = query_name.lower().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "")
+            else:
+                file_metric_id = "unknown_metric"
+            logger.warning(f"Missing metric_id for {query_name}, using sanitized query name: {file_metric_id}")
     
-    # Generate unique filename with date for weekly analysis
-    today = datetime.now().strftime('%Y-%m-%d')
-    md_filename = f"{file_metric_id}_{today}.md"
-    md_path = os.path.join(output_dir, md_filename)
+    # Create district subfolder using the district number - 0 for citywide
+    if district is not None:
+        district_dir = os.path.join(WEEKLY_DIR, f"{district}")
+        os.makedirs(district_dir, exist_ok=True)
+        output_path = district_dir
+    else:
+        # Default to folder 0 if no district specified (treating as citywide)
+        district_dir = os.path.join(WEEKLY_DIR, "0")
+        os.makedirs(district_dir, exist_ok=True)
+        output_path = district_dir
+    
+    # Generate filename - just metric_id.md (no date needed as it will be overwritten each week)
+    md_filename = f"{file_metric_id}.md"
+    md_path = os.path.join(output_path, md_filename)
+    
+    # Also save as JSON for programmatic access
+    json_filename = f"{file_metric_id}.json"
+    json_path = os.path.join(output_path, json_filename)
+    
+    # Check for other files with similar metric names and remove them
+    # This helps avoid duplicate files when names change
+    query_name = result.get('name', '')
+    if query_name:
+        # Create a cleaned version of the name for comparison
+        cleaned_name = query_name.lower().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "")
+        
+        # Look for files matching this pattern, except our target files
+        for filename in os.listdir(output_path):
+            file_path = os.path.join(output_path, filename)
+            # Check if it might be a previously saved version with different naming
+            if (cleaned_name in filename and 
+                filename != md_filename and 
+                filename != json_filename and
+                not filename.startswith(".")):  # Skip hidden files
+                try:
+                    os.remove(file_path)
+                    logger.info(f"Removed old file with different naming: {file_path}")
+                except Exception as e:
+                    logger.warning(f"Could not remove old file {file_path}: {str(e)}")
     
     # Log the file path being used
-    logging.info(f"Saving weekly analysis to: {md_path}")
+    logger.info(f"Saving weekly analysis to: {md_path} and {json_path}")
     
-    # Get the markdown content
-    markdown_content = result.get('markdown', '')
+    # Get the markdown and HTML content
+    markdown_content = result.get('content', '')
+    html_content = result.get('html_contents', [])
     
-    # Write markdown file
-    with open(md_path, 'w') as f:
-        f.write(markdown_content)
+    try:
+        # Write markdown file
+        with open(md_path, 'w') as f:
+            f.write(markdown_content)
+        logger.info(f"Successfully wrote markdown file ({len(markdown_content)} chars) to {md_path}")
+    except Exception as e:
+        logger.error(f"Error writing markdown file to {md_path}: {str(e)}")
+    
+    try:
+        # Write JSON file with both markdown and HTML content
+        json_data = {
+            'metric_id': file_metric_id,
+            'name': result.get('name', ''),
+            'content': markdown_content,
+            'html_contents': html_content,
+            'date_range': result.get('date_range', ''),
+            'generated_at': datetime.now().isoformat()
+        }
         
-    logging.info(f"Saved weekly analysis for {file_metric_id} to {md_path}")
+        with open(json_path, 'w') as f:
+            json.dump(json_data, f, indent=2)
+        logger.info(f"Successfully wrote JSON file to {json_path}")
+    except Exception as e:
+        logger.error(f"Error writing JSON file to {json_path}: {str(e)}")
+    
+    # Get district description based on district value
+    if district == 0 or district is None:
+        district_info = " for Citywide"
+    else:
+        district_info = f" for District {district}"
+        
+    logger.info(f"Saved weekly analysis for {file_metric_id}{district_info} to {md_path} and {json_path}")
     
     return {
-        'md_path': md_path
+        'md_path': md_path,
+        'json_path': json_path
     }
 
 def run_weekly_analysis(metrics_list=None, process_districts=False):
@@ -929,7 +1313,7 @@ def run_weekly_analysis(metrics_list=None, process_districts=False):
             continue
         
         # Log metric details found
-        query_name = metric_info.get('query_name', metric_id)
+        query_name = metric_info.get('name', metric_info.get('query_name', 'Unknown Metric'))
         logger.info(f"Found metric '{metric_id}' - Query Name: '{query_name}'")
         logger.info(f"Category: {metric_info.get('top_category', 'Unknown')}/{metric_info.get('subcategory', 'Unknown')}")
         
@@ -954,12 +1338,25 @@ def run_weekly_analysis(metrics_list=None, process_districts=False):
         try:
             result = process_weekly_analysis(metric_info, process_districts=process_districts)
             if result:
+                # Make sure numeric metric_id is set correctly in the result
+                numeric_metric_id = metric_id  # This is the ID passed to find_metric_in_queries
+                if not result.get('metric_id') or result.get('metric_id') == '':
+                    result['metric_id'] = numeric_metric_id
+                    logger.info(f"Set numeric metric_id in result: {numeric_metric_id}")
+                
+                # Save the analysis results to files
+                saved_paths = save_weekly_analysis(result, numeric_metric_id, district=0)
+                # Add file paths to the result object
+                if saved_paths:
+                    result['md_path'] = saved_paths.get('md_path')
+                    result['json_path'] = saved_paths.get('json_path')
+                
                 all_results.append(result)
                 successful_metrics.append(metric_id)
                 metric_end_time = datetime.now()
                 duration = (metric_end_time - metric_start_time).total_seconds()
                 logger.info(f"Completed weekly analysis for {metric_id} - Duration: {duration:.2f} seconds")
-                logger.info(f"Analysis saved to: {result.get('file_path', 'Unknown path')}")
+                logger.info(f"Analysis saved to: {result.get('md_path', 'Unknown path')}")
                 
                 # Check if YTD query was used based on log messages
                 if has_ytd_query:
@@ -1009,21 +1406,29 @@ def generate_weekly_newsletter(results):
     # Add each analysis result to the newsletter
     for i, result in enumerate(results):
         metric_id = result.get('metric_id', '')
-        query_name = result.get('query_name', '')
-        file_path = result.get('file_path', '')
+        query_name = result.get('name', '')
+        file_path = result.get('md_path', '')
+        json_path = result.get('json_path', '')
         
         logger.info(f"Adding result {i+1}/{len(results)} to newsletter: {metric_id} - {query_name}")
         
         # Add a section for this metric
         newsletter_content += f"### {query_name}\n\n"
         
-        # Include a link to the full analysis
+        # Include links to the full analysis
         if file_path:
-            relative_path = os.path.relpath(file_path, OUTPUT_DIR)
-            newsletter_content += f"[View full analysis]({relative_path})\n\n"
-            logger.info(f"Added link to analysis file: {relative_path}")
+            md_relative_path = os.path.relpath(file_path, OUTPUT_DIR)
+            newsletter_content += f"[View full analysis (Markdown)]({md_relative_path})\n\n"
+            logger.info(f"Added link to markdown analysis file: {md_relative_path}")
         else:
-            logger.warning(f"No file path for {metric_id} - {query_name}, skipping link")
+            logger.warning(f"No markdown file path for {metric_id} - {query_name}")
+            
+        if json_path:
+            json_relative_path = os.path.relpath(json_path, OUTPUT_DIR)
+            newsletter_content += f"[View JSON data]({json_relative_path})\n\n"
+            logger.info(f"Added link to JSON data file: {json_relative_path}")
+        else:
+            logger.warning(f"No JSON file path for {metric_id} - {query_name}")
         
         # Include a summary of key findings (this would need to be extracted from the analysis)
         newsletter_content += "Key findings:\n"

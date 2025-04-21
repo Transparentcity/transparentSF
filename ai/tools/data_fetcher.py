@@ -140,9 +140,32 @@ def set_dataset(context_variables, *args, **kwargs):
     try:
         # Handle the JSON format with "args" and "kwargs" keys
         if 'args' in kwargs and 'kwargs' in kwargs:
-            endpoint = kwargs['args']
-            query = kwargs['kwargs']
+            # Check if args is a string that looks like JSON
+            if isinstance(kwargs['args'], str) and (kwargs['args'].startswith('{') or kwargs['args'] == '{}'):
+                try:
+                    args_dict = json.loads(kwargs['args'])
+                    endpoint = args_dict.get('endpoint', '')
+                except json.JSONDecodeError:
+                    endpoint = kwargs['args']
+            else:
+                endpoint = kwargs['args']
+                
+            # Check if kwargs is a string that looks like JSON
+            if isinstance(kwargs['kwargs'], str) and kwargs['kwargs'].startswith('{'):
+                try:
+                    kwargs_dict = json.loads(kwargs['kwargs'])
+                    query = kwargs_dict.get('query', '')
+                    # If no query but endpoint exists in the kwargs_dict, use that
+                    if not query and 'endpoint' in kwargs_dict:
+                        endpoint = kwargs_dict.get('endpoint', '')
+                        query = kwargs_dict.get('query', '')
+                except json.JSONDecodeError:
+                    query = kwargs['kwargs']
+            else:
+                query = kwargs['kwargs']
+                
             logger.info(f"Using JSON format - Endpoint: {endpoint}, Query: {query}")
+            
         # Handle the args/kwargs syntax
         elif len(args) >= 1 and isinstance(args[0], str):
             endpoint = args[0]
@@ -160,6 +183,11 @@ def set_dataset(context_variables, *args, **kwargs):
         if not query:
             logger.error("Missing query parameter")
             return {'error': 'Query is required', 'queryURL': None}
+            
+        # Clean up endpoint - ensure it ends with .json
+        if not endpoint.endswith('.json'):
+            endpoint = f"{endpoint}.json"
+            logger.info(f"Added .json to endpoint: {endpoint}")
 
         logger.info(f"Final parameters - Endpoint: {endpoint}, Query: {query}")
         query_object = {'endpoint': endpoint, 'query': query}

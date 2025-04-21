@@ -9,7 +9,6 @@ from pathlib import Path
 import logging
 import sys
 import pytz
-from summarize_posts import create_document_summary
 
 # ------------------------------
 # Initialization
@@ -407,7 +406,10 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
                             numeric_field=numeric_field,
                             y_axis_label=numeric_field,
                             title=context_variables['chart_title'],
-                            period_type=period_type
+                            period_type=period_type,
+                            object_type='period_analysis',
+                            object_id=index,
+                            object_name=title
                         )
 
                         if anomalies_result and 'anomalies' in anomalies_result:
@@ -473,17 +475,10 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
             if current_title_suffix != "City Wide":
                 sanitized_title = f"{sanitized_title.replace('.json', '')}_{current_title_suffix.lower().replace(' ', '_')}.json"
 
-            # Save HTML file to the appropriate folder
+            # We no longer save HTML files
             html_filename = os.path.join(current_output_folder, f"{sanitized_title}.html")
-            os.makedirs(os.path.dirname(html_filename), exist_ok=True)
-            # Also remove the summary file if it exists
-            summary_filename = os.path.join(current_output_folder, f"{sanitized_title}_summary.txt")
-            if os.path.exists(summary_filename):
-                os.remove(summary_filename)
-            with open(html_filename, 'w', encoding='utf-8') as f:
-                f.write(full_html_content)
-
-            # Process and save markdown content similarly
+            
+            # Process and save markdown content
             processed_markdown_contents = []
             for content in all_markdown_contents:
                 if content is None:
@@ -518,10 +513,6 @@ def process_entry(index, data_entry, output_folder, log_file, script_dir, period
                 os.remove(markdown_filename)
             with open(markdown_filename, 'w', encoding='utf-8') as f:
                 f.write(full_markdown_content)
-
-            # Generate summary for citywide analysis only
-            if current_title_suffix == "City Wide":
-                summarize_markdown_file(markdown_filename, log_file)
 
             # Clear the contents for the next iteration
             all_markdown_contents.clear()
@@ -647,43 +638,6 @@ def export_for_endpoint(endpoint, period_type='year', output_folder=None,
 
     print(f"\nExport processing complete for endpoint: {endpoint}.")
     print(f"Log file location: {log_file_path}")
-
-def summarize_markdown_file(markdown_filename: str, log_file) -> None:
-    """
-    Create a summary of a markdown file and save it as a _summary.txt file.
-    Only processes the file if a summary doesn't already exist.
-    
-    Args:
-        markdown_filename (str): Path to the markdown file to summarize
-        log_file: File object for logging
-    """
-    try:
-        # Convert to Path object for easier manipulation
-        md_file = Path(markdown_filename)
-        if not md_file.exists():
-            log_file.write(f"Markdown file not found: {markdown_filename}\n")
-            return
-            
-        # Check if summary already exists
-        summary_file = md_file.parent / f"{md_file.stem}_summary.txt"
-        if summary_file.exists():
-            log_file.write(f"Summary already exists for {md_file.name}, skipping...\n")
-            return
-            
-        log_file.write(f"Generating summary for: {md_file.name}\n")
-        
-        # Read the markdown content
-        content = md_file.read_text(encoding='utf-8')
-        
-        # Generate summary
-        summary = create_document_summary(content)
-        
-        # Save summary
-        summary_file.write_text(summary, encoding='utf-8')
-        log_file.write(f"✓ Successfully saved summary to {summary_file.name}\n")
-        
-    except Exception as e:
-        log_file.write(f"❌ Error processing {markdown_filename}: {str(e)}\n")
 
 # ------------------------------
 # Main Function

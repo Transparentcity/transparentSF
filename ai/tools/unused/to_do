@@ -1,0 +1,2 @@
+Add URL tracking to the DB tables Time seris_metadata is enough. 
+Auto-delete old rows when we insert the new ones. 

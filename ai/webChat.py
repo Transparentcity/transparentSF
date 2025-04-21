@@ -22,6 +22,20 @@ from fastapi.templating import Jinja2Templates
 import uuid
 import datetime
 import sys
+import asyncio
+import math
+import psycopg2
+import psycopg2.extras
+import json
+from datetime import datetime, date, time as dt_time
+import time as time_module
+from decimal import Decimal
+import traceback
+# Add import for store_anomalies function
+from tools.store_anomalies import get_anomaly_details as get_anomaly_details_from_db, get_anomalies
+# Import the generate_chart_message function
+from chart_message import generate_chart_message, generate_anomaly_chart_html
+import re
 
 # ------------------------------
 # Configuration and Setup
@@ -57,7 +71,7 @@ os.makedirs(logs_dir, exist_ok=True)
 # Test write access and log startup
 try:
     with open(log_file, 'a', encoding='utf-8') as f:
-        startup_message = f"\n{'='*50}\nLog started at {datetime.datetime.now()}\nLog file: {log_file}\nPython path: {sys.executable}\n{'='*50}\n"
+        startup_message = f"\n{'='*50}\nLog started at {datetime.now()}\nLog file: {log_file}\nPython path: {sys.executable}\n{'='*50}\n"
         f.write(startup_message)
 except Exception as e:
     print(f"Error writing to log file: {e}")
@@ -94,7 +108,7 @@ logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
 
 # Test the logger
-logger.info(f"WebChat logging initialized at {datetime.datetime.now()}")
+logger.info(f"WebChat logging initialized at {datetime.now()}")
 logger.info(f"Log file location: {log_file}")
 
 # Initialize connections
@@ -131,115 +145,86 @@ combined_df = {"dataset": pd.DataFrame()}
 # Add environment check at the top with other configurations
 IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
+def save_notes_to_file(notes_text, filename="combined_notes.txt"):
+    """
+    Saves the combined notes to a file in the output/notes directory.
+    """
+    logger = logging.getLogger(__name__)
+    
+    script_dir = Path(__file__).parent
+    notes_dir = script_dir / 'output' / 'notes'
+    
+    # Create notes directory if it doesn't exist
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_path = notes_dir / filename
+    
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(notes_text)
+        logger.info(f"Successfully saved notes to {file_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving notes to file: {e}")
+        return False
+
 def load_and_combine_notes():
     logger = logging.getLogger(__name__)
     
     script_dir = Path(__file__).parent
-    output_dir = script_dir / 'output'
+    dashboard_dir = script_dir / 'output' / 'dashboard'
     combined_text = ""
-    total_files = 0
+    districts_processed = 0
     
-    # Find and load all summary text files
-    for summary_file in output_dir.rglob('*_summary.txt'):
-        try:
-            with open(summary_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-                combined_text += f"\n{'='*80}\nSummary: {summary_file.name}\n{'='*80}\n\n{content}\n\n"
-                total_files += 1
-        except Exception as e:
-            logger.error(f"Error reading summary file {summary_file}: {e}")
-    
-    # Load YTD metrics
-    ytd_file = script_dir / 'output' / 'dashboard' / 'district_0.json'  # Use citywide data
-    if ytd_file.exists():
-        logger.info("Loading current YTD metrics")
-        try:
-            with open(ytd_file, 'r', encoding='utf-8') as f:
-                ytd_data = json.load(f)
-            
-            # Format YTD metrics as text
-            ytd_text = "\nYear-to-Date (YTD) Metrics Summary:\n\n"
-            
-            # Add citywide metrics
-            ytd_text += f"Citywide Statistics:\n"
-            for category in ytd_data.get("categories", []):
-                ytd_text += f"\n{category['category']}:\n"
-                for metric in category.get("metrics", []):
-                    name = metric.get("name", "")
-                    this_year = metric.get("thisYear", 0)
-                    last_year = metric.get("lastYear", 0)
-                    last_date = metric.get("lastDataDate", "")
-                    
-                    # Calculate percent change
-                    if last_year != 0:
-                        pct_change = ((this_year - last_year) / last_year) * 100
-                        change_text = f"({pct_change:+.1f}% vs last year)"
-                    else:
-                        change_text = "(no prior year data)"
-                    
-                    ytd_text += f"- {name}: {this_year:,} {change_text} as of {last_date}\n"
-            
-            combined_text += "\n" + ytd_text
-            logger.info("Successfully added YTD metrics to notes")
-            
-            # Add district specific metrics from top_level.json files
-            dashboard_dir = script_dir / 'output' / 'dashboard'
-            district_metrics_text = "\n\nDistrict-Level Metrics Summary:\n"
-            districts_processed = 0
-            
-            # Process each district folder (0-11)
-            for district_num in range(1, 12):  # Skip district 0 (citywide) as already processed above
-                district_dir = dashboard_dir / str(district_num)
-                top_level_file = district_dir / 'top_level.json'
+    # Process each district folder (0-11)
+    for district_num in range(12):  # Include all districts 0-11
+        district_dir = dashboard_dir / str(district_num)
+        top_level_file = district_dir / 'top_level.json'
+        
+        if top_level_file.exists():
+            try:
+                with open(top_level_file, 'r', encoding='utf-8') as f:
+                    district_data = json.load(f)
                 
-                if top_level_file.exists():
-                    try:
-                        with open(top_level_file, 'r', encoding='utf-8') as f:
-                            district_data = json.load(f)
+                district_name = district_data.get("name", f"District {district_num}")
+                combined_text += f"\n{'='*80}\n{district_name} Metrics Summary\n{'='*80}\n\n"
+                
+                # Process each category
+                for category in district_data.get("categories", []):
+                    category_name = category.get("category", "")
+                    combined_text += f"\n{category_name}:\n"
+                    
+                    # Process all metrics in the category
+                    metrics = category.get("metrics", [])
+                    for metric in metrics:
+                        name = metric.get("name", "")
+                        this_year = metric.get("thisYear", 0)
+                        last_year = metric.get("lastYear", 0)
+                        last_date = metric.get("lastDataDate", "")
+                        metric_id = metric.get("numeric_id", metric.get("id", ""))
                         
-                        district_name = district_data.get("name", f"District {district_num}")
-                        district_metrics_text += f"\n{district_name}:\n"
+                        # Calculate percent change
+                        if last_year != 0:
+                            pct_change = ((this_year - last_year) / last_year) * 100
+                            change_text = f"({pct_change:+.1f}% vs last year)"
+                        else:
+                            change_text = "(no prior year data)"
                         
-                        # Process each category
-                        for category in district_data.get("categories", []):
-                            category_name = category.get("category", "")
-                            district_metrics_text += f"\n  {category_name}:\n"
-                            
-                            # Get top 3 metrics for each category to avoid overloading
-                            metrics = category.get("metrics", [])[:3]
-                            for metric in metrics:
-                                name = metric.get("name", "")
-                                this_year = metric.get("thisYear", 0)
-                                last_year = metric.get("lastYear", 0)
-                                last_date = metric.get("lastDataDate", "")
-                                metric_id = metric.get("numeric_id", metric.get("id", ""))
-                                
-                                # Calculate percent change
-                                if last_year != 0:
-                                    pct_change = ((this_year - last_year) / last_year) * 100
-                                    change_text = f"({pct_change:+.1f}% vs last year)"
-                                else:
-                                    change_text = "(no prior year data)"
-                                
-                                district_metrics_text += f"  - {name} (ID: {metric_id}): {this_year:,} {change_text} as of {last_date}\n"
-                        
-                        districts_processed += 1
-                    except Exception as e:
-                        logger.error(f"Error processing district {district_num} top-level metrics: {e}")
-            
-            if districts_processed > 0:
-                combined_text += district_metrics_text
-                logger.info(f"Successfully added metrics from {districts_processed} districts")
-            
-        except Exception as e:
-            logger.error(f"Error processing YTD metrics: {e}")
+                        combined_text += f"- {name} (ID: {metric_id}): {this_year:,} {change_text} as of {last_date}\n"
+                
+                districts_processed += 1
+            except Exception as e:
+                logger.error(f"Error processing district {district_num} top-level metrics: {e}")
     
     logger.info(f"""
 Notes loading complete:
-Total files processed: {total_files}
+Districts processed: {districts_processed}
 Total combined length: {len(combined_text)} characters
 First 100 characters: {combined_text[:100]}
 """)
+    
+    # Save the combined notes to a file
+    save_notes_to_file(combined_text)
     
     return combined_text
 
@@ -372,8 +357,53 @@ def transfer_to_analyst_agent(context_variables, *args, **kwargs):
     new_analyst_agent = Agent(
         model=AGENT_MODEL,
         name="Analyst",
-        instructions=analyst_agent.instructions,
-        functions=analyst_agent.functions,
+        instructions="""
+        **Function Usage:**
+
+        - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in. always pass the context_variables and the collection name is allways "SFPublicData"
+        - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
+        - Use `set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")` to set the dataset. Both parameters are required:
+            - endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx')
+            - query: The complete SoQL query string using standard SQL syntax
+            - Always pass context_variables as the first argument
+            - DO NOT pass JSON strings as arguments - pass the actual values directly
+            
+            SOQL Query Guidelines:
+            - Use fieldName values (not column name) in your queries
+            - Don't include FROM clauses (unlike standard SQL)
+            - Use single quotes for string values: where field_name = 'value'
+            - Don't use type casting with :: syntax
+            - Use proper date functions: date_trunc_y(), date_trunc_ym(), date_trunc_ymd()
+            - Use standard aggregation functions: sum(), avg(), min(), max(), count()
+            
+            IMPORTANT: You MUST use the EXACT function call format shown below. Do NOT modify the format or try to encode parameters as JSON strings:
+            
+            ```
+            set_dataset(
+                context_variables, 
+                endpoint="g8m3-pdis", 
+                query="select dba_name where supervisor_district = '2' AND naic_code_description = 'Retail Trade' order by business_start_date desc limit 5"
+            )
+            ```
+            
+            Incorrect formats that will NOT work:
+            - Don't use: set_dataset(context_variables, args={}, kwargs={...})
+            - Don't use: set_dataset(context_variables, "{...}")
+            - Don't use: set_dataset(context_variables, '{"endpoint": "x", "query": "y"}')
+            
+        - Use `get_dataset(context_variables)` to retrieve the current dataset stored in context_variables:
+            - This function takes only the context_variables parameter
+            - Returns the pandas DataFrame if available, or an error dictionary if the dataset is unavailable or empty
+            - Use this to check if a dataset is loaded or to perform custom analysis on the raw data
+            - Example usage: `dataset = get_dataset(context_variables)`
+            
+        - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
+        - Use `get_dashboard_metric(context_variables, district_number, metric_id)` to retrieve dashboard metric data:
+            - district_number: Integer from 0 (citywide) to 11 (specific district)
+            - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary. Sometimes this will be passed in as a metric_id number, for that pass it as an integer..
+        
+        """,
+        functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, get_dashboard_metric, transfer_to_researcher_agent],
         context_variables=context_variables,
         debug=True,
     )
@@ -597,6 +627,328 @@ def get_dashboard_metric(context_variables, district_number=0, metric_id=None):
         logger.error(f"Error retrieving dashboard metric: {str(e)}", exc_info=True)
         return {"error": f"Error retrieving dashboard metric: {str(e)}"}
 
+
+def get_dataset_columns(context_variables, endpoint=None):
+    """
+    Tool to get the columns available in a particular dataset endpoint.
+    
+    Args:
+        context_variables: The context variables dictionary
+        endpoint: The dataset identifier (e.g., 'ubvf-ztfx')
+        
+    Returns:
+        Dictionary with columns information or error
+    """
+    import os
+    import json
+    
+    try:
+        logger.info(f"Getting columns for endpoint: {endpoint}")
+        
+        if not endpoint:
+            return {"error": "No endpoint provided"}
+        
+        # Clean the endpoint parameter (remove .json if present)
+        endpoint = endpoint.replace('.json', '')
+        
+        # Look for dataset metadata in data/datasets directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        datasets_dir = os.path.join(script_dir, 'data', 'datasets')
+        
+        # Check if the directory exists
+        if not os.path.exists(datasets_dir):
+            return {"error": f"Datasets directory not found: {datasets_dir}"}
+        
+        # Try to find a metadata file for this endpoint
+        metadata_files = [
+            os.path.join(datasets_dir, f"{endpoint}.json"),
+            os.path.join(datasets_dir, f"{endpoint}_metadata.json"),
+            os.path.join(datasets_dir, f"{endpoint}_columns.json")
+        ]
+        
+        metadata_file = None
+        for file_path in metadata_files:
+            if os.path.exists(file_path):
+                metadata_file = file_path
+                break
+        
+        if not metadata_file:
+            return {"error": f"No metadata found for endpoint: {endpoint}"}
+        
+        # Read the metadata file
+        with open(metadata_file, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
+        
+        # Extract columns information (adapt based on your metadata structure)
+        columns = []
+        if isinstance(metadata, dict):
+            if "columns" in metadata:
+                columns = metadata["columns"]
+            elif "fields" in metadata:
+                columns = metadata["fields"]
+        elif isinstance(metadata, list):
+            columns = metadata  # Assume it's a list of column objects
+        
+        # Return simplified column info for agent use
+        column_info = []
+        for col in columns:
+            if isinstance(col, dict):
+                info = {
+                    "name": col.get("name", col.get("fieldName", "unknown")),
+                    "type": col.get("dataTypeName", col.get("type", "unknown")),
+                    "description": col.get("description", "")
+                }
+                column_info.append(info)
+        
+        return {
+            "endpoint": endpoint,
+            "column_count": len(column_info),
+            "columns": column_info
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting dataset columns: {str(e)}", exc_info=True)
+        return {"error": f"Failed to get dataset columns: {str(e)}"}
+
+
+def query_anomalies_db(context_variables, query_type='recent', limit=10, group_filter=None, date_start=None, date_end=None, only_anomalies=True, metric_name=None, district_filter=None, metric_id=None, period_type=None):
+    """
+    Query the PostgreSQL database for anomalies based on the specified parameters.
+    
+    Args:
+        context_variables: Context variables from the chatbot
+        query_type: Type of query to execute (recent, top, bottom, by_group, by_metric, by_metric_id)
+        limit: Maximum number of results to return
+        group_filter: Filter by specific group value
+        date_start: Start date for filtering
+        date_end: End date for filtering
+        only_anomalies: If True, only return results where out_of_bounds is True
+        metric_name: Filter by specific field_name (metric name)
+        district_filter: Filter by specific district
+        metric_id: Filter by object_id (metric ID)
+        period_type: Filter by period type (year, month, week, day)
+        
+    Returns:
+        Dictionary with query results and metadata
+    """
+    logger = logging.getLogger(__name__)
+    logger.info(f"""
+=== query_anomalies_db called ===
+Parameters:
+- query_type: {query_type}
+- limit: {limit}
+- group_filter: {group_filter}
+- date_start: {date_start}
+- date_end: {date_end}
+- only_anomalies: {only_anomalies}
+- metric_name: {metric_name}
+- district_filter: {district_filter}
+- metric_id: {metric_id}
+- period_type: {period_type}
+""")
+    
+    try:
+        # Get database connection parameters from environment variables
+        db_host = os.getenv("POSTGRES_HOST", "localhost")
+        db_port = os.getenv("POSTGRES_PORT", "5432")
+        db_user = os.getenv("POSTGRES_USER", "postgres")
+        db_password = os.getenv("POSTGRES_PASSWORD", "postgres")
+        db_name = os.getenv("POSTGRES_DB", "transparentsf")
+        
+        logger.info(f"Using database connection: {db_host}:{db_port}/{db_name} (user: {db_user})")
+        
+        # Use the get_anomalies function from store_anomalies.py
+        # First, we need to convert query_type from our naming convention to store_anomalies' naming
+        sa_query_type = query_type
+        
+        # Special handling for by_metric_id query type
+        if query_type == 'by_metric_id' and metric_id:
+            # Keep the query_type as is, since we're filtering by metric_id
+            logger.info(f"Using query_type 'by_metric_id' with metric_id={metric_id}")
+        elif query_type == 'top':
+            sa_query_type = 'by_anomaly_severity'  # Most significant anomalies first
+            logger.info(f"Converting query_type 'top' to 'by_anomaly_severity'")
+        elif query_type == 'bottom':
+            sa_query_type = 'by_anomaly_severity'  # We'll manually reverse the order after
+            logger.info(f"Converting query_type 'bottom' to 'by_anomaly_severity'")
+        elif query_type in ['by_metric', 'by_metric_id']:
+            sa_query_type = 'recent'  # Default to recent for these types, we'll filter by metric
+            logger.info(f"Converting query_type '{query_type}' to 'recent'")
+        
+        logger.info(f"Calling get_anomalies with query_type={sa_query_type}, limit={limit}")
+        logger.info(f"Additional filters: group_filter={group_filter}, date_start={date_start}, date_end={date_end}, only_anomalies={only_anomalies}, metric_name={metric_name}, district_filter={district_filter}, metric_id={metric_id}, period_type={period_type}")
+        
+        start_time = time_module.time()
+        result = get_anomalies(
+            query_type=sa_query_type,
+            limit=limit,
+            group_filter=group_filter,
+            date_start=date_start,
+            date_end=date_end,
+            only_anomalies=only_anomalies,
+            metric_name=metric_name,
+            district_filter=district_filter,
+            metric_id=metric_id,
+            period_type=period_type,
+            db_host=db_host,
+            db_port=int(db_port),
+            db_name=db_name,
+            db_user=db_user,
+            db_password=db_password
+        )
+        query_time = time_module.time() - start_time
+        logger.info(f"get_anomalies query completed in {query_time:.2f} seconds")
+        
+        if result["status"] == "error":
+            logger.error(f"Error from get_anomalies: {result['message']}")
+            return {
+                'error': result["message"],
+                'results': [],
+                'count': 0,
+                'query_info': {
+                    'type': query_type,
+                    'limit': limit
+                }
+            }
+        
+        logger.info(f"get_anomalies returned {len(result.get('results', []))} results")
+        
+        # Process results
+        processed_results = []
+        start_time = time_module.time()
+        
+        for row in result["results"]:
+            # Convert to regular dictionary (should already be a dict)
+            row_dict = dict(row)
+            
+            # Extract metadata information
+            metadata = row_dict.get("metadata", {})
+            
+            # Add missing fields from metadata
+            row_dict["field_name"] = metadata.get("numeric_field", row_dict.get("field_name", ""))
+            row_dict["object_id"] = metadata.get("object_id", row_dict.get("object_id", ""))
+            row_dict["object_name"] = metadata.get("object_name", "")
+            row_dict["period_type"] = metadata.get("period_type", row_dict.get("period_type", ""))
+            
+            # Calculate percent change
+            if row_dict.get('comparison_mean') and row_dict.get('comparison_mean') != 0:
+                percent_change = ((row_dict.get('recent_mean', 0) - row_dict.get('comparison_mean', 0)) / 
+                                 abs(row_dict.get('comparison_mean', 0)) * 100)
+                row_dict['percent_change'] = round(percent_change, 2)
+            else:
+                row_dict['percent_change'] = None
+            
+            processed_results.append(row_dict)
+        
+        processing_time = time_module.time() - start_time
+        logger.info(f"Processed {len(processed_results)} results in {processing_time:.2f} seconds")
+        
+        # Handle reverse sorting for 'bottom' query type
+        if query_type == 'bottom':
+            logger.info("Sorting results by difference (ascending) for 'bottom' query type")
+            processed_results = sorted(processed_results, key=lambda x: x.get('difference', 0))
+        
+        # Build response
+        response = {
+            'results': processed_results,
+            'count': len(processed_results),
+            'query_info': {
+                'type': query_type,
+                'limit': limit,
+                'filters_applied': {
+                    'group_filter': group_filter,
+                    'date_start': date_start,  # Don't call isoformat() on potentially string values
+                    'date_end': date_end,      # Don't call isoformat() on potentially string values
+                    'only_anomalies': only_anomalies,
+                    'metric_name': metric_name,
+                    'district_filter': district_filter,
+                    'metric_id': metric_id,
+                    'period_type': period_type
+                }
+            }
+        }
+        
+        logger.info(f"Returning {len(processed_results)} results for query_type={query_type}")
+        return response
+    except Exception as e:
+        logger.error(f"Error in query_anomalies_db: {str(e)}")
+        logger.error(traceback.format_exc())
+        return {
+            'error': str(e),
+            'results': [],
+            'count': 0,
+            'query_info': {
+                'type': query_type,
+                'limit': limit
+            }
+        }
+
+def get_anomaly_details(context_variables, anomaly_id):
+    """
+    Tool to retrieve detailed information about a specific anomaly by ID.
+    
+    Args:
+        context_variables: The context variables dictionary
+        anomaly_id: The ID of the anomaly to retrieve
+        
+    Returns:
+        Dictionary with detailed anomaly information
+    """
+    try:
+        # Use the imported function from store_anomalies.py
+        result = get_anomaly_details_from_db(anomaly_id=anomaly_id)
+        
+        # If successful, format the result
+        if result["status"] == "success":
+            item = result["anomaly"]
+            
+            # Extract metadata for easier access
+            if 'metadata' in item and item['metadata']:
+                metadata = item['metadata']
+                item['metric_name'] = metadata.get('object_name', metadata.get('title', 'unknown'))
+                item['metric_field'] = metadata.get('numeric_field', 'unknown')
+                item['group_field'] = metadata.get('group_field', 'unknown')
+                item['period_type'] = metadata.get('period_type', 'month')
+                
+                # Extract period information
+                if 'recent_period' in metadata:
+                    item['recent_period'] = metadata['recent_period']
+                if 'comparison_period' in metadata:
+                    item['comparison_period'] = metadata['comparison_period']
+            
+            # Generate an explanation summary based on the anomaly data
+            explanation = f"Analysis of anomaly for '{item['group_value']}' detected on {item['created_at'].split('T')[0]}:\n"
+            
+            # Add district information if available
+            if item.get('district') and item['district'] != 'None' and item['district'] != 'unknown':
+                explanation += f"District: {item['district']}\n"
+            
+            if item.get('out_of_bounds'):
+                direction = "increased" if item.get('difference', 0) > 0 else "decreased"
+                percent_change = abs(item.get('difference', 0) / item.get('comparison_mean', 1) * 100) if item.get('comparison_mean') else 0
+                explanation += f"The value {direction} by {percent_change:.1f}% from {item.get('comparison_mean', 0):.2f} to {item.get('recent_mean', 0):.2f}.\n"
+                explanation += f"This change is {abs(item.get('difference', 0) / item.get('std_dev', 1)):.1f} standard deviations from the mean."
+            else:
+                explanation += "This data point is within normal range of expected values."
+                
+            # Add the explanation to the item
+            item['explanation'] = explanation
+            
+            return {
+                "status": "success",
+                "anomaly": item
+            }
+        else:
+            return result  # Return error as is
+            
+    except Exception as e:
+        logger.error(f"Error retrieving anomaly details: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "message": f"Failed to retrieve anomaly details: {str(e)}"
+        }
+
+
 # Define the anomaly finder agent
 
 analyst_agent = Agent(
@@ -607,23 +959,187 @@ analyst_agent = Agent(
 
     - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in. always pass the context_variables and the collection name is allways "SFPublicData"
     - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
-    - Use `set_dataset(context_variables, endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
-        - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')  It should come from a query_docs() call.
-        - query: The complete SoQL query string using standard SQL syntax (e.g., 'select field1, field2 where condition')
-        - Remember to pass the fieldname into the query and not the column name.  
-        Example usage:
-        set_dataset(context_variables, endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
+    - Use `set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")` to set the dataset. Both parameters are required:
+        - endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx')
+        - query: The complete SoQL query string using standard SQL syntax
+        - Always pass context_variables as the first argument
+        - DO NOT pass JSON strings as arguments - pass the actual values directly
+        
+        SOQL Query Guidelines:
+        - Use fieldName values (not column name) in your queries
+        - Don't include FROM clauses (unlike standard SQL)
+        - Use single quotes for string values: where field_name = 'value'
+        - Don't use type casting with :: syntax
+        - Use proper date functions: date_trunc_y(), date_trunc_ym(), date_trunc_ymd()
+        - Use standard aggregation functions: sum(), avg(), min(), max(), count()
+        
+        IMPORTANT: You MUST use the EXACT function call format shown below. Do NOT modify the format or try to encode parameters as JSON strings:
+        
+        ```
+        set_dataset(
+            context_variables, 
+            endpoint="g8m3-pdis", 
+            query="select dba_name where supervisor_district = '2' AND naic_code_description = 'Retail Trade' order by business_start_date desc limit 5"
+        )
+        ```
+        
+        Incorrect formats that will NOT work:
+        - Don't use: set_dataset(context_variables, args={}, kwargs={...})
+        - Don't use: set_dataset(context_variables, "{...}")
+        - Don't use: set_dataset(context_variables, '{"endpoint": "x", "query": "y"}')
+        
+    - Use `get_dataset(context_variables)` to retrieve the current dataset stored in context_variables:
+        - This function takes only the context_variables parameter
+        - Returns the pandas DataFrame if available, or an error dictionary if the dataset is unavailable or empty
+        - Use this to check if a dataset is loaded or to perform custom analysis on the raw data
+        - Example usage: `dataset = get_dataset(context_variables)`
+        
     - Use `generate_time_series_chart(context_variables, column_name, start_date, end_date, aggregation_period, return_html=False)` to generate a time series chart. 
     - Use `get_dashboard_metric(context_variables, district_number, metric_id)` to retrieve dashboard metric data:
         - district_number: Integer from 0 (citywide) to 11 (specific district)
         - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary. Sometimes this will be passed in as a metric_id number, for that pass it as an integer..
+    - Use `generate_chart_message(context_variables, chart_data=data_object, chart_type="anomaly")` to create and display charts in your responses:
+        - chart_data: A dictionary containing the data for the chart
+        - chart_type: The type of chart (default: "anomaly")
+        - Example: 
+          anomaly_data = get_anomaly_details(context_variables, anomaly_id=123)
+          chart_message = generate_chart_message(context_variables, chart_data=anomaly_data, chart_type="anomaly")
+          return chart_message
     
     """,
-    # functions=[get_notes, query_docs, transfer_to_researcher_agent],
-    functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, get_dashboard_metric, transfer_to_researcher_agent],
+    functions=[query_docs, set_dataset, get_dataset, set_columns, get_data_summary, anomaly_detection, generate_time_series_chart, get_dashboard_metric, transfer_to_researcher_agent, generate_chart_message],
     context_variables=context_variables,
     debug=True,
 )
+
+# Define the explainer agent directly like in webChat.py
+ANOMALY_EXPLAINER_INSTRUCTIONS = """You are an anomaly explanation agent that specializes in providing deep insights into detected anomalies.
+
+IMPORTANT: You MUST use tools to gather data BEFORE responding. Direct explanations without tool usage are NOT acceptable.
+
+Your task is to:
+1. Take an change that has already been identified in dashboard metrics
+2. Research that change to explain what changed and where or what variables explain the change
+3. Analyze anomalies in the dataset to see if they are related to the change
+4. Provide clear, comprehensive explanations with supporting evidence
+
+
+MANDATORY WORKFLOW (follow this exact sequence):
+1. FIRST, check your notes!
+3. SECOND, Query the anomalies_db for this metric and period_type and group_filter and district_filter and limit 30 and only_anomalies=True to see whats happening in this metric in this period for this group in this district. 
+3. THIRD, If there are no anomalies, get information about the metric from the dashboard_metric tool, there may be enough information there to explain the anomaly.
+4. FOUTH, if an anomaly is explnatory, then be sure to include a link to the anomaly chart, like this: 
+for an anomaly chart, reference it like this:
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
+  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+    <iframe src="http://localhost:8000/anomaly-analyzer/anomaly-chart?id=27338#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
+  </div>
+</div>
+
+
+
+DO NOT skip these steps. You MUST use at least 3 tools before providing your final response.
+
+IMPORTANT CHART GENERATION RULES:
+1. NEVER use markdown syntax for charts (e.g., ![Chart](...))
+2. ALWAYS use the generate_chart_message tool to create charts
+3. The chart data should come from get_anomaly_details
+4. Example usage:
+   get_anomaly_details(context_variables, anomaly_id=123)
+
+TOOLS YOU SHOULD USE:
+- get_notes() ALWAYS Start here. This is a summary of all the analysis you have available to you in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
+
+- get_dashboard_metric: Retrieve dashboard metric data containing anomalies
+  USAGE: get_dashboard_metric(context_variables, district_number=0, metric_id=id_number)
+  Use this to get the dashboard metric that contains the anomaly the user wants explained.  If you are not provided with a metric number, check your notes, and see if the request maps to a metric there.
+  
+- query_anomalies_db: Query anomalies directly from the PostgreSQL database
+  USAGE: query_anomalies_db(context_variables, query_type='by_metric_id', metric_id=metric_id, district_filter=district, period_type=period_type, group_filter=group, limit=30, date_start=None, date_end=None, only_anomalies=True)
+  
+  Parameter guidelines:
+  - query_type: Prefer 'by_metric_id' when you have a metric_id, 'recent' for most recent anomalies
+  - metric_id: REQUIRED when examining a specific metric - always pass this when available
+  - district_filter: 
+     * 0 for citywide data only
+     * 1-11 for specific district data
+     * None to include all districts (citywide + district-specific)
+  - period_type: Filter by time period ('month', 'year', etc.)
+  - group_filter: Filter by specific group value (e.g., specific call type, category, etc.)
+     * Specific value to see anomalies for only that group
+     * None to see anomalies across all groups
+  - only_anomalies: Almost always keep as True to see significant outliers only
+  - date_start/date_end: Use for specific time ranges (default is all available dates)
+  
+  Best practices:
+  - Be as specific as possible with your queries - include all relevant parameters
+  - Always start with metric_id when you know which metric to analyze
+  - When analyzing a district-specific issue, include both district_filter and metric_id
+
+- get_anomaly_details: Get detailed information about a specific anomaly by ID
+  USAGE: get_anomaly_details(context_variables, anomaly_id=123)
+  Use this to get complete information about a specific anomaly, including its time series data and metadata.
+
+- get_dataset: Get information about any dataset that's been loaded
+  USAGE: get_dataset(context_variables)
+  Use this to see what data is available for further analysis.
+
+- get_dashboard_metric(context_variables, district_number, metric_id) to retrieve dashboard metric data:
+  USAGE: get_dashboard_metric(context_variables, district_number, metric_id)
+        - district_number: Integer from 0 (citywide) to 11 (specific district)
+        - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary. Sometimes this will be passed in as a metric_id number, for that pass it as an integer..
+        
+- set_dataset: Load a dataset for analysis
+  USAGE: set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")
+  Use this to load data for further analysis when needed.
+
+- get_dataset_columns: Get column information for a dataset endpoint
+  USAGE: get_dataset_columns(context_variables, endpoint="dataset-id")
+  Use this to explore what columns are available in a specific dataset.
+
+
+- explain_anomaly: Analyze why an anomaly occurred from different perspectives
+  USAGE: explain_anomaly(context_variables, group_value="specific_value", group_field="category_column", numeric_field="value_column", date_field="date_column")
+  This is your main tool - use it to provide multi-dimensional analysis of anomalies.
+
+- query_docs: Search for additional context in documentation
+  USAGE: query_docs(context_variables, collection_name="SFPublicData", query="information related to [specific anomaly]")
+  Use this to find domain-specific information that might explain the anomaly.
+
+When explaining an anomaly or metric change:
+- Compare the anomaly to historical trends and similar metrics
+- Quantify the magnitude and significance of the anomaly
+- Avoid speculation - stick to what the data and documentation show
+- Always include charts to visualize the anomaly, do this by pointing to a link to the chart like this: http://localhost:8000/anomaly-analyzer/anomaly-chart?id=101421
+"""
+# - generate_chart_message: Create a chart message to display to the user
+#   USAGE: generate_chart_message(context_variables, chart_data=data_object, chart_type="anomaly")
+#   Use this to create and display charts in your responses. The chart_data should be a dictionary containing the data for the chart.
+#   For anomaly charts, you can use the data returned by get_anomaly_details.
+#   Example: 
+#   anomaly_data = get_anomaly_details(context_variables, anomaly_id=123)
+#   chart_message = generate_chart_message(context_variables, chart_data=anomaly_data, chart_type="anomaly")
+#   return chart_message
+
+# Create the explainer agent directly (similar to how Researcher_agent is created in webChat.py)
+anomaly_explainer_agent = Agent(
+    model=AGENT_MODEL,
+    name="Explainer",
+    instructions=ANOMALY_EXPLAINER_INSTRUCTIONS,
+    functions=[
+        get_notes,
+        get_dataset,
+        set_dataset,
+        query_docs,
+        query_anomalies_db,
+        get_dashboard_metric,
+        get_anomaly_details,
+        get_dataset_columns,
+    ],
+    context_variables=context_variables,
+    debug=True
+)
+
 
 
 def update_agent_instructions_with_columns(columns):
@@ -851,76 +1367,10 @@ function_mapping = {
     'get_dashboard_metric': get_dashboard_metric,
     'format_table': format_table,
     'format_table_page': format_table_page,
+    'generate_chart_message': generate_chart_message,
 }
 
 
-# Researcher_agent = Agent(
-#     model=AGENT_MODEL,
-#     name="Researcher",
-#     instructions="""
-#     Role: You are a researcher for Transparent SF, focusing on trends in city data.
-#     Purpose: help the user find objective data and specific details on their question. 
-    
-#     - get_notes() ALWAYS Start here. This is a summary of all the analysis you have available to you in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
-#     - Use query_docs("collection_name=<Collection_Name>", query=<words or phrases>) to review analysis of city data.  THis is a semantic search of Qdrant, not a SQL query
-#         There are many collections you can search. Sometimes you might want to look at multiple collections to get the data you need. 
-        
-#         Each collection is named as follows:
-        
-#         timeframe_location
-    
-#         timeframes are one of the following:
-#         annual
-#         monthly
-    
-#         location is one of the following:
-#         citywide
-#         or
-#         district_<number>
-        
-#         So one example collection is "annual_citywide"
-#         another example is "monthly_district_1"
-
-#         There is a collection called "YTD" that contains the year to date metrics for the city of San Francisco.  Use this to get the latest metrics for the city.  It also includes details by date and has queries you can modift to get more details or data you need.
-
-#         There is also a special collection called "SFPublicData" that contains all the data from the city of San Francisco including all the table names and column names you would need to set_dataset because the answer to the user's question isn't in the other collections.  Call this before you use set_dataset().
-
-#         If, after searching through your docs, you can't find the data you need, you can check to see if there is a table available in the "SFPublicData" collection that you might want to query. 
-#         Be specific in your queries to answer the exact question the user is asking.  Select the minimum amount of data necessary to answer the question and how the query do as much of the processing as possible. 
-#         If you can't be precise in your query, don't set_dataset, just answer the user with the info you have. 
-
-#         - Use `set_dataset(endpoint="dataset-id.json", query="your-soql-query")` to set the dataset. Both parameters are required:
-#         - endpoint: The dataset identifier (e.g., 'ubvf-ztfx.json')  It should come from a query_docs() call.
-#         - query: The complete SoQL query string using standard SQL syntax (e.g., 'select field1, field2 where condition')
-#         Example usage:
-#         set_dataset(endpoint="ubvf-ztfx.json", query="select unique_id, collision_date, number_injured where accident_year = 2025")
-
-#         - Use `get_dashboard_metric(district_number, metric_id)` to retrieve dashboard metric data:
-#           - district_number: Integer from 0 (citywide) to 11 (specific district)
-#           - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary.
-#           Example usage:
-#           get_dashboard_metric(0, "🚨_violent_crime_incidents_ytd") # Get citywide violent crime data
-#           get_dashboard_metric(5) # Get all metrics for District 5
-
-#         Query Format:
-#         - Use standard SQL syntax: "select field1, field2 where condition"
-#         - Do not use $ prefixes in your queries
-#         - No FROM clause is needed, just make sure to pass in the endpoint.
-#         - Example: "select dba_name, location_start_date where supervisor_district = '6' and location_start_date >= '2025-01-01'"
-        
-#     When displaying data:
-#     1. Whenever possible, use charts and graphs from your docs to illustrate your findings.  To better find charts add the term charts to your query.
-#     2. Return them in the same markdown format you find in the docs, with no changes. DO NOT ADD or CHANGE THE URLS
-#     3. Include relevant titles and context with your tables and charts. 
-#     4. Follow up tables with explanations of key insights or trends. 
-#     5. If you can't find the data you need, just say so.  Don't make up data or information. 
-#     6. Don't speculate as to causes or "WHY" something is happening.  Just report on WHAT is happening. 
-    
-#     """,
-#     functions=[get_notes, query_docs, set_dataset, get_dashboard_metric, transfer_to_analyst_agent, generate_ghost_post],
-#     context_variables=context_variables,
-#     debug=True
-# )
 Researcher_agent = Agent(
     model=AGENT_MODEL,
     name="Researcher",
@@ -929,6 +1379,9 @@ Researcher_agent = Agent(
     Purpose: help the user find objective data and specific details on their question. 
     
     - get_notes() ALWAYS Start here. This is a summary of all the analysis you have available to you in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
+    
+    - Use query_docs(context_variables, collection_name, query) to search for datasets. The collection_name should be "SFPublicData" when searching for city datasets. The query should be descriptive of what you're looking for. When you get results, pay attention to the field names in the "Columns" section - these are the exact field names you'll need to use in any subsequent queries. Field names are always lowercase with underscores (e.g., "city_elective_office" not "City Elective Office").
+    
     
     - Use `get_dashboard_metric(district_number, metric_id)` to retrieve dashboard metric data:
         - district_number: Integer from 0 (citywide) to 11 (specific district)
@@ -941,12 +1394,14 @@ Researcher_agent = Agent(
     
     Review the data with an eye for explaining recent changes. 
     Are there any recent anomalies that might help illuminate current trends?
-    Is the change happening in a paricular are of the city?
+    Is the change happening in a paricular area of the city?
 
     Summarize this down to a punchy markdown story with with supporting charts or tables.  
     Do use good markdown text to format and tell the story. 
+    If you are referring to a field in the data, or a value show it in italics
     Do not re-state the data, but summarize it in a easy to understad way.
-    Ground the story in historical (annaul) context. 
+    Ground the story in historical (annual) context. 
+
     
     Always ground recent changes in long term trends. 
     Don't draw conclusions, just report on the data.
@@ -1092,6 +1547,7 @@ function_mapping = {
     'get_dashboard_metric': get_dashboard_metric,
     'format_table': format_table,
     'format_table_page': format_table_page,
+    'generate_chart_message': generate_chart_message,
 }
 
 
@@ -1194,24 +1650,56 @@ async def chat(request: Request, session_id: str = Cookie(None)):
     try:
         data = await request.json()
         user_input = data.get("query")
+        agent_name = data.get("agent", "researcher")  # Default to researcher if not specified
+        
+        # Get session ID from request body if not in cookies
+        body_session_id = data.get("session_id")
+        if body_session_id:
+            session_id = body_session_id
+        
         logger.info(f"""
 === New User Message ===
 Session ID: {session_id if session_id else 'New Session'}
-Timestamp: {datetime.datetime.now().isoformat()}
+Timestamp: {datetime.now().isoformat()}
 Message:
 {user_input}
+Agent: {agent_name}
 ===============================
 """)
 
         # Get or create session data
         if session_id is None or session_id not in sessions:
-            session_id = str(uuid.uuid4())
+            if not session_id:
+                session_id = str(uuid.uuid4())
+            
+            # Map agent name to agent object
+            agent_map = {
+                "researcher": Researcher_agent,
+                "analyst": analyst_agent,
+                "explainer": anomaly_explainer_agent
+            }
+            
+            # Get the agent object based on the name
+            agent = agent_map.get(agent_name, Researcher_agent)  # Default to researcher if unknown
+            
             sessions[session_id] = {
                 "messages": [],
-                "agent": Researcher_agent,
+                "agent": agent,
                 "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
             }
-            logger.info(f"Created new session: {session_id}")
+            logger.info(f"Created new session: {session_id} with agent: {agent_name}")
+        else:
+            # If agent is specified and different from current, update it
+            if agent_name and agent_name != sessions[session_id]["agent"].name.lower():
+                agent_map = {
+                    "researcher": Researcher_agent,
+                    "analyst": analyst_agent,
+                    "explainer": anomaly_explainer_agent
+                }
+                
+                if agent_name in agent_map:
+                    sessions[session_id]["agent"] = agent_map[agent_name]
+                    logger.info(f"Updated agent to {agent_name} for session {session_id}")
 
         session_data = sessions[session_id]
 
@@ -1227,7 +1715,7 @@ Message:
             "value": session_id,
             "httponly": True,
             "max_age": 3600,
-            "path": "/"
+            "path": "/chat"
         }
 
         # Add secure and samesite settings only in production
@@ -1249,48 +1737,183 @@ Message:
         raise
 
 @router.post("/api/reset")
-async def reset_conversation(session_id: str = Cookie(None)):
+async def reset_conversation(request: Request, session_id: str = Cookie(None)):
     """Reset the conversation state for the current session."""
-    if session_id and session_id in sessions:
-        # Reinitialize the session with default values
-        sessions[session_id] = {
-            "messages": [],
-            "agent": Researcher_agent,  # Reset to default agent
-            "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
-        }
-        response = JSONResponse({"status": "success"})
+    try:
+        data = await request.json()
         
-        # Set cookie attributes based on environment
-        cookie_settings = {
-            "key": "session_id",
-            "value": session_id,
-            "httponly": True,
-            "max_age": 3600,
-            "path": "/"
-        }
-
-        # Add secure and samesite settings only in production
-        if IS_PRODUCTION:
-            cookie_settings.update({
-                "secure": True,
-                "samesite": "None"
-            })
+        # Get session ID from request body if not in cookies
+        body_session_id = data.get("session_id")
+        if body_session_id:
+            session_id = body_session_id
+        
+        if session_id and session_id in sessions:
+            # Reinitialize the session with default values
+            sessions[session_id] = {
+                "messages": [],
+                "agent": Researcher_agent,  # Reset to default agent
+                "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
+            }
+            response = JSONResponse({"status": "success"})
+            
+            # Set cookie attributes based on environment
+            cookie_settings = {
+                "key": "session_id",
+                "value": session_id,
+                "httponly": True,
+                "max_age": 3600,
+                "path": "/chat"
+            }
+            
+            # Add secure and samesite settings only in production
+            if IS_PRODUCTION:
+                cookie_settings.update({
+                    "secure": True,
+                    "samesite": "None"
+                })
+            else:
+                cookie_settings.update({
+                    "secure": False,
+                    "samesite": "Lax"
+                })
+            
+            response.set_cookie(**cookie_settings)
+            return response
         else:
-            cookie_settings.update({
-                "secure": False,
-                "samesite": "Lax"
-            })
+            # Create a new session if none exists
+            if not session_id:
+                session_id = str(uuid.uuid4())
+            
+            sessions[session_id] = {
+                "messages": [],
+                "agent": Researcher_agent,  # Reset to default agent
+                "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
+            }
+            
+            # Return response with session ID
+            response = JSONResponse({"status": "success", "session_id": session_id})
+            
+            # Set cookie attributes based on environment
+            cookie_settings = {
+                "key": "session_id",
+                "value": session_id,
+                "httponly": True,
+                "max_age": 3600,
+                "path": "/chat"
+            }
+            
+            # Add secure and samesite settings only in production
+            if IS_PRODUCTION:
+                cookie_settings.update({
+                    "secure": True,
+                    "samesite": "None"
+                })
+            else:
+                cookie_settings.update({
+                    "secure": False,
+                    "samesite": "Lax"
+                })
+            
+            response.set_cookie(**cookie_settings)
+            return response
+    except Exception as e:
+        logger.error(f"Error resetting conversation: {str(e)}")
+        return JSONResponse(
+            status_code=500, 
+            content={"status": "error", "message": f"Error resetting conversation: {str(e)}"}
+        )
 
-        response.set_cookie(**cookie_settings)
-        return response
-    return JSONResponse({"status": "error", "message": "No active session found"})
+@router.post("/api/switch-agent")
+async def switch_agent(request: Request, session_id: str = Cookie(None)):
+    """Switch the agent for the current session."""
+    try:
+        data = await request.json()
+        agent_name = data.get("agent")
+        
+        # Get session ID from request body if not in cookies
+        body_session_id = data.get("session_id")
+        if body_session_id:
+            session_id = body_session_id
+        
+        if session_id and session_id in sessions:
+            # Map agent name to agent object
+            agent_map = {
+                "researcher": Researcher_agent,
+                "analyst": analyst_agent,
+                "explainer": anomaly_explainer_agent
+            }
+            
+            if agent_name in agent_map:
+                # Update the agent in the session
+                sessions[session_id]["agent"] = agent_map[agent_name]
+                logger.info(f"Switched to {agent_name} agent for session {session_id}")
+                return JSONResponse({"status": "success", "agent": agent_name})
+            else:
+                return JSONResponse(
+                    status_code=400, 
+                    content={"status": "error", "message": f"Unknown agent: {agent_name}"}
+                )
+        else:
+            # Create a new session if none exists
+            if not session_id:
+                session_id = str(uuid.uuid4())
+            
+            # Map agent name to agent object
+            agent_map = {
+                "researcher": Researcher_agent,
+                "analyst": analyst_agent,
+                "explainer": anomaly_explainer_agent
+            }
+            
+            # Get the agent object based on the name
+            agent = agent_map.get(agent_name, Researcher_agent)  # Default to researcher if unknown
+            
+            sessions[session_id] = {
+                "messages": [],
+                "agent": agent,
+                "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
+            }
+            logger.info(f"Created new session: {session_id} with agent: {agent_name}")
+            
+            # Return response with session ID
+            response = JSONResponse({"status": "success", "agent": agent_name, "session_id": session_id})
+            
+            # Set cookie attributes based on environment
+            cookie_settings = {
+                "key": "session_id",
+                "value": session_id,
+                "httponly": True,
+                "max_age": 3600,
+                "path": "/chat"
+            }
+            
+            # Add secure and samesite settings only in production
+            if IS_PRODUCTION:
+                cookie_settings.update({
+                    "secure": True,
+                    "samesite": "None"
+                })
+            else:
+                cookie_settings.update({
+                    "secure": False,
+                    "samesite": "Lax"
+                })
+            
+            response.set_cookie(**cookie_settings)
+            return response
+    except Exception as e:
+        logger.error(f"Error switching agent: {str(e)}")
+        return JSONResponse(
+            status_code=500, 
+            content={"status": "error", "message": f"Error switching agent: {str(e)}"}
+        )
 
 async def generate_response(user_input, session_data):
     logger.info(f"""
 === Starting Agent Response ===
 Session ID: {id(session_data)}
 Current Agent: {session_data['agent'].name}
-Timestamp: {datetime.datetime.now().isoformat()}
+Timestamp: {datetime.now().isoformat()}
 """)
     
     messages = session_data["messages"]
@@ -1361,7 +1984,40 @@ Arguments: {json.dumps(arguments_json, indent=2)}
                         function_to_call = function_mapping.get(current_function_name)
                         if function_to_call:
                             try:
-                                result = function_to_call(context_variables, **arguments_json)
+                                # Special handling for generate_chart_message function
+                                if current_function_name == 'generate_chart_message':
+                                    # Extract chart_data and chart_type from arguments_json
+                                    chart_data = arguments_json.get('chart_data')
+                                    chart_type = arguments_json.get('chart_type', 'anomaly')
+                                    
+                                    # Call the function with the correct arguments
+                                    result = function_to_call(chart_data=chart_data, chart_type=chart_type)
+                                else:
+                                    # IMPROVED ARGUMENT HANDLING for other functions
+                                    # Check if we have the args/kwargs pattern that needs special handling
+                                    if 'args' in arguments_json and 'kwargs' in arguments_json:
+                                        # Handle case where kwargs is a JSON string
+                                        if isinstance(arguments_json['kwargs'], str) and arguments_json['kwargs'].startswith('{'):
+                                            try:
+                                                # Parse the kwargs JSON string into a dict
+                                                kwargs_dict = json.loads(arguments_json['kwargs'])
+                                                # Call function with parsed kwargs
+                                                logger.info(f"Calling {current_function_name} with extracted kwargs: {kwargs_dict}")
+                                                result = function_to_call(context_variables, **kwargs_dict)
+                                            except json.JSONDecodeError:
+                                                # If kwargs can't be parsed as JSON, use it as is
+                                                logger.warning(f"Couldn't parse kwargs as JSON: {arguments_json['kwargs']}")
+                                                result = function_to_call(context_variables, **arguments_json)
+                                        else:
+                                            # Standard call if kwargs is not a JSON string
+                                            result = function_to_call(context_variables, **arguments_json)
+                                    else:
+                                        # Standard function call with normal arguments
+                                        # Remove context_variables from arguments_json if it exists
+                                        if 'context_variables' in arguments_json:
+                                            del arguments_json['context_variables']
+                                        result = function_to_call(context_variables, **arguments_json)
+                                
                                 logger.info(f"""
 === Tool Result ===
 Function: {current_function_name}
@@ -1391,6 +2047,61 @@ New Agent: {result.name}
                                         "content": result["content"]
                                     }
                                     yield json.dumps(message) + "\n"
+                                # Handle chart messages
+                                elif isinstance(result, dict) and result.get("type") == "chart":
+                                    logger.info(f"""
+=== Chart Message Detected ===
+Chart ID: {result.get("chart_id")}
+Chart Type: {result.get("chart_type")}
+Chart Data: {str(result.get("chart_data"))[:200]}...
+Chart HTML Length: {len(result.get("chart_html", ""))}
+""")
+                                    try:
+                                        # Ensure all chart data is JSON serializable
+                                        chart_data = result.get("chart_data")
+                                        
+                                        # If chart_data is a string, try to parse it as JSON
+                                        if isinstance(chart_data, str):
+                                            try:
+                                                # Try to parse it as JSON
+                                                chart_data = json.loads(chart_data)
+                                            except json.JSONDecodeError:
+                                                # If it's not valid JSON, it might be a Python string representation
+                                                # Try to evaluate it safely
+                                                try:
+                                                    # Replace Python literals with JSON equivalents
+                                                    safe_str = chart_data.replace("True", "true").replace("False", "false").replace("None", "null")
+                                                    # Remove any datetime objects that might cause issues
+                                                    safe_str = re.sub(r'datetime\.date\([^)]+\)', '"date"', safe_str)
+                                                    safe_str = re.sub(r'datetime\.datetime\([^)]+\)', '"datetime"', safe_str)
+                                                    chart_data = json.loads(safe_str)
+                                                except Exception as e:
+                                                    logger.error(f"Failed to parse chart data string: {e}")
+                                                    # Fall back to a simplified version
+                                                    chart_data = {"error": "Could not parse chart data"}
+                                        
+                                        message = {
+                                            "type": "chart",
+                                            "sender": assistant_message["sender"],
+                                            "chart_id": result.get("chart_id"),
+                                            "chart_type": result.get("chart_type"),
+                                            "chart_data": chart_data,
+                                            "chart_html": result.get("chart_html")
+                                        }
+                                        
+                                        # Ensure the message is JSON serializable
+                                        json_message = json.dumps(message)
+                                        yield json_message + "\n"
+                                        logger.info("Chart message sent to client")
+                                    except Exception as e:
+                                        logger.error(f"Error sending chart message: {str(e)}")
+                                        # Send a fallback message instead
+                                        fallback_message = {
+                                            "type": "content",
+                                            "sender": assistant_message["sender"],
+                                            "content": f"Error generating chart: {str(e)}"
+                                        }
+                                        yield json.dumps(fallback_message) + "\n"
                             except Exception as e:
                                 logger.error(f"""
 === Tool Error ===
@@ -1423,7 +2134,7 @@ Error: {str(e)}
                     messages.append(assistant_message)
                     logger.info(f"""
 === Agent Response Complete ===
-Timestamp: {datetime.datetime.now().isoformat()}
+Timestamp: {datetime.now().isoformat()}
 Agent: {assistant_message['sender']}
 Response:
 {assistant_message['content']}
@@ -1438,7 +2149,7 @@ Response:
 Error type: {type(e).__name__}
 Error message: {str(e)}
 Current function: {current_function_name}
-Timestamp: {datetime.datetime.now().isoformat()}
+Timestamp: {datetime.now().isoformat()}
 ===============================
 """)
         raise
@@ -1446,7 +2157,177 @@ Timestamp: {datetime.datetime.now().isoformat()}
     logger.info(f"""
 === Chat Interaction Summary ===
 Total messages: {len(messages)}
-Timestamp: {datetime.datetime.now().isoformat()}
+Timestamp: {datetime.now().isoformat()}
 ===============================
 """)
+
+@router.get("/backend/get-notes")
+async def get_notes_file():
+    """
+    Serves the combined notes file from the output/notes directory.
+    """
+    logger = logging.getLogger(__name__)
+    
+    script_dir = Path(__file__).parent
+    notes_file = script_dir / 'output' / 'notes' / 'combined_notes.txt'
+    
+    if not notes_file.exists():
+        logger.error("Notes file not found")
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "Notes file not found"}
+        )
+    
+    try:
+        with open(notes_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return JSONResponse({
+            "success": True,
+            "content": content,
+            "token_count": len(content.split())  # Approximate token count
+        })
+    except Exception as e:
+        logger.error(f"Error reading notes file: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f"Error reading notes file: {str(e)}"}
+        )
+
+@router.get("/")
+async def index(request: Request, session_id: str = Cookie(None)):
+    """
+    Serve the webchat interface with optional parameters for initializing a session.
+    """
+    # Get query parameters
+    params = dict(request.query_params)
+    
+    # If we have metric data parameters, initialize a session with the explainer agent
+    if "metric_id" in params and "metric_name" in params:
+        # Create a new session ID if not provided
+        if not session_id:
+            session_id = str(uuid.uuid4())
+        
+        # Initialize session with the explainer agent
+        if session_id not in sessions:
+            sessions[session_id] = {
+                "messages": [],
+                "agent": anomaly_explainer_agent,
+                "context_variables": {"dataset": combined_df["dataset"], "notes": combined_notes}
+            }
+        
+        # Add a system message with the metric data
+        metric_data = {
+            "metric_id": params.get("metric_id"),
+            "metric_name": params.get("metric_name"),
+            "district": params.get("district", "0"),
+            "period_type": params.get("period_type", "month"),
+            "previous_value": params.get("previous_value"),
+            "recent_value": params.get("recent_value"),
+            "previous_period": params.get("previous_period"),
+            "recent_period": params.get("recent_period"),
+            "delta": params.get("delta"),
+            "percent_change": params.get("percent_change")
+        }
+        
+        # Create a prompt for the agent
+        prompt = f"""I need you to analyze a significant change in the metric '{metric_data['metric_name']}' (ID: {metric_data['metric_id']}) for district {metric_data['district']}.
+
+METRIC DETAILS:
+- Name: {metric_data['metric_name']} 
+- ID: {metric_data['metric_id']}
+- District: {metric_data['district']}
+- Period Type: {metric_data['period_type']}
+- Previous Period: {metric_data['previous_period']} - Value: {metric_data['previous_value']}
+- Recent Period: {metric_data['recent_period']} - Value: {metric_data['recent_value']}
+- Change: {metric_data['delta']} ({metric_data['percent_change']}%)
+
+Please analyze this metric change and explain why it occurred. Consider:
+1. Historical context and trends
+2. Possible contributing factors
+3. Similar patterns in related metrics
+4. Whether this is part of a longer trend
+
+Use the available tools to gather data and provide a comprehensive explanation."""
+        
+        # Add the user message to the session
+        sessions[session_id]["messages"].append({"role": "user", "content": prompt})
+        
+        # Trigger the agent to respond
+        asyncio.create_task(generate_response(prompt, sessions[session_id]))
+    
+    # Return the index.html template
+    return templates.TemplateResponse("index.html", {"request": request})
+
+def get_anomaly_details(anomaly_id):
+    """Get detailed information about a specific anomaly by ID."""
+    try:
+        # Get the anomaly data from the database
+        anomaly = get_anomaly_by_id(anomaly_id)
+        if not anomaly:
+            return {"error": "Anomaly not found"}
+            
+        # Convert date objects to ISO format strings
+        if isinstance(anomaly.get('created_at'), date):
+            anomaly['created_at'] = anomaly['created_at'].isoformat()
+        if isinstance(anomaly.get('recent_date'), date):
+            anomaly['recent_date'] = anomaly['recent_date'].isoformat()
+            
+        # Convert dates in chart data
+        if 'chart_data' in anomaly:
+            chart_data = anomaly['chart_data']
+            if 'dates' in chart_data:
+                chart_data['dates'] = [d.isoformat() if hasattr(d, 'isoformat') else d for d in chart_data['dates']]
+                
+        # Generate the chart HTML
+        chart_html = generate_anomaly_chart_html(anomaly)
+        
+        # Add the chart HTML to the response
+        anomaly['chart_html'] = chart_html
+        
+        return anomaly
+        
+    except Exception as e:
+        logger.error(f"Error getting anomaly details: {str(e)}")
+        return {"error": str(e)}
+
+def generate_chart_message(chart_data, chart_type="anomaly"):
+    """
+    Generate a special message type for chart data that can be sent to the client.
+    
+    Args:
+        chart_data: The data for the chart
+        chart_type: The type of chart (default: "anomaly")
+        
+    Returns:
+        A dictionary with the chart message
+    """
+    logger.info(f"Generating chart message of type: {chart_type}")
+    
+    # Create a unique ID for the chart container
+    chart_id = f"chart-{uuid.uuid4().hex[:8]}"
+    
+    # Generate the chart HTML based on the chart type
+    if chart_type == "anomaly":
+        chart_html = generate_anomaly_chart_html(chart_data)
+    else:
+        # Default to a simple chart if type is not recognized
+        chart_html = f"""
+        <div id="{chart_id}" style="width: 100%; max-width: 800px; margin: 20px auto;">
+            <div class="chart-wrapper" style="width: 100%; overflow: hidden; border-radius: 12px; border: 3px solid #4A7463; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);">
+                <div id="chart-container-{chart_id}" style="width: 100%; padding: 20px; box-sizing: border-box;"></div>
+            </div>
+        </div>
+        """
+    
+    # Create the chart message
+    chart_message = {
+        "type": "chart",
+        "chart_id": chart_id,
+        "chart_type": chart_type,
+        "chart_data": chart_data,
+        "chart_html": chart_html
+    }
+    
+    return chart_message
 

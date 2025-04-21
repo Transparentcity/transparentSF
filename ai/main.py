@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import json
@@ -13,6 +13,11 @@ from generate_weekly_analysis import run_weekly_analysis, generate_weekly_newsle
 from dotenv import load_dotenv
 import re
 import glob
+
+# Import routers
+from webChat import router as webchat_router
+from backend import router as backend_router, set_templates, get_chart_by_metric, get_chart_data
+from anomalyAnalyzer import router as anomaly_analyzer_router, set_templates as set_anomaly_templates
 
 # Load environment variables from .env file
 load_dotenv()
@@ -61,6 +66,25 @@ logger.debug(f"Static directory: {static_dir}")
 output_dir = os.path.join(current_dir, "output")
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
+
+# Define a custom route for monthly files BEFORE mounting the static directory
+@app.get("/output/monthly/{district}/{metric_id}.md", response_class=HTMLResponse)
+async def get_monthly_file(district: str, metric_id: str):
+    """
+    Serve monthly analysis files only. No fallback to annual files.
+    """
+    # Try to get the monthly file only
+    monthly_path = os.path.join(output_dir, "monthly", district, f"{metric_id}.md")
+    if os.path.exists(monthly_path):
+        logger.debug(f"Serving monthly file from {monthly_path}")
+        with open(monthly_path, 'r') as f:
+            return f.read()
+
+    # If monthly doesn't exist, return a 404 error
+    logger.error(f"Monthly file not found for district {district}, metric {metric_id}")
+    raise HTTPException(status_code=404, detail=f"Monthly analysis file not found for metric {metric_id}")
+
+# Now mount the static directory after defining our custom route
 app.mount("/output", StaticFiles(directory=output_dir), name="output")
 logger.debug(f"Output directory: {output_dir}")
 
@@ -518,21 +542,43 @@ async def root(request: Request):
     logger.debug("Serving index.html template")
     return templates.TemplateResponse("index.html", {"request": request})
 
-# Import routers
-from webChat import router as chat_router
-from backend import router as backend_router, set_templates
-
 # Set templates for backend router
 set_templates(templates)
 logger.debug("Set templates for backend router")
 
+# Set templates for anomaly analyzer router
+set_anomaly_templates(templates)
+logger.debug("Set templates for anomaly analyzer router")
+
 # Include routers
-app.include_router(chat_router, prefix="/chat")  # Chat router at /chat
+app.include_router(webchat_router, prefix="/chat")  # Chat router at /chat
 logger.debug("Included chat router at /chat")
 
 # Mount backend router without trailing slash
 app.include_router(backend_router, prefix="/backend", tags=["backend"])
 logger.debug("Included backend router at /backend")
+
+# Mount anomaly analyzer router
+app.include_router(anomaly_analyzer_router, prefix="/anomaly-analyzer", tags=["anomaly-analyzer"])
+logger.debug("Included anomaly analyzer router at /anomaly-analyzer")
+
+@app.get("/api/chart-by-metric")
+async def forward_chart_by_metric(
+    metric_id: str,
+    district: int = 0,
+    period_type: str = 'year'
+):
+    """
+    Forward requests from /api/chart-by-metric to /backend/api/chart-by-metric
+    """
+    return await get_chart_by_metric(metric_id, district, period_type)
+
+@app.get("/api/chart/{chart_id}")
+async def forward_chart_data(chart_id: int):
+    """
+    Forward requests from /api/chart/{chart_id} to /backend/api/chart/{chart_id}
+    """
+    return await get_chart_data(chart_id)
 
 async def schedule_metrics_generation():
     """Schedule metrics generation to run daily at 5 AM and 11 AM."""
@@ -612,49 +658,64 @@ async def schedule_weekly_analysis():
             await asyncio.sleep(300)  # Wait 5 minutes before retrying if there's an error
 
 async def cleanup_logs():
-    """Delete log files older than 7 days to save disk space. Runs every Thursday after weekly analysis."""
+    """Trim log files to keep only the last 7 days of logs. Runs daily."""
     while True:
         try:
-            # Calculate time until next Thursday at 11:30 AM (after weekly analysis)
+            # Schedule to run daily at 11:30 AM
             now = datetime.now()
-            days_until_thursday = (3 - now.weekday()) % 7  # Thursday is weekday 3
             
-            # If it's Thursday and already past 11:30 AM, schedule for next week
-            if days_until_thursday == 0 and now.hour >= 11 and now.minute >= 30:
-                days_until_thursday = 7
-                
+            # Calculate time until tomorrow at 11:30 AM
             target_run = now.replace(hour=11, minute=30, second=0, microsecond=0)
-            target_run += timedelta(days=days_until_thursday)
+            if now.hour > 11 or (now.hour == 11 and now.minute >= 30):
+                target_run += timedelta(days=1)  # If it's already past 11:30 AM, schedule for tomorrow
             
             # Wait until the scheduled time
             wait_seconds = (target_run - now).total_seconds()
             logger.info(f"Next log cleanup scheduled for {target_run} (in {wait_seconds/3600:.2f} hours)")
             await asyncio.sleep(wait_seconds)
             
-            # Delete old log files
+            # Trim log files
             logger.info("Starting scheduled log cleanup...")
             try:
                 # Get all log files
                 log_files = glob.glob(os.path.join(logs_dir, "*.log"))
+                trimmed_count = 0
                 
-                # Get cutoff date (7 days ago)
-                cutoff_date = datetime.now() - timedelta(days=7)
-                deleted_count = 0
+                # Calculate the cutoff date (7 days ago)
+                cutoff_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
                 
                 for log_file in log_files:
-                    # Get file modification time
-                    mod_time = datetime.fromtimestamp(os.path.getmtime(log_file))
-                    
-                    # If file is older than cutoff date, delete it
-                    if mod_time < cutoff_date:
-                        try:
-                            os.remove(log_file)
-                            deleted_count += 1
-                            logger.debug(f"Deleted old log file: {log_file}")
-                        except Exception as e:
-                            logger.error(f"Error deleting log file {log_file}: {str(e)}")
+                    try:
+                        # Create a temporary file to store recent logs
+                        temp_file = log_file + ".temp"
+                        with open(log_file, 'r') as original, open(temp_file, 'w') as temp:
+                            # For each line, check if it's newer than the cutoff date
+                            kept_lines = 0
+                            for line in original:
+                                # Try to extract the date from the line (assuming standard log format)
+                                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', line)
+                                if date_match and date_match.group(1) >= cutoff_date:
+                                    # Keep lines newer than or equal to the cutoff date
+                                    temp.write(line)
+                                    kept_lines += 1
+                            
+                        # If we kept any lines or the original file is empty, replace the original with the temp file
+                        if kept_lines > 0 or os.path.getsize(log_file) == 0:
+                            os.replace(temp_file, log_file)
+                            trimmed_count += 1
+                            logger.debug(f"Trimmed log file: {log_file}, kept {kept_lines} lines")
+                        else:
+                            # If we didn't keep any lines, don't replace the file (it might be a special case)
+                            os.remove(temp_file)
+                            logger.debug(f"No recent logs found in {log_file}, file not modified")
+                            
+                    except Exception as e:
+                        logger.error(f"Error trimming log file {log_file}: {str(e)}")
+                        # Clean up temp file if it exists
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
                 
-                logger.info(f"Log cleanup completed. Deleted {deleted_count} log files older than 7 days.")
+                logger.info(f"Log cleanup completed. Trimmed {trimmed_count} log files to keep entries from the last 7 days.")
             except Exception as e:
                 logger.error(f"Error during log cleanup: {str(e)}")
                 

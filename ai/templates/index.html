@@ -31,6 +31,32 @@
                 width: 100%;
             }
 
+            /* Iframe mode styles */
+            body.iframe-mode .main {
+                height: 100%;
+                width: 100%;
+            }
+
+            body.iframe-mode .chat {
+                width: 100%;
+                height: 100%;
+                border-right: none;
+                padding: 10px;
+            }
+
+            body.iframe-mode .chat h1 {
+                font-size: 1.5em;
+                margin-bottom: 10px;
+            }
+
+            body.iframe-mode #chat-container {
+                height: calc(100% - 50px);
+            }
+
+            body.iframe-mode #response-area {
+                height: calc(100% - 70px);
+            }
+
             .chat {
                 width: 50%;
                 height: 100vh;
@@ -94,6 +120,17 @@
                 background-color: #f0f0f0;
                 align-self: flex-start;
                 float: left;
+            }
+
+            .system-message {
+                background-color: #e6ffe6;
+                align-self: center;
+                float: none;
+                text-align: center;
+                width: 100%;
+                clear: both;
+                font-style: italic;
+                color: #555;
             }
 
             .sender {
@@ -311,6 +348,14 @@
                 #response-area li {
                     margin-bottom: 4px; /* Reduced spacing between list items */
                 }
+
+                #agentSelector {
+                    font-size: 0.8em;
+                    margin-left: 10px;
+                    background-color: #333;
+                    color: #fff;
+                    border-color: #555;
+                }
             }
 
             .canvas-container {
@@ -324,41 +369,6 @@
                 width: 100%;
                 height: 100%;
                 border: none;
-            }
-
-            #loginForm {
-                max-width: 300px;
-                margin: 100px auto;
-                padding: 20px;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                text-align: center;
-            }
-            .input-group {
-                margin: 10px 0;
-            }
-            .input-group input {
-                width: 100%;
-                padding: 8px;
-                margin: 5px 0;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }
-            .btn {
-                padding: 8px 20px;
-                background-color: #007bff;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-            .btn:hover {
-                background-color: #0056b3;
-            }
-            #logout {
-                position: absolute;
-                top: 10px;
-                right: 10px;
             }
 
             /* Add new overlay styles */
@@ -435,50 +445,80 @@
                 margin-left: 4px;
                 animation: blink 1s infinite;
             }
+
+            #agentSelector {
+                margin-left: 15px;
+                padding: 5px 10px;
+                border-radius: 5px;
+                border: 1px solid #ccc;
+                background-color: #f8f9fa;
+                font-size: 0.5em;
+                vertical-align: middle;
+                cursor: pointer;
+            }
         </style>
+        <script>
+            // Check if the page is loaded in an iframe
+            window.addEventListener('DOMContentLoaded', function() {
+                if (window.self !== window.top) {
+                    // Page is loaded in an iframe
+                    document.body.classList.add('iframe-mode');
+                    
+                    // Hide the header if it exists
+                    const header = document.querySelector('.header');
+                    if (header) {
+                        header.style.display = 'none';
+                    }
+                    
+                    // Adjust the chat container to take full height
+                    const chatContainer = document.getElementById('chat-container');
+                    if (chatContainer) {
+                        chatContainer.style.height = '100%';
+                    }
+                    
+                    // If there's a query parameter for auto-focus, focus the input
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.has('auto_focus')) {
+                        const input = document.getElementById('user-input');
+                        if (input) {
+                            input.focus();
+                        }
+                    }
+                }
+            });
+        </script>
     </head>
     <body>
-        <div id="loginForm">
-            <h2>Login Required</h2>
-            <form onsubmit="return checkLogin(event)">
-                <div class="input-group">
-                    <input type="text" id="username" placeholder="Username" required>
-                </div>
-                <div class="input-group">
-                    <input type="password" id="password" placeholder="Password" required>
-                </div>
-                <button type="submit" class="btn">Login</button>
-            </form>
-        </div>
-
-        <div id="chatInterface" style="display: none;">
-            <button id="logout" class="btn" onclick="logout()">Logout</button>
-            <div class="main">
-                <div class="chat">
-                    <h1>
-                        <button id="newChatButton" title="Start new chat">+</button>
-                        Transparent SF Agent Chat
-                    </h1>
-                    <div id="chat-container">
-                        <div id="response-area"></div>
-                        <div id="input-container">
-                            <input
-                                type="text"
-                                id="userInput"
-                                placeholder="Type your message..."
-                                autocomplete="off"
-                            />
-                            <button id="submit-button">Send</button>
-                        </div>
+        <div class="main">
+            <div class="chat">
+                <h1>
+                    <button id="newChatButton" title="Start new chat">+</button>
+                    Transparent SF Agent Chat
+                    <select id="agentSelector" title="Select agent">
+                        <option value="researcher">Researcher</option>
+                        <option value="analyst">Analyst</option>
+                        <option value="explainer">Explainer</option>
+                    </select>
+                </h1>
+                <div id="chat-container">
+                    <div id="response-area"></div>
+                    <div id="input-container">
+                        <input
+                            type="text"
+                            id="userInput"
+                            placeholder="Type your message..."
+                            autocomplete="off"
+                        />
+                        <button id="submit-button">Send</button>
                     </div>
                 </div>
-                <div class="divider"></div>
-                <div class="canvas-container">
-                    <iframe
-                        name="canvasTarget"
-                        style="width: 100%; height: 100%; border: none"
-                    ></iframe>
-                </div>
+            </div>
+            <div class="divider"></div>
+            <div class="canvas-container">
+                <iframe
+                    name="canvasTarget"
+                    style="width: 100%; height: 100%; border: none"
+                ></iframe>
             </div>
         </div>
 
@@ -496,6 +536,8 @@
         <script src="https://cdn.jsdelivr.net/npm/marked@4.2.12/marked.min.js"></script>
         <!-- Include DOMPurify library -->
         <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+        <!-- Include Chart.js library -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
 
         <script>
             // Configure Marked.js
@@ -576,6 +618,35 @@
             const submitBtn = document.getElementById("submit-button"); // Correct ID
             let currentAIMessage = null;
 
+            // Add session management
+            let currentSessionId = null;
+
+            // Function to get or create a session ID
+            async function getSessionId() {
+                if (currentSessionId) {
+                    return currentSessionId;
+                }
+                
+                try {
+                    // Try to get session ID from cookie
+                    const cookies = document.cookie.split(';');
+                    for (const cookie of cookies) {
+                        const [name, value] = cookie.trim().split('=');
+                        if (name === 'session_id') {
+                            currentSessionId = value;
+                            return currentSessionId;
+                        }
+                    }
+                    
+                    // If no session ID in cookie, create a new one
+                    currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
+                    return currentSessionId;
+                } catch (error) {
+                    console.error("Error getting session ID:", error);
+                    return null;
+                }
+            }
+
             function handleServerMessage(data) {
                 console.log("Received message:", data);
 
@@ -604,6 +675,41 @@
                         arguments: data.arguments,
                     });
                     renderContentSegments(currentAIMessage);
+                } else if (data.type === "chart") {
+                    // Log chart message details
+                    console.log("CHART MESSAGE RECEIVED:", {
+                        chart_id: data.chart_id,
+                        chart_type: data.chart_type,
+                        chart_data: data.chart_data,
+                        chart_html_length: data.chart_html ? data.chart_html.length : 0
+                    });
+                    
+                    // Create chart container
+                    const chartContainer = document.createElement("div");
+                    chartContainer.id = data.chart_id;
+                    chartContainer.className = "chart-container";
+                    
+                    // Add chart HTML
+                    chartContainer.innerHTML = data.chart_html;
+                    
+                    // Add the chart as a segment
+                    currentAIMessage.contentSegments.push({
+                        type: "chart",
+                        chart_id: data.chart_id,
+                        chart_type: data.chart_type,
+                        chart_data: data.chart_data,
+                        chart_html: data.chart_html,
+                        container: chartContainer
+                    });
+                    
+                    // Render the updated content
+                    renderContentSegments(currentAIMessage);
+                    
+                    // Initialize chart if it's an anomaly chart
+                    if (data.chart_type === "anomaly" && typeof initializeAnomalyChart === "function") {
+                        console.log("Initializing anomaly chart:", data.chart_id);
+                        initializeAnomalyChart(data.chart_id, data.chart_data);
+                    }
                 } else {
                     console.warn("Unknown message type:", data.type);
                 }
@@ -682,6 +788,27 @@
                             segment.arguments,
                         );
                         message.contentElement.appendChild(toolCallElement);
+                    } else if (segment.type === "chart") {
+                        // It's a chart segment
+                        console.log("Rendering chart segment:", segment.chart_id);
+                        
+                        // Use the pre-created container if available
+                        if (segment.container) {
+                            message.contentElement.appendChild(segment.container);
+                        } else {
+                            // Fallback if container wasn't pre-created
+                            const chartContainer = document.createElement("div");
+                            chartContainer.id = segment.chart_id;
+                            chartContainer.className = "chart-container";
+                            chartContainer.innerHTML = segment.chart_html;
+                            message.contentElement.appendChild(chartContainer);
+                            
+                            // Initialize chart if it's an anomaly chart
+                            if (segment.chart_type === "anomaly" && typeof initializeAnomalyChart === "function") {
+                                console.log("Initializing anomaly chart (fallback):", segment.chart_id);
+                                initializeAnomalyChart(segment.chart_id, segment.chart_data);
+                            }
+                        }
                     }
                 }
             }
@@ -731,103 +858,261 @@
                 return toolCallContainer;
             }
 
-            async function sendMessage() {
-                const query = userInput.value.trim();
-                if (!query) return;
+            // Chart initialization function
+            function initializeAnomalyChart(chartId, chartData) {
+                console.log("Initializing chart:", chartId, "with data:", chartData);
+                
+                // Get the chart container
+                const container = document.getElementById(chartId);
+                if (!container) {
+                    console.error("Chart container not found:", chartId);
+                    return;
+                }
 
-                // Add user's message to chat log
-                const userMessage = addMessage("You", "user-message");
-                const htmlContent = marked.parse(query);
-                userMessage.contentElement.innerHTML =
-                    DOMPurify.sanitize(htmlContent);
-
-                // Reset currentAIMessage to null
-                currentAIMessage = null;
-
-                // Create initial AI message with typing indicator
-                currentAIMessage = addMessage("AI", "ai-message");
-                const typingIndicator = document.createElement("div");
-                typingIndicator.className = "typing-indicator";
-                currentAIMessage.contentElement.appendChild(typingIndicator);
-
-                userInput.value = "";
+                // Create direct access to chart data without relying on parsing
+                let labels = [];
+                let values = [];
+                let title = 'Anomaly Chart';
 
                 try {
-                    const response = await fetch('/chat/api/chat', {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ query }),
-                    });
-
-                    // Initialize content segments but keep typing indicator
-                    currentAIMessage.contentSegments = [];
-
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-
-                    let buffer = "";
-                    let firstChunkReceived = false;
-
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-
-                        const chunk = decoder.decode(value);
-                        console.log("Received chunk:", chunk);
-                        buffer += chunk;
-
-                        // Only remove typing indicator after we've received actual content
-                        if (!firstChunkReceived && buffer.trim()) {
-                            firstChunkReceived = true;
-                            currentAIMessage.contentElement.removeChild(typingIndicator);
+                    // Use a safer approach to extract data directly from the chart_data object
+                    if (chartData && chartData.raw_data) {
+                        // Direct extraction approach - use regex to extract the data we need
+                        const rawDataString = typeof chartData.raw_data === 'string' ? chartData.raw_data : JSON.stringify(chartData.raw_data);
+                        
+                        console.log("Attempting to extract data directly from raw_data string");
+                        
+                        // Extract comparison_dates using regex
+                        const comparisonDatesMatch = rawDataString.match(/'comparison_dates':\s*\[(.*?)\]/);
+                        if (comparisonDatesMatch && comparisonDatesMatch[1]) {
+                            // Extract the dates from the match
+                            labels = comparisonDatesMatch[1]
+                                .split(',')
+                                .map(date => date.trim().replace(/'/g, ''));
+                            console.log("Extracted comparison_dates:", labels);
                         }
+                        
+                        // Extract comparison_counts using regex
+                        const comparisonCountsMatch = rawDataString.match(/'comparison_counts':\s*\[(.*?)\]/);
+                        if (comparisonCountsMatch && comparisonCountsMatch[1]) {
+                            // Extract the counts from the match
+                            values = comparisonCountsMatch[1]
+                                .split(',')
+                                .map(count => parseFloat(count.trim()));
+                            console.log("Extracted comparison_counts:", values);
+                        }
+                        
+                        // Extract recent dates and counts
+                        const recentDatesMatch = rawDataString.match(/'recent_dates':\s*\[(.*?)\]/);
+                        const recentCountsMatch = rawDataString.match(/'recent_counts':\s*\[(.*?)\]/);
+                        
+                        if (recentDatesMatch && recentDatesMatch[1] && recentCountsMatch && recentCountsMatch[1]) {
+                            const recentDates = recentDatesMatch[1]
+                                .split(',')
+                                .map(date => date.trim().replace(/'/g, ''));
+                                
+                            const recentCounts = recentCountsMatch[1]
+                                .split(',')
+                                .map(count => parseFloat(count.trim()));
+                                
+                            if (recentDates.length > 0 && recentCounts.length > 0) {
+                                labels.push(recentDates[0]);
+                                values.push(recentCounts[0]);
+                                console.log("Added recent data point:", recentDates[0], recentCounts[0]);
+                            }
+                        }
+                        
+                        // Extract title if available
+                        const titleMatch = rawDataString.match(/'title':\s*'([^']+)'/);
+                        if (titleMatch && titleMatch[1]) {
+                            title = titleMatch[1];
+                            console.log("Extracted title:", title);
+                        }
+                    }
+                    
+                    // If no data was extracted, try to get some basic info
+                    if (labels.length === 0 || values.length === 0) {
+                        console.warn("Could not extract data using regex, using fallback approach");
+                        
+                        // Fallback to just hardcoding an example chart
+                        labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May'];
+                        values = [12, 19, 3, 5, 2];
+                        title = 'Anomaly Chart (Fallback)';
+                    }
+                    
+                    // Check if Chart.js is available
+                    if (typeof Chart === 'undefined') {
+                        console.error("Chart.js is not loaded. Loading it now...");
+                        // Create a script element to load Chart.js
+                        const script = document.createElement('script');
+                        script.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js';
+                        script.onload = function() {
+                            console.log("Chart.js loaded successfully");
+                            createChart();
+                        };
+                        script.onerror = function() {
+                            console.error("Failed to load Chart.js");
+                        };
+                        document.head.appendChild(script);
+                        
+                        // Define the createChart function to be called after Chart.js is loaded
+                        function createChart() {
+                            createChartWithData();
+                        }
+                    } else {
+                        // Chart.js is already available, create the chart directly
+                        createChartWithData();
+                    }
+                    
+                    // Function to create the chart with the prepared data
+                    function createChartWithData() {
+                        // Check if canvas exists, if not create it
+                        let canvas = container.querySelector('canvas');
+                        if (!canvas) {
+                            console.log("Canvas not found, creating one");
+                            canvas = document.createElement('canvas');
+                            container.appendChild(canvas);
+                        }
+                        
+                        // Create the chart using the data
+                        const chart = new Chart(canvas, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: title,
+                                    data: values,
+                                    borderColor: 'rgb(75, 192, 192)',
+                                    tension: 0.1,
+                                    backgroundColor: 'rgba(75, 192, 192, 0.2)'
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    title: {
+                                        display: true,
+                                        text: title
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true
+                                    }
+                                }
+                            }
+                        });
+                        
+                        console.log("Chart initialized successfully:", chartId);
+                    }
+                } catch (error) {
+                    console.error("Error initializing chart:", error);
+                }
+            }
 
-                        // Process complete lines
-                        let lines = buffer.split("\n");
-                        buffer = lines.pop(); // Keep the last incomplete line in the buffer
+            async function sendMessage() {
+                const query = userInput.value.trim();
+                if (query) {
+                    userInput.value = "";
+                    const currentAgent = document.getElementById("agentSelector").value;
+                    
+                    // Add user message to chat
+                    addMessage("user", "user-message", query);
+                    
+                    // Create a new AI message and initialize it
+                    currentAIMessage = addMessage("AI", "ai-message");
+                    
+                    // Create typing indicator
+                    const typingIndicator = document.createElement("div");
+                    typingIndicator.className = "typing-indicator";
+                    typingIndicator.innerHTML = '<div class="spinner"></div>';
+                    currentAIMessage.contentElement.appendChild(typingIndicator);
+                    
+                    try {
+                        const sessionId = await getSessionId();
+                        const response = await fetch('/chat/api/chat', {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            credentials: 'include',
+                            body: JSON.stringify({ 
+                                query,
+                                agent: currentAgent,
+                                session_id: sessionId
+                            }),
+                        });
 
-                        for (const line of lines) {
-                            if (line.trim()) {
-                                try {
-                                    const data = JSON.parse(line);
-                                    handleServerMessage(data);
-                                } catch (e) {
-                                    console.error("Error parsing JSON:", e);
-                                    console.error("Invalid JSON:", line);
+                        // Initialize content segments but keep typing indicator
+                        currentAIMessage.contentSegments = [];
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+
+                        let buffer = "";
+                        let firstChunkReceived = false;
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            const chunk = decoder.decode(value);
+                            console.log("Received chunk:", chunk);
+                            buffer += chunk;
+
+                            // Only remove typing indicator after we've received actual content
+                            if (!firstChunkReceived && buffer.trim()) {
+                                firstChunkReceived = true;
+                                if (typingIndicator.parentNode === currentAIMessage.contentElement) {
+                                    currentAIMessage.contentElement.removeChild(typingIndicator);
+                                }
+                            }
+
+                            // Process complete lines
+                            let lines = buffer.split("\n");
+                            buffer = lines.pop(); // Keep the last incomplete line in the buffer
+
+                            for (const line of lines) {
+                                if (line.trim()) {
+                                    try {
+                                        const data = JSON.parse(line);
+                                        handleServerMessage(data);
+                                    } catch (e) {
+                                        console.error("Error parsing JSON:", e);
+                                        console.error("Invalid JSON:", line);
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Process any remaining data in the buffer
-                    if (buffer.trim()) {
-                        try {
-                            const data = JSON.parse(buffer);
-                            handleServerMessage(data);
-                        } catch (e) {
-                            console.error("Error parsing JSON:", e);
-                            console.error("Invalid JSON:", buffer);
+                        // Process any remaining data in the buffer
+                        if (buffer.trim()) {
+                            try {
+                                const data = JSON.parse(buffer);
+                                handleServerMessage(data);
+                            } catch (e) {
+                                console.error("Error parsing JSON:", e);
+                                console.error("Invalid JSON:", buffer);
+                            }
                         }
-                    }
 
-                    // Ensure typing indicator is removed at the end if it hasn't been already
-                    if (typingIndicator.parentNode === currentAIMessage.contentElement) {
-                        currentAIMessage.contentElement.removeChild(typingIndicator);
+                        // Ensure typing indicator is removed at the end if it hasn't been already
+                        if (typingIndicator.parentNode === currentAIMessage.contentElement) {
+                            currentAIMessage.contentElement.removeChild(typingIndicator);
+                        }
+                    } catch (error) {
+                        console.error("Error:", error);
+                        // Remove typing indicator if there's an error
+                        if (typingIndicator.parentNode === currentAIMessage.contentElement) {
+                            currentAIMessage.contentElement.removeChild(typingIndicator);
+                        }
+                        addMessage(
+                            "Error",
+                            "error-message",
+                        ).contentElement.textContent =
+                            "An error occurred. Please try again.";
                     }
-                } catch (error) {
-                    console.error("Error:", error);
-                    // Remove typing indicator if there's an error
-                    if (typingIndicator.parentNode === currentAIMessage.contentElement) {
-                        currentAIMessage.contentElement.removeChild(typingIndicator);
-                    }
-                    addMessage(
-                        "Error",
-                        "error-message",
-                    ).contentElement.textContent =
-                        "An error occurred. Please try again.";
                 }
             }
-            function addMessage(sender, messageType) {
+            function addMessage(sender, messageType, content) {
                 const messageContainer = document.createElement("div");
                 messageContainer.className = `message ${messageType}`;
 
@@ -842,6 +1127,11 @@
                 messageContainer.appendChild(contentElement);
                 responseArea.appendChild(messageContainer);
                 responseArea.scrollTop = responseArea.scrollHeight;
+
+                // If this is a user message, set the content directly
+                if (messageType === "user-message" && content) {
+                    contentElement.textContent = content;
+                }
 
                 return {
                     messageContainer,
@@ -914,6 +1204,7 @@
             document.addEventListener("DOMContentLoaded", function () {
                 const submitButton = document.getElementById("submit-button");
                 const inputBox = document.getElementById("userInput");
+                const agentSelector = document.getElementById("agentSelector");
 
                 if (submitButton && inputBox) {
                     submitButton.addEventListener("click", sendMessage);
@@ -924,6 +1215,12 @@
                     });
                 } else {
                     console.error("submit-button or input-box not found.");
+                }
+                
+                // Set initial agent in dropdown
+                if (agentSelector) {
+                    // Default to researcher agent
+                    agentSelector.value = "researcher";
                 }
             });
 
@@ -977,60 +1274,6 @@
                 }
             });
 
-            // Check login status when page loads
-            document.addEventListener('DOMContentLoaded', function() {
-                checkLoginStatus();
-            });
-
-            function checkLoginStatus() {
-                const isLoggedIn = sessionStorage.getItem('isLoggedIn');
-                if (isLoggedIn) {
-                    showChat();
-                } else {
-                    showLogin();
-                }
-            }
-
-            function showChat() {
-                document.getElementById('loginForm').style.display = 'none';
-                document.getElementById('chatInterface').style.display = 'block';
-            }
-
-            function showLogin() {
-                document.getElementById('loginForm').style.display = 'block';
-                document.getElementById('chatInterface').style.display = 'none';
-            }
-
-            function checkLogin(event) {
-                event.preventDefault();
-                
-                const username = document.getElementById('username').value.trim();
-                const password = document.getElementById('password').value.trim();
-                
-                // Simple hash of the credentials (not secure but better than plaintext in source)
-                const validUsername = btoa('demo');
-                const validPassword = btoa('demo99');
-                
-                if (btoa(username) === validUsername && btoa(password) === validPassword) {
-                    sessionStorage.setItem('isLoggedIn', 'true');
-                    showChat();
-                } else {
-                    alert('Invalid credentials. Please try again.');
-                    document.getElementById('password').value = '';
-                }
-                return false;
-            }
-
-            function logout() {
-                sessionStorage.removeItem('isLoggedIn');
-                showLogin();
-                document.getElementById('username').value = '';
-                document.getElementById('password').value = '';
-            }
-
-            // Prevent access to chat interface through console
-            setInterval(checkLoginStatus, 1000);
-
             // Update the new chat button click handler
             document.getElementById('newChatButton').addEventListener('click', async function() {
                 responseArea.innerHTML = ''; // Clear all messages
@@ -1038,14 +1281,53 @@
                 
                 // Call the server to reset the conversation
                 try {
+                    const sessionId = await getSessionId();
                     await fetch('/chat/api/reset', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
-                        }
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ session_id: sessionId })
                     });
                 } catch (error) {
                     console.error('Failed to reset conversation:', error);
+                }
+            });
+
+            // Add agent selector change handler
+            document.getElementById('agentSelector').addEventListener('change', async function() {
+                const selectedAgent = this.value;
+                
+                // Call the server to switch agents
+                try {
+                    const sessionId = await getSessionId();
+                    const response = await fetch('/chat/api/switch-agent', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ 
+                            agent: selectedAgent,
+                            session_id: sessionId
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        // Add a system message to indicate agent switch
+                        const systemMessage = addMessage("System", "system-message");
+                        systemMessage.contentElement.textContent = `Switched to ${selectedAgent} agent`;
+                        
+                        // Scroll to the bottom
+                        responseArea.scrollTop = responseArea.scrollHeight;
+                    } else {
+                        console.error('Failed to switch agent:', result.message);
+                    }
+                } catch (error) {
+                    console.error('Failed to switch agent:', error);
                 }
             });
         </script>

@@ -11,15 +11,6 @@
             padding: 20px;
             color: #333;
         }
-        .header {
-            background-color: #ffffff;
-            color: rgb(139, 213, 214);
-            padding: 15px 20px;
-            font-size: 24px;
-            font-weight: bold;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -28,6 +19,7 @@
             display: flex;
             gap: 20px;
             margin-bottom: 20px;
+            align-items: flex-end;
         }
         .form-group {
             flex: 1;
@@ -125,18 +117,6 @@
             padding-left: 15px;
             color: #666;
         }
-        .back-button {
-            text-decoration: none;
-            color: #666;
-            display: inline-block;
-            margin-bottom: 15px;
-        }
-        .back-button:hover {
-            color: #333;
-        }
-        .admin-controls {
-            margin-bottom: 20px;
-        }
         .btn {
             padding: 10px 16px;
             border: none;
@@ -223,40 +203,96 @@
         .btn-danger:hover {
             background-color: #c82333;
         }
+        .status-container {
+            margin-top: 10px;
+            display: none;
+        }
+        .progress-container {
+            margin-top: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background-color: #007bff;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-status {
+            font-size: 14px;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+        .progress-details {
+            font-size: 12px;
+            color: #6c757d;
+            max-height: 100px;
+            overflow-y: auto;
+            background-color: #f1f3f5;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        .btn-with-spinner {
+            position: relative;
+        }
+        .btn-spinner {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+        .btn-with-spinner.loading .btn-spinner {
+            display: block;
+        }
+        .btn-with-spinner.loading {
+            padding-right: 40px;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        .log-time {
+            color: #6c757d;
+            font-size: 11px;
+            margin-right: 5px;
+        }
+        .log-info {
+            color: #0c5460;
+        }
+        .log-warning {
+            color: #856404;
+        }
+        .log-error {
+            color: #721c24;
+        }
+        .log-success {
+            color: #155724;
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        Dashboard Metric Control
-    </div>
-    
     <div class="container">
-        <a href="/backend" class="back-button">← Back to Dashboard</a>
-        
-        <div class="admin-controls">
-            <button id="enhance-queries-btn" class="btn btn-secondary">
-                Enhance Dashboard Queries
-            </button>
-            <div class="form-group" style="display: inline-block; margin-left: 10px;">
-                <select id="period-type-select" class="btn btn-secondary" style="padding: 10px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: all 0.3s ease; font-size: 16px;">
-                    <option value="ytd">YTD Metrics</option>
-                    <option value="month">Monthly Analysis</option>
-                    <option value="year">Annual Analysis</option>
-                    <option value="week">Weekly Analysis</option>
-                    <option value="both">Monthly & Annual Analysis</option>
-                </select>
-            </div>
-            <button id="generate-metrics-btn" class="btn btn-secondary" style="margin-left: 10px;">
-                Generate Metrics
-            </button>
-            <button id="run-all-metrics-btn" class="btn btn-secondary" style="margin-left: 10px;">
-                Run All Metrics
-            </button>
-            <div id="enhance-status" style="margin-top: 10px; display: none;"></div>
-            <div id="generate-status" style="margin-top: 10px; display: none;"></div>
-            <div id="run-all-status" style="margin-top: 10px; display: none;"></div>
-        </div>
-        
         <div class="controls">
             <div class="form-group">
                 <label for="district-select">Select District:</label>
@@ -279,9 +315,37 @@
             <div class="form-group">
                 <label for="metric-select">Select Metric:</label>
                 <select id="metric-select">
+                    <option value="all">All Metrics</option>
                     <option value="1">Loading metrics...</option>
                 </select>
             </div>
+            
+            <div class="form-group">
+                <label for="period-type-select">Period Type:</label>
+                <select id="period-type-select">
+                    <option value="month">Monthly Analysis</option>
+                    <option value="year">Annual Analysis</option>
+                    <option value="week">Weekly Analysis</option>
+                    <option value="both">Monthly & Annual Analysis</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <button id="generate-metrics-btn" class="btn btn-secondary btn-with-spinner">
+                    Generate Metrics
+                    <span class="btn-spinner"></span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Progress and status information moved below the controls -->
+        <div id="generate-status" class="status-container"></div>
+        <div id="generate-progress" class="progress-container" style="display: none;">
+            <div class="progress-status">Initializing metric generation...</div>
+            <div class="progress-bar">
+                <div class="progress-bar-fill"></div>
+            </div>
+            <div class="progress-details" id="progress-log"></div>
         </div>
         
         <!-- Add column selection section -->
@@ -329,8 +393,9 @@
             const annualOutput = document.getElementById('annual-output');
             const monthlyOutput = document.getElementById('monthly-output');
             const weeklyOutput = document.getElementById('weekly-output');
-            const enhanceQueriesBtn = document.getElementById('enhance-queries-btn');
-            const enhanceStatus = document.getElementById('enhance-status');
+            const generateMetricsBtn = document.getElementById('generate-metrics-btn');
+            const generateStatus = document.getElementById('generate-status');
+            const periodTypeSelect = document.getElementById('period-type-select');
             
             let metrics = [];
             
@@ -366,9 +431,12 @@
                     metrics.sort((a, b) => a.id - b.id);
                     
                     // Populate metric select
-                    metricSelect.innerHTML = metrics.map(metric => 
-                        `<option value="${metric.id}">${metric.id} - ${metric.name}</option>`
-                    ).join('');
+                    metricSelect.innerHTML = `
+                        <option value="all">All Metrics</option>
+                        ${metrics.map(metric => 
+                            `<option value="${metric.id}">${metric.id} - ${metric.name}</option>`
+                        ).join('')}
+                    `;
                     
                     // Load initial outputs
                     loadOutputs();
@@ -385,6 +453,8 @@
                 
                 if (!metricId) return;
                 
+                console.log(`Loading outputs for district ${districtId}, metric ${metricId}`);
+                
                 // Show loading state
                 [dashboardOutput, annualOutput, monthlyOutput, weeklyOutput].forEach(output => {
                     output.innerHTML = '<div class="spinner"></div> Loading...';
@@ -397,7 +467,8 @@
                         const dashboardData = await dashboardResponse.json();
                         dashboardOutput.textContent = JSON.stringify(dashboardData, null, 2);
                     } else {
-                        dashboardOutput.textContent = 'No dashboard output available';
+                        console.warn(`Dashboard output not found: /output/dashboard/${districtId}/${metricId}.json (${dashboardResponse.status})`);
+                        dashboardOutput.textContent = 'No dashboard output available for this district/metric combination';
                     }
                     
                     // Load annual output
@@ -407,7 +478,8 @@
                         annualOutput.innerHTML = marked.parse(annualText);
                         annualOutput.classList.add('markdown');
                     } else {
-                        annualOutput.textContent = 'No annual output available';
+                        console.warn(`Annual output not found: /output/annual/${districtId}/${metricId}.md (${annualResponse.status})`);
+                        annualOutput.textContent = 'No annual output available for this district/metric combination';
                     }
                     
                     // Load monthly output
@@ -417,7 +489,8 @@
                         monthlyOutput.innerHTML = marked.parse(monthlyText);
                         monthlyOutput.classList.add('markdown');
                     } else {
-                        monthlyOutput.textContent = 'No monthly output available';
+                        console.warn(`Monthly output not found: /output/monthly/${districtId}/${metricId}.md (${monthlyResponse.status})`);
+                        monthlyOutput.textContent = 'No monthly output available for this district/metric combination';
                     }
                     
                     // Load weekly output
@@ -427,12 +500,13 @@
                         weeklyOutput.innerHTML = marked.parse(weeklyText);
                         weeklyOutput.classList.add('markdown');
                     } else {
-                        weeklyOutput.textContent = 'No weekly output available';
+                        console.warn(`Weekly output not found: /output/weekly/${districtId}/${metricId}.md (${weeklyResponse.status})`);
+                        weeklyOutput.textContent = 'No weekly output available for this district/metric combination';
                     }
                 } catch (error) {
                     console.error('Error loading outputs:', error);
                     [dashboardOutput, annualOutput, monthlyOutput, weeklyOutput].forEach(output => {
-                        output.textContent = 'Error loading output';
+                        output.textContent = `Error loading output: ${error.message}`;
                     });
                 }
             }
@@ -441,64 +515,15 @@
             districtSelect.addEventListener('change', loadOutputs);
             metricSelect.addEventListener('change', loadOutputs);
             
-            // Enhancement functionality
-            enhanceQueriesBtn.addEventListener('click', async () => {
-                try {
-                    enhanceQueriesBtn.disabled = true;
-                    enhanceStatus.style.display = 'block';
-                    enhanceStatus.innerHTML = '<div class="spinner"></div> Enhancing dashboard queries...';
-                    
-                    const response = await fetch('/backend/enhance_queries', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.status === 'success') {
-                        enhanceStatus.innerHTML = `
-                            <div style="color: #28a745;">
-                                <h4>✅ Enhancement Complete</h4>
-                                <p>${data.message}</p>
-                            </div>
-                        `;
-                        // Reload metrics after successful enhancement
-                        await loadMetrics();
-                    } else {
-                        enhanceStatus.innerHTML = `
-                            <div style="color: #dc3545;">
-                                <h4>❌ Enhancement Failed</h4>
-                                <p>${data.message}</p>
-                            </div>
-                        `;
-                    }
-                } catch (error) {
-                    console.error('Error enhancing queries:', error);
-                    enhanceStatus.innerHTML = `
-                        <div style="color: #dc3545;">
-                            <h4>❌ Error</h4>
-                            <p>An error occurred while enhancing queries: ${error.message}</p>
-                        </div>
-                    `;
-                } finally {
-                    enhanceQueriesBtn.disabled = false;
-                }
-            });
-            
             // Generate metrics functionality
-            const generateMetricsBtn = document.getElementById('generate-metrics-btn');
-            const generateStatus = document.getElementById('generate-status');
-            const periodTypeSelect = document.getElementById('period-type-select');
-            const runAllMetricsBtn = document.getElementById('run-all-metrics-btn');
-            const runAllStatus = document.getElementById('run-all-status');
-
-            // Add generate metrics functionality
             generateMetricsBtn.addEventListener('click', async () => {
                 const periodType = periodTypeSelect.value;
                 const metricId = metricSelect.value;
                 const districtId = districtSelect.value;
+                const progressContainer = document.getElementById('generate-progress');
+                const progressBar = progressContainer.querySelector('.progress-bar-fill');
+                const progressStatus = progressContainer.querySelector('.progress-status');
+                const progressLog = document.getElementById('progress-log');
                 
                 if (!metricId) {
                     generateStatus.style.display = 'block';
@@ -512,83 +537,261 @@
                 }
                 
                 try {
+                    // Reset and show progress UI
+                    generateMetricsBtn.classList.add('loading');
                     generateMetricsBtn.disabled = true;
-                    generateStatus.style.display = 'block';
-                    generateStatus.innerHTML = '<div class="spinner"></div> Generating metrics...';
+                    progressContainer.style.display = 'block';
+                    progressBar.style.width = '0%';
+                    progressStatus.textContent = 'Initializing metric generation...';
+                    progressLog.innerHTML = '';
                     
-                    // For 'both' period type, we need to make two separate calls
-                    if (periodType === 'both') {
-                        // First run monthly analysis
-                        const monthlyResponse = await fetch(`/backend/run_specific_metric?metric_id=${metricId}&district_id=${districtId}&period_type=month`, {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json'
+                    // Add initial log entry
+                    addLogEntry('Starting metric generation process...', 'info');
+                    
+                    // Handle "All Metrics" selection
+                    if (metricId === 'all') {
+                        // For 'both' period type, we need to make two separate calls for each metric
+                        if (periodType === 'both') {
+                            // First run monthly analysis for all metrics
+                            progressStatus.textContent = 'Running monthly analysis for all metrics...';
+                            progressBar.style.width = '25%';
+                            addLogEntry('Starting monthly analysis for all metrics...', 'info');
+                            
+                            // Run monthly analysis for each metric
+                            for (let i = 0; i < metrics.length; i++) {
+                                const metric = metrics[i];
+                                const progress = ((i + 1) / metrics.length) * 25;
+                                progressBar.style.width = `${progress}%`;
+                                progressStatus.textContent = `Running monthly analysis for metric ${metric.id} (${i + 1}/${metrics.length})...`;
+                                addLogEntry(`Processing monthly analysis for metric ${metric.id} - ${metric.name}...`, 'info');
+                                
+                                const monthlyResponse = await fetch(`/backend/run_specific_metric?metric_id=${metric.id}&district_id=${districtId}&period_type=month`, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    }
+                                });
+                                
+                                const monthlyData = await monthlyResponse.json();
+                                if (monthlyData.status !== 'success') {
+                                    addLogEntry(`Warning: Monthly analysis failed for metric ${metric.id}: ${monthlyData.message}`, 'warning');
+                                } else {
+                                    addLogEntry(`Completed monthly analysis for metric ${metric.id}`, 'success');
+                                }
                             }
-                        });
-                        
-                        const monthlyData = await monthlyResponse.json();
-                        if (monthlyData.status !== 'success') {
-                            throw new Error(`Monthly analysis failed: ${monthlyData.message}`);
-                        }
-                        
-                        // Then run annual analysis
-                        const annualResponse = await fetch(`/backend/run_specific_metric?metric_id=${metricId}&district_id=${districtId}&period_type=year`, {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json'
+                            
+                            progressBar.style.width = '50%';
+                            addLogEntry('Monthly analysis completed for all metrics', 'success');
+                            
+                            // Then run annual analysis for all metrics
+                            progressStatus.textContent = 'Running annual analysis for all metrics...';
+                            addLogEntry('Starting annual analysis for all metrics...', 'info');
+                            
+                            // Run annual analysis for each metric
+                            for (let i = 0; i < metrics.length; i++) {
+                                const metric = metrics[i];
+                                const progress = 50 + ((i + 1) / metrics.length) * 50;
+                                progressBar.style.width = `${progress}%`;
+                                progressStatus.textContent = `Running annual analysis for metric ${metric.id} (${i + 1}/${metrics.length})...`;
+                                addLogEntry(`Processing annual analysis for metric ${metric.id} - ${metric.name}...`, 'info');
+                                
+                                const annualResponse = await fetch(`/backend/run_specific_metric?metric_id=${metric.id}&district_id=${districtId}&period_type=year`, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    }
+                                });
+                                
+                                const annualData = await annualResponse.json();
+                                if (annualData.status !== 'success') {
+                                    addLogEntry(`Warning: Annual analysis failed for metric ${metric.id}: ${annualData.message}`, 'warning');
+                                } else {
+                                    addLogEntry(`Completed annual analysis for metric ${metric.id}`, 'success');
+                                }
                             }
-                        });
-                        
-                        const annualData = await annualResponse.json();
-                        if (annualData.status !== 'success') {
-                            throw new Error(`Annual analysis failed: ${annualData.message}`);
-                        }
-                        
-                        generateStatus.innerHTML = `
-                            <div style="color: #28a745;">
-                                <h4>✅ Generation Complete</h4>
-                                <p>Monthly and annual analysis completed successfully</p>
-                            </div>
-                        `;
-                    } else if (periodType === 'week') {
-                        // Weekly analysis - calls a different endpoint
-                        const response = await fetch(`/api/weekly-analysis?metrics=${metricId}&include_districts=true`, {
-                            method: 'GET'
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            generateStatus.innerHTML = `
-                                <div style="color: #28a745;">
-                                    <h4>✅ Weekly Analysis Complete</h4>
-                                    <p>Weekly analysis completed successfully</p>
-                                    <p><a href="/weekly-report" target="_blank">View Weekly Report</a></p>
-                                </div>
-                            `;
-                        } else {
-                            throw new Error(data.error || 'Unknown error');
-                        }
-                    } else {
-                        // Single period type analysis
-                        const response = await fetch(`/backend/run_specific_metric?metric_id=${metricId}&district_id=${districtId}&period_type=${periodType}`, {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.status === 'success') {
+                            
+                            progressBar.style.width = '100%';
+                            progressStatus.textContent = 'Monthly and annual analysis completed for all metrics';
+                            addLogEntry('All metric generation completed', 'success');
+                            
                             generateStatus.innerHTML = `
                                 <div style="color: #28a745;">
                                     <h4>✅ Generation Complete</h4>
-                                    <p>${data.message}</p>
+                                    <p>Monthly and annual analysis completed for all metrics</p>
                                 </div>
                             `;
+                        } else if (periodType === 'week') {
+                            // Weekly analysis - calls a different endpoint
+                            progressStatus.textContent = 'Running weekly analysis for all metrics...';
+                            progressBar.style.width = '50%';
+                            addLogEntry('Starting weekly analysis for all metrics...', 'info');
+                            
+                            const response = await fetch(`/api/weekly-analysis?include_districts=true`, {
+                                method: 'GET'
+                            });
+                            
+                            const data = await response.json();
+                            
+                            if (data.success) {
+                                progressBar.style.width = '100%';
+                                progressStatus.textContent = 'Weekly analysis completed successfully for all default metrics';
+                                addLogEntry('Weekly analysis completed successfully', 'success');
+                                
+                                generateStatus.innerHTML = `
+                                    <div style="color: #28a745;">
+                                        <h4>✅ Weekly Analysis Complete</h4>
+                                        <p>Weekly analysis completed successfully for all default metrics</p>
+                                        <p><a href="/weekly-report" target="_blank">View Weekly Report</a></p>
+                                    </div>
+                                `;
+                            } else {
+                                throw new Error(data.error || 'Unknown error');
+                            }
                         } else {
-                            throw new Error(data.message);
+                            // Single period type analysis for all metrics
+                            progressStatus.textContent = `Running ${periodType} analysis for all metrics...`;
+                            addLogEntry(`Starting ${periodType} analysis for all metrics...`, 'info');
+                            
+                            // Run analysis for each metric
+                            for (let i = 0; i < metrics.length; i++) {
+                                const metric = metrics[i];
+                                const progress = ((i + 1) / metrics.length) * 100;
+                                progressBar.style.width = `${progress}%`;
+                                progressStatus.textContent = `Running ${periodType} analysis for metric ${metric.id} (${i + 1}/${metrics.length})...`;
+                                addLogEntry(`Processing ${periodType} analysis for metric ${metric.id} - ${metric.name}...`, 'info');
+                                
+                                const response = await fetch(`/backend/run_specific_metric?metric_id=${metric.id}&district_id=${districtId}&period_type=${periodType}`, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    }
+                                });
+                                
+                                const data = await response.json();
+                                if (data.status !== 'success') {
+                                    addLogEntry(`Warning: ${periodType} analysis failed for metric ${metric.id}: ${data.message}`, 'warning');
+                                } else {
+                                    addLogEntry(`Completed ${periodType} analysis for metric ${metric.id}`, 'success');
+                                }
+                            }
+                            
+                            progressBar.style.width = '100%';
+                            progressStatus.textContent = `${periodType} analysis completed for all metrics`;
+                            addLogEntry(`All ${periodType} analysis completed`, 'success');
+                            
+                            generateStatus.innerHTML = `
+                                <div style="color: #28a745;">
+                                    <h4>✅ Generation Complete</h4>
+                                    <p>${periodType} analysis completed for all metrics</p>
+                                </div>
+                            `;
+                        }
+                    } else {
+                        // Handle single metric selection
+                        // For 'both' period type, we need to make two separate calls
+                        if (periodType === 'both') {
+                            // First run monthly analysis
+                            progressStatus.textContent = 'Running monthly analysis...';
+                            progressBar.style.width = '25%';
+                            addLogEntry(`Starting monthly analysis for metric ${metricId} in district ${districtId}...`, 'info');
+                            
+                            const monthlyResponse = await fetch(`/backend/run_specific_metric?metric_id=${metricId}&district_id=${districtId}&period_type=month`, {
+                                method: 'GET',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                            
+                            const monthlyData = await monthlyResponse.json();
+                            if (monthlyData.status !== 'success') {
+                                throw new Error(`Monthly analysis failed: ${monthlyData.message}`);
+                            }
+                            
+                            progressBar.style.width = '50%';
+                            addLogEntry('Monthly analysis completed successfully', 'success');
+                            
+                            // Then run annual analysis
+                            progressStatus.textContent = 'Running annual analysis...';
+                            addLogEntry(`Starting annual analysis for metric ${metricId} in district ${districtId}...`, 'info');
+                            
+                            const annualResponse = await fetch(`/backend/run_specific_metric?metric_id=${metricId}&district_id=${districtId}&period_type=year`, {
+                                method: 'GET',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                            
+                            const annualData = await annualResponse.json();
+                            if (annualData.status !== 'success') {
+                                throw new Error(`Annual analysis failed: ${annualData.message}`);
+                            }
+                            
+                            progressBar.style.width = '100%';
+                            progressStatus.textContent = 'Monthly and annual analysis completed successfully';
+                            addLogEntry('Annual analysis completed successfully', 'success');
+                            
+                            generateStatus.innerHTML = `
+                                <div style="color: #28a745;">
+                                    <h4>✅ Generation Complete</h4>
+                                    <p>Monthly and annual analysis completed successfully</p>
+                                </div>
+                            `;
+                        } else if (periodType === 'week') {
+                            // Weekly analysis - calls a different endpoint
+                            progressStatus.textContent = 'Running weekly analysis...';
+                            progressBar.style.width = '50%';
+                            addLogEntry(`Starting weekly analysis for metric ${metricId} in district ${districtId}...`, 'info');
+                            
+                            const response = await fetch(`/api/weekly-analysis?metrics=${metricId}&include_districts=true`, {
+                                method: 'GET'
+                            });
+                            
+                            const data = await response.json();
+                            
+                            if (data.success) {
+                                progressBar.style.width = '100%';
+                                progressStatus.textContent = 'Weekly analysis completed successfully';
+                                addLogEntry('Weekly analysis completed successfully', 'success');
+                                
+                                generateStatus.innerHTML = `
+                                    <div style="color: #28a745;">
+                                        <h4>✅ Weekly Analysis Complete</h4>
+                                        <p>Weekly analysis completed successfully</p>
+                                        <p><a href="/weekly-report" target="_blank">View Weekly Report</a></p>
+                                    </div>
+                                `;
+                            } else {
+                                throw new Error(data.error || 'Unknown error');
+                            }
+                        } else {
+                            // Single period type analysis
+                            progressStatus.textContent = `Running ${periodType} analysis...`;
+                            progressBar.style.width = '50%';
+                            addLogEntry(`Starting ${periodType} analysis for metric ${metricId} in district ${districtId}...`, 'info');
+                            
+                            const response = await fetch(`/backend/run_specific_metric?metric_id=${metricId}&district_id=${districtId}&period_type=${periodType}`, {
+                                method: 'GET',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                            
+                            const data = await response.json();
+                            
+                            if (data.status === 'success') {
+                                progressBar.style.width = '100%';
+                                progressStatus.textContent = `${periodType} analysis completed successfully`;
+                                addLogEntry(`${periodType} analysis completed successfully`, 'success');
+                                
+                                generateStatus.innerHTML = `
+                                    <div style="color: #28a745;">
+                                        <h4>✅ Generation Complete</h4>
+                                        <p>${data.message}</p>
+                                    </div>
+                                `;
+                            } else {
+                                throw new Error(data.message);
+                            }
                         }
                     }
                     
@@ -596,6 +799,11 @@
                     await loadOutputs();
                 } catch (error) {
                     console.error('Error generating metrics:', error);
+                    progressBar.style.width = '100%';
+                    progressBar.style.backgroundColor = '#dc3545';
+                    progressStatus.textContent = `Error: ${error.message}`;
+                    addLogEntry(`Error: ${error.message}`, 'error');
+                    
                     generateStatus.innerHTML = `
                         <div style="color: #dc3545;">
                             <h4>❌ Error</h4>
@@ -603,109 +811,24 @@
                         </div>
                     `;
                 } finally {
+                    generateMetricsBtn.classList.remove('loading');
                     generateMetricsBtn.disabled = false;
                 }
             });
             
-            // Add run all metrics functionality
-            runAllMetricsBtn.addEventListener('click', async () => {
-                const periodType = periodTypeSelect.value;
+            // Function to add a log entry with timestamp
+            function addLogEntry(message, type = 'info') {
+                const progressLog = document.getElementById('progress-log');
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
                 
-                try {
-                    runAllMetricsBtn.disabled = true;
-                    runAllStatus.style.display = 'block';
-                    runAllStatus.innerHTML = '<div class="spinner"></div> Running all metrics...';
-                    
-                    // For 'both' period type, we need to make two separate calls
-                    if (periodType === 'both') {
-                        // First run monthly analysis
-                        const monthlyResponse = await fetch('/backend/run_all_metrics?period_type=month', {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                        
-                        const monthlyData = await monthlyResponse.json();
-                        if (monthlyData.status !== 'success') {
-                            throw new Error(`Monthly analysis failed: ${monthlyData.message}`);
-                        }
-                        
-                        // Then run annual analysis
-                        const annualResponse = await fetch('/backend/run_all_metrics?period_type=year', {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                        
-                        const annualData = await annualResponse.json();
-                        if (annualData.status !== 'success') {
-                            throw new Error(`Annual analysis failed: ${annualData.message}`);
-                        }
-                        
-                        runAllStatus.innerHTML = `
-                            <div style="color: #28a745;">
-                                <h4>✅ Generation Complete</h4>
-                                <p>Monthly and annual analysis completed successfully for all metrics</p>
-                            </div>
-                        `;
-                    } else if (periodType === 'week') {
-                        // Call the weekly analysis endpoint without specific metric
-                        const response = await fetch('/api/weekly-analysis?include_districts=true', {
-                            method: 'GET'
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            runAllStatus.innerHTML = `
-                                <div style="color: #28a745;">
-                                    <h4>✅ Weekly Analysis Complete</h4>
-                                    <p>Weekly analysis completed successfully for all default metrics</p>
-                                    <p><a href="/weekly-report" target="_blank">View Weekly Report</a></p>
-                                </div>
-                            `;
-                        } else {
-                            throw new Error(data.error || 'Unknown error');
-                        }
-                    } else {
-                        // Single period type analysis
-                        const response = await fetch(`/backend/run_all_metrics?period_type=${periodType}`, {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.status === 'success') {
-                            runAllStatus.innerHTML = `
-                                <div style="color: #28a745;">
-                                    <h4>✅ Generation Complete</h4>
-                                    <p>${data.message}</p>
-                                </div>
-                            `;
-                        } else {
-                            throw new Error(data.message);
-                        }
-                    }
-                    
-                    // Reload metrics after successful generation
-                    await loadMetrics();
-                } catch (error) {
-                    console.error('Error running all metrics:', error);
-                    runAllStatus.innerHTML = `
-                        <div style="color: #dc3545;">
-                            <h4>❌ Error</h4>
-                            <p>An error occurred while running all metrics: ${error.message}</p>
-                        </div>
-                    `;
-                } finally {
-                    runAllMetricsBtn.disabled = false;
-                }
-            });
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry log-${type}`;
+                logEntry.innerHTML = `<span class="log-time">[${timeString}]</span> ${message}`;
+                
+                progressLog.appendChild(logEntry);
+                progressLog.scrollTop = progressLog.scrollHeight;
+            }
             
             // Function to load columns for a metric
             async function loadColumns(metricId) {
@@ -729,8 +852,8 @@
                     
                     const data = await response.json();
                     
-                    // Fetch currently selected columns
-                    const selectedResponse = await fetch(`/backend/get-selected-columns/${encodeURIComponent(metric.endpoint)}`);
+                    // Fetch currently selected columns - UPDATED to include metric_id
+                    const selectedResponse = await fetch(`/backend/get-selected-columns/${encodeURIComponent(metric.endpoint)}?metric_id=${metricId}`);
                     const selectedData = await selectedResponse.json();
                     const selectedColumns = new Set(selectedData.columns || []);
                     
@@ -786,8 +909,18 @@
                                         <p>${updateData.message}</p>
                                     </div>
                                 `;
+                                // Save the current selection before reloading metrics
+                                const currentMetricId = metricSelect.value;
+                                
                                 // Reload metrics to refresh the enhanced queries
                                 await loadMetrics();
+                                
+                                // Restore the previous selection
+                                if (currentMetricId) {
+                                    metricSelect.value = currentMetricId;
+                                    // Trigger change event to update relevant UI
+                                    metricSelect.dispatchEvent(new Event('change'));
+                                }
                             } else {
                                 throw new Error(updateData.message);
                             }
@@ -824,27 +957,6 @@
             
             // Load metrics when page loads
             loadMetrics();
-
-            // Add event listeners to select districts
-            // Your code here...
-
-            // Add code to initialize periodTypeSelect variable
-            // When period type changes, update the run all metrics button text
-            periodTypeSelect.addEventListener('change', function() {
-                const periodTypeOptions = {
-                    'ytd': 'YTD',
-                    'month': 'Monthly',
-                    'year': 'Annual',
-                    'week': 'Weekly',
-                    'both': 'Monthly & Annual'
-                };
-                const selectedText = periodTypeOptions[this.value] || this.value;
-                runAllMetricsBtn.textContent = `Run All ${selectedText} Metrics`;
-            });
-
-            // Trigger the change event to set initial text
-            const event = new Event('change');
-            periodTypeSelect.dispatchEvent(event);
         });
     </script>
 </body>

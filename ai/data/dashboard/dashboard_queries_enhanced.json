@@ -21,29 +21,24 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "Report Type Code",
-                            "fieldName": "report_type_code",
-                            "description": "A system code for report types, these have corresponding descriptions within the dataset."
-                        },
-                        {
-                            "name": "Report Type Description",
+                            "name": "report_type_description",
                             "fieldName": "report_type_description",
-                            "description": "The description of the report type, can be one of: Initial; Initial Supplement; Vehicle Initial; Vehicle Supplement; Coplogic Initial; Coplogic Supplement"
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Incident Code",
-                            "fieldName": "incident_code",
-                            "description": "Incident Codes are the system codes to describe a type of incident. A single incident report can have one or more incident types associated. In those cases you will see multiple rows representing a unique combination of the Incident ID and Incident Code."
-                        },
-                        {
-                            "name": "Incident Category",
+                            "name": "incident_category",
                             "fieldName": "incident_category",
-                            "description": "A category mapped on to the Incident Code used in statistics and reporting. Mappings provided by the Crime Analysis Unit of the Police Department."
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Incident Subcategory",
+                            "name": "incident_subcategory",
                             "fieldName": "incident_subcategory",
-                            "description": "A subcategory mapped to the Incident Code that is used for statistics and reporting. Mappings are provided by the Crime Analysis Unit of the Police Department."
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },
@@ -65,11 +60,6 @@
                         }
                     ],
                     "category_fields": [
-                        {
-                            "name": "report_type_code",
-                            "fieldName": "report_type_code",
-                            "description": "Selected column for enhanced dashboard queries"
-                        },
                         {
                             "name": "report_type_description",
                             "fieldName": "report_type_description",
@@ -116,11 +106,6 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "report_type_code",
-                            "fieldName": "report_type_code",
-                            "description": "Selected column for enhanced dashboard queries"
-                        },
-                        {
                             "name": "report_type_description",
                             "fieldName": "report_type_description",
                             "description": "Selected column for enhanced dashboard queries"
@@ -165,11 +150,6 @@
                         }
                     ],
                     "category_fields": [
-                        {
-                            "name": "report_type_code",
-                            "fieldName": "report_type_code",
-                            "description": "Selected column for enhanced dashboard queries"
-                        },
                         {
                             "name": "report_type_description",
                             "fieldName": "report_type_description",
@@ -317,24 +297,19 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "Structure Type",
-                            "fieldName": "structure_type",
-                            "description": ""
+                            "name": "area_of_fire_origin",
+                            "fieldName": "area_of_fire_origin",
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Structure Status",
-                            "fieldName": "structure_status",
-                            "description": ""
+                            "name": "ignition_cause",
+                            "fieldName": "ignition_cause",
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Detector Type",
-                            "fieldName": "detector_type",
-                            "description": ""
-                        },
-                        {
-                            "name": "Automatic Extinguishing Sytem Type",
-                            "fieldName": "automatic_extinguishing_sytem_type",
-                            "description": ""
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },
@@ -357,24 +332,14 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "Structure Type",
-                            "fieldName": "structure_type",
-                            "description": ""
+                            "name": "ignition_cause",
+                            "fieldName": "ignition_cause",
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "Structure Status",
-                            "fieldName": "structure_status",
-                            "description": ""
-                        },
-                        {
-                            "name": "Detector Type",
-                            "fieldName": "detector_type",
-                            "description": ""
-                        },
-                        {
-                            "name": "Automatic Extinguishing Sytem Type",
-                            "fieldName": "automatic_extinguishing_sytem_type",
-                            "description": ""
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 }
@@ -382,7 +347,7 @@
         },
         "emergency_response": {
             "queries": {
-                "\ud83d\ude91 911 Response Time (mins) - Danger to life": {
+                "\ud83d\ude91 911 Response (minutes) - Danger to life": {
                     "id": 10,
                     "endpoint": "2zdj-bwza",
                     "summary": "Average response time in minutes for Priority A emergency calls.",
@@ -401,38 +366,23 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "call_type_original",
-                            "fieldName": "call_type_original",
-                            "description": "Call type code as originally coded/selected by dispatcher"
-                        },
-                        {
                             "name": "call_type_original_desc",
                             "fieldName": "call_type_original_desc",
-                            "description": "Standard description of original call type"
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "call_type_original_notes",
-                            "fieldName": "call_type_original_notes",
-                            "description": "Any notes regarding the original call type entered by the dispatcher"
+                            "name": "disposition",
+                            "fieldName": "disposition",
+                            "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "call_type_final",
-                            "fieldName": "call_type_final",
-                            "description": "Final call type code as coded/selected by dispatcher. For closed calls this is the last call type code. For open calls this code may continue to change."
-                        },
-                        {
-                            "name": "call_type_final_desc",
-                            "fieldName": "call_type_final_desc",
-                            "description": "Standard description of final call type"
-                        },
-                        {
-                            "name": "call_type_final_notes",
-                            "fieldName": "call_type_final_notes",
-                            "description": "Any notes regarding the final call type entered by the dispatcher"
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },
-                "\ud83d\ude91 911 Response Time (mins) - Danger to property ": {
+                "\ud83d\ude91 911 Response (minutes) - Danger to property ": {
                     "id": 11,
                     "endpoint": "2zdj-bwza",
                     "summary": "Average response time in minutes for Priority B emergency calls.",
@@ -482,7 +432,7 @@
                         }
                     ]
                 },
-                "\ud83d\ude91 911 Response Time (mins) - No danger to life or property": {
+                "\ud83d\ude91 911 Response (minutes) - No danger to life or property": {
                     "id": 12,
                     "endpoint": "2zdj-bwza",
                     "summary": "Average response time in minutes for Priority C emergency calls.",
@@ -585,6 +535,11 @@
                             "description": "Selected column for enhanced dashboard queries"
                         },
                         {
+                            "name": "lic_code_description",
+                            "fieldName": "lic_code_description",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
                             "name": "supervisor_district",
                             "fieldName": "supervisor_district",
                             "description": "Selected column for enhanced dashboard queries"
@@ -610,9 +565,19 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "NAICS Code",
-                            "fieldName": "naic_code",
-                            "description": "The North American Industry Classification System (NAICS) is a standard used by Federal statistical agencies for the purpose of collecting, analyzing and publishing statistical data related to the U.S. business economy. A subset of these are options on the business registration form used in the administration of the City and County's tax code. The registrant indicates the business activity on the City and County's tax registration forms.\n\nSee NAICS Codes tab in the attached data dictionary under About > Attachments."
+                            "name": "naic_code_description",
+                            "fieldName": "naic_code_description",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "business_corridor",
+                            "fieldName": "business_corridor",
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },
@@ -635,9 +600,19 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "NAICS Code",
-                            "fieldName": "naic_code",
-                            "description": "The North American Industry Classification System (NAICS) is a standard used by Federal statistical agencies for the purpose of collecting, analyzing and publishing statistical data related to the U.S. business economy. A subset of these are options on the business registration form used in the administration of the City and County's tax code. The registrant indicates the business activity on the City and County's tax registration forms.\n\nSee NAICS Codes tab in the attached data dictionary under About > Attachments."
+                            "name": "naic_code_description",
+                            "fieldName": "naic_code_description",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "lic_code_description",
+                            "fieldName": "lic_code_description",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },

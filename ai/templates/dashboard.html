@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - TransparentSF</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background-color: #ffffff;
+            color: #333;
+        }
+        
+        .dashboard-header {
+            margin-bottom: 25px;
+        }
+        
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 28px;
+            font-weight: 500;
+            color: #222;
+        }
+        
+        .subtitle {
+            font-size: 15px;
+            color: #666;
+            margin-bottom: 25px;
+        }
+        
+        .metrics-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-box {
+            position: relative;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: none;
+            padding: 20px;
+            transition: transform 0.2s ease;
+            border: 0;
+            overflow: hidden;
+        }
+        
+        .metric-box-top-right {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 61.8%;
+            height: 61.8%;
+            border-top: 2px solid rgba(0, 0, 0, 0.1);
+            border-right: 2px solid rgba(0, 0, 0, 0.1);
+            border-top-right-radius: 8px;
+        }
+        
+        .metric-box-bottom-left {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 61.8%;
+            height: 61.8%;
+            border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+            border-left: 2px solid rgba(0, 0, 0, 0.1);
+            border-bottom-left-radius: 8px;
+        }
+        
+        .metric-box:hover {
+            transform: translateY(-3px);
+            box-shadow: none;
+        }
+        
+        .metric-title {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+            margin: 0 0 10px 0;
+            font-weight: 600;
+        }
+        
+        .metric-value {
+            font-size: 32px;
+            font-weight: 500;
+            color: #222;
+            margin: 0;
+        }
+        
+        .metric-subvalues {
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+            margin-top: 5px;
+            padding-right: 10px;
+        }
+        
+        .metric-subvalue {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .metric-icon {
+            float: right;
+            background-color: #f0f0f0;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: -5px;
+        }
+        
+        .status-section {
+            position: relative;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: none;
+            padding: 20px;
+            margin-bottom: 25px;
+            border: 0;
+            overflow: hidden;
+        }
+        
+        .status-section-top-right {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 61.8%;
+            height: 61.8%;
+            border-top: 2px solid rgba(0, 0, 0, 0.1);
+            border-right: 2px solid rgba(0, 0, 0, 0.1);
+            border-top-right-radius: 8px;
+        }
+        
+        .status-section-bottom-left {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 61.8%;
+            height: 61.8%;
+            border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+            border-left: 2px solid rgba(0, 0, 0, 0.1);
+            border-bottom-left-radius: 8px;
+        }
+        
+        .status-header {
+            font-size: 16px;
+            font-weight: 500;
+            margin: 0 0 15px 0;
+            color: #222;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .status-label {
+            flex: 1;
+            font-size: 14px;
+        }
+        
+        .status-value {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .status-healthy {
+            background-color: #28a745;
+        }
+        
+        .status-warning {
+            background-color: #ffc107;
+        }
+        
+        .status-error {
+            background-color: #dc3545;
+        }
+        
+        .refresh-button {
+            background-color: #f0f0f0;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 15px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            margin-top: 15px;
+        }
+        
+        .refresh-button:hover {
+            background-color: #e0e0e0;
+        }
+        
+        .refresh-icon {
+            margin-right: 5px;
+        }
+        
+        .loading {
+            opacity: 0.6;
+        }
+        
+        /* Spinner animation */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .spinner {
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            border-top: 2px solid #333;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        
+        .status-loading {
+            background-color: #f0f0f0;
+        }
+        
+        .pending-value {
+            color: #ffc107;
+        }
+        
+        .error-value {
+            color: #dc3545;
+        }
+        
+        /* System Resources Styles */
+        .disk-space-details {
+            font-size: 14px;
+            color: #666;
+            margin-top: 10px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .progress {
+            height: 100%;
+            background-color: #000000;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header">
+        <h1>System Dashboard</h1>
+        <div class="subtitle">Overview of TransparentSF system resources and usage</div>
+    </div>
+    
+    <div class="metrics-container">
+        <div class="metric-box">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-title">System Resources</div>
+            <div class="disk-space-details">
+                <div>Available: <span id="available-space">Loading...</span></div>
+                <div>Total: <span id="total-space">Loading...</span></div>
+                <div class="progress-bar">
+                    <div id="space-used-bar" class="progress"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="metric-box" id="total-datasets">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">📊</div>
+            <div class="metric-title">Total Datasets</div>
+            <div class="metric-value">--</div>
+        </div>
+        
+        <div class="metric-box" id="total-metrics">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">📈</div>
+            <div class="metric-title">Total Metrics</div>
+            <div class="metric-value">--</div>
+        </div>
+        
+        <div class="metric-box" id="time-series-metadata">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">📝</div>
+            <div class="metric-title">Time Series Metadata</div>
+            <div class="metric-value">--</div>
+        </div>
+        
+        <div class="metric-box" id="anomalies">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">⚠️</div>
+            <div class="metric-title">Anomalies</div>
+            <div class="metric-value">--</div>
+            <div class="metric-subvalues">
+                <div class="metric-subvalue out-of-bounds">Out of bounds: --</div>
+                <div class="metric-subvalue in-bounds">In bounds: --</div>
+            </div>
+        </div>
+        
+        <div class="metric-box" id="postgres-size">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">🗄️</div>
+            <div class="metric-title">PostgreSQL Size</div>
+            <div class="metric-value">--</div>
+        </div>
+        
+        <div class="metric-box" id="vectordb-size">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">📈</div>
+            <div class="metric-title">Vector DB Size</div>
+            <div class="metric-value">--</div>
+        </div>
+        
+        <div class="metric-box" id="time-series-data">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">📊</div>
+            <div class="metric-title">Time Series Data</div>
+            <div class="metric-value">--</div>
+        </div>
+    </div>
+    
+    <div class="status-section">
+        <div class="status-section-top-right"></div>
+        <div class="status-section-bottom-left"></div>
+        <div class="status-header">System Status</div>
+        <div id="system-status">
+            <div class="status-item">
+                <div class="status-indicator status-loading"></div>
+                <div class="status-label">Loading system status...</div>
+                <div class="status-value"></div>
+            </div>
+        </div>
+        <button id="refresh-btn" class="refresh-button">
+            <span class="refresh-icon">↻</span> Refresh Data
+        </button>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Format numbers with k, m, b suffixes
+            function formatNumber(num) {
+                if (typeof num !== 'number') return num;
+                
+                if (num >= 1000000000) {
+                    return (num / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+                }
+                if (num >= 1000000) {
+                    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+                }
+                if (num >= 1000) {
+                    return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+                }
+                return num.toString();
+            }
+            
+            // Initial load of dashboard data
+            loadDashboardData();
+            
+            // Set up refresh button
+            document.getElementById('refresh-btn').addEventListener('click', function() {
+                this.disabled = true;
+                this.innerHTML = '<span class="spinner"></span> Refreshing...';
+                
+                // Add loading class to metrics
+                document.querySelectorAll('.metric-box').forEach(box => {
+                    box.classList.add('loading');
+                });
+                
+                loadDashboardData().finally(() => {
+                    this.disabled = false;
+                    this.innerHTML = '<span class="refresh-icon">↻</span> Refresh Data';
+                    
+                    // Remove loading class from metrics
+                    document.querySelectorAll('.metric-box').forEach(box => {
+                        box.classList.remove('loading');
+                    });
+                });
+            });
+            
+            // Function to load all dashboard data
+            async function loadDashboardData() {
+                try {
+                    // Load all metrics
+                    const [datasetsData, timeSeriesData, anomaliesData, postgresData, vectordbData, timeSeriesDataCount, totalMetricsData] = await Promise.all([
+                        fetchDatasetsCount(),
+                        fetchTimeSeriesCount(),
+                        fetchAnomaliesCount(),
+                        fetchPostgresSize(),
+                        fetchVectorDBSize(),
+                        fetchTimeSeriesDataCount(),
+                        fetchTotalMetricsCount()
+                    ]);
+                    
+                    // Update UI with the data
+                    updateDatasetMetric(datasetsData);
+                    updateTimeSeriesMetric(timeSeriesData);
+                    updateAnomaliesMetric(anomaliesData);
+                    updatePostgresMetric(postgresData);
+                    updateVectorDBMetric(vectordbData);
+                    updateTimeSeriesDataMetric(timeSeriesDataCount);
+                    updateTotalMetricsMetric(totalMetricsData);
+                    
+                    // Load system status
+                    await loadSystemStatus();
+                    
+                } catch (error) {
+                    console.error('Error loading dashboard data:', error);
+                }
+            }
+            
+            // Function to fetch datasets count
+            async function fetchDatasetsCount() {
+                try {
+                    const response = await fetch('/backend/api/datasets-count');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch datasets count');
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching datasets count:', error);
+                    return { count: 'Error', change: 0 };
+                }
+            }
+            
+            // Function to update dataset metric
+            function updateDatasetMetric(data) {
+                const box = document.getElementById('total-datasets');
+                const valueEl = box.querySelector('.metric-value');
+                
+                valueEl.textContent = typeof data.count === 'number' ? formatNumber(data.count) : data.count;
+            }
+            
+            // Function to fetch time series metadata count
+            async function fetchTimeSeriesCount() {
+                try {
+                    const response = await fetch('/backend/api/time-series-count');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch time series count');
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching time series count:', error);
+                    return { count: 'Error', change: 0 };
+                }
+            }
+            
+            // Function to update time series metadata metric
+            function updateTimeSeriesMetric(data) {
+                const box = document.getElementById('time-series-metadata');
+                const valueEl = box.querySelector('.metric-value');
+                
+                valueEl.textContent = typeof data.count === 'number' ? formatNumber(data.count) : data.count;
+            }
+            
+            // Function to fetch anomalies count
+            async function fetchAnomaliesCount() {
+                try {
+                    const response = await fetch('/backend/api/anomalies-count-by-status');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch anomalies count');
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching anomalies count:', error);
+                    return { out_of_bounds: 'Error', in_bounds: 'Error', total: 'Error' };
+                }
+            }
+            
+            // Function to update anomalies metric
+            function updateAnomaliesMetric(data) {
+                const box = document.getElementById('anomalies');
+                const valueEl = box.querySelector('.metric-value');
+                const outOfBoundsEl = box.querySelector('.metric-subvalue.out-of-bounds');
+                const inBoundsEl = box.querySelector('.metric-subvalue.in-bounds');
+                
+                valueEl.textContent = typeof data.total === 'number' ? formatNumber(data.total) : data.total;
+                outOfBoundsEl.textContent = `Out of bounds: ${typeof data.out_of_bounds === 'number' ? formatNumber(data.out_of_bounds) : data.out_of_bounds}`;
+                inBoundsEl.textContent = `In bounds: ${typeof data.in_bounds === 'number' ? formatNumber(data.in_bounds) : data.in_bounds}`;
+                
+                // Add link to anomaly_analyzer
+                box.style.cursor = 'pointer';
+                box.onclick = () => window.location.href = '/anomaly-analyzer';
+            }
+            
+            // Function to fetch Postgres database size
+            async function fetchPostgresSize() {
+                try {
+                    const response = await fetch('/backend/api/postgres-size');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch Postgres size');
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching Postgres size:', error);
+                    return { size_mb: 'Error', change: 0 };
+                }
+            }
+            
+            // Function to update Postgres metric
+            function updatePostgresMetric(data) {
+                const box = document.getElementById('postgres-size');
+                const valueEl = box.querySelector('.metric-value');
+                
+                if (typeof data.size_mb === 'number') {
+                    if (data.size_mb >= 1000) {
+                        valueEl.textContent = `${(data.size_mb / 1000).toFixed(1).replace(/\.0$/, '')} GB`;
+                    } else {
+                        valueEl.textContent = `${data.size_mb.toFixed(1).replace(/\.0$/, '')} MB`;
+                    }
+                } else {
+                    valueEl.textContent = data.size_mb;
+                }
+                
+                // Add link to query page
+                box.style.cursor = 'pointer';
+                box.onclick = () => window.location.href = '/backend/query';
+            }
+            
+            // Function to fetch Vector DB size
+            async function fetchVectorDBSize() {
+                try {
+                    const response = await fetch('/backend/api/vectordb-size');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch Vector DB size');
+                    }
+                    const data = await response.json();
+                    
+                    // If size is 0, likely an error or incomplete data
+                    if (data.size_mb === 0) {
+                        console.warn('Vector DB size reported as 0, this may indicate an issue with data collection');
+                        return { size_mb: 'Calculating...', change: 0, status: 'pending' };
+                    }
+                    
+                    return data;
+                } catch (error) {
+                    console.error('Error fetching Vector DB size:', error);
+                    return { size_mb: 'Error', change: 0, status: 'error' };
+                }
+            }
+            
+            // Function to update Vector DB metric
+            function updateVectorDBMetric(data) {
+                const box = document.getElementById('vectordb-size');
+                const valueEl = box.querySelector('.metric-value');
+                
+                if (data.status === 'pending') {
+                    valueEl.textContent = data.size_mb;
+                    // Add a loading style if needed
+                    valueEl.classList.add('pending-value');
+                } else if (data.status === 'error') {
+                    valueEl.textContent = data.size_mb;
+                    // Add error styling if needed
+                    valueEl.classList.add('error-value');
+                } else if (typeof data.size_mb === 'number') {
+                    if (data.size_mb >= 1000) {
+                        valueEl.textContent = `${(data.size_mb / 1000).toFixed(1).replace(/\.0$/, '')} GB`;
+                    } else {
+                        valueEl.textContent = `${data.size_mb.toFixed(1).replace(/\.0$/, '')} MB`;
+                    }
+                    // Remove any special styling
+                    valueEl.classList.remove('pending-value', 'error-value');
+                } else {
+                    valueEl.textContent = data.size_mb;
+                }
+            }
+            
+            // Function to fetch Time Series Data count
+            async function fetchTimeSeriesDataCount() {
+                try {
+                    const response = await fetch('/backend/api/time-series-data-count');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch time series data count');
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching time series data count:', error);
+                    return { count: 'Error', change: 0 };
+                }
+            }
+            
+            // Function to update Time Series Data metric
+            function updateTimeSeriesDataMetric(data) {
+                const box = document.getElementById('time-series-data');
+                const valueEl = box.querySelector('.metric-value');
+                
+                valueEl.textContent = typeof data.count === 'number' ? formatNumber(data.count) : data.count;
+            }
+            
+            // Function to fetch total metrics count
+            async function fetchTotalMetricsCount() {
+                try {
+                    const response = await fetch('/backend/api/total-metrics-count');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch total metrics count');
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching total metrics count:', error);
+                    return { count: 'Error', change: 0 };
+                }
+            }
+            
+            // Function to update total metrics metric
+            function updateTotalMetricsMetric(data) {
+                const box = document.getElementById('total-metrics');
+                const valueEl = box.querySelector('.metric-value');
+                
+                valueEl.textContent = typeof data.count === 'number' ? formatNumber(data.count) : data.count;
+                // Add link to metric_control
+                box.style.cursor = 'pointer';
+                box.onclick = () => window.location.href = '/backend/metric-control';
+            }
+            
+            // Function to load system status
+            async function loadSystemStatus() {
+                try {
+                    const response = await fetch('/backend/api/system-status');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch system status');
+                    }
+                    
+                    const data = await response.json();
+                    const statusContainer = document.getElementById('system-status');
+                    statusContainer.innerHTML = '';
+                    
+                    // Add each status item
+                    data.forEach(item => {
+                        const statusClass = item.status === 'healthy' ? 'status-healthy' : 
+                                         item.status === 'warning' ? 'status-warning' : 'status-error';
+                        
+                        statusContainer.innerHTML += `
+                            <div class="status-item">
+                                <div class="status-indicator ${statusClass}"></div>
+                                <div class="status-label">${item.name}</div>
+                                <div class="status-value">${item.value}</div>
+                            </div>
+                        `;
+                    });
+                    
+                } catch (error) {
+                    console.error('Error loading system status:', error);
+                    const statusContainer = document.getElementById('system-status');
+                    
+                    statusContainer.innerHTML = `
+                        <div class="status-item">
+                            <div class="status-indicator status-error"></div>
+                            <div class="status-label">Error loading system status</div>
+                            <div class="status-value">Please try refreshing</div>
+                        </div>
+                    `;
+                }
+            }
+
+            // Function to format bytes to human readable format
+            function formatBytes(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+            
+            // Load system information
+            async function updateDiskSpace() {
+                try {
+                    const response = await fetch('/backend/disk-space');
+                    const data = await response.json();
+                    
+                    const availableSpace = document.getElementById('available-space');
+                    const totalSpace = document.getElementById('total-space');
+                    const progressBar = document.getElementById('space-used-bar');
+                    
+                    if (data.available && data.total) {
+                        availableSpace.textContent = formatBytes(data.available);
+                        totalSpace.textContent = formatBytes(data.total);
+                        
+                        // Calculate used percentage
+                        const usedPercentage = ((data.total - data.available) / data.total) * 100;
+                        progressBar.style.width = `${usedPercentage}%`;
+                        
+                        // Change color based on usage
+                        if (usedPercentage > 90) {
+                            progressBar.style.backgroundColor = '#cc0000'; // Red
+                        } else if (usedPercentage > 70) {
+                            progressBar.style.backgroundColor = '#777777'; // Dark Gray
+                        } else {
+                            progressBar.style.backgroundColor = '#000000'; // Black
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching disk space:', error);
+                    document.getElementById('available-space').textContent = 'Error';
+                    document.getElementById('total-space').textContent = 'Error';
+                }
+            }
+
+            // Update disk space initially and every 5 minutes
+            updateDiskSpace();
+            setInterval(updateDiskSpace, 300000);
+        });
+    </script>
+</body>
+</html> 

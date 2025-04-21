@@ -10,11 +10,13 @@ TransparentSF is a web-based application that provides interactive visualization
 - AI-powered insights generation
 - Interactive chat interface for data exploration
 - Integration with Ghost CMS for publishing insights
+- Anomaly detection with PostgreSQL storage
 
 ## Technology Stack
 
 - **Backend**: Python
 - **Vector Database**: Qdrant
+- **Database**: PostgreSQL
 - **Content Management**: Ghost CMS
 - **APIs**:  
   - OpenAI API for analysis  
@@ -25,6 +27,7 @@ TransparentSF is a web-based application that provides interactive visualization
 **Prerequisites:**  
 - Python3 with `pip`  
 - Docker (for Qdrant) 
+- PostgreSQL (for anomaly storage)
 - OpenAI API key
 - Ghost admin API key (optional)
   - Publishing ghost blogs
@@ -52,31 +55,84 @@ TransparentSF is a web-based application that provides interactive visualization
    GHOST_ADMIN_API_KEY=your_ghost_admin_api_key
    ```
 
+4. **Set up PostgreSQL:**
+   ```bash
+   # For macOS with Homebrew
+   brew install postgresql
+   brew services start postgresql
+   
+   # For Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install postgresql postgresql-contrib
+   
+   # For Windows
+   # Download and install from https://www.postgresql.org/download/windows/
+   ```
+
+5. **Initialize the PostgreSQL database:**
+   ```bash
+   python ai/tools/init_postgres_db.py
+   ```
+   
+   This script will create:
+   - A database named "transparentsf" (if it doesn't exist)
+   - An "anomalies" table to store detected anomalies
+
+   You can customize the connection parameters as needed:
+   ```bash
+   python ai/tools/init_postgres_db.py --host localhost --port 5432 --user postgres --password <pass> --dbname transparentsf
+   ```
+
 ## Usage
 
-1. **Start Qdrant:**
+1. **Start all services:**
+
+   The easiest way to start all required services is to use the included script:
    ```bash
+   ./start_services.sh
+   ```
+   
+   This script will:
+   - Start the main backend service
+   - Start Qdrant for vector search
+   - Start the Ghost Bridge for CMS integration
+   - Ensure all services are ready before proceeding
+
+2. **Access the application:**
+
+   After starting the services, you can access:
+   - **Chat Interface**: http://localhost:8000/
+     - Use this for interactive data exploration and queries
+   - **Backend Configuration**: http://localhost:8000/backend
+     - Use this for system configuration, data analysis setup, and administration tasks
+     - From here you can run analysis tasks, configure metrics, and manage the system
+
+3. **Manual service startup (alternative):**
+
+   If you prefer to start services individually:
+   ```bash
+   # Start Qdrant
    docker run -p 6333:6333 qdrant/qdrant
-   ```
-
-2. **Run Initial Analysis:**
-   ```bash
+   
+   # Start the backend service
    cd ai
-   python backend.py
+   python main.py
    ```
-   Visit the provided URL with the path `/backend` (http://0.0.0.0:8000/backend) to start the analysis process. Note that this can take anywhere from a few minutes to several hours depending on your configuration in `backend.py`.
 
-3. **Load Analysis Results to Vector Database:**
-   Once the analysis is complete and the output folder is generated:
-   ```bash
-   python vector_loader.py
-   ```   
-
-4. **Start the Chat Interface:**
-   ```bash
-   python webChat.py
+4. **Run Initial Analysis:**
+   
+   To perform initial data analysis, visit the backend configuration at:
    ```
-   Visit the provided URL (http://0.0.0.0:8001/) to access the interactive chat interface.
+   http://localhost:8000/backend
+   ```
+   
+   From the backend interface, you can:
+   - Configure data sources
+   - Run analysis on specific metrics
+   - Schedule automatic analysis
+   - View analysis results
+
+
 
 ## Project Structure
 
@@ -84,8 +140,13 @@ TransparentSF is a web-based application that provides interactive visualization
   - `backend.py`: Initial data analysis pipeline
   - `webChat.py`: Interactive chat interface
   - `load_analysis_2_vec.py`: Vector database loader
+  - `/tools`: Utility scripts and tools
+    - `anomaly_detection.py`: Anomaly detection with PostgreSQL storage
+    - `init_postgres_db.py`: Database initialization tool
+    - `view_anomalies.py`: Tool for viewing anomalies in the database
 - `/output`: Generated analysis results
 - (deprecated) `ghostbridge.js`: Ghost CMS integration
+
 
 ## Contributing
 
@@ -113,71 +174,6 @@ This project is licensed under the ISC License. See the [LICENSE](LICENSE) file 
 - San Francisco's DataSF efforts and all the departments that publish data
 - OpenAI for AI capabilities
 - Ghost CMS team for the content management platform
-
-## Weekly Metric Analysis
-
-The `generate_weekly_analysis.py` script allows you to analyze weekly trends in San Francisco data metrics. It compares the most recent week (last 7 complete days) with the previous 4 weeks to identify trends and anomalies.
-
-### Features
-
-- Time series analysis of weekly data
-- Trend comparison between recent week and prior 4 weeks
-- Anomaly detection for significant changes
-- Support for district-level analysis
-- Automated scheduling (runs every Thursday at 11am)
-- Weekly newsletter generation summarizing findings
-
-### Usage
-
-Run the script directly:
-
-```bash
-# Analyze a specific metric
-python ai/generate_weekly_analysis.py --metric_id police_reported_incidents
-
-# Analyze multiple metrics
-python ai/generate_weekly_analysis.py --metrics police_reported_incidents,311_cases,building_permits
-
-# Include district-level analysis
-python ai/generate_weekly_analysis.py --process-districts
-
-# Run as a scheduled task (every Thursday at 11am)
-python ai/generate_weekly_analysis.py --schedule
-```
-
-### Output
-
-The script generates:
-
-1. Analysis files for each metric (stored in `ai/output/weekly/`)
-2. Weekly newsletter summarizing findings
-3. Charts and visualizations for key trends
-
-## Monthly and Annual Analysis
-
-The `generate_metric_analysis.py` script provides monthly and annual analysis of San Francisco data metrics.
-
-```bash
-# Analyze a specific metric monthly, annually or both
-python ai/generate_metric_analysis.py metric_id --period monthly|annual|both
-
-# Include district-level analysis
-python ai/generate_metric_analysis.py metric_id --process-districts
-```
-
-## Requirements
-
-Install required packages:
-
-```bash
-pip install -r ai/requirements.txt
-```
-
-Additional requirements for the weekly analysis:
-- schedule
-- pandas
-- matplotlib
-- plotly
 
 ---
 

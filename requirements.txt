@@ -1,1 +1,27 @@
-markdown2==2.4.10  # or python-markdown 
+# Force modern numpy to avoid pip backtracking issues
+numpy==1.26.4
+
+# Core project dependencies
+openai==1.71.0
+python-dotenv==1.1.0
+chardet==5.2.0
+qdrant-client==1.13.3
+fastapi==0.115.12
+uvicorn==0.34.0
+tabulate==0.9.0
+pandas==2.2.3
+plotly==6.0.1
+beautifulsoup4==4.13.3
+selenium==4.31.0
+kaleido==0.2.1
+tiktoken==0.9.0
+webdriver-manager==4.0.2
+markdown2==2.5.3
+html2markdown==0.1.7
+python-multipart==0.0.20
+schedule==1.2.2
+jinja2==3.1.2
+psycopg2-binary==2.9.9
+
+# Git dependency
+git+https://github.com/openai/swarm.git@0c82d7d868bb8e2d380dfd2a319b5c3a1f4c0cb9

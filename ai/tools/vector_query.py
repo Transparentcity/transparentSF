@@ -1,4 +1,4 @@
-from tools.embedding import get_embedding
+from .embedding import get_embedding
 import qdrant_client
 import re
 from typing import List, Dict

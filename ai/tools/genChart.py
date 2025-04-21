@@ -1,18 +1,82 @@
 import os
 import pandas as pd
 import plotly.express as px
-import datetime
+from datetime import datetime, date, timedelta
 import uuid
 import logging
+from typing import Dict, Any
 from tools.genAggregate import aggregate_data
 from tools.anomaly_detection import filter_data_by_date_and_conditions
+from tools.store_time_series import store_time_series_in_db
+from tools.db_utils import execute_with_connection
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+def store_chart_data(
+    chart_data,
+    metadata,
+    db_host='localhost',
+    db_port=5432, 
+    db_name='transparentsf',
+    db_user='postgres',
+    db_password='postgres'
+) -> Dict[str, Any]:
+    """
+    Main function to store chart data in the database.
+    
+    Args:
+        chart_data: List of data points for the chart
+        metadata: Dictionary with metadata about the chart
+        db_host: Database host
+        db_port: Database port
+        db_name: Database name
+        db_user: Database user
+        db_password: Database password
+        
+    Returns:
+        dict: Result with status and message
+    """
+    def store_operation(connection):
+        try:
+            return store_time_series_in_db(connection, chart_data, metadata)
+        except Exception as e:
+            logging.error(f"Failed to store time series data: {e}")
+            return 0
+    
+    try:
+        result = execute_with_connection(
+            operation=store_operation,
+            db_host=db_host,
+            db_port=db_port,
+            db_name=db_name,
+            db_user=db_user,
+            db_password=db_password
+        )
+        
+        if result["status"] == "success" and result["result"] > 0:
+            inserted_count = result["result"]
+            return {
+                "status": "success",
+                "message": f"Successfully stored {inserted_count} data points in the database",
+                "records_stored": inserted_count
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Failed to store data in database: {result.get('error', 'Unknown error')}",
+                "records_stored": 0
+            }
+    except Exception as e:
+        logging.error(f"Error in store_chart_data: {e}")
+        return {
+            "status": "error",
+            "message": f"Failed to store data in database: {str(e)}",
+            "records_stored": 0
+        }
 
 def generate_time_series_chart(
     context_variables: dict,
@@ -25,10 +89,19 @@ def generate_time_series_chart(
     filter_conditions: dict = None,
     null_group_label: str = 'NA',
     show_average_line: bool = False,
-    y_axis_min: float = 0,  # Ensure default is 0
+    y_axis_min: float = 0,
     y_axis_max: float = None,
-    return_html: bool = False,  # New parameter
-    output_dir: str = None  # New parameter for output directory
+    return_html: bool = False,
+    output_dir: str = None,
+    store_in_db: bool = False,
+    object_type: str = None,
+    object_id: str = None,
+    object_name: str = None,
+    db_host: str = 'localhost',
+    db_port: int = 5432,
+    db_name: str = 'transparentsf',
+    db_user: str = 'postgres',
+    db_password: str = 'postgres'
 ) -> str:
     try:
         logging.info("Full context_variables: %s", context_variables)
@@ -46,9 +119,13 @@ def generate_time_series_chart(
         y_axis_label = context_variables.get("y_axis_label")
         if not y_axis_label:
             # Try to get it from the first numeric field name
-            field_name = numeric_fields[0].lower().replace('_', ' ')
-            y_axis_label = "count" if field_name == "item count" else numeric_fields[0].capitalize()
-            logging.info(f"No y_axis_label provided in context_variables, using derived label: {y_axis_label}")
+            if numeric_fields and len(numeric_fields) > 0:
+                field_name = numeric_fields[0].lower().replace('_', ' ')
+                y_axis_label = "count" if field_name == "item count" else numeric_fields[0].capitalize()
+                logging.info(f"No y_axis_label provided in context_variables, using derived label: {y_axis_label}")
+            else:
+                y_axis_label = "Value"
+                logging.info(f"No y_axis_label or numeric fields provided, using default: {y_axis_label}")
         else:
             logging.info(f"Using provided y_axis_label from context_variables: {y_axis_label}")
 
@@ -165,7 +242,7 @@ def generate_time_series_chart(
         aggregated_df['time_period'] = pd.to_datetime(aggregated_df['time_period'])
         aggregated_df = aggregated_df.sort_values('time_period')
         logging.debug("Aggregated DataFrame sorted by 'time_period'.")
-
+        
         # Compute values for the caption
         try:
             last_time_period = aggregated_df['time_period'].max()
@@ -272,7 +349,10 @@ def generate_time_series_chart(
             # ---------------------------------------------------------------------
             #  NEW LOGIC FOR MORE THAN 2 YEARS OF DATA
             # ---------------------------------------------------------------------
-            time_span_years = (last_time_period - earliest_time_period).days / 365
+            # Fix the calculation of time span to handle pandas datetime objects correctly
+            time_span_days = (last_time_period - earliest_time_period).total_seconds() / (60 * 60 * 24)
+            time_span_years = time_span_days / 365
+            
             if time_span_years > 2:
                 try:
                     last_year_num = last_time_period.year
@@ -363,7 +443,42 @@ def generate_time_series_chart(
         except Exception as e:
             logging.error("Failed to compute caption values: %s", e)
             caption = ""
-
+        
+        # Store chart data in the database if requested
+        if store_in_db:
+            try:
+                # Add executed_query_url and caption to metadata
+                metadata = {
+                    "chart_title": context_variables.get("chart_title", "Time Series Chart"),
+                    "y_axis_label": context_variables.get("y_axis_label", numeric_fields[0]),
+                    "aggregation_period": aggregation_period,
+                    "filter_conditions": filter_conditions or [],
+                    "object_type": object_type or context_variables.get("object_type", "unknown"),
+                    "object_id": object_id or context_variables.get("object_id", "unknown"),
+                    "object_name": object_name or context_variables.get("object_name", "unknown"),
+                    "time_series_field": time_series_field,
+                    "numeric_fields": numeric_fields,
+                    "group_field": group_field,
+                    "executed_query_url": context_variables.get("executed_query_url"),
+                    "caption": caption,
+                    "period_type": aggregation_period  # Add the period_type to metadata
+                }
+                
+                # Use the new store_chart_data function
+                db_result = store_chart_data(
+                    chart_data=aggregated_df.to_dict('records'),
+                    metadata=metadata,
+                    db_host=db_host,
+                    db_port=db_port,
+                    db_name=db_name,
+                    db_user=db_user,
+                    db_password=db_password
+                )
+                logging.info(f"Database storage result: {db_result['message']}")
+            except Exception as db_error:
+                logging.error(f"Database operation failed: {db_error}")
+                return f"**Error**: Failed to store chart data: {str(db_error)}"
+        
         # Limit legend to top max_legend_items
         if group_field:
             group_totals = aggregated_df.groupby(group_field)[numeric_fields].sum().sum(axis=1)

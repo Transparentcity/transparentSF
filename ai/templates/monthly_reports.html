@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Monthly Newsletters - TransparentSF</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+            color: #333;
+            background-color: #ffffff;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+        
+        h1 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #222;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+            font-size: 24px;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .section h2 {
+            margin-top: 0;
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 10px;
+            display: inline-block;
+            margin-right: 15px;
+            vertical-align: top;
+        }
+        
+        .form-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        
+        .form-row .form-group {
+            margin-bottom: 0;
+            margin-right: 0;
+        }
+        
+        .form-row button {
+            margin-top: 0;
+            height: 32px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 3px;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        
+        select, input {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: #fff;
+        }
+        
+        button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            margin-top: 20px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .reports-list {
+            margin-top: 20px;
+        }
+        
+        .report-item {
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .report-info {
+            flex: 1;
+        }
+        
+        .report-title {
+            font-weight: 500;
+            margin-bottom: 5px;
+            font-size: 16px;
+        }
+        
+        .report-meta {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .report-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .report-details {
+            margin-top: 10px;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+        
+        .report-items {
+            margin-top: 10px;
+        }
+        
+        .report-item-row {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        
+        .report-item-title {
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        
+        .report-item-explanation {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 5px;
+        }
+        
+        .report-item-text {
+            font-size: 13px;
+            color: #333;
+            background: #fff;
+            padding: 8px;
+            border-radius: 3px;
+            border: 1px solid #eee;
+        }
+        
+        .report-links {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .report-link {
+            display: inline-flex;
+            align-items: center;
+            color: #007BFF;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        
+        .report-link:hover {
+            text-decoration: underline;
+        }
+        
+        .report-link svg {
+            margin-right: 5px;
+            width: 14px;
+            height: 14px;
+        }
+        
+        .view-btn {
+            background-color: #28a745;
+        }
+        
+        .view-btn:hover {
+            background-color: #1e7e34;
+        }
+        
+        .delete-btn {
+            background-color: #dc3545;
+        }
+        
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+        
+        .action-btn {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-right: 5px;
+        }
+        
+        .action-btn:hover {
+            background-color: #5a6268;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .status-message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .no-reports {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .report-selector {
+            margin-bottom: 20px;
+        }
+
+        .report-details-container {
+            display: none;
+            margin-top: 20px;
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 800px;
+            overflow-y: auto;
+        }
+
+        .report-details-container h2 {
+            color: #007BFF;
+            margin-top: 20px;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .report-details-container h3 {
+            color: #333;
+            margin-top: 15px;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .report-details-container p {
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .report-details-container ul, .report-details-container ol {
+            margin-bottom: 15px;
+            padding-left: 20px;
+        }
+
+        .report-details-container li {
+            margin-bottom: 8px;
+        }
+
+        .report-details-container .highlight {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border-left: 4px solid #007BFF;
+        }
+
+        .report-details-container .chart-container {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #eee;
+        }
+
+        .report-details-container .chart-container img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .report-details-container .district-official {
+            background-color: #e9f7fe;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-style: italic;
+        }
+
+        .report-details-container .metric-change {
+            font-weight: 600;
+        }
+
+        .report-details-container .positive-change {
+            color: #28a745;
+        }
+
+        .report-details-container .negative-change {
+            color: #dc3545;
+        }
+
+        .report-details-container .neutral-change {
+            color: #6c757d;
+        }
+
+        .metric-details {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+
+        .report-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .report-metadata {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+        }
+        
+        .metric-item {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .metric-item h4 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .metrics-container {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .metric-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .metric-item h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+
+        .metric-details {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+
+        .metric-details p {
+            margin: 8px 0;
+            line-height: 1.4;
+        }
+
+        .positive-change {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .negative-change {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .neutral-change {
+            color: #6c757d;
+            font-weight: bold;
+        }
+
+        #report-metrics {
+            margin-top: 20px;
+        }
+
+        .report-metadata {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .report-metadata p {
+            margin: 5px 0;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 800px;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .close {
+            position: absolute;
+            right: 20px;
+            top: 10px;
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Monthly Newsletters</h1>
+        
+        <div class="section">
+            <h2>Generate New Report</h2>
+            <form id="generate-report-form">
+                <div style="display: flex; align-items: flex-end; gap: 15px; margin-bottom: 10px;">
+                    <div style="width: 200px;">
+                        <label for="district-select">District</label>
+                        <select id="district-select" style="width: 100%;">
+                            <option value="0">Citywide</option>
+                            <option value="1">District 1</option>
+                            <option value="2">District 2</option>
+                            <option value="3">District 3</option>
+                            <option value="4">District 4</option>
+                            <option value="5">District 5</option>
+                            <option value="6">District 6</option>
+                            <option value="7">District 7</option>
+                            <option value="8">District 8</option>
+                            <option value="9">District 9</option>
+                            <option value="10">District 10</option>
+                            <option value="11">District 11</option>
+                        </select>
+                    </div>
+                    
+                    <div style="width: 150px;">
+                        <label for="max-items">Max Items</label>
+                        <select id="max-items" style="width: 100%;">
+                            <option value="3">3 items</option>
+                            <option value="5">5 items</option>
+                            <option value="10">10 items</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" id="generate-btn" style="height: 32px; margin-top: 0;">Generate Report</button>
+                </div>
+                <div id="generate-status" class="status-message" style="display: none;"></div>
+            </form>
+        </div>
+        
+        <div class="section">
+            <h2>View Reports</h2>
+            <div class="report-selector">
+                <label for="report-select">Select a Report</label>
+                <select id="report-select">
+                    <option value="">-- Select a report --</option>
+                </select>
+            </div>
+            
+            <div id="report-details" class="report-details-container">
+                <h3>Report Details</h3>
+                <div class="report-actions" style="margin-bottom: 15px;">
+                    <button id="view-full-report" class="view-btn">View Full Report</button>
+                    <button id="view-email-report" class="view-btn">View Email Version</button>
+                    <button id="rerunReportBtn" class="btn btn-primary" onclick="rerunReportGeneration()">
+                        Re-write newsletter
+                    </button>
+                    <button id="rerun-proofreading" class="action-btn">Re-run Proofreading</button>
+                </div>
+                <div id="report-metrics"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="reportDetailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Report Details</h2>
+            <div id="reportDetails"></div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const generateForm = document.getElementById('generate-report-form');
+            const generateBtn = document.getElementById('generate-btn');
+            const generateStatus = document.getElementById('generate-status');
+            const reportSelect = document.getElementById('report-select');
+            const reportDetails = document.getElementById('report-details');
+            const reportMetrics = document.getElementById('report-metrics');
+            const modal = document.getElementById('reportDetailsModal');
+            const closeBtn = document.querySelector('.close');
+            
+            // Load reports into the selector
+            loadReports();
+            
+            // Modal event handlers
+            closeBtn.onclick = function() {
+                modal.style.display = "none";
+            }
+            
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
+            
+            // Handle report selection
+            reportSelect.addEventListener('change', () => {
+                const selectedReport = reportSelect.value;
+                if (selectedReport) {
+                    console.log("Selected report:", selectedReport);
+                    reportDetails.style.display = 'block';
+                    loadReportDetails(selectedReport);
+                    
+                    // --- Add links for original and revised reports ---
+                    const reportActionsDiv = document.getElementById('report-details').querySelector('.report-actions');
+                    let linkContainer = reportActionsDiv.querySelector('.view-links-container');
+                    if (!linkContainer) {
+                        linkContainer = document.createElement('div');
+                        linkContainer.className = 'view-links-container';
+                        linkContainer.style.display = 'flex'; // Basic styling
+                        linkContainer.style.gap = '10px';
+                        reportActionsDiv.prepend(linkContainer); // Add it at the start of actions
+                    }
+                    
+                    const selectedOption = reportSelect.options[reportSelect.selectedIndex];
+                    const originalFilename = selectedOption.value;
+                    const revisedFilename = selectedOption.dataset.revisedFilename;
+
+                    const originalLink = `<a href="/backend/monthly-report/file/${originalFilename}" target="_blank" class="report-link action-btn">View Original</a>`;
+                    const revisedLink = revisedFilename ? `<a href="/backend/monthly-report/file/${revisedFilename}" target="_blank" class="report-link action-btn">View Revised</a>` : '';
+                    
+                    // Set the content of the container
+                    linkContainer.innerHTML = originalLink + (revisedFilename ? '&nbsp;' + revisedLink : ''); // Use &nbsp; for spacing
+                    // --- End of adding links ---
+
+                    // Set up the view full report button
+                    const viewFullReportBtn = document.getElementById('view-full-report');
+                    viewFullReportBtn.onclick = () => {
+                        console.log("Opening full report:", selectedReport);
+                        window.open(`/backend/monthly-report/file/${selectedReport}`, '_blank');
+                    };
+                    
+                    // Set up the view email version button
+                    const viewEmailReportBtn = document.getElementById('view-email-report');
+                    viewEmailReportBtn.onclick = () => {
+                        console.log("Opening email version:", selectedReport);
+                        // Replace .html with _email.html in the filename
+                        const emailFilename = selectedReport.replace('.html', '_email.html');
+                        window.open(`/backend/monthly-report/file/${emailFilename}`, '_blank');
+                    };
+                    
+                    // Set up the re-run generation button
+                    const rerunReportBtn = document.getElementById('rerunReportBtn');
+                    rerunReportBtn.onclick = () => {
+                        console.log("Re-running report generation for:", selectedReport);
+                        rerunReportGeneration(selectedReport);
+                    };
+                    
+                    // Set up the re-run proofreading button
+                    const rerunProofreadingBtn = document.getElementById('rerun-proofreading');
+                    rerunProofreadingBtn.onclick = () => {
+                        console.log("Re-running proofreading for:", selectedReport);
+                        rerunProofreading(selectedReport);
+                    };
+                } else {
+                    reportDetails.style.display = 'none';
+                }
+            });
+            
+            // Handle form submission
+            generateForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const district = document.getElementById('district-select').value;
+                const maxItems = document.getElementById('max-items').value;
+                
+                // Disable button and show loading state
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<span class="loading"></span> Generating...';
+                generateStatus.style.display = 'none';
+                
+                try {
+                    // Call the API to generate the report
+                    const response = await fetch('/backend/generate_monthly_report', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            district,
+                            max_report_items: parseInt(maxItems)
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        generateStatus.className = 'status-message success';
+                        generateStatus.textContent = 'Report generated successfully!';
+                        generateStatus.style.display = 'block';
+                        
+                        // Reload the reports list
+                        loadReports();
+                    } else {
+                        throw new Error(data.message || 'Failed to generate report');
+                    }
+                } catch (error) {
+                    generateStatus.className = 'status-message error';
+                    generateStatus.textContent = `Error: ${error.message}`;
+                    generateStatus.style.display = 'block';
+                } finally {
+                    // Reset button state
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Generate Report';
+                }
+            });
+            
+            // Function to load reports into the selector
+            async function loadReports() {
+                try {
+                    const response = await fetch('/backend/get_monthly_reports');
+                    const data = await response.json();
+                    
+                    console.log("Reports data received:", data);
+                    
+                    if (data.status === 'success' && data.reports && data.reports.length > 0) {
+                        // Clear existing options except the first one
+                        while (reportSelect.options.length > 1) {
+                            reportSelect.remove(1);
+                        }
+                        
+                        // Add new options
+                        data.reports.forEach(report => {
+                            const option = document.createElement('option');
+                            // Use the original_filename as the value
+                            option.value = report.original_filename;
+                            // Format the display text with district name and date
+                            const reportDate = new Date(report.report_date);
+                            const formattedDate = reportDate.toLocaleDateString();
+                            option.textContent = `${report.district_name} - ${formattedDate}`;
+                            // Store revised filename as a data attribute
+                            option.dataset.revisedFilename = report.revised_filename || ''; 
+                            reportSelect.appendChild(option);
+                            console.log("Added option:", option.value, option.textContent);
+                        });
+                        
+                        // If there's only one report, select it automatically
+                        if (data.reports.length === 1) {
+                            reportSelect.value = data.reports[0].original_filename;
+                            // Trigger the change event to load the report details
+                            const event = new Event('change');
+                            reportSelect.dispatchEvent(event);
+                        }
+                    } else {
+                        console.log("No reports found or empty reports array");
+                        // Add a message if no reports are found
+                        const option = document.createElement('option');
+                        option.value = "";
+                        option.textContent = "No reports available";
+                        option.disabled = true;
+                        reportSelect.appendChild(option);
+                    }
+                } catch (error) {
+                    console.error('Error loading reports:', error);
+                    // Add an error message to the dropdown
+                    const option = document.createElement('option');
+                    option.value = "";
+                    option.textContent = "Error loading reports";
+                    option.disabled = true;
+                    reportSelect.appendChild(option);
+                }
+            }
+            
+            // Function to load report details
+            async function loadReportDetails(filename) {
+                try {
+                    console.log("Loading report details for:", filename);
+                    
+                    // Show loading state
+                    reportMetrics.innerHTML = '<p>Loading report details...</p>';
+                    reportDetails.style.display = 'block';
+                    
+                    // Extract the report ID from the filename
+                    // The filename format is monthly_report_{district}_{date}.html
+                    const parts = filename.split('_');
+                    if (parts.length < 3) {
+                        throw new Error("Invalid filename format");
+                    }
+                    
+                    // Get the district and date from the filename
+                    const district = parts[2];
+                    const date = parts[3].split('.')[0]; // Remove .html extension
+                    
+                    // Find the report ID from the reports list
+                    const reportsResponse = await fetch('/backend/get_monthly_reports');
+                    const reportsData = await reportsResponse.json();
+                    
+                    if (reportsData.status !== 'success' || !reportsData.reports) {
+                        throw new Error("Failed to get reports list");
+                    }
+                    
+                    // Find the report with matching filename
+                    const report = reportsData.reports.find(r => r.original_filename === filename);
+                    if (!report) {
+                        throw new Error("Report not found");
+                    }
+                    
+                    // Now fetch the report details using the report ID
+                    const reportResponse = await fetch(`/backend/monthly-report/${report.id}`, {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (reportResponse.ok) {
+                        // Check if the response is JSON
+                        const contentType = reportResponse.headers.get("content-type");
+                        console.log("Response content type:", contentType);
+                        
+                        if (contentType && contentType.includes("application/json")) {
+                            // Handle JSON response (report data)
+                            const reportData = await reportResponse.json();
+                            console.log("Report data received:", reportData);
+                            
+                            if (reportData.status === 'success' && reportData.report) {
+                                // Display the report data
+                                displayReportDetails(reportData.report);
+                                reportDetails.style.display = 'block';
+                            } else {
+                                reportMetrics.innerHTML = '<p>Error: Invalid report data format.</p>';
+                                reportDetails.style.display = 'block';
+                            }
+                        } else {
+                            // Handle HTML response (full report)
+                            const html = await reportResponse.text();
+                            console.log("HTML report received, length:", html.length);
+                            
+                            // Create a temporary div to parse the HTML
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = html;
+                            
+                            // Extract the metrics section - look for content between h2 and footer
+                            const h2Elements = tempDiv.querySelectorAll('h2');
+                            const footer = tempDiv.querySelector('.footer');
+                            
+                            if (h2Elements && h2Elements.length > 0) {
+                                // Create a container for the metrics
+                                let metricsContent = '';
+                                
+                                // Start from the first h2 (Key Highlights)
+                                let currentElement = h2Elements[0];
+                                
+                                // Collect all content until we reach the footer or another h2
+                                while (currentElement) {
+                                    // Skip the h2 itself as we'll add it separately
+                                    if (currentElement && currentElement.tagName && currentElement.tagName !== 'H2') {
+                                        metricsContent += currentElement.outerHTML || '';
+                                    }
+                                    
+                                    // Move to the next element
+                                    currentElement = currentElement.nextElementSibling;
+                                    
+                                    // Stop if we reach the footer or another h2
+                                    if (!currentElement || 
+                                        (footer && currentElement === footer) || 
+                                        (currentElement && currentElement.tagName === 'H2')) {
+                                        break;
+                                    }
+                                }
+                                
+                                // Add the metrics content to the report-metrics div
+                                reportMetrics.innerHTML = metricsContent || 'No metrics content found';
+                                reportDetails.style.display = 'block';
+                            } else {
+                                // If no h2 elements found, try to find any content
+                                const bodyContent = tempDiv.querySelector('body');
+                                if (bodyContent) {
+                                    // Remove the footer if it exists
+                                    const footerElement = bodyContent.querySelector('.footer');
+                                    if (footerElement) {
+                                        footerElement.remove();
+                                    }
+                                    
+                                    reportMetrics.innerHTML = bodyContent.innerHTML;
+                                    reportDetails.style.display = 'block';
+                                } else {
+                                    // If no body content, just display the entire HTML
+                                    reportMetrics.innerHTML = html;
+                                    reportDetails.style.display = 'block';
+                                }
+                            }
+                        }
+                    } else {
+                        console.error("Error loading report:", reportResponse.status, reportResponse.statusText);
+                        reportMetrics.innerHTML = `<p>Error loading report: ${reportResponse.status} ${reportResponse.statusText}</p>`;
+                        reportDetails.style.display = 'block';
+                    }
+                } catch (error) {
+                    console.error('Error loading report details:', error);
+                    reportMetrics.innerHTML = `<p>Error loading report details: ${error.message}</p>`;
+                    reportDetails.style.display = 'block';
+                }
+            }
+            
+            // Function to re-run report generation
+            async function rerunReportGeneration(filename) {
+                const button = document.getElementById('rerunReportBtn');
+                const originalText = button.textContent;
+                button.textContent = 'Re-writing...';
+                button.disabled = true;
+                
+                try {
+                    const response = await fetch('/backend/rerun_monthly_report_generation', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            filename,
+                            district: '0',
+                            period_type: 'month',
+                            max_report_items: 10,
+                            only_generate: true
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        alert('Newsletter has been re-written successfully!');
+                        location.reload();
+                    } else {
+                        alert('Error re-writing newsletter: ' + data.message);
+                    }
+                } catch (error) {
+                    alert('Error re-writing newsletter: ' + error.message);
+                } finally {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }
+            }
+            
+            // Function to re-run proofreading
+            async function rerunProofreading(filename) {
+                try {
+                    // Show loading state
+                    const rerunProofreadingBtn = document.getElementById('rerun-proofreading');
+                    rerunProofreadingBtn.disabled = true;
+                    rerunProofreadingBtn.innerHTML = '<span class="loading"></span> Re-running...';
+                    
+                    // Call the API to re-run proofreading
+                    const response = await fetch('/backend/rerun_monthly_report_proofreading', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            filename
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        alert('Proofreading re-run successfully!');
+                        // Reload the reports list
+                        loadReports();
+                    } else {
+                        throw new Error(data.message || 'Failed to re-run proofreading');
+                    }
+                } catch (error) {
+                    alert(`Error: ${error.message}`);
+                } finally {
+                    // Reset button state
+                    const rerunProofreadingBtn = document.getElementById('rerun-proofreading');
+                    rerunProofreadingBtn.disabled = false;
+                    rerunProofreadingBtn.textContent = 'Re-run Proofreading';
+                }
+            }
+            
+            async function viewReportDetails(reportId) {
+                try {
+                    const response = await fetch(`/backend/monthly-report/${reportId}`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        displayReportDetails(data.report);
+                        document.getElementById('reportDetailsModal').style.display = 'block';
+                    } else {
+                        alert('Error loading report details: ' + data.message);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error loading report details');
+                }
+            }
+
+            function displayReportDetails(report) {
+                console.log("Displaying report details:", report);
+                const detailsContainer = document.getElementById('reportDetails');
+                const metricsContainer = document.getElementById('report-metrics');
+                
+                if (!report) {
+                    metricsContainer.innerHTML = '<p>Error: No report data available</p>';
+                    return;
+                }
+                
+                // Format dates
+                const createdDate = report.created_at ? new Date(report.created_at).toLocaleString() : 'N/A';
+                const updatedDate = report.updated_at ? new Date(report.updated_at).toLocaleString() : 'N/A';
+                
+                // Create the HTML content for the metrics container
+                let metricsHtml = `
+                    <div class="report-metadata">
+                        <p><strong>District:</strong> ${report.district_name || report.district || 'N/A'}</p>
+                        <p><strong>Period Type:</strong> ${report.period_type || 'N/A'}</p>
+                        <p><strong>Max Items:</strong> ${report.max_items || 'N/A'}</p>
+                        <p><strong>Created:</strong> ${createdDate}</p>
+                        <p><strong>Last Updated:</strong> ${updatedDate}</p>
+                    </div>
+                `;
+                
+                // Check if metrics exist in the report
+                if (report.metrics && Array.isArray(report.metrics) && report.metrics.length > 0) {
+                    metricsHtml += `
+                        <div class="metrics-container">
+                            <h3>Metrics</h3>
+                            ${report.metrics.map((metric, index) => {
+                                if (!metric) return '';
+                                
+                                // Determine the change color class
+                                let changeClass = 'neutral-change';
+                                if (metric.percent_change > 0) {
+                                    changeClass = 'positive-change';
+                                } else if (metric.percent_change < 0) {
+                                    changeClass = 'negative-change';
+                                }
+                                
+                                return `
+                                    <div class="metric-item">
+                                        <h4>${metric.item_title || metric.metric_name || 'Unnamed Metric'}</h4>
+                                        <p><strong>Change:</strong> <span class="${changeClass}">${metric.percent_change || metric.change_percentage || 'N/A'}%</span></p>
+                                        <div class="metric-details">
+                                            <p><strong>Explanation:</strong></p>
+                                            <p>${metric.explanation || 'No explanation available'}</p>
+                                            <p><strong>Trend Analysis:</strong></p>
+                                            <p>${metric.trend_analysis || 'No trend analysis available'}</p>
+                                            ${metric.report_text ? `
+                                                <p><strong>Report Text:</strong></p>
+                                                <p>${metric.report_text}</p>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `;
+                } else {
+                    // If no metrics, show a message
+                    metricsHtml += `
+                        <div class="metrics-container">
+                            <h3>Metrics</h3>
+                            <p>No metrics data available for this report.</p>
+                        </div>
+                    `;
+                }
+                
+                // Update the metrics container
+                metricsContainer.innerHTML = metricsHtml;
+                
+                // Also update the modal details container for consistency
+                if (detailsContainer) {
+                    detailsContainer.innerHTML = metricsHtml;
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

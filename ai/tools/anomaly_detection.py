@@ -2,13 +2,21 @@ import datetime
 from datetime import date
 import logging
 import pandas as pd
-from tools.generateAnomalyCharts import generate_anomalies_summary_with_charts 
+from .generateAnomalyCharts import generate_anomalies_summary_with_charts 
 from dateutil import parser  # Import this library for robust date parsing
 import os
+import psycopg2
+from psycopg2.extras import Json
+import json
+import numpy as np
+from .store_anomalies import store_anomaly_data, CustomJSONEncoder  # Import the store_anomalies module
 
 # set logging level to INFO
 logging.basicConfig(level=logging.INFO)
+
 def find_key(item, field_name):
+    if field_name is None:
+        return None
     if field_name in item:
         return field_name
     for key in item.keys():
@@ -17,6 +25,8 @@ def find_key(item, field_name):
     return None
 
 def get_item_value_case_insensitive(item, field_name):
+    if field_name is None:
+        return None
     for key in item.keys():
         if key.lower() == field_name.lower():
             return item[key]
@@ -579,6 +589,66 @@ def get_month_range(start_date, end_date):
     logging.info(f"Generated month range: {months}")
     return months
 
+def parse_period_date(date_val):
+    """
+    Parse period date into standard format
+    
+    Args:
+        date_val: Date value in various formats (string, datetime, date)
+        
+    Returns:
+        dict: Year and month parts
+    """
+    # Handle datetime or date objects
+    if isinstance(date_val, (datetime, date, pd.Timestamp)):
+        return {
+            'year': date_val.year,
+            'month': date_val.month,
+            'day': date_val.day
+        }
+    
+    # Handle string format
+    if isinstance(date_val, str):
+        # Check if it's in YYYY-WXX format (week format)
+        if 'W' in date_val:
+            year = date_val.split('-W')[0]
+            return {
+                'year': int(year),
+                'week': int(date_val.split('-W')[1])
+            }
+        
+        # Handle ISO format date
+        try:
+            parts = date_val.split('-')
+            if len(parts) >= 2:
+                return {
+                    'year': int(parts[0]),
+                    'month': int(parts[1]),
+                    'day': int(parts[2]) if len(parts) > 2 else 1
+                }
+        except (ValueError, IndexError):
+            # If parsing fails, try to parse as datetime
+            try:
+                dt = pd.to_datetime(date_val)
+                return {
+                    'year': dt.year,
+                    'month': dt.month,
+                    'day': dt.day
+                }
+            except:
+                # Return a default value if all parsing fails
+                return {
+                    'year': datetime.now().year,
+                    'month': datetime.now().month,
+                    'day': 1
+                }
+    
+    # Default return if parsing fails
+    return {
+        'year': datetime.now().year,
+        'month': datetime.now().month,
+        'day': 1
+    }
 
 def anomaly_detection(
     context_variables,
@@ -593,7 +663,16 @@ def anomaly_detection(
     title=None,
     period_type='month',  # Add period_type parameter with default
     agg_function='sum',  # Add agg_function parameter with default 'sum'
-    output_dir=None  # Add output_dir parameter with default None
+    output_dir=None,  # Add output_dir parameter with default None
+    db_host='localhost',
+    db_port=5432,
+    db_name='transparentsf',
+    db_user='postgres',
+    db_password='postgres',
+    store_in_db=True,
+    object_type=None,   # Add object_type parameter
+    object_id=None,     # Add object_id parameter
+    object_name=None    # Add object_name parameter
 ):
     
     # Set default output_dir based on period_type if not provided
@@ -605,12 +684,9 @@ def anomaly_detection(
         logging.error("Dataset is not available.")
         return {"error": "Dataset is not available."}
 
-    # Log the aggregation function being used
-    logging.info(f"Using aggregation function: {agg_function}")
-
     data_records = data.to_dict('records')
-    logging.info(f"Total records in the dataset: {len(data_records)}")
-      # Adjust date periods if date_field is provided
+    
+    # Adjust date periods if date_field is provided
     if date_field and (recent_period is None or comparison_period is None):
         date_ranges = get_date_ranges()
         if recent_period is None:
@@ -649,13 +725,6 @@ def anomaly_detection(
             'end': parse_period_date(comparison_period['end'])
         }
 
-    # Log date periods
-    if date_field:
-        logging.info(f"Recent period: {recent_period['start']} to {recent_period['end']}")
-        logging.info(f"Comparison period: {comparison_period['start']} to {comparison_period['end']}")
-    else:
-        logging.info("Date field not provided. Skipping date-based filtering.")
-
     # Apply filtering
     recent_data = filter_data_by_date_and_conditions(
         data_records,
@@ -666,7 +735,6 @@ def anomaly_detection(
         period_type=period_type
     )
 
-    logging.info(f"Filtered data size: {len(recent_data)} records after applying filters.")
     # Group data with period_type and agg_function
     grouped_data = group_data_by_field_and_date(
         recent_data,
@@ -676,8 +744,7 @@ def anomaly_detection(
         period_type=period_type,
         agg_function=agg_function  # Pass the aggregation function
     )
-    logging.info(f"Grouped data size: {len(grouped_data)} groups.")
-    print(grouped_data)
+
     # Get the full list of periods between comparison_period['start'] and recent_period['end']
     if date_field:
         if period_type == 'year':  # Changed from date_field.lower() == 'year'
@@ -690,11 +757,9 @@ def anomaly_detection(
             full_months = get_month_range(comparison_period['start'], recent_period['end'])
     else:
         full_months = ['All']  # When date_field is not provided
-    logging.info(f"full months {full_months}")
+
     results = []
     for group_value, data_points in grouped_data.items():
-        logging.info(f"Processing group: {group_value}")
-
         # Get the first actual data point date for this group
         group_dates = sorted(data_points.keys())
         if not group_dates:
@@ -719,10 +784,6 @@ def anomaly_detection(
         dates = sorted(data_points.keys())
         counts = [data_points[date] for date in dates]
 
-        logging.info(f"First data date for group {group_value}: {first_group_date}")
-        logging.info(f"Dates in group {group_value}: {dates}")
-        logging.debug(f"Counts in group {group_value}: {counts}")
-
         comparison_counts = []
         recent_counts = []
 
@@ -730,7 +791,6 @@ def anomaly_detection(
         for date_key in dates:
             if date_key >= first_group_date:  # Only process dates after first actual data
                 count = data_points[date_key]
-                logging.debug(f"Processing date {date_key} with count: {count}")
                 if date_field:
                     try:
                         # Use appropriate date format based on period_type
@@ -757,15 +817,12 @@ def anomaly_detection(
                                 comparison_counts.append(count)
                             elif recent_period['start'] <= item_date <= recent_period['end']:
                                 recent_counts.append(count)
-                    except ValueError as e:
-                        logging.error(f"Error parsing date {date_key}: {e}")
+                    except ValueError:
+                        continue
                 else:
                     comparison_counts = counts
                     recent_counts = counts
                     break
-
-        logging.info(f"Comparison counts for {group_value}: {comparison_counts}")
-        logging.info(f"Recent counts for {group_value}: {recent_counts}")
 
         # Initialize stats with default empty values
         comparison_stats = {'mean': None, 'stdDev': None}
@@ -775,9 +832,6 @@ def anomaly_detection(
             comparison_stats = calculate_stats(comparison_counts)
         if recent_counts:
             recent_stats = calculate_stats(recent_counts)
-
-        logging.info(f"Comparison stats for {group_value}: {comparison_stats}")
-        logging.info(f"Recent stats for {group_value}: {recent_stats}")
 
         if (
             comparison_stats['mean'] is not None and
@@ -789,8 +843,7 @@ def anomaly_detection(
                 recent_mean = float(recent_stats['mean'])
                 comparison_std_dev = float(comparison_stats['stdDev'])
                 min_diff = float(min_diff)
-            except ValueError as e:
-                logging.error(f"Error converting statistics to float: {e}")
+            except ValueError:
                 continue
 
             difference = recent_mean - comparison_mean
@@ -801,9 +854,6 @@ def anomaly_detection(
                     comparison_mean > 2 and
                     recent_mean > 2
                 )
-
-                logging.debug(f"Difference for {group_value}: {difference}")
-                logging.debug(f"Out of bounds for {group_value}: {out_of_bounds}")
 
                 if True:
                     results.append({
@@ -828,9 +878,16 @@ def anomaly_detection(
         'title': title,
         'filter_conditions': filter_conditions,
         'numeric_field': numeric_field,
-        'period_type': period_type,  # Add period_type to metadata
-        'agg_function': agg_function  # Add agg_function to metadata
+        'period_type': period_type,
+        'agg_function': agg_function,
+        'object_type': object_type,   # Add object_type to metadata
+        'object_id': object_id,       # Add object_id to metadata
+        'object_name': object_name    # Add object_name to metadata
     }
+
+    # Add executed_query_url to metadata if it exists in context_variables
+    if 'executed_query_url' in context_variables:
+        metadata['executed_query_url'] = context_variables['executed_query_url']
 
     # Get script directory and set up output directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -847,9 +904,19 @@ def anomaly_detection(
                 district = condition.get('value')
                 break
     
+    # Default district to "0" if it's null
+    if district is None:
+        district = 0
+    else:
+        # Try to convert district to integer
+        try:
+            district = int(district)
+        except (ValueError, TypeError):
+            district = 0
+    
     # Construct the full output path
     if district:
-        output_dir = os.path.join(base_output_dir, period_name, district)
+        output_dir = os.path.join(base_output_dir, period_name, str(district))
     else:
         output_dir = os.path.join(base_output_dir, period_name)
     
@@ -857,5 +924,21 @@ def anomaly_detection(
     os.makedirs(output_dir, exist_ok=True)
     
     html_content, markdown_content = generate_anomalies_summary_with_charts(results, metadata, output_dir=output_dir)
+    
+    # Store anomalies in PostgreSQL database if requested
+    if store_in_db:
+        try:
+            # Use the new store_anomaly_data function from store_anomalies.py
+            db_result = store_anomaly_data(
+                results=results,
+                metadata=metadata,
+                db_host=db_host,
+                db_port=db_port,
+                db_name=db_name,
+                db_user=db_user,
+                db_password=db_password
+            )
+        except Exception as e:
+            logging.error(f"Error storing anomalies in database: {e}")
     
     return {"anomalies":html_content, "anomalies_markdown":markdown_content}

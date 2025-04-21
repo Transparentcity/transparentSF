@@ -486,7 +486,7 @@
         "status_description",
         "agency_responsible",
         "service_name",
-        "neighborhoods_sffind_boundaries"
+        "service_subtype"
     ],
     "LocationFields": [
         "supervisor_district",

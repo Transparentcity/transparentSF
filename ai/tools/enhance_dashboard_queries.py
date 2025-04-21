@@ -6,11 +6,15 @@ import logging
 from pathlib import Path
 
 # Configure logging
+script_dir = os.path.dirname(os.path.abspath(__file__))
+logs_dir = os.path.join(script_dir, '..', 'logs')
+os.makedirs(logs_dir, exist_ok=True)
+
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("enhance_dashboard_queries.log"),
+        logging.FileHandler(os.path.join(logs_dir, "enhance_dashboard_queries.log")),
         logging.StreamHandler()
     ]
 )
@@ -111,6 +115,15 @@ def enhance_dashboard_queries(queries_file, datasets_dir, output_file):
     dashboard_queries = load_json_file(queries_file)
     logger.debug(f"Loaded dashboard queries with {len(dashboard_queries)} categories")
     
+    # Check if existing enhanced queries file exists and load it to preserve category_fields
+    existing_enhanced_queries = {}
+    if os.path.exists(output_file):
+        try:
+            existing_enhanced_queries = load_json_file(output_file)
+            logger.info(f"Loaded existing enhanced queries to preserve custom category_fields")
+        except Exception as e:
+            logger.warning(f"Could not load existing enhanced queries: {str(e)}")
+    
     # Create a new enhanced structure
     enhanced_queries = {}
     
@@ -160,24 +173,45 @@ def enhance_dashboard_queries(queries_file, datasets_dir, output_file):
                         **metric_data  # Copy all existing metric data
                     }
                     
-                    # Get dataset info if endpoint is available in the metric data
+                    # Get endpoint
                     endpoint_id = metric_data.get("endpoint")
-                    dataset_info = None
-                    if endpoint_id:
-                        logger.info(f"Found endpoint: {endpoint_id}")
-                        dataset_info = get_dataset_info(endpoint_id, datasets_dir)
-                    else:
-                        logger.warning(f"No endpoint found for metric: {metric_name}")
                     
-                    # Add dataset info if available
-                    if dataset_info:
-                        logger.debug(f"Adding dataset info to metric {metric_name}")
-                        enhanced_metric["dataset_title"] = dataset_info.get("title", "")
-                        enhanced_metric["dataset_category"] = dataset_info.get("category", "")
-                        enhanced_metric["location_fields"] = dataset_info.get("location_fields", [])
-                        enhanced_metric["category_fields"] = dataset_info.get("category_fields", [])
+                    # Check if we already have custom category_fields for this endpoint in existing enhanced queries
+                    existing_category_fields = None
+                    if existing_enhanced_queries:
+                        # Try to find the metric with this name or endpoint in existing enhanced queries
+                        for ex_category in existing_enhanced_queries.values():
+                            for ex_subcategory in ex_category.values():
+                                for ex_metric_name, ex_metric_data in ex_subcategory.get("queries", {}).items():
+                                    if (ex_metric_name == metric_name or 
+                                        (endpoint_id and ex_metric_data.get("endpoint") == endpoint_id)):
+                                        existing_category_fields = ex_metric_data.get("category_fields")
+                                        if existing_category_fields:
+                                            logger.info(f"Found existing category_fields for metric {metric_name}")
+                                        break
+                    
+                    # If we have existing custom category_fields, use them
+                    if existing_category_fields:
+                        enhanced_metric["category_fields"] = existing_category_fields
+                        logger.info(f"Using existing category_fields for metric {metric_name}")
                     else:
-                        logger.warning(f"No dataset info available for metric {metric_name}")
+                        # Otherwise, get dataset info if endpoint is available in the metric data
+                        dataset_info = None
+                        if endpoint_id:
+                            logger.info(f"No existing category_fields found, looking for endpoint: {endpoint_id}")
+                            dataset_info = get_dataset_info(endpoint_id, datasets_dir)
+                        else:
+                            logger.warning(f"No endpoint found for metric: {metric_name}")
+                        
+                        # Add dataset info if available
+                        if dataset_info:
+                            logger.debug(f"Adding dataset info to metric {metric_name}")
+                            enhanced_metric["dataset_title"] = dataset_info.get("title", "")
+                            enhanced_metric["dataset_category"] = dataset_info.get("category", "")
+                            enhanced_metric["location_fields"] = dataset_info.get("location_fields", [])
+                            enhanced_metric["category_fields"] = dataset_info.get("category_fields", [])
+                        else:
+                            logger.warning(f"No dataset info available for metric {metric_name}")
                     
                     # Add to enhanced queries
                     enhanced_queries[category][subcategory]["queries"][metric_name] = enhanced_metric

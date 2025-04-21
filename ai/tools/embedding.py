@@ -1,9 +1,15 @@
 import time
 from openai import OpenAI
+import os
+from dotenv import load_dotenv
 
-client = OpenAI()
+# Load environment variables from .env file
+load_dotenv()
 
 def get_embedding(text, retries=3, delay=5):
+    # Initialize client inside the function to ensure environment variables are loaded
+    client = OpenAI()
+    
     for attempt in range(1, retries + 3):
         try:
             response = client.embeddings.create(

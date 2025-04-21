@@ -7,6 +7,7 @@ from datetime import datetime, date, timedelta
 import pandas as pd
 import re
 from pathlib import Path
+import copy
 
 from tools.data_fetcher import set_dataset
 from tools.genChart import generate_time_series_chart
@@ -372,6 +373,11 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
         logging.error(f"Error setting dataset for {query_name}: {result['error']}")
         return None
     
+    # Store the queryURL in context_variables if available
+    if 'queryURL' in result:
+        context_variables['executed_query_url'] = result['queryURL']
+        logging.info(f"Stored executed_query_url in context: {result['queryURL']}")
+    
     # Get the dataset from context_variables
     if 'dataset' not in context_variables:
         logging.error(f"No dataset found in context for {query_name}")
@@ -573,10 +579,17 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                 })
                 
                 # Process analysis for this district
+                # For district 0 (citywide), keep supervisor_district as a category field
+                if district == 0:
+                    district_category_fields = category_fields
+                else:
+                    # For other districts, remove supervisor_district from category fields
+                    district_category_fields = [f for f in category_fields if not ((isinstance(f, dict) and f.get('fieldName') == 'supervisor_district') 
+                                    or f == 'supervisor_district')]
+                
                 district_result = process_single_analysis(
                     context_variables=context_variables.copy(),
-                    category_fields=[f for f in category_fields if not (isinstance(f, dict) and f.get('fieldName') == 'supervisor_district') 
-                                    and f != 'supervisor_district'],  # Remove supervisor_district from category fields
+                    category_fields=district_category_fields,
                     period_type=period_type,
                     period_field=period_field,
                     filter_conditions=district_filter_conditions,
@@ -625,8 +638,8 @@ def process_single_analysis(context_variables, category_fields, period_type, per
     # Get a copy of the dataset to avoid modifying the original
     dataset = context_variables['dataset'].copy()
     
-    # Make a new context variables dictionary
-    context = context_variables.copy()
+    # Make a deep copy of context variables to preserve all nested data
+    context = copy.deepcopy(context_variables)
     context['dataset'] = dataset
     
     # Clean the metric name for the y-axis label
@@ -669,7 +682,11 @@ def process_single_analysis(context_variables, category_fields, period_type, per
             show_average_line=True,
             agg_functions=agg_functions,
             return_html=True,
-            output_dir=ANNUAL_DIR if period_type == 'year' else MONTHLY_DIR
+            output_dir=ANNUAL_DIR if period_type == 'year' else MONTHLY_DIR,
+            store_in_db=True,  # Enable database storage
+            object_type='dashboard_metric',  # Add object type
+            object_id=metric_id,  # Add object ID (metric_id)
+            object_name=query_name  # Use the query name as object_name
         )
         
         logging.info(f"Successfully generated main time series chart for {query_name}")
@@ -705,9 +722,9 @@ def process_single_analysis(context_variables, category_fields, period_type, per
             logging.warning(f"Category field '{category_field_name}' not found in dataset for {query_name}")
             continue
         
-        # Skip supervisor_district if we're doing district-specific analysis
-        if district is not None and category_field_name == 'supervisor_district':
-            logging.info(f"Skipping supervisor_district category for district-specific analysis")
+        # Skip supervisor_district if we're doing district-specific analysis (but not for district 0/citywide)
+        if district is not None and district != 0 and category_field_name == 'supervisor_district':
+            logging.info(f"Skipping supervisor_district category for district-specific analysis (district {district})")
             continue
         
         logging.info(f"Processing category field: {category_field_name} for {query_name}")
@@ -730,7 +747,11 @@ def process_single_analysis(context_variables, category_fields, period_type, per
                 show_average_line=False,
                 agg_functions=agg_functions,
                 return_html=True,
-                output_dir=ANNUAL_DIR if period_type == 'year' else MONTHLY_DIR
+                output_dir=ANNUAL_DIR if period_type == 'year' else MONTHLY_DIR,
+                store_in_db=True,  # Enable database storage
+                object_type='dashboard_metric_category',  # Add object type with category suffix
+                object_id=metric_id,  # Use just the metric ID
+                object_name=f"{query_name} by {category_field_display}"  # Use query name with category as object_name
             )
             
             logging.info(f"Successfully generated chart for {category_field_name} for {query_name}")
@@ -766,7 +787,10 @@ def process_single_analysis(context_variables, category_fields, period_type, per
                 title=f"{query_name} - {value_field} by {category_field_display}",
                 period_type=period_type,
                 agg_function='mean' if uses_avg else 'sum',
-                output_dir='monthly' if period_type == 'month' else 'annual'
+                output_dir='monthly' if period_type == 'month' else 'annual',
+                object_type='dashboard_metric',
+                object_id=metric_id,  # Ensure we're using just the metric_id
+                object_name=query_name
             )
             
             # Get markdown and HTML content from anomaly results
@@ -1149,7 +1173,7 @@ def transform_query_for_period(original_query, date_field, category_fields, peri
         return modified_query
 
 def save_analysis_files(result, metric_id, period_type, output_dir=None, district=None):
-    """Save analysis results to markdown files."""
+    """Save analysis results to markdown files. HTML files are not saved."""
     # Create output directory if it doesn't exist
     if output_dir is None:
         output_dir = OUTPUT_DIR
