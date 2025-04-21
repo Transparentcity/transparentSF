@@ -2,7 +2,7 @@
 
 export LD_LIBRARY_PATH="/nix/store/qxfi4d8dfc8rpdk3y0dlmdc28nad02pd-zlib-1.2.13/lib:/nix/store/22nxhmsfcv2q2rpkmfvzwg2w5z1l231z-gcc-13.3.0-lib/lib:$LD_LIBRARY_PATH"
 
-
+export PATH="/nix/store/0rcrmxk4y6w0gl96a2nzjb78gv8r8vyv-postgresql-14.11/bin:$PATH"
 # Function to wait for a service to be ready
 wait_for_service() {
     local url=$1

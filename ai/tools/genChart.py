@@ -97,11 +97,11 @@ def generate_time_series_chart(
     object_type: str = None,
     object_id: str = None,
     object_name: str = None,
-    db_host: str = 'localhost',
-    db_port: int = 5432,
-    db_name: str = 'transparentsf',
-    db_user: str = 'postgres',
-    db_password: str = 'postgres'
+    db_host: str = None,
+    db_port: int = None,
+    db_name: str = None,
+    db_user: str = None,
+    db_password: str = None
 ) -> str:
     try:
         logging.info("Full context_variables: %s", context_variables)
