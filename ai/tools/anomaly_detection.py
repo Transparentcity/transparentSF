@@ -664,11 +664,11 @@ def anomaly_detection(
     period_type='month',  # Add period_type parameter with default
     agg_function='sum',  # Add agg_function parameter with default 'sum'
     output_dir=None,  # Add output_dir parameter with default None
-    db_host='localhost',
-    db_port=5432,
-    db_name='transparentsf',
-    db_user='postgres',
-    db_password='postgres',
+    db_host=None,
+    db_port=None,
+    db_name=None,
+    db_user=None,
+    db_password=None,
     store_in_db=True,
     object_type=None,   # Add object_type parameter
     object_id=None,     # Add object_id parameter

@@ -70,14 +70,17 @@ def store_anomalies_in_db(anomalies, connection=None):
 
 def create_anomalies_table(connection):
     """
-    Create the anomalies table if it doesn't exist.
+    Check if the anomalies table exists.
     
     Args:
         connection: PostgreSQL database connection
+        
+    Returns:
+        bool: True if table exists, False otherwise
     """
     try:
         with connection.cursor() as cursor:
-            # First check if the table exists
+            # Check if the table exists
             cursor.execute("""
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables 
@@ -87,74 +90,27 @@ def create_anomalies_table(connection):
             table_exists = cursor.fetchone()[0]
             
             if not table_exists:
-                # If table doesn't exist, create it with INTEGER district
-                cursor.execute("""
-                    CREATE TABLE anomalies (
-                        id SERIAL PRIMARY KEY,
-                        group_value TEXT,
-                        group_field_name TEXT,
-                        period_type TEXT,
-                        comparison_mean FLOAT,
-                        recent_mean FLOAT,
-                        difference FLOAT,
-                        std_dev FLOAT,
-                        out_of_bounds BOOLEAN,
-                        recent_date DATE,
-                        comparison_dates JSONB,
-                        comparison_counts JSONB,
-                        recent_dates JSONB,
-                        recent_counts JSONB,
-                        metadata JSONB,
-                        field_name TEXT,
-                        object_type TEXT,
-                        object_id TEXT,
-                        object_name TEXT,
-                        recent_data JSONB,
-                        comparison_data JSONB,
-                        district INTEGER,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                logging.info("Created new anomalies table with INTEGER district column")
-            
-            # Create indexes if they don't exist
+                logging.error("Anomalies table does not exist. Please run the database initialization script.")
+                return False
+                
+            # Check if required indexes exist
             cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_anomalies_created_at 
-                ON anomalies(created_at)
+                SELECT EXISTS (
+                    SELECT FROM pg_indexes 
+                    WHERE tablename = 'anomalies' AND indexname = 'idx_anomalies_created_at'
+                );
             """)
+            index_exists = cursor.fetchone()[0]
             
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_anomalies_out_of_bounds 
-                ON anomalies(out_of_bounds)
-            """)
+            if not index_exists:
+                logging.warning("Some indexes on anomalies table may be missing. Performance might be affected.")
             
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_anomalies_object_type 
-                ON anomalies(object_type)
-            """)
-            
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_anomalies_field_name 
-                ON anomalies(field_name)
-            """)
-            
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_anomalies_period_type 
-                ON anomalies(period_type)
-            """)
-            
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_anomalies_district 
-                ON anomalies(district)
-            """)
-            
-            connection.commit()
-            logging.info("Anomalies table and indexes created or updated")
+            return table_exists
     except Exception as e:
-        logging.error(f"Error creating/updating anomalies table: {e}")
+        logging.error(f"Error checking anomalies table: {e}")
         import traceback
         logging.error(traceback.format_exc())
-        connection.rollback()
+        return False
 
 def store_anomalies_in_db(connection, results, metadata):
     """
@@ -173,8 +129,10 @@ def store_anomalies_in_db(connection, results, metadata):
         return 0
     
     try:
-        # Ensure the table exists
-        create_anomalies_table(connection)
+        # Check if the table exists
+        if not create_anomalies_table(connection):
+            logging.error("Cannot store anomalies - table does not exist")
+            return 0
         
         # Use the custom JSON encoder to serialize the entire results and metadata
         serializable_metadata = json.loads(json.dumps(metadata, cls=CustomJSONEncoder))

@@ -217,6 +217,11 @@
                     "location_fields": [],
                     "category_fields": [
                         {
+                            "name": "court_number",
+                            "fieldName": "court_number",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
                             "name": "arresting_agency",
                             "fieldName": "arresting_agency",
                             "description": "Selected column for enhanced dashboard queries"

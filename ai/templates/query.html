@@ -255,6 +255,34 @@
         .history-item:hover {
             background-color: #e9ecef;
         }
+        /* Database Tables Section Styles */
+        .db-tables-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .tables-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .table-item {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .table-item:hover {
+            background-color: #e9ecef;
+            transform: translateY(-2px);
+        }
+        .table-item:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -264,6 +292,16 @@
         <!-- PostgreSQL Query Section -->
         <div class="query-section">
             <h2>PostgreSQL Query</h2>
+            
+            <!-- Database Tables Section -->
+            <div class="db-tables-section" id="dbTablesSection">
+                <h3>Database Tables</h3>
+                <p>Click on a table to load a sample query.</p>
+                <div id="tablesContainer" class="tables-container">
+                    <p>Loading tables...</p>
+                </div>
+            </div>
+            
             <form id="postgresQueryForm">
                 <div class="form-group">
                     <label for="sqlQuery">SQL Query:</label>
@@ -680,6 +718,57 @@
             };
             historyDiv.insertBefore(historyItem, historyDiv.firstChild);
         }
+
+        // Load PostgreSQL Tables
+        async function loadPostgresTables() {
+            const tablesContainer = document.getElementById('tablesContainer');
+            tablesContainer.innerHTML = '<p>Loading tables...</p>';
+            
+            try {
+                const response = await fetch('/backend/api/postgres-tables');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!data.tables || data.tables.length === 0) {
+                    tablesContainer.innerHTML = '<p>No tables found in database.</p>';
+                    return;
+                }
+                
+                tablesContainer.innerHTML = '';
+                data.tables.forEach(table => {
+                    const tableItem = document.createElement('div');
+                    tableItem.className = 'table-item';
+                    tableItem.textContent = table;
+                    tableItem.onclick = () => {
+                        loadSampleQuery(table);
+                    };
+                    tablesContainer.appendChild(tableItem);
+                });
+            } catch (error) {
+                console.error('Error loading PostgreSQL tables:', error);
+                tablesContainer.innerHTML = '<p>Error loading tables from database.</p>';
+            }
+        }
+        
+        function loadSampleQuery(tableName) {
+            const sqlQuery = document.getElementById('sqlQuery');
+            sqlQuery.value = `SELECT * FROM ${tableName} LIMIT 5;`;
+            
+            // Scroll to the query form
+            sqlQuery.scrollIntoView({ behavior: 'smooth' });
+            
+            // Focus and add a highlight effect
+            sqlQuery.focus();
+            sqlQuery.style.backgroundColor = '#f0f8ff';
+            setTimeout(() => {
+                sqlQuery.style.backgroundColor = '';
+            }, 1000);
+        }
+        
+        // Load tables when page loads
+        loadPostgresTables();
     </script>
 </body>
 </html>

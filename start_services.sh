@@ -2,7 +2,64 @@
 
 export LD_LIBRARY_PATH="/nix/store/qxfi4d8dfc8rpdk3y0dlmdc28nad02pd-zlib-1.2.13/lib:/nix/store/22nxhmsfcv2q2rpkmfvzwg2w5z1l231z-gcc-13.3.0-lib/lib:$LD_LIBRARY_PATH"
 
+# Ensure we're using PostgreSQL 14
 export PATH="/nix/store/0rcrmxk4y6w0gl96a2nzjb78gv8r8vyv-postgresql-14.11/bin:$PATH"
+
+# Load environment variables from .env file if it exists
+if [ -f .env ]; then
+    echo "Loading environment variables from .env file..."
+    set -o allexport
+    source .env
+    set +o allexport
+fi
+
+# Function to check if we're running on Replit
+is_replit() {
+    [ -n "$REPL_ID" ]
+}
+
+# Set PostgreSQL environment variables based on environment
+if is_replit; then
+    # On Replit, use the 'runner' user which already exists
+    CURRENT_USER=$(whoami)
+    echo "Running on Replit, using user: $CURRENT_USER"
+    
+    export POSTGRES_USER="$CURRENT_USER"
+    export POSTGRES_HOST="localhost"
+    export POSTGRES_PORT=5432
+    export POSTGRES_DB="transparentsf"
+    export POSTGRES_PASSWORD=""
+else
+    # On other environments, use .env settings or defaults
+    if [ -z "$POSTGRES_USER" ]; then
+        export POSTGRES_USER="postgres"
+    fi
+    if [ -z "$POSTGRES_HOST" ]; then
+        export POSTGRES_HOST="localhost"
+    fi
+    if [ -z "$POSTGRES_PORT" ]; then
+        export POSTGRES_PORT=5432
+    fi
+    if [ -z "$POSTGRES_DB" ]; then
+        export POSTGRES_DB="transparentsf"
+    fi
+    if [ -z "$POSTGRES_PASSWORD" ]; then
+        export POSTGRES_PASSWORD=""
+    fi
+fi
+
+# Set standard PostgreSQL environment variables for CLI tools
+export PGUSER="$POSTGRES_USER"
+export PGHOST="$POSTGRES_HOST"
+export PGPORT="$POSTGRES_PORT"
+export PGDATABASE="$POSTGRES_DB"
+export PGPASSWORD="$POSTGRES_PASSWORD"
+
+echo "PostgreSQL connection settings:"
+echo "  POSTGRES_USER: $POSTGRES_USER"
+echo "  POSTGRES_HOST: $POSTGRES_HOST"
+echo "  POSTGRES_DB: $POSTGRES_DB"
+
 # Function to wait for a service to be ready
 wait_for_service() {
     local url=$1
@@ -23,26 +80,85 @@ wait_for_service() {
     echo "$name is ready!"
 }
 
-# Function to check if we're running on Replit
-is_replit() {
-    [ -n "$REPL_ID" ]
+# Function to create the database if it doesn't exist
+create_database() {
+    echo "Checking if database '$POSTGRES_DB' exists..."
+    if ! psql -h $POSTGRES_HOST -U $POSTGRES_USER -lqt | cut -d \| -f 1 | grep -qw $POSTGRES_DB; then
+        echo "Creating database '$POSTGRES_DB'..."
+        createdb -h $POSTGRES_HOST -U $POSTGRES_USER $POSTGRES_DB
+        echo "Database created successfully."
+        return 0  # Database was just created
+    else
+        echo "Database '$POSTGRES_DB' already exists."
+        return 1  # Database already existed
+    fi
 }
+
 start_postgres() {
+    # Check for PostgreSQL version
+    PG_VERSION=$(postgres --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
+    echo "Using PostgreSQL version: $PG_VERSION"
+    
     if is_replit; then
         echo "Setting up PostgreSQL on Replit..."
 
-        export PGDATA=$HOME/postgres_data
-
-        # Create data directory if needed
-        if [ ! -d "$PGDATA/base" ]; then
-            echo "Initializing PostgreSQL data directory..."
-            initdb -D "$PGDATA"
+        # Check if PostgreSQL is already running
+        if pgrep -f "postgres -D" > /dev/null; then
+            echo "PostgreSQL is already running"
+            
+            # Check PostgreSQL connection
+            echo "Checking PostgreSQL connection..."
+            max_attempts=30
+            attempt=1
+            while ! pg_isready -p 5432 -h localhost > /dev/null 2>&1; do
+                if [ $attempt -ge $max_attempts ]; then
+                    echo "Cannot connect to PostgreSQL after $max_attempts attempts"
+                    exit 1
+                fi
+                echo "Attempt $attempt: Cannot connect to PostgreSQL yet..."
+                sleep 2
+                ((attempt++))
+            done
+            echo "PostgreSQL connection successful!"
+            
+            # Try to connect and get database info
+            echo "Getting PostgreSQL info..."
+            psql -h localhost -c "\conninfo" 2>/dev/null || echo "Failed to get connection info"
+            
+            # Create the database if it doesn't exist
+            create_database
+            
+            return
         fi
 
-        # Modify postgresql.conf to avoid /run/postgresql
-        echo "Configuring PostgreSQL socket and PID locations..."
-        echo "unix_socket_directories = '$HOME'" >> "$PGDATA/postgresql.conf"
-        echo "external_pid_file = '$HOME/postgres.pid'" >> "$PGDATA/postgresql.conf"
+        # Try both potential data directory locations
+        if [ -d "/tmp/postgres_data" ] && [ -f "/tmp/postgres_data/PG_VERSION" ]; then
+            echo "Using existing PostgreSQL data directory in /tmp/postgres_data"
+            export PGDATA=/tmp/postgres_data
+        else
+            echo "Using home directory for PostgreSQL data"
+            export PGDATA=$HOME/postgres_data
+            
+            # Create data directory if needed
+            if [ ! -d "$PGDATA/base" ]; then
+                echo "Initializing PostgreSQL data directory..."
+                initdb -D "$PGDATA"
+            fi
+
+            # Modify postgresql.conf to avoid /run/postgresql
+            echo "Configuring PostgreSQL socket and PID locations..."
+            echo "unix_socket_directories = '$HOME'" >> "$PGDATA/postgresql.conf"
+            echo "external_pid_file = '$HOME/postgres.pid'" >> "$PGDATA/postgresql.conf"
+        fi
+
+        # Check for stale pid file
+        if [ -f "$PGDATA/postmaster.pid" ]; then
+            PID=$(head -1 "$PGDATA/postmaster.pid")
+            if ! ps -p "$PID" > /dev/null; then
+                echo "Removing stale PID file..."
+                rm "$PGDATA/postmaster.pid"
+            fi
+        fi
 
         echo "Starting PostgreSQL..."
         pg_ctl -D "$PGDATA" -l "$HOME/postgres_log" start
@@ -50,7 +166,7 @@ start_postgres() {
         echo "Waiting for PostgreSQL to be ready..."
         max_attempts=30
         attempt=1
-        while ! pg_isready -h "$HOME" -p 5432 > /dev/null 2>&1; do
+        while ! pg_isready -p 5432 -h localhost > /dev/null 2>&1; do
             if [ $attempt -ge $max_attempts ]; then
                 echo "PostgreSQL failed to start after $max_attempts attempts"
                 exit 1
@@ -61,33 +177,45 @@ start_postgres() {
         done
         echo "PostgreSQL is ready!"
 
-        echo "Ensuring database exists..."
-        createdb -h "$HOME" -U postgres transparentsf 2>/dev/null || true
-
-        # Create DB role if it doesn't exist yet
-        echo "Checking if DB role exists..."
-        if ! psql -h "$HOME" -U postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='app_user'" | grep -q 1; then
-            echo "Creating new DB role..."
-            psql -h "$HOME" -U postgres -c "CREATE ROLE postgres WITH LOGIN PASSWORD 'postgres' NOSUPERUSER INHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;"
-            psql -h "$HOME" -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE transparentsf TO postgres;"
-            echo "DB role created successfully!"
-        else
-            echo "DB role already exists, skipping creation."
-        fi
+        # Create the database if it doesn't exist
+        create_database
 
     else
-        # (Mac path unchanged)
-        ...
+        # For macOS, just check if PostgreSQL is running
+        echo "Checking PostgreSQL on macOS..."
+        if ! pg_isready -h localhost > /dev/null 2>&1; then
+            echo "PostgreSQL is not running. Please start it with: brew services start postgresql"
+            exit 1
+        fi
+        echo "PostgreSQL is running."
+        
+        # Create the database if it doesn't exist
+        create_database
     fi
 }
 
-
 # Function to initialize the database
 init_database() {
-    echo "Initializing database..."
+    echo "Checking database status..."
+    
     if [ -d "ai" ]; then
         cd ai
-        python tools/init_postgres_db.py
+        
+        # Check if tables exist by directly using psql
+        echo "Checking if database tables exist..."
+        TABLE_COUNT=$(psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'")
+        
+        # Trim whitespace
+        TABLE_COUNT=$(echo $TABLE_COUNT | tr -d ' ')
+        
+        if [ "$TABLE_COUNT" -eq "0" ]; then
+            echo "No tables found in database. Running initialization..."
+            python tools/init_postgres_db.py
+            echo "Database initialization completed."
+        else
+            echo "Database tables already exist. Skipping initialization."
+        fi
+        
         cd ..
     else
         echo "Error: 'ai' directory not found"
@@ -95,10 +223,34 @@ init_database() {
     fi
 }
 
+# Check for Node.js
+check_node() {
+    if ! command -v node &> /dev/null; then
+        echo "Node.js is not installed. Ghost Bridge will not start."
+        echo "To install Node.js, please run: curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - && sudo apt-get install -y nodejs"
+        return 1
+    else
+        echo "Node.js is installed: $(node --version)"
+        return 0
+    fi
+}
+
+# Check for Qdrant
+check_qdrant() {
+    if ! command -v qdrant &> /dev/null; then
+        echo "Qdrant is not installed. Vector database will not be available."
+        echo "To install Qdrant, please follow the instructions at: https://qdrant.tech/documentation/install/"
+        return 1
+    else
+        echo "Qdrant is installed"
+        return 0
+    fi
+}
+
 # Kill any lingering processes
-pkill -f qdrant
-pkill -f main.py
-pkill -f ghostBridge.js
+pkill -f qdrant || true
+pkill -f main.py || true
+pkill -f ghostBridge.js || true
 
 # Create logs directory
 mkdir -p ai/logs
@@ -121,14 +273,26 @@ wait_for_service "http://0.0.0.0:8000" "Frontend"
 
 # Start Qdrant
 echo "Starting Qdrant..."
-qdrant &
-wait_for_service "http://0.0.0.0:6333/healthz" "Qdrant"
+if check_qdrant; then
+    qdrant &
+    wait_for_service "http://0.0.0.0:6333/healthz" "Qdrant"
+else
+    echo "Continuing without Qdrant..."
+fi
 
 # Start Ghost Bridge
 echo "Starting Ghost Bridge..."
-cd ai
-node tools/ghost_bridge/ghostBridge.js &
-cd ..
+if check_node; then
+    cd ai
+    # Check if Ghost Bridge configuration exists
+    if [ -f .env ] && grep -q "GHOST_URL" .env; then
+        echo "Found Ghost configuration, starting Ghost Bridge..."
+        node tools/ghost_bridge/ghostBridge.js &
+    else
+        echo "Ghost Bridge configuration is missing. Please add GHOST_URL to your .env file."
+    fi
+    cd ..
+fi
 
 # Hold the script open
 wait

@@ -4263,3 +4263,37 @@ async def update_chart_groups(chart_id: int, request: Request):
             cursor.close()
         if 'conn' in locals() and conn:
             conn.close()
+
+@router.get("/api/postgres-tables")
+async def get_postgres_tables():
+    """Get a list of all tables in the PostgreSQL database."""
+    try:
+        # Connect to PostgreSQL
+        conn = psycopg2.connect(
+            host=os.environ.get("POSTGRES_HOST", "localhost"),
+            database=os.environ.get("POSTGRES_DB", "transparentsf"),
+            user=os.environ.get("POSTGRES_USER", "postgres"),
+            password=os.environ.get("POSTGRES_PASSWORD", "postgres")
+        )
+        
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        
+        # Query to get all tables in the public schema
+        cursor.execute("""
+            SELECT tablename 
+            FROM pg_tables 
+            WHERE schemaname = 'public'
+            ORDER BY tablename;
+        """)
+        
+        tables = [row['tablename'] for row in cursor.fetchall()]
+        
+        cursor.close()
+        conn.close()
+        
+        return JSONResponse(content={
+            "tables": tables
+        })
+    except Exception as e:
+        logger.error(f"Error getting PostgreSQL tables: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error getting PostgreSQL tables")
