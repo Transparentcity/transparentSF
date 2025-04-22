@@ -1016,13 +1016,18 @@ async def anomaly_analyzer_page(request: Request):
     """Serve the anomaly analyzer interface."""
     from fastapi.templating import Jinja2Templates
     
+    logger.info("Anomaly analyzer page requested")
+    logger.info(f"Templates instance: {templates}")
+    
     # Use the templates instance set by main.py
     if templates is None:
         logger.error("Templates not initialized in anomalyAnalyzer router")
         templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+        logger.info(f"Using local templates from: {templates_dir}")
         templates_local = Jinja2Templates(directory=templates_dir)
         return templates_local.TemplateResponse("anomaly_analyzer.html", {"request": request})
     
+    logger.info("Using global templates instance")
     return templates.TemplateResponse("anomaly_analyzer.html", {"request": request})
 
 @router.post("/api/reset-anomaly-chat")

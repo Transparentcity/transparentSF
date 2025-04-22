@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import json
@@ -561,6 +561,11 @@ logger.debug("Included backend router at /backend")
 # Mount anomaly analyzer router
 app.include_router(anomaly_analyzer_router, prefix="/anomaly-analyzer", tags=["anomaly-analyzer"])
 logger.debug("Included anomaly analyzer router at /anomaly-analyzer")
+
+# Add redirect for anomaly analyzer without trailing slash
+@app.get("/anomaly-analyzer")
+async def redirect_to_anomaly_analyzer():
+    return RedirectResponse(url="/anomaly-analyzer/")
 
 @app.get("/api/chart-by-metric")
 async def forward_chart_by_metric(
