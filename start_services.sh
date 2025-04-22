@@ -64,6 +64,17 @@ start_postgres() {
         echo "Ensuring database exists..."
         createdb -h "$HOME" -U postgres transparentsf 2>/dev/null || true
 
+        # Create DB role if it doesn't exist yet
+        echo "Checking if DB role exists..."
+        if ! psql -h "$HOME" -U postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='app_user'" | grep -q 1; then
+            echo "Creating new DB role..."
+            psql -h "$HOME" -U postgres -c "CREATE ROLE postgres WITH LOGIN PASSWORD 'postgres' NOSUPERUSER INHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;"
+            psql -h "$HOME" -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE transparentsf TO postgres;"
+            echo "DB role created successfully!"
+        else
+            echo "DB role already exists, skipping creation."
+        fi
+
     else
         # (Mac path unchanged)
         ...
