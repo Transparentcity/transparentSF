@@ -832,80 +832,80 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                     "metrics": []
                 }
                 
-                # Process each metric
+                # Process each metric in the category
                 for metric in category['metrics']:
-                    # Create a copy of the metric without trend data for top_level.json
-                    metric_copy = metric.copy()
-                    if 'trend_data' in metric_copy:
-                        del metric_copy['trend_data']
+                    # Create a copy of the metric without trend data
+                    metric_copy = {
+                        "name": metric['name'],
+                        "id": metric['id'],
+                        "lastYear": metric['lastYear'],
+                        "thisYear": metric['thisYear'],
+                        "lastDataDate": metric['lastDataDate']
+                    }
+                    
+                    # Add numeric_id if it exists
+                    if 'numeric_id' in metric:
+                        metric_copy['numeric_id'] = metric['numeric_id']
+                    
+                    # Add location_fields and category_fields if they exist
+                    if 'location_fields' in metric:
+                        metric_copy['location_fields'] = metric['location_fields']
+                    if 'category_fields' in metric:
+                        metric_copy['category_fields'] = metric['category_fields']
+                    
                     category_copy['metrics'].append(metric_copy)
                     
-                    # Save individual metric file with trend data
-                    if 'trend_data' in metric and metric['trend_data']:
-                        # Use numeric_id for filename if available, otherwise use string id
-                        file_id = str(metric['numeric_id']) if 'numeric_id' in metric else metric['id']
-                        metric_file = os.path.join(district_dir, f"{file_id}.json")
-                        metric_data = {
-                            "metadata": metrics['metadata'],
-                            "metric_id": metric['id'],
-                            "metric_name": metric['name'],
-                            "category": category['category'],
-                            "lastYear": metric['lastYear'],
-                            "thisYear": metric['thisYear'],
-                            "lastDataDate": metric['lastDataDate'],
-                            "trend_data": metric['trend_data'],
-                            "trend_last_updated": metric.get('trend_last_updated'),
-                            # Add summary, definition, and URL from metadata
-                            "summary": metric['metadata'].get('summary', ''),
-                            "definition": metric['metadata'].get('definition', ''),
-                            "data_sf_url": metric['metadata'].get('data_sf_url', ''),
-                            # Add executed queries for transparency and debugging
-                            "queries": {
-                                "metric_query": metric['queries'].get('metric_query', ''),
-                                "executed_metric_query": metric['queries'].get('executed_query', ''),
-                                "ytd_query": metric['queries'].get('ytd_query', ''),
-                                "executed_ytd_query": metric['queries'].get('executed_ytd_query', '')
-                            }
-                        }
-
-                        # Add location_fields, category_fields, and numeric_id if they exist in the metric
-                        if 'location_fields' in metric:
-                            metric_data['location_fields'] = metric['location_fields']
-                        if 'category_fields' in metric:
-                            metric_data['category_fields'] = metric['category_fields']
-                        if 'numeric_id' in metric:
-                            metric_data['numeric_id'] = metric['numeric_id']
-
-                        # Add district breakdown for citywide metrics (district 0)
-                        if district_str == '0':
-                            district_breakdown = {}
-                            # Look for this metric in each district's data
-                            for d_num in range(1, 12):
-                                d_str = str(d_num)
-                                if d_str in metrics['districts']:
-                                    # Find matching metric in district data
-                                    for d_cat in metrics['districts'][d_str]['categories']:
-                                        if d_cat['category'] == category['category']:
-                                            for d_metric in d_cat['metrics']:
-                                                if d_metric['id'] == metric['id']:
-                                                    district_breakdown[d_str] = {
-                                                        "thisYear": d_metric['thisYear'],
-                                                        "lastYear": d_metric['lastYear'],
-                                                        "lastDataDate": d_metric['lastDataDate']
-                                                    }
-                                                    break
-                            if district_breakdown:
-                                metric_data["district_breakdown"] = district_breakdown
-
-                        with open(metric_file, 'w', encoding='utf-8') as f:
-                            json.dump(metric_data, f, indent=2)
-                        logger.info(f"Metric {file_id} (original id: {metric['id']}) saved to {metric_file}")
+                    # Save individual metric file with full data
+                    file_id = metric.get('numeric_id', metric['id'])
+                    metric_file = os.path.join(district_dir, f"{file_id}.json")
+                    metric_data = {
+                        "category": category['category'],
+                        "metric_name": metric['name'],
+                        "metric_id": metric['id'],
+                        "lastYear": metric['lastYear'],
+                        "thisYear": metric['thisYear'],
+                        "lastDataDate": metric['lastDataDate'],
+                        "queries": metric['queries']
+                    }
                     
-                    # Remove summary, definition, and URL from the top-level copy
-                    if 'metadata' in metric_copy:
-                        metric_copy['metadata'].pop('summary', None)
-                        metric_copy['metadata'].pop('definition', None)
-                        metric_copy['metadata'].pop('data_sf_url', None)
+                    # Add numeric_id if it exists
+                    if 'numeric_id' in metric:
+                        metric_data['numeric_id'] = metric['numeric_id']
+                    
+                    # Add location_fields and category_fields if they exist
+                    if 'location_fields' in metric:
+                        metric_data['location_fields'] = metric['location_fields']
+                    if 'category_fields' in metric:
+                        metric_data['category_fields'] = metric['category_fields']
+                    
+                    # Add trend data if it exists
+                    if 'trend_data' in metric:
+                        metric_data['trend_data'] = metric['trend_data']
+                    
+                    # Add district breakdown for citywide metrics (district 0)
+                    if district_str == '0':
+                        district_breakdown = {}
+                        # Look for this metric in each district's data
+                        for d_num in range(1, 12):
+                            d_str = str(d_num)
+                            if d_str in metrics['districts']:
+                                # Find matching metric in district data
+                                for d_cat in metrics['districts'][d_str]['categories']:
+                                    if d_cat['category'] == category['category']:
+                                        for d_metric in d_cat['metrics']:
+                                            if d_metric['id'] == metric['id']:
+                                                district_breakdown[d_str] = {
+                                                    "thisYear": d_metric['thisYear'],
+                                                    "lastYear": d_metric['lastYear'],
+                                                    "lastDataDate": d_metric['lastDataDate']
+                                                }
+                                                break
+                        if district_breakdown:
+                            metric_data["district_breakdown"] = district_breakdown
+
+                    with open(metric_file, 'w', encoding='utf-8') as f:
+                        json.dump(metric_data, f, indent=2)
+                    logger.info(f"Metric {file_id} (original id: {metric['id']}) saved to {metric_file}")
                 
                 district_data['categories'].append(category_copy)
             
@@ -914,12 +914,6 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
             with open(top_level_file, 'w', encoding='utf-8') as f:
                 json.dump(district_data, f, indent=2)
             logger.info(f"District {district_str} top_level metrics saved to {top_level_file}")
-            
-            # For backward compatibility, also save the district file in the old location
-            district_file = os.path.join(dashboard_dir, f'district_{district_str}.json')
-            with open(district_file, 'w', encoding='utf-8') as f:
-                json.dump(district_data, f, indent=2)
-            logger.info(f"District {district_str} metrics saved to {district_file} (for backward compatibility)")
             
             # Save to history directory with timestamp
             history_file = os.path.join(history_dir, f'district_{district_str}_{datetime.now().strftime("%Y%m%d")}.json')
@@ -1363,19 +1357,13 @@ def process_single_metric(metric_id, period_type='ytd'):
             json.dump(district_data, f, indent=2)
         logging.info(f"Created new top_level.json for district {district_str}")
         
-        # For backward compatibility, also save the district file in the old location
-        district_file = os.path.join(output_dir, f'district_{district_str}.json')
-        with open(district_file, 'w', encoding='utf-8') as f:
-            json.dump(district_data, f, indent=2)
-        logging.info(f"Created new district_{district_str}.json for backward compatibility")
-        
         # Save to history directory with timestamp
         history_dir = os.path.join(output_dir, 'history')
         os.makedirs(history_dir, exist_ok=True)
         history_file = os.path.join(history_dir, f'district_{district_str}_{datetime.now().strftime("%Y%m%d")}.json')
         with open(history_file, 'w', encoding='utf-8') as f:
             json.dump(district_data, f, indent=2)
-        logging.info(f"Created new history file for district {district_str}")
+        logging.info(f"District {district_str} metrics history saved to {history_file}")
     
     return metrics_result
 

@@ -121,27 +121,15 @@ async def get_metrics(filename: str):
         # Extract district number
         district_str = filename.split('_')[1].split('.')[0]
         
-        # For backward compatibility, check if the file exists in the old location
-        old_file_path = os.path.join(output_dir, 'dashboard', filename)
-        if os.path.exists(old_file_path):
-            logger.debug(f"Serving metrics from old location: {old_file_path}")
-            try:
-                with open(old_file_path, 'r') as f:
-                    data = json.load(f)
-                    return JSONResponse(content=data)
-            except Exception as e:
-                logger.error(f"Error reading metrics file {old_file_path}: {str(e)}")
-                # Fall through to try the new location
-        
         # Try to serve top_level.json from the district subfolder
         new_file_path = os.path.join(output_dir, 'dashboard', district_str, 'top_level.json')
-        logger.debug(f"Attempting to read metrics from new location: {new_file_path}")
+        logger.debug(f"Attempting to read metrics from: {new_file_path}")
         try:
             with open(new_file_path, 'r') as f:
                 data = json.load(f)
                 return JSONResponse(content=data)
         except FileNotFoundError:
-            logger.error(f"Metrics file not found in new location: {new_file_path}")
+            logger.error(f"Metrics file not found: {new_file_path}")
             raise HTTPException(status_code=404, detail=f"Metrics file '{filename}' not found")
         except json.JSONDecodeError:
             logger.error(f"Invalid JSON in metrics file: {new_file_path}")
@@ -172,25 +160,6 @@ async def get_metrics(filename: str):
         # If we get here, the metric file wasn't found in any district folder
         logger.error(f"Metric file not found in any district folder: {filename}")
         raise HTTPException(status_code=404, detail=f"Metric file '{filename}' not found")
-    
-    # For any other files, try the old location
-    else:
-        file_path = os.path.join(output_dir, 'dashboard', filename)
-        logger.debug(f"Attempting to read metrics from: {file_path}")
-        
-        try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-                return JSONResponse(content=data)
-        except FileNotFoundError:
-            logger.error(f"Metrics file not found: {file_path}")
-            raise HTTPException(status_code=404, detail=f"Metrics file '{filename}' not found")
-        except json.JSONDecodeError:
-            logger.error(f"Invalid JSON in metrics file: {file_path}")
-            raise HTTPException(status_code=500, detail=f"Invalid JSON in metrics file '{filename}'")
-        except Exception as e:
-            logger.error(f"Error reading metrics file {file_path}: {str(e)}")
-            raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/enhanced-queries")
 async def get_enhanced_queries():

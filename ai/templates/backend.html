@@ -805,14 +805,36 @@
             });
 
             // Dashboard metrics button handler
-            document.getElementById('analyze-ytd-btn').addEventListener('click', () => {
+            document.getElementById('analyze-ytd-btn').addEventListener('click', async () => {
                 showLoading('Generating dashboard metrics...');
-                document.getElementById('content-frame').src = '/backend/generate_ytd_metrics';
                 
-                // Hide loading when iframe loads
-                document.getElementById('content-frame').onload = function() {
+                try {
+                    const response = await fetch('/backend/generate_ytd_metrics');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        // Show success message
+                        const operationElement = document.getElementById('loading-operation-text');
+                        operationElement.textContent = 'Dashboard metrics generated successfully!';
+                        
+                        // Wait a moment to show the success message
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                        // Reload the dashboard to show updated metrics
+                        document.getElementById('content-frame').src = '/backend/dashboard';
+                    } else {
+                        throw new Error(data.message || 'Failed to generate dashboard metrics');
+                    }
+                } catch (error) {
+                    console.error('Error generating dashboard metrics:', error);
+                    const operationElement = document.getElementById('loading-operation-text');
+                    operationElement.textContent = `Error: ${error.message}`;
+                    
+                    // Wait a moment to show the error message
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                } finally {
                     hideLoading();
-                };
+                }
             });
 
             // Monthly report button handler - removed since we're using data-href now

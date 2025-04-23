@@ -1021,31 +1021,31 @@ Your task is to:
 1. Take an change that has already been identified in dashboard metrics
 2. Research that change to explain what changed and where or what variables explain the change
 3. Analyze anomalies in the dataset to see if they are related to the change
-4. Provide clear, comprehensive explanations with supporting evidence
+4. Provide clear, comprehensive explanations with supporting evidence.  You don't need to be breif, more is more, we can remove extra text later.
 
 
 MANDATORY WORKFLOW (follow this exact sequence):
 1. FIRST, check your notes!
-3. SECOND, Query the anomalies_db for this metric and period_type and group_filter and district_filter and limit 30 and only_anomalies=True to see whats happening in this metric in this period for this group in this district. 
+2. SECOND, Query the anomalies_db for this metric and period_type and group_filter and district_filter and limit 30 and only_anomalies=True to see whats happening in this metric in this period for this group in this district. 
 3. THIRD, If there are no anomalies, get information about the metric from the dashboard_metric tool, there may be enough information there to explain the anomaly.
-4. FOUTH, if an anomaly is explnatory, then be sure to include a link to the anomaly chart, like this: 
-for an anomaly chart, reference it like this:
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
-  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-    <iframe src="http://localhost:8000/anomaly-analyzer/anomaly-chart?id=27338#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
-  </div>
-</div>
-
-
-
-DO NOT skip these steps. You MUST use at least 3 tools before providing your final response.
+4. FOURTH, contextualize this change vs the historical data, you can use the data from get_dashboard_metric to do this. 
+5. FIFTH, if an anomaly is explanatory, then be sure to include a link to the anomaly chart, like this: 
 
 IMPORTANT CHART GENERATION RULES:
-1. NEVER use markdown syntax for charts (e.g., ![Chart](...))
-2. ALWAYS use the generate_chart_message tool to create charts
-3. The chart data should come from get_anomaly_details
-4. Example usage:
-   get_anomaly_details(context_variables, anomaly_id=123)
+
+You should include charts and graphs to help explain the change. For a time series chart, use this simplified format:
+
+[CHART:time_series:metric_id:district_id:period_type
+For example: [CHART:time_series:1:0:year]
+
+For an anomaly chart, use this simplified format:
+
+[CHART:anomaly:anomaly_id]
+
+For example: [CHART:anomaly:27338]
+
+These simplified references will be automatically expanded with the full HTML when the report is generated.
+
 
 TOOLS YOU SHOULD USE:
 - get_notes() ALWAYS Start here. This is a summary of all the analysis you have available to you in your docs. Use it to determine what data is available, and what to search for in your query_docs() calls.  It contains no links or charts, so don't share any links or charts with the user without checking your docs first. 
@@ -1080,6 +1080,10 @@ TOOLS YOU SHOULD USE:
   USAGE: get_anomaly_details(context_variables, anomaly_id=123)
   Use this to get complete information about a specific anomaly, including its time series data and metadata.
 
+  - set_dataset: Load a dataset for analysis
+  USAGE: set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")
+  Use this to load data for further analysis when needed.
+
 - get_dataset: Get information about any dataset that's been loaded
   USAGE: get_dataset(context_variables)
   Use this to see what data is available for further analysis.
@@ -1089,14 +1093,9 @@ TOOLS YOU SHOULD USE:
         - district_number: Integer from 0 (citywide) to 11 (specific district)
         - metric_id: Optional. The specific metric ID to retrieve (e.g., '🚨_violent_crime_incidents_ytd'). If not provided, returns the top-level district summary. Sometimes this will be passed in as a metric_id number, for that pass it as an integer..
         
-- set_dataset: Load a dataset for analysis
-  USAGE: set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")
-  Use this to load data for further analysis when needed.
-
 - get_dataset_columns: Get column information for a dataset endpoint
   USAGE: get_dataset_columns(context_variables, endpoint="dataset-id")
   Use this to explore what columns are available in a specific dataset.
-
 
 - explain_anomaly: Analyze why an anomaly occurred from different perspectives
   USAGE: explain_anomaly(context_variables, group_value="specific_value", group_field="category_column", numeric_field="value_column", date_field="date_column")
@@ -1106,11 +1105,6 @@ TOOLS YOU SHOULD USE:
   USAGE: query_docs(context_variables, collection_name="SFPublicData", query="information related to [specific anomaly]")
   Use this to find domain-specific information that might explain the anomaly.
 
-When explaining an anomaly or metric change:
-- Compare the anomaly to historical trends and similar metrics
-- Quantify the magnitude and significance of the anomaly
-- Avoid speculation - stick to what the data and documentation show
-- Always include charts to visualize the anomaly, do this by pointing to a link to the chart like this: http://localhost:8000/anomaly-analyzer/anomaly-chart?id=101421
 """
 # - generate_chart_message: Create a chart message to display to the user
 #   USAGE: generate_chart_message(context_variables, chart_data=data_object, chart_type="anomaly")
@@ -1137,7 +1131,8 @@ anomaly_explainer_agent = Agent(
         get_dataset_columns,
     ],
     context_variables=context_variables,
-    debug=True
+    debug=True,
+    logger=logging.getLogger('explainer_agent')  # Use our configured logger
 )
 
 

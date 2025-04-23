@@ -45,6 +45,14 @@ if not logger.handlers:
     console_handler.setLevel(logging.INFO)
     logger.addHandler(console_handler)
 
+# Also configure logging for the explainer agent
+explainer_logger = logging.getLogger('explainer_agent')
+explainer_logger.setLevel(logging.INFO)
+if not explainer_logger.handlers:
+    # Use the same file handler as the main logger
+    explainer_logger.addHandler(file_handler)
+    explainer_logger.addHandler(console_handler)
+
 # Load environment variables
 load_dotenv()
 
@@ -93,7 +101,7 @@ def initialize_monthly_reporting_table():
                 "group_field_name", "period_type", "comparison_mean", 
                 "recent_mean", "difference", "std_dev", "percent_change", 
                 "explanation", "priority", "report_text", "district", 
-                "chart_data", "metadata", "created_at"
+                "chart_data", "metadata", "created_at","metric_id"
             ]
             
             missing_columns = [col for col in required_columns if col not in existing_columns]
@@ -141,6 +149,9 @@ def initialize_monthly_reporting_table():
                             cursor.execute("ALTER TABLE monthly_reporting ADD COLUMN metadata JSONB")
                         elif column == "created_at":
                             cursor.execute("ALTER TABLE monthly_reporting ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+                        elif column == "metric_id":
+                            cursor.execute("ALTER TABLE monthly_reporting ADD COLUMN metric_id TEXT")
+
                     except Exception as e:
                         logger.warning(f"Error adding column {column}: {e}")
                         # Continue with other columns even if one fails
@@ -156,6 +167,7 @@ def initialize_monthly_reporting_table():
                     id SERIAL PRIMARY KEY,
                     report_date DATE DEFAULT CURRENT_DATE,
                     metric_name TEXT,
+                    metric_id TEXT,
                     group_value TEXT,
                     group_field_name TEXT,
                     period_type TEXT DEFAULT 'month',
@@ -243,6 +255,7 @@ def select_deltas_to_discuss(period_type='month', top_n=20, bottom_n=20, distric
         for item in top_data.get("top_results", []):
             top_changes.append({
                 "metric": item.get("object_name", "Unknown"),
+                "metric_id": item.get("object_id", "Unknown"),
                 "group": item.get("group", "All"),
                 "recent_mean": item.get("recent_value", 0),
                 "comparison_mean": item.get("previous_value", 0),
@@ -255,6 +268,7 @@ def select_deltas_to_discuss(period_type='month', top_n=20, bottom_n=20, distric
         for item in bottom_data.get("bottom_results", []):
             bottom_changes.append({
                 "metric": item.get("object_name", "Unknown"),
+                "metric_id": item.get("object_id", "Unknown"),
                 "group": item.get("group", "All"),
                 "recent_mean": item.get("recent_value", 0),
                 "comparison_mean": item.get("previous_value", 0),
@@ -311,6 +325,7 @@ def prioritize_deltas(deltas, max_items=10):
         changes_text = "Here are the metrics with significant changes:\n\n"
         for idx, change in enumerate(combined_changes, 1):
             metric = change.get("metric", "Unknown")
+            metric_id = change.get("metric_id", "Unknown")
             group = change.get("group", "Unknown")
             # Safely handle None values for group
             if group is None:
@@ -359,6 +374,7 @@ Return your response as a JSON object with a property named "items" that contain
     {{
       "index": 1,
       "metric": "Metric Name",
+      "metric_id": "Metric ID",
       "group": "Group Value",
       "priority": 1,
       "explanation": "Detailed explanation of why this change is significant",
@@ -453,6 +469,7 @@ You MUST select {max_items} different metrics. This is a hard requirement.
                         # Create prioritized item with data from both the AI response and original change
                         prioritized_items.append({
                             "metric": original_change.get("metric"),
+                            "metric_id": original_change.get("metric_id", "Unknown"),
                             "group": original_change.get("group", "All"),
                             "priority": item.get("priority", 999),
                             "recent_mean": original_change.get("recent_mean", 0),
@@ -482,6 +499,7 @@ You MUST select {max_items} different metrics. This is a hard requirement.
                         # Create prioritized item with data from both the AI response and original change
                         prioritized_items.append({
                             "metric": metric_name,
+                            "metric_id": original_change.get("metric_id", "Unknown"),
                             "group": group_value,
                             "priority": item.get("priority", 999),
                             "recent_mean": original_change.get("recent_mean", 0),
@@ -594,23 +612,25 @@ def store_prioritized_items(prioritized_items, period_type='month', district="0"
             
             # Create item title from metric name and group
             metric_name = item.get("metric", "")
+            metric_id = item.get("metric_id", "Unknown")
             group_value = item.get("group", "All")
             item_title = f"{metric_name} - {group_value}" if group_value != "All" else metric_name
                 
             # Prepare the data
             cursor.execute("""
                 INSERT INTO monthly_reporting (
-                    report_id, report_date, item_title, metric_name, group_value, group_field_name, 
+                    report_id, report_date, item_title, metric_name, metric_id, group_value, group_field_name, 
                     period_type, comparison_mean, recent_mean, difference, 
                     percent_change, explanation, priority, district, metadata
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 ) RETURNING id
             """, (
                 report_id,
                 report_date,
                 item_title,
                 metric_name,
+                metric_id,
                 group_value,
                 "group", # Default group field name
                 period_type,
@@ -681,6 +701,7 @@ def generate_explanations(report_ids):
             
             # Format the data for the explainer agent
             metric_name = item["metric_name"]
+            metric_id = item["metric_id"]  # Get the metric_id from the item
             group_value = item["group_value"]
             recent_mean = item["recent_mean"]
             comparison_mean = item["comparison_mean"]
@@ -713,33 +734,14 @@ def generate_explanations(report_ids):
             direction = "increased" if delta > 0 else "decreased"
             percent_change_str = f"{abs(percent_change):.2f}%" if percent_change is not None else "unknown percentage"
             
-            prompt = f"""Please explain why the metric '{metric_name}' {direction} from {comparison_mean} to {recent_mean} ({percent_change_str}) between {previous_month} and {current_month} for district {district}.
+            prompt = f"""Please explain why the metric '{metric_name}' (ID: {metric_id})  {direction} from {comparison_mean} to {recent_mean} ({percent_change_str}) between {previous_month} and {current_month} for district {district}.
 
 Use the available tools to research this change and provide a comprehensive explanation that can be included in a monthly newsletter for city residents.
-You should first look to supervisor district and see if there are localized trends in a particular neighborhood.  If so, you should include that in your explanation.
+You should first look to supervisor district and see if there are localized trends in a particular neighborhood.  If so, you should include that in your explanation. 
 Other than thay, prefer to share anomalies or datapoints that explain a large portion of the difference in the metric.  
+If the anomaly relates to business location openings or closing, user set_dataset to get the dba_name of the businesses and share some of those.
 
-You should include charts and graphs to help explain the change. For a time series chart, use this simplified format:
-
-[CHART:time_series:metric_id:district:period_type:group:group_field_name]
-
-For example: [CHART:time_series:1:0:year]
-
-For an anomaly chart, use this simplified format:
-
-[CHART:anomaly:anomaly_id]
-
-For example: [CHART:anomaly:27338]
-
-Alternatively, you can use direct image references like this:
-
-<img src="time_series_metric_id_district_period_type.png" alt="Chart Description">
-
-For example: <img src="time_series_27323_8_month.png" alt="Violent Crime Incidents Chart">
-
-These simplified references will be automatically expanded with the full HTML when the report is generated.
-
-IMPORTANT: Your response MUST follow this structured format:
+Your response MUST follow this structured format:
 
 EXPLANATION: [Your clear explanation of what happened]
 
@@ -751,7 +753,7 @@ DO NOT include any additional content, headers, or formatting outside of this st
             
             # Process with the agent
             try:
-                logger.info(f"Running explainer agent for metric: {metric_name}")
+                logger.info(f"Running explainer agent for metric: {metric_id}")
                 # Run the agent in a non-streaming mode to get the complete response
                 response = swarm_client.run(
                     agent=anomaly_explainer_agent,
@@ -1023,7 +1025,7 @@ def generate_monthly_report(report_date=None, district="0"):
         cursor.execute("""
             SELECT *, 
                    metadata->>'anomaly_id' as anomaly_id, -- Extract potential anomaly_id from metadata
-                   0 as metric_id -- Placeholder for metric_id, needs proper retrieval logic
+                   metric_id -- Placeholder for metric_id, needs proper retrieval logic
             FROM monthly_reporting 
             WHERE report_date = %s AND district = %s
             ORDER BY priority
@@ -1079,6 +1081,7 @@ def generate_monthly_report(report_date=None, district="0"):
 
             report_data.append({
                 "metric": item["metric_name"],
+                "metric_id": item["metric_id"],
                 "group": item["group_value"],
                 "recent_mean": item["recent_mean"],
                 "comparison_mean": item["comparison_mean"],
@@ -1156,7 +1159,7 @@ INSTRUCTIONS:
 1.  **Develop a Narrative:** Explore the explanations, trends, and detailed analysis provided for each item. Identify connections, overlapping themes, or contrasting movements between different metrics. How do Citywide trends relate to District specifics, and vice versa? Build a story around the most significant developments.
 2.  **Structure the Newsletter:** Use a clear structure like this:
     *   **Catchy Headline(s):** Suggest 1-2 compelling headlines summarizing the main story (e.g., "Crime trends down in District 5 — see what changed", "Service requests spike in SoMa: What the data shows").
-    *   **Key Takeaways:** A brief paragraph summarizing the main narrative and key findings.
+    *   **Key Takeaways:** A brief paragraph summarizing the main narrative and key findings. Wrap this section in a div with class="key-takeaways" to give it a blue accent.
     *   **The Story in Data:** This is the core section. Dive deep into the prioritized metrics. Group related items together. Explain the changes, referencing the data (recent vs. comparison numbers, percentages). Incorporate the 'Detailed Analysis' and 'Trend Analysis' provided.
     *   **Context ** Here we want toget into some explanatory details in the "what" changed.  Did it happen in a paricular distirct? Was it caused by an anomaly, is it will withini its normal range? 
     *   **Looking Ahead / The TransparentSF Take:** Offer a brief conclusion, highlight what to watch in the future, or provide a concise, data-driven perspective.
@@ -1387,6 +1390,14 @@ Please create a professional, well-structured, and narrative-driven newsletter b
             border-left: 4px solid var(--ink-black);
         }}
         
+        .key-takeaways {{
+            background-color: var(--white);
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #007bff;
+        }}
+        
         .data-point {{
             color: var(--ink-black);
             font-weight: 500;
@@ -1477,35 +1488,14 @@ BRAND GUIDELINES:
 - Style: Clean and clear in design and tone, calm and credible
 
 Please review the following newsletter and make these improvements:
-1. Ensure that it matches this visual style: 
 
-
-        Clear space & minimum size guidance
-        Logo usage: light/dark backgrounds, placement rules
-
-       
-        5. Typography
-        Primary Typeface:
-        Display & Headings: Inter Bold / Inter Medium
-        Clean, modern, humanist sans-serif optimized for screen readability. Use for H1-H3 and major numeric displays.
-        Secondary Typeface:
-        Body Copy: IBM Plex Sans or Source Sans Pro Regular
-        Used for descriptions, longform content, and user interface text. Prioritizes clarity and legibility in dense information layouts.
-        Alternate & Fallback Fonts:
-        Web-safe fallback: Arial, Helvetica Neue, sans-serif
-        Typographic Hierarchy:
-        H1: Inter Bold, 36pt / 42pt line-height
-        H2: Inter Medium, 24pt / 32pt line-height
-        H3: Inter Regular, 18pt / 28pt line-height
-        Body: IBM Plex Sans, 14pt / 22pt line-height
-        Captions: IBM Plex Sans, 12pt / 18pt line-height
 
 1. Fix any grammatical or spelling errors
-2. Improve clarity and readability for a general audience
 3. Ensure consistent formatting and style
 6. Ensure the tone aligns with our brand guidelines - intelligent but accessible, civic-minded, and focused on impact
 7. Make sure the HTML formatting is clean and consistent
 8. Ensure the newsletter feels like a communication to citizens, not a formal report
+9. Remove any refereces to markdown calls for embeddd charts that remain in the file and haven't been swapped for HTML. 
 
 Here's the newsletter:
 
@@ -1613,29 +1603,55 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
         if revised_result.get("status") != "success":
             return revised_result
             
+        # Update the district's top_level.json with the revised report filename
+        try:
+            # Get the district directory path
+            script_dir = Path(__file__).parent
+            dashboard_dir = script_dir / 'output' / 'dashboard'
+            district_dir = dashboard_dir / district
+            
+            # Read the current top_level.json
+            top_level_file = district_dir / 'top_level.json'
+            if top_level_file.exists():
+                with open(top_level_file, 'r', encoding='utf-8') as f:
+                    top_level_data = json.load(f)
+                
+                # Add the revised report filename
+                top_level_data['monthly_report'] = Path(revised_result['revised_report_path']).name
+                
+                # Save the updated top_level.json
+                with open(top_level_file, 'w', encoding='utf-8') as f:
+                    json.dump(top_level_data, f, indent=2)
+                logger.info(f"Updated top_level.json for district {district} with revised report filename")
+            else:
+                logger.warning(f"top_level.json not found for district {district}")
+        except Exception as e:
+            logger.error(f"Error updating top_level.json: {str(e)}")
+            # Don't fail the process if this update fails
+            
         # Use the original newsletter path since proofreading is skipped
         revised_newsletter_path = newsletter_result.get("report_path")
         
-        # Step 6: Generate an email-compatible version of the report
-        logger.info("Step 6: Generating email-compatible version")
-        email_result = generate_email_compatible_report(revised_newsletter_path) # Use original path
-        if not email_result:
-            logger.warning("Failed to generate email-compatible report")
+        # # Step 6: Generate an email-compatible version of the report
+        # logger.info("Step 6: Generating email-compatible version")
+        # email_result = generate_email_compatible_report(revised_newsletter_path) # Use original path
+        # if not email_result:
+        #     logger.warning("Failed to generate email-compatible report")
             
-        # Step 7: Generate an inline version of the report with data URLs
-        logger.info("Step 7: Generating inline version")
-        inline_result = generate_inline_report(revised_newsletter_path) # Use original path
-        if not inline_result:
-            logger.warning("Failed to generate inline report")
+        # # Step 7: Generate an inline version of the report with data URLs
+        # logger.info("Step 7: Generating inline version")
+        # inline_result = generate_inline_report(revised_newsletter_path) # Use original path
+        # if not inline_result:
+        #     logger.warning("Failed to generate inline report")
             
         logger.info("Monthly newsletter process completed successfully")
         return {
             "status": "success",
             "newsletter_path": newsletter_result.get("report_path"),
-            "revised_newsletter_path": revised_newsletter_path, # Return original path as revised path
-            "email_newsletter_path": email_result,
-            "inline_newsletter_path": inline_result
-        }
+            "revised_newsletter_path": revised_newsletter_path # Return original path as revised path
+        #     "email_newsletter_path": email_result,
+        #     "inline_newsletter_path": inline_result
+         }
         
     except Exception as e:
         error_msg = f"Error in run_monthly_report_process: {str(e)}"
@@ -1727,7 +1743,7 @@ def get_monthly_reports_list():
 
 def delete_monthly_report(report_id):
     """
-    Delete a specific monthly newsletter file.
+    Delete a specific monthly newsletter file and its database records.
     
     Args:
         report_id: The ID of the newsletter to delete (index in the list)
@@ -1738,7 +1754,46 @@ def delete_monthly_report(report_id):
     logger.info(f"Deleting monthly newsletter with ID {report_id}")
     
     try:
-        # Get the reports directory
+        # First, get the report details from the database
+        conn = psycopg2.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            dbname=DB_NAME
+        )
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        
+        # Get the report details
+        cursor.execute("""
+            SELECT id, original_filename, revised_filename
+            FROM reports
+            WHERE id = %s
+        """, (report_id,))
+        
+        report = cursor.fetchone()
+        if not report:
+            cursor.close()
+            conn.close()
+            return {"status": "error", "message": f"Report with ID {report_id} not found in database"}
+        
+        # Delete records from monthly_reporting table
+        cursor.execute("""
+            DELETE FROM monthly_reporting
+            WHERE report_id = %s
+        """, (report_id,))
+        
+        # Delete record from reports table
+        cursor.execute("""
+            DELETE FROM reports
+            WHERE id = %s
+        """, (report_id,))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Now delete the files
         reports_dir = Path(__file__).parent / 'output' / 'reports'
         
         # Check if the directory exists
@@ -1746,24 +1801,20 @@ def delete_monthly_report(report_id):
             logger.warning(f"Reports directory does not exist: {reports_dir}")
             return {"status": "error", "message": "Reports directory not found"}
         
-        # Get the list of newsletter files (both .md and .html)
-        newsletter_files = list(reports_dir.glob("monthly_report_*.md")) + list(reports_dir.glob("monthly_report_*.html"))
+        # Delete original file
+        original_path = reports_dir / report['original_filename']
+        if original_path.exists():
+            original_path.unlink()
+            logger.info(f"Deleted original newsletter file: {original_path}")
         
-        # Sort newsletters by date (newest first) to match the order in get_monthly_reports_list
-        newsletter_files.sort(key=lambda x: x.name, reverse=True)
+        # Delete revised file if it exists
+        if report['revised_filename']:
+            revised_path = reports_dir / report['revised_filename']
+            if revised_path.exists():
+                revised_path.unlink()
+                logger.info(f"Deleted revised newsletter file: {revised_path}")
         
-        # Check if the report_id is valid
-        if report_id < 1 or report_id > len(newsletter_files):
-            return {"status": "error", "message": f"Newsletter with ID {report_id} not found"}
-        
-        # Get the file to delete (report_id is 1-indexed)
-        newsletter_path = newsletter_files[report_id - 1]
-        
-        # Delete the file
-        newsletter_path.unlink()
-        logger.info(f"Deleted newsletter file: {newsletter_path}")
-        
-        return {"status": "success", "message": f"Newsletter {newsletter_path.name} deleted successfully"}
+        return {"status": "success", "message": f"Newsletter {report['original_filename']} and its database records deleted successfully"}
         
     except Exception as e:
         error_msg = f"Error in delete_monthly_report: {str(e)}"
@@ -2351,5 +2402,5 @@ def expand_chart_references(report_path):
 if __name__ == "__main__":
     # Run the monthly report process
     # You can adjust the max_report_items to control how many items appear in the report
-    result = run_monthly_report_process(max_report_items=3, district="4")
+    result = run_monthly_report_process(max_report_items=3, district="0")
     print(json.dumps(result, indent=2, cls=PathEncoder)) 

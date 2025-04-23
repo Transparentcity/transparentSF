@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Monthly Newsletters - TransparentSF</title>
+    <title>Monthly Newsletters - WHAT'S HAPPENING IN SF?</title>
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
@@ -528,6 +528,7 @@
                     <div style="width: 150px;">
                         <label for="max-items">Max Items</label>
                         <select id="max-items" style="width: 100%;">
+                            <option value="1">1 items</option>
                             <option value="3">3 items</option>
                             <option value="5">5 items</option>
                             <option value="10">10 items</option>
@@ -552,12 +553,11 @@
             <div id="report-details" class="report-details-container">
                 <h3>Report Details</h3>
                 <div class="report-actions" style="margin-bottom: 15px;">
-                    <button id="view-full-report" class="view-btn">View Full Report</button>
-                    <button id="view-email-report" class="view-btn">View Email Version</button>
                     <button id="rerunReportBtn" class="btn btn-primary" onclick="rerunReportGeneration()">
                         Re-write newsletter
                     </button>
                     <button id="rerun-proofreading" class="action-btn">Re-run Proofreading</button>
+                    <button id="delete-report" class="action-btn delete-btn">Delete Report</button>
                 </div>
                 <div id="report-metrics"></div>
             </div>
@@ -604,6 +604,14 @@
                     console.log("Selected report:", selectedReport);
                     reportDetails.style.display = 'block';
                     loadReportDetails(selectedReport);
+                    
+                    // Set up the delete button
+                    const deleteBtn = document.getElementById('delete-report');
+                    if (deleteBtn) {
+                        deleteBtn.onclick = () => {
+                            deleteReport(selectedReport);
+                        };
+                    }
                     
                     // --- Add links for original and revised reports ---
                     const reportActionsDiv = document.getElementById('report-details').querySelector('.report-actions');
@@ -969,6 +977,63 @@
                     const rerunProofreadingBtn = document.getElementById('rerun-proofreading');
                     rerunProofreadingBtn.disabled = false;
                     rerunProofreadingBtn.textContent = 'Re-run Proofreading';
+                }
+            }
+            
+            // Function to delete a report
+            async function deleteReport(filename) {
+                if (!filename) {
+                    alert('No report selected');
+                    return;
+                }
+
+                if (!confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
+                    return;
+                }
+
+                try {
+                    const deleteBtn = document.getElementById('delete-report');
+                    deleteBtn.disabled = true;
+                    deleteBtn.innerHTML = '<span class="loading"></span> Deleting...';
+
+                    // Get the reports list to find the report ID
+                    const reportsResponse = await fetch('/backend/get_monthly_reports');
+                    const reportsData = await reportsResponse.json();
+                    
+                    if (reportsData.status !== 'success' || !reportsData.reports) {
+                        throw new Error('Failed to get reports list');
+                    }
+
+                    // Find the report with matching filename
+                    const report = reportsData.reports.find(r => r.original_filename === filename);
+                    if (!report) {
+                        throw new Error('Report not found');
+                    }
+
+                    const reportId = report.id;
+
+                    // Now delete the report using the ID
+                    const deleteResponse = await fetch(`/backend/delete_monthly_report/${reportId}`, {
+                        method: 'DELETE'
+                    });
+
+                    const deleteData = await deleteResponse.json();
+
+                    if (deleteData.status === 'success') {
+                        alert('Report deleted successfully!');
+                        // Reload the reports list
+                        loadReports();
+                        // Hide the report details
+                        reportDetails.style.display = 'none';
+                    } else {
+                        throw new Error(deleteData.message || 'Failed to delete report');
+                    }
+                } catch (error) {
+                    alert(`Error deleting report: ${error.message}`);
+                } finally {
+                    const deleteBtn = document.getElementById('delete-report');
+                    deleteBtn.disabled = false;
+                    deleteBtn.textContent = 'Delete Report';
                 }
             }
             
