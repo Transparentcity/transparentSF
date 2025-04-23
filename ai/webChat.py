@@ -362,8 +362,8 @@ def transfer_to_analyst_agent(context_variables, *args, **kwargs):
 
         - Use `query_docs(context_variables, "SFPublicData", query)` to search for datasets. The `query` parameter is a string describing the data the user is interested in. always pass the context_variables and the collection name is allways "SFPublicData"
         - Use the `transfer_to_researcher_agent` function (without any parameters) to transfer to the researcher agent. 
-        - Use `set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")` to set the dataset. Both parameters are required:
-            - endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx')
+        - Use `set_dataset(context_variables, endpoint="endpoint-id", query="your-soql-query")` to set the dataset. Both parameters are required:
+            - endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx').  If you dont't have that, get it from get_dashboard_metric()
             - query: The complete SoQL query string using standard SQL syntax
             - Always pass context_variables as the first argument
             - DO NOT pass JSON strings as arguments - pass the actual values directly
@@ -386,10 +386,15 @@ def transfer_to_analyst_agent(context_variables, *args, **kwargs):
             )
             ```
             
-            Incorrect formats that will NOT work:
-            - Don't use: set_dataset(context_variables, args={}, kwargs={...})
-            - Don't use: set_dataset(context_variables, "{...}")
-            - Don't use: set_dataset(context_variables, '{"endpoint": "x", "query": "y"}')
+            CRITICAL: The following formats are INCORRECT and will NOT work:
+            - set_dataset(context_variables, args={}, kwargs={...})  # WRONG - don't use args/kwargs
+            - set_dataset(context_variables, "{...}")  # WRONG - don't pass JSON strings
+            - set_dataset(context_variables, '{"endpoint": "x", "query": "y"}')  # WRONG - don't pass JSON strings
+            - set_dataset(context_variables, endpoint="file.json")  # WRONG - don't include .json extension
+            - set_dataset(context_variables, endpoint="business-registrations-district2.json")  # WRONG - don't include .json extension
+            
+            The ONLY correct format is:
+            set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")
             
         - Use `get_dataset(context_variables)` to retrieve the current dataset stored in context_variables:
             - This function takes only the context_variables parameter
@@ -533,21 +538,27 @@ def get_dashboard_metric(context_variables, district_number=0, metric_id=None):
                             queries_data = json.load(f)
                         
                         # Look for the metric name in the queries data
-                        for item in queries_data:
-                            if isinstance(item, dict) and 'name' in item and 'id' in item:
-                                # Check if the name matches our metric name (with or without emoji)
-                                item_name = item['name'].lower()
-                                clean_metric_name = base_metric_name.lower()
-                                
-                                # Remove emojis and special characters for comparison
-                                import re
-                                clean_item_name = re.sub(r'[^\w\s]', '', item_name).strip()
-                                clean_base_name = re.sub(r'[^\w\s]', '', clean_metric_name).strip()
-                                
-                                if clean_item_name == clean_base_name or item_name == clean_metric_name:
-                                    metric_id_number = str(item['id'])
-                                    logger.info(f"Found metric ID {metric_id_number} from dashboard_queries_enhanced.json")
-                                    break
+                        for category in queries_data.values():
+                            for subcategory in category.values():
+                                if "queries" in subcategory:
+                                    for query_name, query_data in subcategory["queries"].items():
+                                        # Check if the name matches our metric name (with or without emoji)
+                                        item_name = query_name.lower()
+                                        clean_metric_name = base_metric_name.lower()
+                                        
+                                        # Remove emojis and special characters for comparison
+                                        import re
+                                        clean_item_name = re.sub(r'[^\w\s]', '', item_name).strip()
+                                        clean_base_name = re.sub(r'[^\w\s]', '', clean_metric_name).strip()
+                                        
+                                        if clean_item_name == clean_base_name or item_name == clean_metric_name:
+                                            metric_id_number = str(query_data["id"])
+                                            # Add query information to result
+                                            result["endpoint"] = query_data.get("endpoint")
+                                            result["ytd_query"] = query_data.get("ytd_query")
+                                            result["metric_query"] = query_data.get("metric_query")
+                                            logger.info(f"Found metric ID {metric_id_number} from dashboard_queries_enhanced.json")
+                                            break
                         
                         if not metric_id_number:
                             logger.info(f"Could not find metric ID for '{base_metric_name}' in dashboard_queries_enhanced.json")
@@ -643,20 +654,28 @@ def get_dataset_columns(context_variables, endpoint=None):
     import json
     
     try:
-        logger.info(f"Getting columns for endpoint: {endpoint}")
+        logger.info(f"""
+=== get_dataset_columns called ===
+Endpoint: {endpoint}
+Context variables keys: {list(context_variables.keys())}
+""")
         
         if not endpoint:
+            logger.error("No endpoint provided")
             return {"error": "No endpoint provided"}
         
         # Clean the endpoint parameter (remove .json if present)
         endpoint = endpoint.replace('.json', '')
+        logger.info(f"Cleaned endpoint: {endpoint}")
         
         # Look for dataset metadata in data/datasets directory
         script_dir = os.path.dirname(os.path.abspath(__file__))
         datasets_dir = os.path.join(script_dir, 'data', 'datasets')
+        logger.info(f"Looking for datasets in: {datasets_dir}")
         
         # Check if the directory exists
         if not os.path.exists(datasets_dir):
+            logger.error(f"Datasets directory not found: {datasets_dir}")
             return {"error": f"Datasets directory not found: {datasets_dir}"}
         
         # Try to find a metadata file for this endpoint
@@ -665,51 +684,94 @@ def get_dataset_columns(context_variables, endpoint=None):
             os.path.join(datasets_dir, f"{endpoint}_metadata.json"),
             os.path.join(datasets_dir, f"{endpoint}_columns.json")
         ]
+        logger.info(f"Checking for metadata files: {metadata_files}")
         
         metadata_file = None
         for file_path in metadata_files:
             if os.path.exists(file_path):
                 metadata_file = file_path
+                logger.info(f"Found metadata file: {metadata_file}")
                 break
         
         if not metadata_file:
+            logger.error(f"No metadata found for endpoint: {endpoint}")
             return {"error": f"No metadata found for endpoint: {endpoint}"}
         
         # Read the metadata file
-        with open(metadata_file, 'r', encoding='utf-8') as f:
-            metadata = json.load(f)
+        try:
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            logger.info(f"""
+Successfully loaded metadata file:
+File size: {os.path.getsize(metadata_file)} bytes
+Metadata type: {type(metadata)}
+Metadata keys: {list(metadata.keys()) if isinstance(metadata, dict) else 'Not a dictionary'}
+""")
+        except Exception as e:
+            logger.error(f"Error reading metadata file: {str(e)}")
+            return {"error": f"Error reading metadata file: {str(e)}"}
         
         # Extract columns information (adapt based on your metadata structure)
         columns = []
         if isinstance(metadata, dict):
             if "columns" in metadata:
                 columns = metadata["columns"]
+                logger.info(f"Found {len(columns)} columns in 'columns' key")
             elif "fields" in metadata:
                 columns = metadata["fields"]
+                logger.info(f"Found {len(columns)} columns in 'fields' key")
+            else:
+                logger.warning(f"No 'columns' or 'fields' key found in metadata. Available keys: {list(metadata.keys())}")
         elif isinstance(metadata, list):
             columns = metadata  # Assume it's a list of column objects
+            logger.info(f"Metadata is a list with {len(columns)} items")
+        else:
+            logger.error(f"Unexpected metadata type: {type(metadata)}")
+            return {"error": f"Unexpected metadata type: {type(metadata)}"}
         
         # Return simplified column info for agent use
         column_info = []
         for col in columns:
             if isinstance(col, dict):
                 info = {
-                    "name": col.get("name", col.get("fieldName", "unknown")),
+                    "name": col.get("fieldName", col.get("name", "unknown")),
                     "type": col.get("dataTypeName", col.get("type", "unknown")),
                     "description": col.get("description", "")
                 }
                 column_info.append(info)
+            else:
+                logger.warning(f"Unexpected column type: {type(col)}")
         
-        return {
+        logger.info(f"""
+=== Column Information Summary ===
+Total columns found: {len(column_info)}
+First few columns: {column_info[:3] if column_info else 'None'}
+""")
+        
+        result = {
             "endpoint": endpoint,
             "column_count": len(column_info),
             "columns": column_info
         }
         
+        logger.info(f"""
+=== Final Result ===
+Endpoint: {result['endpoint']}
+Column count: {result['column_count']}
+Columns: {[col['name'] for col in result['columns']][:5]}... (showing first 5)
+""")
+        
+        return result
+        
     except Exception as e:
-        logger.error(f"Error getting dataset columns: {str(e)}", exc_info=True)
+        logger.error(f"""
+=== Error in get_dataset_columns ===
+Error type: {type(e).__name__}
+Error message: {str(e)}
+Stack trace:
+{traceback.format_exc()}
+""")
         return {"error": f"Failed to get dataset columns: {str(e)}"}
-
 
 def query_anomalies_db(context_variables, query_type='recent', limit=10, group_filter=None, date_start=None, date_end=None, only_anomalies=True, metric_name=None, district_filter=None, metric_id=None, period_type=None):
     """
@@ -983,10 +1045,15 @@ analyst_agent = Agent(
         )
         ```
         
-        Incorrect formats that will NOT work:
-        - Don't use: set_dataset(context_variables, args={}, kwargs={...})
-        - Don't use: set_dataset(context_variables, "{...}")
-        - Don't use: set_dataset(context_variables, '{"endpoint": "x", "query": "y"}')
+        CRITICAL: The following formats are INCORRECT and will NOT work:
+        - set_dataset(context_variables, args={}, kwargs={...})  # WRONG - don't use args/kwargs
+        - set_dataset(context_variables, "{...}")  # WRONG - don't pass JSON strings
+        - set_dataset(context_variables, '{"endpoint": "x", "query": "y"}')  # WRONG - don't pass JSON strings
+        - set_dataset(context_variables, endpoint="file.json")  # WRONG - don't include .json extension
+        - set_dataset(context_variables, endpoint="business-registrations-district2.json")  # WRONG - don't include .json extension
+        
+        The ONLY correct format is:
+        set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")
         
     - Use `get_dataset(context_variables)` to retrieve the current dataset stored in context_variables:
         - This function takes only the context_variables parameter
@@ -1027,7 +1094,7 @@ Your task is to:
 MANDATORY WORKFLOW (follow this exact sequence):
 1. FIRST, check your notes!
 2. SECOND, Query the anomalies_db for this metric and period_type and group_filter and district_filter and limit 30 and only_anomalies=True to see whats happening in this metric in this period for this group in this district. 
-3. THIRD, If there are no anomalies, get information about the metric from the dashboard_metric tool, there may be enough information there to explain the anomaly.
+3. THIRD, Get information about the metric from the dashboard_metric tool, there may be enough information there to thoroughly explain the anomaly.
 4. FOURTH, contextualize this change vs the historical data, you can use the data from get_dashboard_metric to do this. 
 5. FIFTH, if an anomaly is explanatory, then be sure to include a link to the anomaly chart, like this: 
 
@@ -1080,10 +1147,40 @@ TOOLS YOU SHOULD USE:
   USAGE: get_anomaly_details(context_variables, anomaly_id=123)
   Use this to get complete information about a specific anomaly, including its time series data and metadata.
 
-  - set_dataset: Load a dataset for analysis
-  USAGE: set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")
-  Use this to load data for further analysis when needed.
-
+ - Use `set_dataset(context_variables, endpoint="endpoint-id", query="your-soql-query")` to set the dataset. Both parameters are required:
+            - endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx').  If you dont't have that, get it from get_dashboard_metric()
+            - query: The complete SoQL query string using standard SQL syntax.  If you don't know the field names and types, use get_dataset_columns() to get the column information.
+            - Always pass context_variables as the first argument
+            - DO NOT pass JSON strings as arguments - pass the actual values directly
+            
+            SOQL Query Guidelines:
+            - Use fieldName values (not column name) in your queries
+            - Don't include FROM clauses (unlike standard SQL)
+            - Use single quotes for string values: where field_name = 'value'
+            - Don't use type casting with :: syntax
+            - Use proper date functions: date_trunc_y(), date_trunc_ym(), date_trunc_ymd()
+            - Use standard aggregation functions: sum(), avg(), min(), max(), count()
+            
+            IMPORTANT: You MUST use the EXACT function call format shown below. Do NOT modify the format or try to encode parameters as JSON strings:
+            
+            ```
+            set_dataset(
+                context_variables, 
+                endpoint="g8m3-pdis", 
+                query="select dba_name where supervisor_district = '2' AND naic_code_description = 'Retail Trade' order by business_start_date desc limit 5"
+            )
+            ```
+            
+            CRITICAL: The following formats are INCORRECT and will NOT work:
+            - set_dataset(context_variables, args={}, kwargs={...})  # WRONG - don't use args/kwargs
+            - set_dataset(context_variables, "{...}")  # WRONG - don't pass JSON strings
+            - set_dataset(context_variables, '{"endpoint": "x", "query": "y"}')  # WRONG - don't pass JSON strings
+            - set_dataset(context_variables, endpoint="file.json")  # WRONG - don't include .json extension
+            - set_dataset(context_variables, endpoint="business-registrations-district2.json")  # WRONG - don't include .json extension
+            
+            The ONLY correct format is:
+            set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")
+      
 - get_dataset: Get information about any dataset that's been loaded
   USAGE: get_dataset(context_variables)
   Use this to see what data is available for further analysis.

@@ -26,11 +26,28 @@
             padding: 20px;
         }
         
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .row {
+            display: flex;
+            justify-content: center;
+            margin: 0 auto;
+        }
+        
+        .col-12 {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
         .chart-container {
             background-color: white;
             border-radius: 8px;
-            padding: 20px;
-            margin: 0;
+            padding: 0;
+            margin: 0 auto;
             box-shadow: none;
             overflow: visible;
             position: relative;
@@ -38,10 +55,8 @@
             justify-content: center;
             align-items: center;
             width: 100%;
-            height: 100vh;
-            max-width: 900px;
-            margin-left: auto;
-            margin-right: auto;
+            max-width: 600px;
+            height: 450px;
             border: none;
             box-sizing: border-box;
         }
@@ -130,20 +145,23 @@
         #anomaly-chart {
             width: 100%;
             height: 100%;
-            min-height: 500px;
+            position: relative;
             overflow: visible;
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
             box-sizing: border-box;
         }
         
         #anomaly-plot {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100% !important;
             height: 100% !important;
-            max-width: 100% !important;
-            max-height: 100% !important;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
         
         /* Ensure Plotly elements are responsive */
@@ -159,6 +177,11 @@
             height: 100% !important;
             max-width: 100% !important;
             max-height: 100% !important;
+        }
+        
+        /* Ensure annotation text maintains its size */
+        .annotation-text {
+            font-size: 14px !important;
         }
         
         /* Ensure the container takes full height in chart section mode */
@@ -464,7 +487,7 @@
                 });
             }
             
-            // Add comparison period trace using Spruce Green
+            // Add comparison period trace using Bright Blue
             if (comparisonDates.length > 0) {
                 traces.push({
                     x: comparisonDates,
@@ -472,13 +495,13 @@
                     type: 'scatter',
                     mode: 'lines+markers',
                     name: 'Historical',
-                    line: { color: '#4A7463', width: 2 }, // Spruce Green
-                    marker: { color: '#4A7463', size: 6 },
+                    line: { color: '#007BFF', width: 2 }, // Bright Blue
+                    marker: { color: '#007BFF', size: 6 }, // Bright Blue
                     showlegend: true
                 });
             }
             
-            // Add recent period trace using Sky Blue instead of Warm Coral
+            // Add recent period trace using Bright Blue
             if (recentDates.length > 0) {
                 traces.push({
                     x: recentDates,
@@ -486,8 +509,8 @@
                     type: 'scatter',
                     mode: 'lines+markers',
                     name: 'Recent',
-                    line: { color: '#71B2CA', width: 2 }, // Sky Blue
-                    marker: { color: '#71B2CA', size: 6 },
+                    line: { color: '#007BFF', width: 2 }, // Bright Blue
+                    marker: { color: '#007BFF', size: 6 }, // Bright Blue
                     showlegend: true
                 });
             }
@@ -499,7 +522,7 @@
                     y: [comparisonValues[comparisonValues.length - 1], recentValues[0]],
                     type: 'scatter',
                     mode: 'lines',
-                    line: { color: '#71B2CA', width: 2 }, // Sky Blue, solid line (removed dash)
+                    line: { color: '#007BFF', width: 2 }, // Bright Blue
                     showlegend: false
                 });
             }
@@ -519,25 +542,31 @@
                     text: objectName,
                     font: {
                         family: 'Inter, Arial, sans-serif',
-                        size: 18,
+                        size: 12,
                         color: '#222222'
-                    }
+                    },
+                    y: 0.98, // Move title up
+                    pad: { b: 20 } // Add padding below title
                 },
                 annotations: [
                     {
-                        text: subtitleText,
+                        text: `${anomaly.anomaly.percent_change > 0 ? 'Spike' : 'Drop'} in ${subtitleText}`,
                         font: { 
                             family: 'Inter, Arial, sans-serif',
-                            size: 20,
+                            size: 14,
                             color: '#222222' // Ink Black
                         },
                         showarrow: false,
                         x: 0.5,
-                        y: 1.1, 
+                        y: 1.15,  // Move subtitle up significantly
                         xref: 'paper',
                         yref: 'paper',
                         align: 'center',
-                        html: true // Enable HTML formatting
+                        html: true, // Enable HTML formatting
+                        textangle: 0,
+                        borderpad: 4,
+                        borderwidth: 0,
+                        opacity: 1
                     }
                 ],
                 xaxis: {
@@ -646,10 +675,10 @@
                     },
                     bgcolor: 'rgba(246, 241, 234, 0.7)' // Soft Sand with transparency
                 },
-                margin: { t: 80, b: 120, l: 60, r: 60 },
-                height: null,
-                width: null,
-                autosize: true,
+                margin: { t: 70, b: 120, l: 60, r: 60 }, // Reduced top margin
+                height: null, // Remove fixed height
+                width: null, // Remove fixed width
+                autosize: true, // Enable autosize
                 paper_bgcolor: 'rgba(255, 255, 255, 0.9)', // Slightly transparent white
                 plot_bgcolor: 'rgba(255, 255, 255, 0.9)', // Slightly transparent white
                 hovermode: 'closest',
@@ -699,7 +728,7 @@
             const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
             const formattedDate = `${fullMonths[month]} ${year}`;
             
-            // Add to existing annotations array
+            // Update the annotation color to match
             layout.annotations.push({
                 text: `${formattedDate}:<br>${formatValue(lastValue)}`,
                 x: lastDate,
@@ -707,16 +736,16 @@
                 arrowhead: 2,
                 ax: -50,
                 ay: 20,
-                bgcolor: 'rgba(113, 178, 202, 0.7)', // Sky Blue with transparency
-                bordercolor: '#71B2CA', // Sky Blue
+                bgcolor: 'rgba(0, 123, 255, 0.7)', // Bright Blue with transparency
+                bordercolor: '#007BFF', // Bright Blue
                 borderwidth: 1,
                 font: { 
                     family: 'IBM Plex Sans, Arial, sans-serif',
-                    size: 12, // Increased font size
+                    size: 12,
                     color: '#222222' // Ink Black
                 },
                 showarrow: true,
-                arrowcolor: '#71B2CA', // Sky Blue
+                arrowcolor: '#007BFF', // Bright Blue
                 arrowwidth: 1,
                 arrowside: 'end',
                 axref: 'pixel',
@@ -821,7 +850,9 @@
                 toImageButtonOptions: {
                     format: 'png',
                     filename: 'anomaly_chart',
-                    scale: 2 // Increased scale for better quality
+                    height: 480,
+                    width: 600,
+                    scale: 1
                 }
             };
             
@@ -1188,7 +1219,7 @@
             embedCode += ` frameborder="0" scrolling="no"></iframe>`;
             
             if (isResponsive) {
-                embedCode = `<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">\n  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">\n    ${embedCode}\n  </div>\n</div>`;
+                embedCode = `<div style="position: relative; width: 100%; height: 0; padding-bottom: 80%;">\n  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">\n    ${embedCode}\n  </div>\n</div>`;
             }
             
             document.getElementById('embedCode').value = embedCode;

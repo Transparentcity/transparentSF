@@ -312,7 +312,7 @@
             const hasGroups = timeSeriesData.some(item => item.group_value);
             
             // Determine labels based on metadata
-            let yAxisLabel = metadata.y_axis_label || metadata.field_name || "Value";
+            let yAxisLabel = metadata.object_name || metadata.y_axis_label || "Value";
             let xAxisLabel = "Date";
             
             // Hide loading indicator

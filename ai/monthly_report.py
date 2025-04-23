@@ -1137,47 +1137,30 @@ Detailed Analysis:
                 
         current_month = report_date.strftime("%B %Y")
         
-        prompt = f"""You are tasked with creating a comprehensive, citizen-focused newsletter for {district_name} for {current_month}.
-
-This is a newsletter for all citizens of San Francisco. The tone should be intelligent but accessible, civic-minded (not partisan), transparent, and focused on impact rather than ideology. Aim for a style similar to the provided example: start with a strong statement, present the facts clearly, provide context, and offer a brief takeaway.
-
-BRAND GUIDELINES:
-- Voice: Intelligent but accessible, civic-minded (not partisan)
-- Tone: Factual, clear, non-righteous, with occasional dry wit
-- Focus: Impact over ideology, precision over polish
-- Approach: Assume no ill intention from public officials, drive accountability while being fair and data-driven.
-- Style: Clean and clear in design and tone, calm and credible
-
-DISTRICT INFORMATION:
-- District: {district_name}
-- District Official: {official_name} ({official_role})
-
-YOUR GOAL:
-Weave the selected data points below into a cohesive and engaging narrative that tells a story about what's happening in the district/city. Just the what never get into the why.  Reports could be up due to better enforcement or down due to lax enforcement.  We never know the why, so keep it dry.
-
-INSTRUCTIONS:
-1.  **Develop a Narrative:** Explore the explanations, trends, and detailed analysis provided for each item. Identify connections, overlapping themes, or contrasting movements between different metrics. How do Citywide trends relate to District specifics, and vice versa? Build a story around the most significant developments.
-2.  **Structure the Newsletter:** Use a clear structure like this:
-    *   **Catchy Headline(s):** Suggest 1-2 compelling headlines summarizing the main story (e.g., "Crime trends down in District 5 — see what changed", "Service requests spike in SoMa: What the data shows").
-    *   **Key Takeaways:** A brief paragraph summarizing the main narrative and key findings. Wrap this section in a div with class="key-takeaways" to give it a blue accent.
-    *   **The Story in Data:** This is the core section. Dive deep into the prioritized metrics. Group related items together. Explain the changes, referencing the data (recent vs. comparison numbers, percentages). Incorporate the 'Detailed Analysis' and 'Trend Analysis' provided.
-    *   **Context ** Here we want toget into some explanatory details in the "what" changed.  Did it happen in a paricular distirct? Was it caused by an anomaly, is it will withini its normal range? 
-    *   **Looking Ahead / The TransparentSF Take:** Offer a brief conclusion, highlight what to watch in the future, or provide a concise, data-driven perspective.
-3.  **Incorporate Charts Strategically:** Look for opportunities to include charts mentioned in the 'Detailed Analysis' (`report_text`) or indicated by the `Potential Chart` field for each item. Use the specific placeholder format provided (e.g., `[CHART:time_series:123:0:year]` or `[CHART:anomaly:456]`) where you think a chart would be most effective in the narrative flow. Use charts to visually support the narrative, illustrate key trends, or make comparisons clearer. Ensure charts add value and are easy to understand.  ** Important: Only include charts that are in the explanations, don't make up your own.
-4.  **Maintain Tone & Style:** Write clearly and accessibly for a general audience while maintaining data integrity. Adhere to the Brand Guidelines.
-5.  **Format as HTML:** Use appropriate HTML tags (headings, paragraphs, lists, etc.) for structure and readability.
-
-Here are the data items to build your narrative around:
-
-{report_items_text}
-
-Please create a professional, well-structured, and narrative-driven newsletter based on these instructions. Make it significantly more detailed and longer than a simple summary.
-"""
+        # Load prompt from JSON file
+        try:
+            prompts_path = Path(__file__).parent / 'data' / 'prompts.json'
+            with open(prompts_path, 'r') as f:
+                prompts = json.load(f)
+                prompt_template = prompts['monthly_report']['generate_report']['prompt']
+                system_message = prompts['monthly_report']['generate_report']['system']
+                
+                # Format the prompt with the required variables
+                prompt = prompt_template.format(
+                    district_name=district_name,
+                    current_month=current_month,
+                    official_name=official_name,
+                    official_role=official_role,
+                    report_items_text=report_items_text
+                )
+        except Exception as e:
+            logger.error(f"Error loading prompts from JSON: {e}")
+            raise
 
         # Make API call to generate the report
         response = client.chat.completions.create(
             model=AGENT_MODEL,
-            messages=[{"role": "system", "content": "You are a professional data analyst and newsletter writer for a civic transparency organization."},
+            messages=[{"role": "system", "content": system_message},
                      {"role": "user", "content": prompt}],
             temperature=0.2
         )

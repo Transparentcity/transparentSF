@@ -15,22 +15,41 @@
             background-color: #ffffff;
         }
         
-        /* Header styles with text logo */
+        /* Main container for two-column layout */
+        .main-container {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar with white/black design */
+        .sidebar {
+            flex: 0 0 220px;
+            background: #ffffff;
+            overflow-y: auto;
+            padding: 0;
+            color: #000000;
+            z-index: 10;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header styles moved to sidebar */
         .header {
             background-color: #ffffff;
-            padding: 12px 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 20px;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-            height: 70px;
+            border-bottom: 1px solid #e0e0e0;
         }
         
         /* Text Logo Styles */
         .logo-container {
             display: flex;
             align-items: center;
+            margin-bottom: 10px;
         }
         
         .logo-text {
@@ -96,34 +115,7 @@
             font-weight: 600;
             color: #666;
         }
-        
-        /* Frames layout */
-        .container {
-            display: flex;
-            height: calc(100vh - 70px); /* Account for header height */
-            overflow: hidden;
-        }
 
-        /* Sidebar with white/black design */
-        .sidebar {
-            flex: 0 0 220px;
-            background: #ffffff;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
-            overflow-y: auto;
-            padding: 20px 0;
-            color: #000000;
-            z-index: 10;
-            border-right: 1px solid rgba(0,0,0,0.1);
-        }
-
-        .main-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 25px;
-            background-color: #ffffff;
-            position: relative;
-        }
-        
         /* Navigation section headers */
         .nav-section {
             padding: 0 20px;
@@ -156,8 +148,7 @@
         }
         
         .sidebar button:hover {
-            background: #efefef;
-            transform: translateX(3px);
+            background: #f0f0f0;
         }
         
         /* Analysis buttons */
@@ -188,7 +179,7 @@
         /* Divider */
         .sidebar-divider {
             height: 1px;
-            background: rgba(0, 0, 0, 0.1);
+            background: #e0e0e0;
             margin: 15px auto;
             width: 80%;
         }
@@ -199,7 +190,7 @@
             margin: 20px 15px;
             padding: 15px;
             border-radius: 6px;
-            border: 1px solid rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
         }
         
         .disk-space h3 {
@@ -218,7 +209,7 @@
         .progress-bar {
             width: 100%;
             height: 4px;
-            background: rgba(0, 0, 0, 0.1);
+            background: #e0e0e0;
             border-radius: 2px;
             margin-top: 10px;
             overflow: hidden;
@@ -230,6 +221,15 @@
             transition: width 0.3s ease;
         }
 
+        /* Main content area */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 25px;
+            background-color: #ffffff;
+            position: relative;
+        }
+        
         /* Create iframe in main content */
         #content-frame {
             width: 100%;
@@ -242,7 +242,7 @@
         .sidebar select {
             background: #f0f0f0;
             color: #000000;
-            border: 1px solid rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
             padding: 8px;
             border-radius: 4px;
             width: 100%;
@@ -260,7 +260,7 @@
             margin-top: 20px; 
         }
         th, td { 
-            border: 1px solid #ddd; 
+            border: 1px solid #e0e0e0; 
             padding: 2px; 
             text-align: left; 
             font-size: 13px;
@@ -283,27 +283,20 @@
             transition: all 0.2s ease;
             min-width: 100px;
             margin: 0 4px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            position: relative;
-            padding-right: 30px;
         }
         .prep-btn {
             background-color: #007BFF;
-            border-color: #0056b3;
             color: white;
         }
         .run-btn {
             background-color: #28A745;
-            border-color: #1e7e34;
             color: white;
         }
         .prep-btn:hover {
             background-color: #0056b3;
-            transform: translateY(-1px);
         }
         .run-btn:hover {
             background-color: #1e7e34;
-            transform: translateY(-1px);
         }
         .button-disabled { 
             background-color: #6c757d !important; 
@@ -348,8 +341,6 @@
             width: 100%;
             height: 100%;
             background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
             z-index: 1000;
             align-items: center;
             justify-content: center;
@@ -359,7 +350,7 @@
             background: #ffffff;
             padding: 25px 40px;
             border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
             text-align: center;
             max-width: 80%;
         }
@@ -368,7 +359,7 @@
             display: inline-block;
             width: 50px;
             height: 50px;
-            border: 4px solid rgba(0, 0, 0, 0.1);
+            border: 4px solid #e0e0e0;
             border-radius: 50%;
             border-top-color: #000000;
             animation: spinner-rotate 1s linear infinite;
@@ -403,26 +394,23 @@
             height: 100%;
             overflow: auto;
             background-color: rgba(0,0,0,0.4);
-            backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
         }
         
         .modal-content {
-            background-color: #fefefe;
+            background-color: #ffffff;
             margin: 10% auto;
             padding: 0;
-            border: 1px solid #888;
+            border: 1px solid #e0e0e0;
             border-radius: 8px;
             width: 500px;
             max-width: 80%;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
             overflow: hidden;
         }
         
         .modal-header {
             padding: 15px 20px;
             background-color: #f8f8f8;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #e0e0e0;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -435,7 +423,7 @@
         }
         
         .close {
-            color: #aaa;
+            color: #666;
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
@@ -456,7 +444,7 @@
         .modal-footer {
             padding: 15px 20px;
             background-color: #f8f8f8;
-            border-top: 1px solid #eee;
+            border-top: 1px solid #e0e0e0;
             text-align: right;
         }
         
@@ -509,7 +497,7 @@
         
         .cancel-btn {
             background-color: #f0f0f0;
-            border: 1px solid #ddd;
+            border: 1px solid #e0e0e0;
             color: #333;
         }
         
@@ -521,21 +509,22 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo-container" style="cursor: pointer;" id="dashboard-logo">
-            <div class="logo-text">Transparent</div>
-            <div class="logo-box">
-                <div class="logo-box-top-right"></div>
-                <div class="logo-box-bottom-left"></div>
-                <div class="logo-box-text">SF</div>
-            </div>
-        </div>
-        <div class="beta-container">
-            <div class="beta-text">BETA</div>
-        </div>
-    </div>
-    <div class="container">
+    <div class="main-container">
         <div class="sidebar">
+            <div class="header">
+                <div class="logo-container" style="cursor: pointer;" id="dashboard-logo">
+                    <div class="logo-text">Transparent</div>
+                    <div class="logo-box">
+                        <div class="logo-box-top-right"></div>
+                        <div class="logo-box-bottom-left"></div>
+                        <div class="logo-box-text">SF</div>
+                    </div>
+                </div>
+                <div class="beta-container">
+                    <div class="beta-text">BETA</div>
+                </div>
+            </div>
+            
             <div class="nav-section">
                 <h3>Actions</h3>
             </div>
@@ -565,7 +554,7 @@
                 <h3>Logs & Notes</h3>
             </div>
             <div style="padding: 0 20px; margin-bottom: 10px;">
-                <select id="log-selector" class="version-select" style="width: 100%; background: #f0f0f0; color: #000000; border: 1px solid rgba(0,0,0,0.1); padding: 8px; border-radius: 4px;">
+                <select id="log-selector" class="version-select" style="width: 100%; background: #f0f0f0; color: #000000; border: 1px solid #e0e0e0; padding: 8px; border-radius: 4px;">
                     <option value="">Select a log file...</option>
                 </select>
                 <div id="log-info" style="font-size: 11px; color: #333333; margin-top: 5px;"></div>
@@ -593,6 +582,71 @@
             <div class="loading-spinner"></div>
             <div class="loading-text">Processing...</div>
             <div class="loading-subtext" id="loading-operation-text">Generating dashboard metrics</div>
+        </div>
+    </div>
+
+    <!-- Delete Data Modal -->
+    <div id="deleteDataModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Delete Data</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="delete-options">
+                    <h3>Output Files</h3>
+                    
+                    <div class="delete-option">
+                        <input type="checkbox" id="delete-all-output" name="delete-option">
+                        <label for="delete-all-output">All Output Files</label>
+                    </div>
+                    
+                    <div class="delete-option sub-option">
+                        <input type="checkbox" id="delete-annual" name="delete-option">
+                        <label for="delete-annual">Annual Reports</label>
+                    </div>
+                    
+                    <div class="delete-option sub-option">
+                        <input type="checkbox" id="delete-monthly" name="delete-option">
+                        <label for="delete-monthly">Monthly Reports</label>
+                    </div>
+                    
+                    <div class="delete-option sub-option">
+                        <input type="checkbox" id="delete-weekly" name="delete-option">
+                        <label for="delete-weekly">Weekly Reports</label>
+                    </div>
+                    
+                    <div class="delete-option sub-option">
+                        <input type="checkbox" id="delete-ytd" name="delete-option">
+                        <label for="delete-ytd">YTD Metrics</label>
+                    </div>
+                    
+                    <div class="delete-option sub-option">
+                        <input type="checkbox" id="delete-html" name="delete-option">
+                        <label for="delete-html">HTML Files</label>
+                    </div>
+                    
+                    <h3>Database Data</h3>
+                    
+                    <div class="delete-option">
+                        <input type="checkbox" id="delete-vectordb" name="delete-option">
+                        <label for="delete-vectordb">Vector Database</label>
+                    </div>
+                    
+                    <div class="delete-option">
+                        <input type="checkbox" id="delete-postgres" name="delete-option">
+                        <label for="delete-postgres">PostgreSQL Data</label>
+                    </div>
+                </div>
+                
+                <div class="delete-warning">
+                    <p><strong>Warning:</strong> Deleting data cannot be undone. Make sure you have backups if needed.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelDeleteBtn" class="cancel-btn">Cancel</button>
+                <button id="confirmDeleteBtn" class="confirm-btn">Delete Selected Data</button>
+            </div>
         </div>
     </div>
 
@@ -1159,70 +1213,5 @@
             });
         });
     </script>
-    
-    <!-- Delete Data Modal -->
-    <div id="deleteDataModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Delete Data</h2>
-                <span class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="delete-options">
-                    <h3>Output Files</h3>
-                    
-                    <div class="delete-option">
-                        <input type="checkbox" id="delete-all-output" name="delete-option">
-                        <label for="delete-all-output">All Output Files</label>
-                    </div>
-                    
-                    <div class="delete-option sub-option">
-                        <input type="checkbox" id="delete-annual" name="delete-option">
-                        <label for="delete-annual">Annual Reports</label>
-                    </div>
-                    
-                    <div class="delete-option sub-option">
-                        <input type="checkbox" id="delete-monthly" name="delete-option">
-                        <label for="delete-monthly">Monthly Reports</label>
-                    </div>
-                    
-                    <div class="delete-option sub-option">
-                        <input type="checkbox" id="delete-weekly" name="delete-option">
-                        <label for="delete-weekly">Weekly Reports</label>
-                    </div>
-                    
-                    <div class="delete-option sub-option">
-                        <input type="checkbox" id="delete-ytd" name="delete-option">
-                        <label for="delete-ytd">YTD Metrics</label>
-                    </div>
-                    
-                    <div class="delete-option sub-option">
-                        <input type="checkbox" id="delete-html" name="delete-option">
-                        <label for="delete-html">HTML Files</label>
-                    </div>
-                    
-                    <h3>Database Data</h3>
-                    
-                    <div class="delete-option">
-                        <input type="checkbox" id="delete-vectordb" name="delete-option">
-                        <label for="delete-vectordb">Vector Database</label>
-                    </div>
-                    
-                    <div class="delete-option">
-                        <input type="checkbox" id="delete-postgres" name="delete-option">
-                        <label for="delete-postgres">PostgreSQL Data</label>
-                    </div>
-                </div>
-                
-                <div class="delete-warning">
-                    <p><strong>Warning:</strong> Deleting data cannot be undone. Make sure you have backups if needed.</p>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button id="cancelDeleteBtn" class="cancel-btn">Cancel</button>
-                <button id="confirmDeleteBtn" class="confirm-btn">Delete Selected Data</button>
-            </div>
-        </div>
-    </div>
 </body>
 </html>

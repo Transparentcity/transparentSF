@@ -131,6 +131,22 @@ def fetch_data_from_api(query_object):
 def set_dataset(context_variables, *args, **kwargs):
     """
     Fetches data from the API and sets it in the context variables.
+    
+    Args:
+        context_variables: Dictionary to store the dataset
+        endpoint: The dataset identifier (e.g., 'ubvf-ztfx')
+        query: The complete SoQL query string
+        
+    The function can be called in two ways:
+    1. With positional arguments:
+       set_dataset(context_variables, "dataset-id", query="your-soql-query")
+    2. With keyword arguments:
+       set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")
+    3. With nested kwargs (agent style):
+       set_dataset(context_variables, args="{}", kwargs={"endpoint": "x", "query": "y"})
+        
+    Returns:
+        Dictionary with status and optional error message
     """
     logger.info("=== Starting set_dataset ===")
     logger.info(f"Args received: {args}")
@@ -138,45 +154,17 @@ def set_dataset(context_variables, *args, **kwargs):
     logger.info(f"Context variables keys: {list(context_variables.keys())}")
 
     try:
-        # Handle the JSON format with "args" and "kwargs" keys
-        if 'args' in kwargs and 'kwargs' in kwargs:
-            # Check if args is a string that looks like JSON
-            if isinstance(kwargs['args'], str) and (kwargs['args'].startswith('{') or kwargs['args'] == '{}'):
-                try:
-                    args_dict = json.loads(kwargs['args'])
-                    endpoint = args_dict.get('endpoint', '')
-                except json.JSONDecodeError:
-                    endpoint = kwargs['args']
-            else:
-                endpoint = kwargs['args']
-                
-            # Check if kwargs is a string that looks like JSON
-            if isinstance(kwargs['kwargs'], str) and kwargs['kwargs'].startswith('{'):
-                try:
-                    kwargs_dict = json.loads(kwargs['kwargs'])
-                    query = kwargs_dict.get('query', '')
-                    # If no query but endpoint exists in the kwargs_dict, use that
-                    if not query and 'endpoint' in kwargs_dict:
-                        endpoint = kwargs_dict.get('endpoint', '')
-                        query = kwargs_dict.get('query', '')
-                except json.JSONDecodeError:
-                    query = kwargs['kwargs']
-            else:
-                query = kwargs['kwargs']
-                
-            logger.info(f"Using JSON format - Endpoint: {endpoint}, Query: {query}")
-            
-        # Handle the args/kwargs syntax
-        elif len(args) >= 1 and isinstance(args[0], str):
-            endpoint = args[0]
-            query = kwargs.get('kwargs') if 'kwargs' in kwargs else kwargs.get('query')
-            logger.info(f"Using args/kwargs syntax - Endpoint: {endpoint}, Query: {query}")
+        # Handle nested kwargs structure (agent style)
+        if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
+            inner_kwargs = kwargs['kwargs']
+            endpoint = inner_kwargs.get('endpoint')
+            query = inner_kwargs.get('query')
         else:
-            # Handle named parameters syntax
-            endpoint = kwargs.get('endpoint')
+            # Handle direct kwargs or positional args
+            endpoint = args[0] if args else kwargs.get('endpoint')
             query = kwargs.get('query')
-            logger.info(f"Using named parameters - Endpoint: {endpoint}, Query: {query}")
-
+        
+        # Validate required parameters
         if not endpoint:
             logger.error("Missing endpoint parameter")
             return {'error': 'Endpoint is required', 'queryURL': None}
