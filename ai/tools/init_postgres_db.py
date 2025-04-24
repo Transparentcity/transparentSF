@@ -175,9 +175,23 @@ def init_database():
             CREATE TABLE monthly_reporting (
                 id SERIAL PRIMARY KEY,
                 report_id INTEGER NOT NULL,
-                item_title VARCHAR(255) NOT NULL,
+                report_date DATE DEFAULT CURRENT_DATE,
+                metric_name TEXT,
+                metric_id TEXT,
+                group_value TEXT,
+                group_field_name TEXT,
+                period_type TEXT DEFAULT 'month',
+                comparison_mean FLOAT,
+                recent_mean FLOAT,
+                difference FLOAT,
+                std_dev FLOAT,
+                percent_change FLOAT,
                 explanation TEXT,
+                priority INTEGER,
                 report_text TEXT,
+                district TEXT,
+                chart_data JSONB,
+                metadata JSONB,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT fk_report
@@ -189,9 +203,19 @@ def init_database():
 
         # Create indexes
         cursor.execute("""
-            CREATE INDEX idx_reports_district ON reports(district);
-            CREATE INDEX idx_reports_period_type ON reports(period_type);
-            CREATE INDEX idx_monthly_reporting_report_id ON monthly_reporting(report_id);
+            CREATE INDEX IF NOT EXISTS monthly_reporting_report_date_idx ON monthly_reporting (report_date)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS monthly_reporting_district_idx ON monthly_reporting (district)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS monthly_reporting_priority_idx ON monthly_reporting (priority)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS monthly_reporting_report_id_idx ON monthly_reporting (report_id)
         """)
 
         # Create triggers for updating timestamps

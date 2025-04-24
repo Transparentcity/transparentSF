@@ -15,6 +15,25 @@ from PIL import Image
 import time
 import re
 
+# Set up paths to look for .env file
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+possible_env_paths = [
+    os.path.join(script_dir, '.env'),  # ai/.env
+    os.path.join(project_root, '.env'),  # /.env (project root)
+    os.path.join(os.path.expanduser('~'), '.env')  # ~/.env (home directory)
+]
+
+# Try loading .env from each location
+for env_path in possible_env_paths:
+    if os.path.exists(env_path):
+        print(f"Loading environment variables from: {env_path}")
+        load_dotenv(env_path)
+        break
+
+# Import database utilities
+from tools.db_utils import get_postgres_connection, execute_with_connection, CustomJSONEncoder
+
 # Import necessary functions from other modules
 from webChat import get_dashboard_metric, anomaly_explainer_agent, swarm_client, context_variables, client, AGENT_MODEL, load_and_combine_notes
     
@@ -45,43 +64,131 @@ if not logger.handlers:
     console_handler.setLevel(logging.INFO)
     logger.addHandler(console_handler)
 
-# Also configure logging for the explainer agent
-explainer_logger = logging.getLogger('explainer_agent')
-explainer_logger.setLevel(logging.INFO)
-if not explainer_logger.handlers:
-    # Use the same file handler as the main logger
-    explainer_logger.addHandler(file_handler)
-    explainer_logger.addHandler(console_handler)
+    # Store handlers for use with other loggers
+    handlers = {
+        'file': file_handler,
+        'console': console_handler
+    }
+else:
+    # Extract existing handlers if already configured
+    handlers = {
+        'file': next((h for h in logger.handlers if isinstance(h, logging.FileHandler)), None),
+        'console': next((h for h in logger.handlers if isinstance(h, logging.StreamHandler)), None)
+    }
+
+# Configure the root logger to capture all logs
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+# Remove existing handlers to avoid duplicates
+for handler in root_logger.handlers[:]:
+    root_logger.removeHandler(handler)
+# Add our handlers
+for handler_name, handler in handlers.items():
+    if handler:
+        root_logger.addHandler(handler)
+
+# Also explicitly configure logging for the explainer agent and related modules
+log_modules = [
+    'explainer_agent',              # Explainer agent logs
+    'swarm_client',                 # Swarm client logs
+    'swarm',                        # Swarm library logs
+    'anomaly_analyzer',             # Anomaly analyzer logs
+    'tools.anomaly_detection',      # Tools module logs
+    'ai.anomalyAnalyzer',           # AI module logs
+    'tools',                        # All tools
+    'webChat',                      # Web chat agent logs
+    ''                              # Root logger (again to be sure)
+]
+
+for log_name in log_modules:
+    module_logger = logging.getLogger(log_name)
+    module_logger.setLevel(logging.INFO)
+    # Remove any existing handlers to avoid duplicates
+    for handler in module_logger.handlers[:]:
+        module_logger.removeHandler(handler)
+    # Add our handlers
+    for handler_name, handler in handlers.items():
+        if handler:
+            module_logger.addHandler(handler)
+
+logger.info("Monthly report logging initialized")
+logger.info(f"Log file path: {os.path.join(logs_dir, 'monthly_report.log')}")
 
 # Load environment variables
 load_dotenv()
 
-# Database connection parameters
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = int(os.getenv("DB_PORT", "5432"))
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
-DB_NAME = os.getenv("DB_NAME", "transparentsf")
+# Only log non-sensitive environment variables
+non_sensitive_vars = {k: v for k, v in os.environ.items() 
+                     if k.startswith('POSTGRES_') and not k.endswith('PASSWORD')}
+logger.info(f"Environment variables (excluding sensitive data): {non_sensitive_vars}")
+
+# Database connection parameters - use POSTGRES_* variables directly
+DB_HOST = os.getenv("POSTGRES_HOST", 'localhost')
+DB_PORT = os.getenv("POSTGRES_PORT", '5432')
+DB_USER = os.getenv("POSTGRES_USER", 'postgres')
+DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", 'postgres')
+DB_NAME = os.getenv("POSTGRES_DB", 'transparentsf')
+
+# Log only non-sensitive connection parameters
+logger.info(f"Using database connection parameters: HOST={DB_HOST}, PORT={DB_PORT}, USER={DB_USER}, DB={DB_NAME}")
+
+# Validate and convert DB_PORT to int if it exists
+try:
+    DB_PORT = int(DB_PORT)
+except ValueError:
+    logger.error(f"Invalid POSTGRES_PORT value: {DB_PORT}. Must be an integer.")
+    DB_PORT = 5432  # Default port
 
 # API Base URL
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+logger.info(f"Using API_BASE_URL: {API_BASE_URL}")
 
 def initialize_monthly_reporting_table():
     """
     Initialize the monthly_reporting table in PostgreSQL if it doesn't exist.
+    Also creates the reports table if it doesn't exist.
     """
-    try:
-        # Connect to database
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            dbname=DB_NAME
-        )
-        cursor = conn.cursor()
+    logger.info("Initializing tables for monthly reporting")
+    
+    def init_table_operation(connection):
+        """Inner function to initialize the tables within a connection."""
+        cursor = connection.cursor()
         
-        # Check if the table exists and get its columns
+        # First, check and create the reports table if it doesn't exist
+        logger.info("Checking if reports table exists...")
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'reports'
+            );
+        """)
+        reports_table_exists = cursor.fetchone()[0]
+        
+        if not reports_table_exists:
+            logger.info("Creating reports table...")
+            try:
+                cursor.execute("""
+                    CREATE TABLE reports (
+                        id SERIAL PRIMARY KEY,
+                        max_items INTEGER DEFAULT 10,
+                        district TEXT DEFAULT '0',
+                        period_type TEXT DEFAULT 'month',
+                        original_filename TEXT,
+                        revised_filename TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                connection.commit()
+                logger.info("Reports table created successfully")
+            except Exception as e:
+                logger.error(f"Error creating reports table: {e}")
+                connection.rollback()
+                return False
+        else:
+            logger.info("Reports table already exists")
+        
+        # Now check if the monthly_reporting table exists and get its columns
         cursor.execute("""
             SELECT column_name 
             FROM information_schema.columns 
@@ -101,7 +208,7 @@ def initialize_monthly_reporting_table():
                 "group_field_name", "period_type", "comparison_mean", 
                 "recent_mean", "difference", "std_dev", "percent_change", 
                 "explanation", "priority", "report_text", "district", 
-                "chart_data", "metadata", "created_at","metric_id"
+                "chart_data", "metadata", "created_at", "metric_id", "report_id", "item_title"
             ]
             
             missing_columns = [col for col in required_columns if col not in existing_columns]
@@ -151,21 +258,28 @@ def initialize_monthly_reporting_table():
                             cursor.execute("ALTER TABLE monthly_reporting ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
                         elif column == "metric_id":
                             cursor.execute("ALTER TABLE monthly_reporting ADD COLUMN metric_id TEXT")
+                        elif column == "report_id":
+                            cursor.execute("ALTER TABLE monthly_reporting ADD COLUMN report_id INTEGER REFERENCES reports(id) ON DELETE CASCADE")
+                        elif column == "item_title":
+                            cursor.execute("ALTER TABLE monthly_reporting ADD COLUMN item_title TEXT")
 
                     except Exception as e:
                         logger.warning(f"Error adding column {column}: {e}")
                         # Continue with other columns even if one fails
                 
-                conn.commit()
+                connection.commit()
                 logger.info("Added missing columns to monthly_reporting table")
             else:
                 logger.info("Table monthly_reporting already has all required columns")
         else:
             # Create monthly_reporting table if it doesn't exist
+            logger.info("Creating monthly_reporting table...")
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS monthly_reporting (
                     id SERIAL PRIMARY KEY,
+                    report_id INTEGER REFERENCES reports(id) ON DELETE CASCADE,
                     report_date DATE DEFAULT CURRENT_DATE,
+                    item_title TEXT,
                     metric_name TEXT,
                     metric_id TEXT,
                     group_value TEXT,
@@ -199,14 +313,30 @@ def initialize_monthly_reporting_table():
                 CREATE INDEX IF NOT EXISTS monthly_reporting_priority_idx ON monthly_reporting (priority)
             """)
             
-            conn.commit()
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS monthly_reporting_report_id_idx ON monthly_reporting (report_id)
+            """)
+            
+            connection.commit()
             logger.info("Monthly reporting table created successfully")
         
         cursor.close()
-        conn.close()
         return True
-    except Exception as e:
-        logger.error(f"Failed to initialize monthly_reporting table: {e}")
+    
+    # Execute the operation with proper connection handling
+    result = execute_with_connection(
+        operation=init_table_operation,
+        db_host=DB_HOST,
+        db_port=DB_PORT,
+        db_name=DB_NAME,
+        db_user=DB_USER,
+        db_password=DB_PASSWORD
+    )
+    
+    if result["status"] == "success":
+        return True
+    else:
+        logger.error(f"Failed to initialize tables: {result['message']}")
         return False
 
 def select_deltas_to_discuss(period_type='month', top_n=20, bottom_n=20, district=""):
@@ -231,51 +361,107 @@ def select_deltas_to_discuss(period_type='month', top_n=20, bottom_n=20, distric
         logger.info(f"Requesting top changes from: {top_url}")
         
         top_response = requests.get(top_url)
+        logger.info(f"Top changes API response status code: {top_response.status_code}")
+        
         if top_response.status_code != 200:
             error_msg = f"Failed to get top changes: Status code {top_response.status_code} - {top_response.text}"
             logger.error(error_msg)
             return {"status": "error", "message": error_msg}
         
-        top_data = top_response.json()
+        try:
+            top_data = top_response.json()
+            logger.info(f"Received top changes data: {json.dumps(top_data)[:200]}...")
+            
+            # Log more details about the returned data structure
+            if isinstance(top_data, dict):
+                logger.info(f"Top data keys: {list(top_data.keys())}")
+                if "top_results" in top_data:
+                    logger.info(f"Top results count: {len(top_data['top_results'])}")
+                    if top_data['top_results'] and len(top_data['top_results']) > 0:
+                        sample_item = top_data['top_results'][0]
+                        logger.info(f"Sample top result item keys: {list(sample_item.keys())}")
+                        logger.info(f"Sample top result item: {json.dumps(sample_item)}")
+        except Exception as e:
+            logger.error(f"Error parsing top changes response as JSON: {str(e)}")
+            logger.error(f"Raw response content: {top_response.text[:500]}")
+            raise
         
         # Use the same endpoint with negative=true for bottom changes
         bottom_url = f"{API_BASE_URL}/anomaly-analyzer/api/top-metric-changes?period_type={period_type}&limit={bottom_n}&district={district}&show_both=false&negative=true"
         logger.info(f"Requesting bottom changes from: {bottom_url}")
         
         bottom_response = requests.get(bottom_url)
+        logger.info(f"Bottom changes API response status code: {bottom_response.status_code}")
+        
         if bottom_response.status_code != 200:
             error_msg = f"Failed to get bottom changes: Status code {bottom_response.status_code} - {bottom_response.text}"
             logger.error(error_msg)
             return {"status": "error", "message": error_msg}
         
-        bottom_data = bottom_response.json()
+        try:
+            bottom_data = bottom_response.json()
+            logger.info(f"Received bottom changes data: {json.dumps(bottom_data)[:200]}...")
+            
+            # Log more details about the returned data structure
+            if isinstance(bottom_data, dict):
+                logger.info(f"Bottom data keys: {list(bottom_data.keys())}")
+                if "bottom_results" in bottom_data:
+                    logger.info(f"Bottom results count: {len(bottom_data['bottom_results'])}")
+                    if bottom_data['bottom_results'] and len(bottom_data['bottom_results']) > 0:
+                        sample_item = bottom_data['bottom_results'][0]
+                        logger.info(f"Sample bottom result item keys: {list(sample_item.keys())}")
+                        logger.info(f"Sample bottom result item: {json.dumps(sample_item)}")
+        except Exception as e:
+            logger.error(f"Error parsing bottom changes response as JSON: {str(e)}")
+            logger.error(f"Raw response content: {bottom_response.text[:500]}")
+            raise
         
         # Format the results from the API to match what we need
         top_changes = []
         for item in top_data.get("top_results", []):
-            top_changes.append({
-                "metric": item.get("object_name", "Unknown"),
-                "metric_id": item.get("object_id", "Unknown"),
-                "group": item.get("group", "All"),
-                "recent_mean": item.get("recent_value", 0),
-                "comparison_mean": item.get("previous_value", 0),
-                "difference_value": item.get("recent_value", 0) - item.get("previous_value", 0),
-                "difference": item.get("recent_value", 0) - item.get("previous_value", 0),
-                "district": district
-            })
+            try:
+                # Safely handle None values
+                recent_value = float(item.get("recent_value", 0)) if item.get("recent_value") is not None else 0
+                previous_value = float(item.get("previous_value", 0)) if item.get("previous_value") is not None else 0
+                difference = recent_value - previous_value
+                
+                top_changes.append({
+                    "metric": item.get("object_name", "Unknown"),
+                    "metric_id": item.get("object_id", "Unknown"),
+                    "group": item.get("group", "All"),
+                    "recent_mean": recent_value,
+                    "comparison_mean": previous_value,
+                    "difference_value": difference,
+                    "difference": difference,
+                    "district": district
+                })
+            except (ValueError, TypeError) as e:
+                logger.error(f"Error processing top change item: {e}")
+                logger.error(f"Problematic item data: {json.dumps(item)}")
+                continue
         
         bottom_changes = []
         for item in bottom_data.get("bottom_results", []):
-            bottom_changes.append({
-                "metric": item.get("object_name", "Unknown"),
-                "metric_id": item.get("object_id", "Unknown"),
-                "group": item.get("group", "All"),
-                "recent_mean": item.get("recent_value", 0),
-                "comparison_mean": item.get("previous_value", 0),
-                "difference_value": item.get("recent_value", 0) - item.get("previous_value", 0),
-                "difference": item.get("recent_value", 0) - item.get("previous_value", 0),
-                "district": district
-            })
+            try:
+                # Safely handle None values
+                recent_value = float(item.get("recent_value", 0)) if item.get("recent_value") is not None else 0
+                previous_value = float(item.get("previous_value", 0)) if item.get("previous_value") is not None else 0
+                difference = recent_value - previous_value
+                
+                bottom_changes.append({
+                    "metric": item.get("object_name", "Unknown"),
+                    "metric_id": item.get("object_id", "Unknown"),
+                    "group": item.get("group", "All"),
+                    "recent_mean": recent_value,
+                    "comparison_mean": previous_value,
+                    "difference_value": difference,
+                    "difference": difference,
+                    "district": district
+                })
+            except (ValueError, TypeError) as e:
+                logger.error(f"Error processing bottom change item: {e}")
+                logger.error(f"Problematic item data: {json.dumps(item)}")
+                continue
         
         # Combine results
         all_deltas = {
@@ -552,16 +738,8 @@ def store_prioritized_items(prioritized_items, period_type='month', district="0"
     if not prioritized_items or not isinstance(prioritized_items, list):
         return {"status": "error", "message": "Invalid prioritized items"}
     
-    try:
-        # Connect to database
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            dbname=DB_NAME
-        )
-        cursor = conn.cursor()
+    def store_items_operation(connection):
+        cursor = connection.cursor()
         
         # Get the current date for the report
         report_date = datetime.now().date()
@@ -652,17 +830,26 @@ def store_prioritized_items(prioritized_items, period_type='month', district="0"
             expl_length = cursor.fetchone()[0]
             logger.info(f"Stored item with ID {inserted_id}, explanation length in DB: {expl_length}")
         
-        conn.commit()
+        connection.commit()
         cursor.close()
-        conn.close()
         
         logger.info(f"Successfully stored {len(inserted_ids)} items in the database")
-        return {"status": "success", "inserted_ids": inserted_ids}
-        
-    except Exception as e:
-        error_msg = f"Error in store_prioritized_items: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return {"status": "error", "message": error_msg}
+        return inserted_ids
+    
+    # Execute the operation with proper connection handling
+    result = execute_with_connection(
+        operation=store_items_operation,
+        db_host=DB_HOST,
+        db_port=DB_PORT,
+        db_name=DB_NAME,
+        db_user=DB_USER,
+        db_password=DB_PASSWORD
+    )
+    
+    if result["status"] == "success":
+        return {"status": "success", "inserted_ids": result["result"]}
+    else:
+        return {"status": "error", "message": result["message"]}
 
 def generate_explanations(report_ids):
     """
@@ -677,16 +864,9 @@ def generate_explanations(report_ids):
     """
     logger.info(f"Generating explanations for {len(report_ids)} items")
     
-    try:
-        # Connect to database
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            dbname=DB_NAME
-        )
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    def generate_explanations_operation(connection):
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        successful_explanations = 0
         
         for report_id in report_ids:
             # Get the report item
@@ -710,13 +890,33 @@ def generate_explanations(report_ids):
             district = item["district"]
             period_type = item["period_type"]
             
-            # Calculate time periods for context
-            current_date = datetime.now()
+            # Calculate time periods for context - check the report date
+            report_date = item.get("report_date") or datetime.now().date()
+            if isinstance(report_date, str):
+                report_date = datetime.strptime(report_date, "%Y-%m-%d").date()
+            
+            # Get the current date from the report_date field or fallback to item creation date
+            current_date = report_date
+            # Correctly determine the two months for comparison
+            # 'Current month' is actually the month of the report
             current_month = current_date.strftime("%B %Y")
-            previous_month = (current_date.replace(month=current_date.month-1 if current_date.month > 1 else 12)).strftime("%B %Y")
+            
+            # 'Previous month' is the month before
+            if current_date.month == 1:  # January case
+                previous_month_date = current_date.replace(month=12, year=current_date.year-1)
+            else:
+                previous_month_date = current_date.replace(month=current_date.month-1)
+            previous_month = previous_month_date.strftime("%B %Y")
+            
+            logger.info(f"Comparing data between {previous_month} and {current_month}")
             
             # Calculate delta if not already in the item
             delta = item.get("difference", recent_mean - comparison_mean)
+            
+            # Add detailed context about the item for logging
+            logger.info(f"Generating explanation for report_id={report_id}, metric={metric_name} (ID: {metric_id}), group={group_value}")
+            logger.info(f"  Values: recent={recent_mean}, comparison={comparison_mean}, diff={difference}, percent_change={percent_change}")
+            logger.info(f"  Period: {period_type}, District: {district}")
             
             # Create a simple session for the anomaly explainer agent
             session_id = f"report_{report_id}"
@@ -747,6 +947,8 @@ EXPLANATION: [Your clear explanation of what happened]
 
 DO NOT include any additional content, headers, or formatting outside of this structure. The explanation will be extracted directly for use in a report."""
             
+            logger.info(f"Prompt for explainer agent: {prompt[:200]}...")
+            
             # Add prompt to the session
             session_data = sessions[session_id]
             session_data["messages"].append({"role": "user", "content": prompt})
@@ -762,14 +964,31 @@ DO NOT include any additional content, headers, or formatting outside of this st
                     stream=False
                 )
                 
+                # Log information about the response type and attributes
+                logger.info(f"Explainer agent response type: {type(response)}")
+                if hasattr(response, '__dict__'):
+                    logger.info(f"Response attributes: {list(response.__dict__.keys())}")
+                elif isinstance(response, dict):
+                    logger.info(f"Response keys: {list(response.keys())}")
+                
+                # Log the raw response for debugging
+                try:
+                    if hasattr(response, 'model_dump'):
+                        logger.info(f"Response model_dump: {json.dumps(response.model_dump())[:500]}...")
+                    elif isinstance(response, dict):
+                        logger.info(f"Response dict: {json.dumps(response)[:500]}...")
+                    elif hasattr(response, '__dict__'):
+                        logger.info(f"Response __dict__: {json.dumps(response.__dict__)[:500]}...")
+                    else:
+                        logger.info(f"Response string: {str(response)[:500]}...")
+                except Exception as dump_error:
+                    logger.error(f"Error dumping response for logging: {str(dump_error)}")
+                
                 explanation = ""
                 chart_data = None
                 
                 # Check if response contains content
                 if response:
-                    # Log the response type and structure
-                    logger.info(f"Response type: {type(response)}")
-                    
                     # Try to extract explanation from the response messages
                     try:
                         # Check if response has a 'messages' attribute
@@ -882,6 +1101,8 @@ DO NOT include any additional content, headers, or formatting outside of this st
                                             logger.info(f"Found explanation in dict messages[].text: {explanation[:100]}...")
                     except Exception as e:
                         logger.error(f"Error extracting explanation from response messages: {e}")
+                        logger.error(f"Problematic response: {str(response)[:200]}...")
+                        logger.error(traceback.format_exc())
                     
                     # If we still don't have an explanation, try to find chart data
                     if not explanation:
@@ -913,6 +1134,7 @@ DO NOT include any additional content, headers, or formatting outside of this st
                                             break
                         except Exception as e:
                             logger.error(f"Error extracting chart data: {e}")
+                            logger.error(f"Chart data extraction error traceback: {traceback.format_exc()}")
                 
                 # Validate the explanation
                 if explanation:
@@ -962,34 +1184,49 @@ DO NOT include any additional content, headers, or formatting outside of this st
             
             # Update the database with the detailed explanation and chart data
             if explanation:  # Only update if we have a valid explanation
-                if chart_html:
-                    cursor.execute("""
-                        UPDATE monthly_reporting
-                        SET report_text = %s, chart_data = %s
-                        WHERE id = %s
-                    """, (explanation, json.dumps({"html": str(chart_html)}), report_id))
-                    logger.info(f"Updated explanation and chart data for report ID {report_id}")
-                else:
-                    cursor.execute("""
-                        UPDATE monthly_reporting
-                        SET report_text = %s
-                        WHERE id = %s
-                    """, (explanation, report_id))
-                    logger.info(f"Updated explanation for report ID {report_id}")
+                try:
+                    if chart_html:
+                        cursor.execute("""
+                            UPDATE monthly_reporting
+                            SET report_text = %s, chart_data = %s
+                            WHERE id = %s
+                        """, (explanation, json.dumps({"html": str(chart_html)}), report_id))
+                        logger.info(f"Updated explanation and chart data for report ID {report_id}")
+                    else:
+                        cursor.execute("""
+                            UPDATE monthly_reporting
+                            SET report_text = %s
+                            WHERE id = %s
+                        """, (explanation, report_id))
+                        logger.info(f"Updated explanation for report ID {report_id}")
+                    
+                    successful_explanations += 1
+                except Exception as db_error:
+                    logger.error(f"Database error while updating explanation: {str(db_error)}")
+                    logger.error(traceback.format_exc())
             else:
                 logger.warning(f"No valid explanation to store for report ID {report_id}")
         
-        conn.commit()
+        connection.commit()
         cursor.close()
-        conn.close()
         
-        logger.info(f"Successfully generated explanations for {len(report_ids)} items")
-        return {"status": "success", "message": f"Explanations generated for {len(report_ids)} items"}
-        
-    except Exception as e:
-        error_msg = f"Error in generate_explanations: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return {"status": "error", "message": error_msg}
+        return successful_explanations
+    
+    # Execute the operation with proper connection handling
+    result = execute_with_connection(
+        operation=generate_explanations_operation,
+        db_host=DB_HOST,
+        db_port=DB_PORT,
+        db_name=DB_NAME,
+        db_user=DB_USER,
+        db_password=DB_PASSWORD
+    )
+    
+    if result["status"] == "success":
+        logger.info(f"Successfully generated explanations for {result['result']} items")
+        return {"status": "success", "message": f"Explanations generated for {result['result']} items"}
+    else:
+        return {"status": "error", "message": result["message"]}
 
 def generate_monthly_report(report_date=None, district="0"):
     """
@@ -1006,20 +1243,12 @@ def generate_monthly_report(report_date=None, district="0"):
     
     logger.info(f"Generating monthly report for district {district}")
     
-    try:
-        # Set report date to current date if not provided
-        if not report_date:
-            report_date = datetime.now().date()
-        
-        # Connect to database
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            dbname=DB_NAME
-        )
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    # Set report date to current date if not provided
+    if not report_date:
+        report_date = datetime.now().date()
+    
+    def generate_report_operation(connection):
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
         # Get all report items for this date and district, ordered by priority
         cursor.execute("""
@@ -1035,7 +1264,8 @@ def generate_monthly_report(report_date=None, district="0"):
         logger.info(f"Found {len(items)} report items for date {report_date} and district {district}")
         if not items:
             logger.warning(f"No report items found for date {report_date} and district {district}")
-            return {"status": "error", "message": "No report items found"}
+            cursor.close()
+            return None
         
         # Format the report data
         report_data = []
@@ -1095,6 +1325,8 @@ def generate_monthly_report(report_date=None, district="0"):
                 "trend_analysis": item["metadata"].get("trend_analysis", "") if item["metadata"] else "",
                 "follow_up": item["metadata"].get("follow_up", "") if item["metadata"] else ""
             })
+        
+        cursor.close()
         
         # Get district name for the report title
         district_name = f"District {district}"
@@ -1158,6 +1390,7 @@ Detailed Analysis:
             raise
 
         # Make API call to generate the report
+        logger.info("Making API call to generate report content")
         response = client.chat.completions.create(
             model=AGENT_MODEL,
             messages=[{"role": "system", "content": system_message},
@@ -1166,6 +1399,7 @@ Detailed Analysis:
         )
 
         report_text = response.choices[0].message.content
+        logger.info(f"Received report content (length: {len(report_text)})")
         
         # Once we have the report text, insert any charts if they exist
         for i, item in enumerate(report_data, 1):
@@ -1208,9 +1442,6 @@ Detailed Analysis:
                     # If we couldn't find a suitable mention, append the chart at the end
                     report_text += f"\\n\\n{chart_content_to_insert}\\n"
                     logger.info(f"Appended chart for '{item['metric']}' at the end of the report.")
-
-                # Removed the separate replace call as we insert directly now
-                # report_text = report_text.replace(chart_placeholder, item['chart_html'])
         
         # Create directory for reports if it doesn't exist
         reports_dir = Path(__file__).parent / 'output' / 'reports'
@@ -1434,12 +1665,24 @@ Detailed Analysis:
             f.write(html_content)
         
         logger.info(f"Monthly newsletter saved to {report_path}")
-        return {"status": "success", "report_path": str(report_path)}
-        
-    except Exception as e:
-        error_msg = f"Error in generate_monthly_report: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return {"status": "error", "message": error_msg}
+        return str(report_path)
+    
+    # Execute the operation with proper connection handling
+    result = execute_with_connection(
+        operation=generate_report_operation,
+        db_host=DB_HOST,
+        db_port=DB_PORT,
+        db_name=DB_NAME,
+        db_user=DB_USER,
+        db_password=DB_PASSWORD
+    )
+    
+    if result["status"] == "success" and result["result"]:
+        return {"status": "success", "report_path": result["result"]}
+    elif result["status"] == "success" and not result["result"]:
+        return {"status": "error", "message": "No report items found"}
+    else:
+        return {"status": "error", "message": result["message"]}
 
 def proofread_and_revise_report(report_path):
     """
@@ -1650,16 +1893,8 @@ def get_monthly_reports_list():
     """
     logger.info("Getting list of monthly newsletters from database")
     
-    try:
-        # Connect to database
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            dbname=DB_NAME
-        )
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    def get_reports_operation(connection):
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
         # Query the reports table
         cursor.execute("""
@@ -1715,13 +1950,22 @@ def get_monthly_reports_list():
             })
         
         cursor.close()
-        conn.close()
-        
         return formatted_reports
-        
-    except Exception as e:
-        error_msg = f"Error in get_monthly_reports_list: {str(e)}"
-        logger.error(error_msg, exc_info=True)
+    
+    # Execute the operation with proper connection handling
+    result = execute_with_connection(
+        operation=get_reports_operation,
+        db_host=DB_HOST,
+        db_port=DB_PORT,
+        db_name=DB_NAME,
+        db_user=DB_USER,
+        db_password=DB_PASSWORD
+    )
+    
+    if result["status"] == "success":
+        return result["result"]
+    else:
+        logger.error(f"Error getting monthly reports: {result['message']}")
         return []
 
 def delete_monthly_report(report_id):
@@ -1736,16 +1980,8 @@ def delete_monthly_report(report_id):
     """
     logger.info(f"Deleting monthly newsletter with ID {report_id}")
     
-    try:
-        # First, get the report details from the database
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            dbname=DB_NAME
-        )
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    def delete_report_operation(connection):
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
         # Get the report details
         cursor.execute("""
@@ -1757,8 +1993,7 @@ def delete_monthly_report(report_id):
         report = cursor.fetchone()
         if not report:
             cursor.close()
-            conn.close()
-            return {"status": "error", "message": f"Report with ID {report_id} not found in database"}
+            return None
         
         # Delete records from monthly_reporting table
         cursor.execute("""
@@ -1772,11 +2007,30 @@ def delete_monthly_report(report_id):
             WHERE id = %s
         """, (report_id,))
         
-        conn.commit()
+        connection.commit()
         cursor.close()
-        conn.close()
         
-        # Now delete the files
+        return dict(report)
+    
+    # Execute the operation with proper connection handling
+    result = execute_with_connection(
+        operation=delete_report_operation,
+        db_host=DB_HOST,
+        db_port=DB_PORT,
+        db_name=DB_NAME,
+        db_user=DB_USER,
+        db_password=DB_PASSWORD
+    )
+    
+    if result["status"] != "success":
+        return {"status": "error", "message": result["message"]}
+    
+    if not result["result"]:
+        return {"status": "error", "message": f"Report with ID {report_id} not found in database"}
+    
+    # Now delete the files
+    try:
+        report = result["result"]
         reports_dir = Path(__file__).parent / 'output' / 'reports'
         
         # Check if the directory exists
@@ -1798,9 +2052,8 @@ def delete_monthly_report(report_id):
                 logger.info(f"Deleted revised newsletter file: {revised_path}")
         
         return {"status": "success", "message": f"Newsletter {report['original_filename']} and its database records deleted successfully"}
-        
     except Exception as e:
-        error_msg = f"Error in delete_monthly_report: {str(e)}"
+        error_msg = f"Error deleting newsletter files: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return {"status": "error", "message": error_msg}
 
