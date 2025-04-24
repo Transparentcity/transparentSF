@@ -110,6 +110,15 @@ def get_date_ranges(target_date=None, query=None):
         else:
             last_year_end = target_date.replace(year=last_year).strftime('%Y-%m-%d')
     
+    # Ensure this_year_end is never later than yesterday
+    yesterday = datetime.now().date() - timedelta(days=1)
+    yesterday_str = yesterday.strftime('%Y-%m-%d')
+    if this_year_end > yesterday_str:
+        logger.info(f"Capping this_year_end date to yesterday: {this_year_end} -> {yesterday_str}")
+        this_year_end = yesterday_str
+        # Also adjust last_year_end to maintain the same day of year
+        last_year_end = yesterday.replace(year=yesterday.year-1).strftime('%Y-%m-%d')
+    
     logger.info(f"Date ranges: this_year={this_year_start} to {this_year_end}, last_year={last_year_start} to {last_year_end}")
     
     return {
@@ -221,9 +230,15 @@ def debug_query(query, endpoint, date_ranges, query_name=None):
                     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
                     max_date = df[date_col].max()
                     if pd.notnull(max_date):
-                        max_date_str = max_date.strftime('%Y-%m-%d')
-                        logger.info(f"Max date determined from {date_col}: {max_date_str}")
+                        max_date = max_date.strftime('%Y-%m-%d')
+                        logger.info(f"Max date determined from {date_col}: {max_date}")
                         break
+            
+            # Cap max_date to yesterday
+            yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            if max_date and max_date > yesterday:
+                logger.info(f"Capping max date from query results to yesterday: {max_date} -> {yesterday}")
+                max_date = yesterday
     else:
         logger.error("Query failed or no data returned")
         if 'error' in result:
@@ -339,6 +354,12 @@ def process_query_for_district(query, endpoint, date_ranges, query_name=None):
                         max_date = max_date.strftime('%Y-%m-%d')
                         logger.info(f"Max date determined from {date_col}: {max_date}")
                         break
+            
+            # Cap max_date to yesterday
+            yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            if max_date and max_date > yesterday:
+                logger.info(f"Capping max date from query results to yesterday: {max_date} -> {yesterday}")
+                max_date = yesterday
             
             if has_district:
                 is_response_time = query_name and ('response time' in query_name.lower() or 'response (minutes)' in query_name.lower())
@@ -483,6 +504,14 @@ def process_ytd_trend_query(query, endpoint, date_ranges=None, target_date=None,
             if pd.notnull(last_data_date):
                 last_data_date_str = last_data_date.strftime('%Y-%m-%d')
                 logger.info(f"Found last data date from trend data: {last_data_date_str}")
+                
+                # Ensure last_data_date is not later than yesterday
+                yesterday = datetime.now() - timedelta(days=1)
+                yesterday_str = yesterday.strftime('%Y-%m-%d')
+                if last_data_date_str > yesterday_str:
+                    logger.info(f"Capping last data date from trend data to yesterday: {last_data_date_str} -> {yesterday_str}")
+                    last_data_date_str = yesterday_str
+                    last_data_date = yesterday
                 
                 # Update date ranges if needed
                 if last_data_date_str < date_ranges['this_year_end']:
@@ -650,6 +679,14 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                             # Convert max_date to datetime for manipulation
                             max_date_dt = datetime.strptime(max_date, '%Y-%m-%d')
                             today = datetime.now()
+                            yesterday = today - timedelta(days=1)
+                            yesterday_str = yesterday.strftime('%Y-%m-%d')
+                            
+                            # Cap max_date to yesterday
+                            if max_date > yesterday_str:
+                                logger.info(f"Capping max date to yesterday: {max_date} -> {yesterday_str}")
+                                max_date = yesterday_str
+                                max_date_dt = yesterday
                             
                             # If max_date is in the future, set it to last day of previous month
                             if max_date_dt > today:
@@ -740,6 +777,12 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                         # Update metadata with the most recent data date
                         if metrics['metadata']['data_as_of'] is None or (metric_last_data_date and metric_last_data_date > metrics['metadata']['data_as_of']):
                             metrics['metadata']['data_as_of'] = metric_last_data_date
+                        
+                        # Ensure data_as_of is never later than yesterday
+                        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+                        if metrics['metadata']['data_as_of'] and metrics['metadata']['data_as_of'] > yesterday:
+                            logger.info(f"Capping data_as_of date to yesterday: {metrics['metadata']['data_as_of']} -> {yesterday}")
+                            metrics['metadata']['data_as_of'] = yesterday
                         
                         # Add citywide metric
                         if '0' in results:
@@ -840,7 +883,9 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                         "id": metric['id'],
                         "lastYear": metric['lastYear'],
                         "thisYear": metric['thisYear'],
-                        "lastDataDate": metric['lastDataDate']
+                        "lastDataDate": metric['lastDataDate'],
+                        "queries": metric['queries'],
+                        "metadata": metric.get('metadata', {})
                     }
                     
                     # Add numeric_id if it exists
@@ -865,7 +910,8 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                         "lastYear": metric['lastYear'],
                         "thisYear": metric['thisYear'],
                         "lastDataDate": metric['lastDataDate'],
-                        "queries": metric['queries']
+                        "queries": metric['queries'],
+                        "metadata": metric.get('metadata', {})
                     }
                     
                     # Add numeric_id if it exists
@@ -1329,10 +1375,7 @@ def process_single_metric(metric_id, period_type='ytd'):
                     "lastYear": metric_data['lastYear'],
                     "thisYear": metric_data['thisYear'],
                     "lastDataDate": metric_data['lastDataDate'],
-                    "metadata": {
-                        "ytd_query": metric_data['queries'].get('ytd_query', ''),
-                        "metric_query": metric_data['queries'].get('metric_query', '')
-                    }
+                    "metadata": metric_data['metadata']
                 }
                 
                 # Add numeric_id if it exists
