@@ -626,6 +626,11 @@
                         <label for="delete-html">HTML Files</label>
                     </div>
                     
+                    <div class="delete-option sub-option">
+                        <input type="checkbox" id="delete-charts" name="delete-option">
+                        <label for="delete-charts">Chart Images</label>
+                    </div>
+                    
                     <h3>Database Data</h3>
                     
                     <div class="delete-option">
@@ -636,6 +641,13 @@
                     <div class="delete-option">
                         <input type="checkbox" id="delete-postgres" name="delete-option">
                         <label for="delete-postgres">PostgreSQL Data</label>
+                    </div>
+                    
+                    <h3>System Data</h3>
+                    
+                    <div class="delete-option">
+                        <input type="checkbox" id="delete-logs" name="delete-option">
+                        <label for="delete-logs">Log Files (except webchat.log)</label>
                     </div>
                 </div>
                 
@@ -1050,7 +1062,7 @@
             deleteAllOutput.addEventListener('change', function() {
                 const outputCheckboxes = [
                     'delete-annual', 'delete-monthly', 'delete-weekly', 
-                    'delete-ytd', 'delete-html'
+                    'delete-ytd', 'delete-html', 'delete-charts'
                 ].map(id => document.getElementById(id));
                 
                 // Check/uncheck all output options based on the "All Output" checkbox
@@ -1106,6 +1118,9 @@
                             case 'delete-html':
                                 endpoint = '/backend/clear-html-files';
                                 break;
+                            case 'delete-charts':
+                                endpoint = '/backend/clear-chart-files';
+                                break;
                             case 'delete-all-output':
                                 endpoint = '/backend/clear-all-output';
                                 break;
@@ -1114,6 +1129,9 @@
                                 break;
                             case 'delete-postgres':
                                 endpoint = '/backend/clear-postgres-data';
+                                break;
+                            case 'delete-logs':
+                                endpoint = '/backend/clear-logs';
                                 break;
                         }
                         

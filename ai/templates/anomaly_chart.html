@@ -143,14 +143,14 @@
         }
         
         #anomaly-chart {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            overflow: visible;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            box-sizing: border-box;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            width: calc(100% - 40px);
+            height: calc(100% - 40px);
+            overflow: hidden;
         }
         
         #anomaly-plot {
@@ -170,6 +170,7 @@
             height: 100% !important;
             max-width: 100% !important;
             max-height: 100% !important;
+            padding:10px;
         }
         
         .main-svg {
@@ -198,7 +199,6 @@
             height: 100%;
             padding: 0;
             margin: 0;
-            max-width: none;
         }
         
         body.chart-section-mode .row,
@@ -206,6 +206,23 @@
             height: 100%;
             margin: 0;
             padding: 0;
+        }
+        
+        /* Fix for iframe embedding */
+        body.chart-section-mode .chart-container {
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+
+        body.chart-section-mode #anomaly-chart {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
         }
     </style>
 </head>
@@ -429,31 +446,19 @@
             // Create a container for the chart
             const chartElement = document.getElementById('anomaly-chart');
             chartElement.innerHTML = ''; // Clear existing content
-            chartElement.style.display = 'flex';
-            chartElement.style.justifyContent = 'center';
-            chartElement.style.alignItems = 'center';
-            chartElement.style.width = '100%';
             
-            // Create a container for the chart and caption
-            const chartAndCaptionContainer = document.createElement('div');
-            chartAndCaptionContainer.style.width = '100%';
-            chartAndCaptionContainer.style.display = 'flex';
-            chartAndCaptionContainer.style.flexDirection = 'column';
-            chartAndCaptionContainer.style.alignItems = 'center';
-            chartAndCaptionContainer.style.position = 'relative';
-            chartAndCaptionContainer.style.zIndex = '1';
-            chartAndCaptionContainer.style.padding = '0 0 20px 0'; // Remove top padding
-            chartElement.appendChild(chartAndCaptionContainer);
+            // Check if we're in chart section mode (embedded)
+            const isChartSection = window.location.hash === '#chart-section';
             
             // Create a new div for the actual chart
             const plotDiv = document.createElement('div');
             plotDiv.id = 'anomaly-plot';
-            plotDiv.style.width = '480px';
-            plotDiv.style.maxWidth = '480px'; // Set default width to 480px
-            plotDiv.style.height = '480px';
-            plotDiv.style.margin = '0 auto';
-            plotDiv.style.position = 'relative';
-            chartAndCaptionContainer.appendChild(plotDiv);
+            plotDiv.style.width = '100%';
+            plotDiv.style.height = '100%';
+            plotDiv.style.position = 'absolute';
+            plotDiv.style.top = '0';
+            plotDiv.style.left = '0';
+            chartElement.appendChild(plotDiv);
             
             // Create traces for the chart
             const traces = [];
@@ -846,13 +851,11 @@
             
             const config = {
                 responsive: true,
-                displayModeBar: false,
+                displayModeBar: !isChartSection,
                 toImageButtonOptions: {
                     format: 'png',
                     filename: 'anomaly_chart',
-                    height: 480,
-                    width: 600,
-                    scale: 1
+                    scale: 2
                 }
             };
             
@@ -865,6 +868,14 @@
                         Plotly.Plots.resize(plotElement);
                     }
                 });
+                
+                // Force a resize to ensure proper initial rendering
+                setTimeout(() => {
+                    const plotElement = document.getElementById('anomaly-plot');
+                    if (plotElement) {
+                        Plotly.Plots.resize(plotElement);
+                    }
+                }, 100);
             });
             
             // Apply styling directly without setTimeout
@@ -1055,6 +1066,7 @@
             const datasfLink = document.getElementById('datasf-link');
             const shareBtn = document.getElementById('share-btn');
             const embedBtn = document.getElementById('embed-btn');
+            const backButton = document.querySelector('a[href="javascript:history.back()"]');
             
             // Add or remove chart-section-mode class on body
             document.body.classList.toggle('chart-section-mode', isChartSection);
@@ -1068,15 +1080,16 @@
                 if (datasfLink) datasfLink.style.display = 'none';
                 if (shareBtn) shareBtn.style.display = 'none';
                 if (embedBtn) embedBtn.style.display = 'none';
+                if (backButton) backButton.style.display = 'none';
                 
-                // Add padding to chart container to ensure corner accents are visible
+                // Set chart container to maintain aspect ratio
                 const chartContainer = document.getElementById('chart-section');
                 if (chartContainer) {
                     chartContainer.style.margin = '0';
+                    chartContainer.style.padding = '0';
+                    chartContainer.style.width = '100%';
                     chartContainer.style.height = '100%';
-                    chartContainer.style.display = 'flex';
-                    chartContainer.style.justifyContent = 'center';
-                    chartContainer.style.alignItems = 'center';
+                    chartContainer.style.maxHeight = 'none';
                     
                     // Add permalink button to chart section
                     let permalinkBtn = document.getElementById('chart-section-permalink');
@@ -1098,29 +1111,10 @@
                         permalinkBtn.innerHTML = '<i class="fas fa-share-alt me-1"></i>Share';
                         permalinkBtn.onclick = function() {
                             const fullUrl = window.location.href.split('#')[0];
-                            if (navigator.share) {
-                                navigator.share({
-                                    title: 'TransparentSF Chart',
-                                    text: 'Check out this chart from TransparentSF',
-                                    url: fullUrl
-                                }).catch(err => {
-                                    console.error('Error sharing:', err);
-                                    // Fallback to copying to clipboard
-                                    copyToClipboard(fullUrl);
-                                });
-                            } else {
-                                // Fallback to copying to clipboard
-                                copyToClipboard(fullUrl);
-                            }
+                            copyToClipboard(fullUrl);
                         };
                         chartContainer.appendChild(permalinkBtn);
                     }
-                }
-                
-                // Hide the chart caption
-                const chartCaption = document.querySelector('.chart-caption');
-                if (chartCaption) {
-                    chartCaption.style.display = 'none';
                 }
                 
                 // Update chart size to fit container
@@ -1128,15 +1122,38 @@
                 if (plotElement) {
                     Plotly.Plots.resize(plotElement);
                 }
+                
+                // Send chart height to parent window
+                const sendHeight = () => {
+                    const chartElement = document.getElementById('anomaly-chart');
+                    if (chartElement) {
+                        // Use a square aspect ratio for anomaly charts
+                        const width = chartElement.offsetWidth;
+                        const height = width;
+                        window.parent.postMessage({
+                            type: 'chartHeight',
+                            height: height
+                        }, '*'); // Allow any origin for embedding
+                    }
+                };
+                
+                // Send height initially and after any changes
+                sendHeight();
+                const observer = new ResizeObserver(sendHeight);
+                const chartElement = document.getElementById('anomaly-chart');
+                if (chartElement) {
+                    observer.observe(chartElement);
+                }
             } else {
                 // Show all elements
                 if (header) header.style.display = 'block';
                 if (metadata) metadata.style.display = 'block';
-                if (buttons) buttons.style.display = 'block';
+                if (buttons) buttons.style.display = 'flex';
                 if (embedModal) embedModal.style.display = 'block';
                 if (datasfLink) datasfLink.style.display = 'block';
                 if (shareBtn) shareBtn.style.display = 'block';
                 if (embedBtn) embedBtn.style.display = 'block';
+                if (backButton) backButton.style.display = 'block';
                 
                 // Remove permalink button if it exists
                 const permalinkBtn = document.getElementById('chart-section-permalink');
@@ -1144,20 +1161,14 @@
                     permalinkBtn.remove();
                 }
                 
-                // Show the chart caption
-                const chartCaption = document.querySelector('.chart-caption');
-                if (chartCaption) {
-                    chartCaption.style.display = 'block';
-                }
-                
                 // Reset chart container styles
                 const chartContainer = document.getElementById('chart-section');
                 if (chartContainer) {
                     chartContainer.style.margin = '';
+                    chartContainer.style.padding = '';
+                    chartContainer.style.width = '';
                     chartContainer.style.height = '';
-                    chartContainer.style.display = '';
-                    chartContainer.style.justifyContent = '';
-                    chartContainer.style.alignItems = '';
+                    chartContainer.style.maxHeight = '';
                 }
             }
         }
@@ -1205,10 +1216,10 @@
         // Function to update the embed code based on current settings
         function updateEmbedCode() {
             const width = document.getElementById('widthInput').value;
-            const height = document.getElementById('heightInput').value;
+            const height = document.getElementById('heightInput').value || width; // Default to same as width for square aspect ratio
             const isResponsive = document.getElementById('responsiveCheck').checked;
             
-            let embedCode = `<iframe src="${window.location.href}"`;
+            let embedCode = `<iframe src="${window.location.href.split('#')[0]}#chart-section"`;
             
             if (isResponsive) {
                 embedCode += ` style="width: 100%; height: 100%; border: none;"`;
@@ -1219,7 +1230,8 @@
             embedCode += ` frameborder="0" scrolling="no"></iframe>`;
             
             if (isResponsive) {
-                embedCode = `<div style="position: relative; width: 100%; height: 0; padding-bottom: 80%;">\n  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">\n    ${embedCode}\n  </div>\n</div>`;
+                // Use square aspect ratio (100%) for anomaly charts 
+                embedCode = `<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%;">\n  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">\n    ${embedCode}\n  </div>\n</div>`;
             }
             
             document.getElementById('embedCode').value = embedCode;

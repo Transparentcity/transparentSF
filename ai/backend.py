@@ -4297,3 +4297,93 @@ async def get_postgres_tables():
     except Exception as e:
         logger.error(f"Error getting PostgreSQL tables: {str(e)}")
         raise HTTPException(status_code=500, detail="Error getting PostgreSQL tables")
+
+@router.post("/clear-chart-files")
+async def clear_chart_files():
+    """Delete all chart image files (chart*.png) from the output directory and its subdirectories."""
+    logger.debug("Clear chart files called")
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        output_dir = os.path.join(script_dir, 'output')
+        
+        # Count of deleted files
+        deleted_count = 0
+        
+        # Walk through all subdirectories
+        for root, _, files in os.walk(output_dir):
+            for file in files:
+                if file.startswith('chart') and file.endswith('.png'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        os.remove(file_path)
+                        deleted_count += 1
+                        logger.debug(f"Deleted chart file: {file_path}")
+                    except Exception as e:
+                        logger.error(f"Error deleting chart file {file_path}: {str(e)}")
+        
+        logger.info(f"Successfully deleted {deleted_count} chart image files")
+        return JSONResponse({
+            "status": "success",
+            "message": f"Successfully deleted {deleted_count} chart image files"
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error clearing chart files: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        })
+
+
+@router.post("/clear-logs")
+async def clear_logs():
+    """Truncate all log files in the logs directory except for webchat.log."""
+    logger.debug("Clear logs called")
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        logs_dir = os.path.join(script_dir, 'logs')
+        
+        # Count of truncated files
+        truncated_count = 0
+        
+        # Check if directory exists
+        if not os.path.exists(logs_dir):
+            logger.debug(f"Logs directory does not exist: {logs_dir}")
+            return JSONResponse({
+                "status": "success",
+                "message": "No log files to truncate"
+            })
+        
+        # Get all log files
+        log_files = [f for f in os.listdir(logs_dir) 
+                     if os.path.isfile(os.path.join(logs_dir, f)) and 
+                     (f.endswith('.log') or f.endswith('.txt'))]
+        
+        # Truncate each log file except webchat.log
+        for file in log_files:
+            if file.lower() == 'webchat.log':
+                logger.debug(f"Skipping webchat.log")
+                continue
+                
+            file_path = os.path.join(logs_dir, file)
+            try:
+                # Truncate file (open in write mode and close immediately)
+                with open(file_path, 'w') as f:
+                    pass
+                truncated_count += 1
+                logger.debug(f"Truncated log file: {file_path}")
+            except Exception as e:
+                logger.error(f"Error truncating log file {file_path}: {str(e)}")
+        
+        logger.info(f"Successfully truncated {truncated_count} log files")
+        return JSONResponse({
+            "status": "success",
+            "message": f"Successfully truncated {truncated_count} log files (webchat.log preserved)"
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error clearing log files: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        })

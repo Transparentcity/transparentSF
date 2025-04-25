@@ -538,14 +538,11 @@ def prioritize_deltas(deltas, max_items=10):
 Given the following list of metrics with significant changes, identify EXACTLY {max_items} most important items to highlight in a monthly newsletter.
 
 Consider these factors when prioritizing:
-1. Magnitude of the change (both absolute and percentage)
-2. Public importance of the metric (e.g., crime most important, then public safety, then housing, then the rest)
-3. Something intersting or newsworthy about the change
+1. Magnitude of the change (both absolute and percentage)  higher is better
+2. Public importance of the metric (e.g., crime most important, then public safety, then housing, then the rest) higher is better
+3. Compare the direction of the change with teh Year to Date info about the metrtic.  Same direction is better. 
+4.- Represents a new development that requires special attention
 
-Additionally, review the year-to-date metrics and notes provided below to determine if each change:
-- Represents a counter-trend (reversing previous patterns), if so choose it only if it is outside of it's normal range.  In other words don't alarm people about a recent uptick in crime if its still far lower than it has been in the past asn is well within its normal range. 
-- Continues a broader trend already in progress
-- Represents a new development that requires special attention
 
 RECENT CHANGES:
 {changes_text}
@@ -895,20 +892,23 @@ def generate_explanations(report_ids):
             if isinstance(report_date, str):
                 report_date = datetime.strptime(report_date, "%Y-%m-%d").date()
             
-            # Get the current date from the report_date field or fallback to item creation date
-            current_date = report_date
-            # Correctly determine the two months for comparison
-            # 'Current month' is actually the month of the report
-            current_month = current_date.strftime("%B %Y")
-            
-            # 'Previous month' is the month before
-            if current_date.month == 1:  # January case
-                previous_month_date = current_date.replace(month=12, year=current_date.year-1)
+            # Get the previous month's date (the more recent month in the comparison)
+            if report_date.month == 1:  # January case
+                previous_month_date = report_date.replace(month=12, year=report_date.year-1)
             else:
-                previous_month_date = current_date.replace(month=current_date.month-1)
-            previous_month = previous_month_date.strftime("%B %Y")
+                previous_month_date = report_date.replace(month=report_date.month-1)
             
-            logger.info(f"Comparing data between {previous_month} and {current_month}")
+            # Get the month before the previous month (the earlier month in the comparison)
+            if previous_month_date.month == 1:  # January case
+                comparison_month_date = previous_month_date.replace(month=12, year=previous_month_date.year-1)
+            else:
+                comparison_month_date = previous_month_date.replace(month=previous_month_date.month-1)
+            
+            # Format the month names
+            recent_month = previous_month_date.strftime("%B %Y")
+            previous_month = comparison_month_date.strftime("%B %Y")
+            
+            logger.info(f"Comparing data between {previous_month} and {recent_month}")
             
             # Calculate delta if not already in the item
             delta = item.get("difference", recent_mean - comparison_mean)
@@ -934,7 +934,7 @@ def generate_explanations(report_ids):
             direction = "increased" if delta > 0 else "decreased"
             percent_change_str = f"{abs(percent_change):.2f}%" if percent_change is not None else "unknown percentage"
             
-            prompt = f"""Please explain why the metric '{metric_name}' (ID: {metric_id})  {direction} from {comparison_mean} to {recent_mean} ({percent_change_str}) between {previous_month} and {current_month} for district {district}.
+            prompt = f"""Please explain why the metric '{metric_name}' (ID: {metric_id})  {direction} from {comparison_mean} to {recent_mean} ({percent_change_str}) between {previous_month} and {recent_month} for district {district}.
 
 Use the available tools to research this change and provide a comprehensive explanation that can be included in a monthly newsletter for city residents.
 You should first look to supervisor district and see if there are localized trends in a particular neighborhood.  If so, you should include that in your explanation. 
@@ -1155,7 +1155,7 @@ DO NOT include any additional content, headers, or formatting outside of this st
                         logger.info(f"Using existing explanation from prioritization step: {explanation[:100]}...")
                     else:
                         # If there's no explanation at all, create a generic one
-                        explanation = f"Unable to generate an automated explanation for the change in {metric_name} ({percent_change_str}) between {previous_month} and {current_month}."
+                        explanation = f"Unable to generate an automated explanation for the change in {metric_name} ({percent_change_str}) between {previous_month} and {recent_month}."
                 
             except Exception as e:
                 logger.error(f"Error running explainer agent: {str(e)}", exc_info=True)
@@ -1366,8 +1366,15 @@ Detailed Analysis:
 """
             if item['chart_html']:
                 report_items_text += f"Chart Available: Yes\n"
-                
-        current_month = report_date.strftime("%B %Y")
+        
+        # Calculate the month for the report title (the more recent month in the comparison)
+        if report_date.month == 1:  # January case
+            report_month_date = report_date.replace(month=12, year=report_date.year-1)
+        else:
+            report_month_date = report_date.replace(month=report_date.month-1)
+            
+        # Format the month name for the report title
+        current_month = report_month_date.strftime("%B %Y")
         
         # Load prompt from JSON file
         try:
@@ -1652,10 +1659,11 @@ Detailed Analysis:
             <div class="logo-box-text">SF</div>
         </div>
     </div>
+    <div class="key-takaways">
+    </div>
     {report_text}
     <div class="footer">
         <p>Generated on {datetime.now().strftime('%B %d, %Y')} by TransparentSF</p>
-        <p>This newsletter is part of our commitment to transparency and civic engagement.</p>
     </div>
 </body>
 </html>
@@ -2518,10 +2526,8 @@ def expand_chart_references(report_path):
             period_type = match.group(3)
             
             return f"""
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
-  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-    <iframe src="{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
-  </div>
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 80%; margin-bottom: 30px;">
+    <iframe src="{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>  
 </div>
 """
         
@@ -2530,10 +2536,8 @@ def expand_chart_references(report_path):
             anomaly_id = match.group(1)
             
             return f"""
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
-  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-    <iframe src="{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
-  </div>
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
+    <iframe src="{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
 </div>
 """
         
@@ -2543,34 +2547,17 @@ def expand_chart_references(report_path):
             img_src = match.group(1)
             img_alt = match.group(2)
             
-            # Check if it's a time series chart image
-            if img_src.startswith("time_series_"):
-                # Extract parameters from the filename
-                parts = img_src.split("_")
-                if len(parts) >= 4:
-                    metric_id = parts[2]
-                    district = parts[3]
-                    period_type = parts[4].split(".")[0]  # Remove file extension
-                    
-                    return f"""
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
-  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-    <iframe src="{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
-  </div>
-</div>
-"""
-            
             # Check if it's an anomaly chart image
-            elif img_src.startswith("anomaly_"):
+            if img_src.startswith("anomaly_"):
                 # Extract anomaly ID from the filename
                 parts = img_src.split("_")
                 if len(parts) >= 2:
                     anomaly_id = parts[1].split(".")[0]  # Remove file extension
                     
                     return f"""
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
   <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-    <iframe src="{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
+    <iframe src="{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
   </div>
 </div>
 """
@@ -2582,34 +2569,17 @@ def expand_chart_references(report_path):
             img_tag = match.group(0)
             img_src = match.group(1)
             
-            # Check if it's a time series chart image
-            if img_src.startswith("time_series_"):
-                # Extract parameters from the filename
-                parts = img_src.split("_")
-                if len(parts) >= 4:
-                    metric_id = parts[2]
-                    district = parts[3]
-                    period_type = parts[4].split(".")[0]  # Remove file extension
-                    
-                    return f"""
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
-  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-    <iframe src="{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
-  </div>
-</div>
-"""
-            
             # Check if it's an anomaly chart image
-            elif img_src.startswith("anomaly_"):
+            if img_src.startswith("anomaly_"):
                 # Extract anomaly ID from the filename
                 parts = img_src.split("_")
                 if len(parts) >= 2:
                     anomaly_id = parts[1].split(".")[0]  # Remove file extension
                     
                     return f"""
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
   <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-    <iframe src="{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
+    <iframe src="{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
   </div>
 </div>
 """
