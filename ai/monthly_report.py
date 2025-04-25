@@ -2095,9 +2095,9 @@ def generate_chart_image(chart_type, params, output_dir=None):
         
         # Construct the URL for the chart
         if chart_type == 'time_series':
-            url = f"{API_BASE_URL}/backend/time-series-chart?metric_id={params.get('metric_id', 1)}&district={params.get('district', 0)}&period_type={params.get('period_type', 'year')}#chart-section"
+            url = f"/backend/time-series-chart?metric_id={params.get('metric_id', 1)}&district={params.get('district', 0)}&period_type={params.get('period_type', 'year')}#chart-section"
         elif chart_type == 'anomaly':
-            url = f"{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={params.get('id', 27338)}#chart-section"
+            url = f"/anomaly-analyzer/anomaly-chart?id={params.get('id', 27338)}#chart-section"
         else:
             raise ValueError(f"Unsupported chart type: {chart_type}")
         
@@ -2106,9 +2106,10 @@ def generate_chart_image(chart_type, params, output_dir=None):
         # For this example, we'll use a simple approach with requests and PIL
         
         # Make a request to the chart URL
-        response = requests.get(url)
+        full_url = f"{API_BASE_URL}{url}"  # Only use API_BASE_URL for server-side requests
+        response = requests.get(full_url)
         if response.status_code != 200:
-            logger.error(f"Failed to fetch chart from {url}: {response.status_code}")
+            logger.error(f"Failed to fetch chart from {full_url}: {response.status_code}")
             return None
         
         # For a real implementation, you would use a headless browser to render the page
@@ -2244,9 +2245,9 @@ def generate_chart_data_url(chart_type, params):
     try:
         # Construct the URL for the chart
         if chart_type == 'time_series':
-            url = f"{API_BASE_URL}/backend/time-series-chart?metric_id={params.get('metric_id', 1)}&district={params.get('district', 0)}&period_type={params.get('period_type', 'year')}#chart-section"
+            url = f"/backend/time-series-chart?metric_id={params.get('metric_id', 1)}&district={params.get('district', 0)}&period_type={params.get('period_type', 'year')}#chart-section"
         elif chart_type == 'anomaly':
-            url = f"{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={params.get('id', 27338)}#chart-section"
+            url = f"/anomaly-analyzer/anomaly-chart?id={params.get('id', 27338)}#chart-section"
         else:
             raise ValueError(f"Unsupported chart type: {chart_type}")
         
@@ -2255,9 +2256,10 @@ def generate_chart_data_url(chart_type, params):
         # For this example, we'll use a simple approach with requests and PIL
         
         # Make a request to the chart URL
-        response = requests.get(url)
+        full_url = f"{API_BASE_URL}{url}"  # Only use API_BASE_URL for server-side requests
+        response = requests.get(full_url)
         if response.status_code != 200:
-            logger.error(f"Failed to fetch chart from {url}: {response.status_code}")
+            logger.error(f"Failed to fetch chart from {full_url}: {response.status_code}")
             return None
         
         # For a real implementation, you would use a headless browser to render the page
@@ -2410,16 +2412,17 @@ def generate_time_series_chart_image(metric_id, district, period_type, output_di
         output_path = output_dir / filename
         
         # Construct the URL for the chart
-        url = f"{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section"
+        url = f"/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section"
         
         # Use a headless browser service to capture the chart as an image
         # This could be implemented using Selenium, Playwright, or a service like Browserless
         # For this example, we'll use a simple approach with requests and PIL
         
         # Make a request to the chart URL
-        response = requests.get(url)
+        full_url = f"{API_BASE_URL}{url}"  # Only use API_BASE_URL for server-side requests
+        response = requests.get(full_url)
         if response.status_code != 200:
-            logger.error(f"Failed to fetch chart from {url}: {response.status_code}")
+            logger.error(f"Failed to fetch chart from {full_url}: {response.status_code}")
             return None
         
         # For a real implementation, you would use a headless browser to render the page
@@ -2455,16 +2458,17 @@ def generate_time_series_chart_data_url(metric_id, district, period_type):
     
     try:
         # Construct the URL for the chart
-        url = f"{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section"
+        url = f"/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section"
         
         # Use a headless browser service to capture the chart as an image
         # This could be implemented using Selenium, Playwright, or a service like Browserless
         # For this example, we'll use a simple approach with requests and PIL
         
         # Make a request to the chart URL
-        response = requests.get(url)
+        full_url = f"{API_BASE_URL}{url}"  # Only use API_BASE_URL for server-side requests
+        response = requests.get(full_url)
         if response.status_code != 200:
-            logger.error(f"Failed to fetch chart from {url}: {response.status_code}")
+            logger.error(f"Failed to fetch chart from {full_url}: {response.status_code}")
             return None
         
         # For a real implementation, you would use a headless browser to render the page
@@ -2527,7 +2531,7 @@ def expand_chart_references(report_path):
             
             return f"""
 <div style="position: relative; width: 100%; height: 0; padding-bottom: 80%; margin-bottom: 30px;">
-    <iframe src="{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>  
+    <iframe src="/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>  
 </div>
 """
         
@@ -2537,7 +2541,7 @@ def expand_chart_references(report_path):
             
             return f"""
 <div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
-    <iframe src="{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
+    <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
 </div>
 """
         
@@ -2557,7 +2561,7 @@ def expand_chart_references(report_path):
                     return f"""
 <div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
   <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-    <iframe src="{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
+    <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
   </div>
 </div>
 """
@@ -2579,7 +2583,7 @@ def expand_chart_references(report_path):
                     return f"""
 <div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
   <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-    <iframe src="{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
+    <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
   </div>
 </div>
 """

@@ -23,13 +23,14 @@
             font-family: 'IBM Plex Sans', Arial, sans-serif;
             color: var(--ink-black);
             background-color: white;
-            padding: 20px;
+            padding: 15px;
+            font-size: 14px;
         }
         
         .chart-container {
             background-color: white;
             border-radius: 8px;
-            padding: 20px;
+            padding: 10px;
             margin: 0 auto;
             box-shadow: none;
             overflow: visible;
@@ -38,7 +39,7 @@
             justify-content: center;
             align-items: center;
             width: 100%;
-            max-width: 600px;
+            max-width: 100%;
             border: none;
             box-sizing: border-box;
         }
@@ -74,50 +75,54 @@
         
         .header {
             color: var(--spruce-green);
-            margin-bottom: 20px;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
         }
         
         .loading {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 300px;
+            height: 250px;
             color: var(--spruce-green);
         }
         
         .error-message {
             color: var(--warm-coral);
-            padding: 15px;
+            padding: 12px;
             background-color: rgba(255, 107, 90, 0.1);
             border-radius: 5px;
+            font-size: 0.9rem;
         }
         
         .metadata {
             background-color: rgba(246, 241, 234, 0.7);
             border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
         }
         
         .chart-caption {
-            font-size: 12px;
-            padding: 8px;
+            font-size: 11px;
+            padding: 6px;
             background-color: rgba(246, 241, 234, 0.7);
             border-radius: 4px;
-            margin-top: 10px;
+            margin-top: 8px;
         }
         
         .badge {
             background-color: var(--spruce-green);
             color: white;
             font-weight: normal;
-            padding: 5px 10px;
+            padding: 3px 8px;
+            font-size: 0.75rem;
         }
         
         #time-series-chart {
             width: 100%;
             height: 0;
-            padding-bottom: 80%; /* 480/600 = 0.8 = 80% aspect ratio */
+            padding-bottom: 65%; /* Reduced from 90% to prevent cutting off on wide screens */
             position: relative;
             overflow: visible;
             display: flex;
@@ -146,7 +151,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            padding:10px;
+            padding: 6px;
         }
         
         .main-svg {
@@ -154,6 +159,47 @@
             height: 100% !important;
             max-width: 100% !important;
             max-height: 100% !important;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 576px) {
+            body {
+                padding: 10px;
+            }
+            
+            .chart-container {
+                padding: 8px;
+            }
+            
+            .metadata {
+                padding: 10px;
+            }
+            
+            .mt-3.d-flex {
+                flex-direction: column;
+            }
+            
+            .mt-3.d-flex .btn {
+                margin: 5px 0;
+                width: 100%;
+            }
+            
+            #time-series-chart {
+                padding-bottom: 100%; /* Taller aspect ratio on very small screens */
+            }
+        }
+        
+        /* Add media query for wider screens */
+        @media (min-width: 768px) {
+            #time-series-chart {
+                padding-bottom: 60%; /* Lower aspect ratio for wider screens */
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            #time-series-chart {
+                padding-bottom: 50%; /* Even lower aspect ratio for very wide screens */
+            }
         }
         
         /* Ensure the container takes full height in chart section mode */
@@ -202,14 +248,16 @@
                     <div id="datasf-link" class="mt-3" style="text-align: center;"></div>
                 </div>
                 
-                <div class="mt-3 d-flex justify-content-between">
-                    <a href="javascript:history.back()" class="btn btn-outline-secondary flex-grow-1 mx-1">Back</a>
-                    <button id="share-btn" class="btn btn-outline-success flex-grow-1 mx-1" onclick="copyShareLink()">
-                        <i class="fas fa-share-alt me-1"></i> Share
-                    </button>
-                    <button id="embed-btn" class="btn btn-outline-primary flex-grow-1 mx-1" onclick="showEmbedCode()">
-                        <i class="fas fa-code me-1"></i> Embed
-                    </button>
+                <div class="mt-3 d-flex justify-content-between flex-column flex-sm-row">
+                    <a href="javascript:history.back()" class="btn btn-outline-secondary mb-2 mb-sm-0">Back</a>
+                    <div class="d-flex flex-column flex-sm-row">
+                        <button id="share-btn" class="btn btn-outline-success mb-2 mb-sm-0 me-sm-2" onclick="copyShareLink()">
+                            <i class="fas fa-share-alt me-1"></i> Share
+                        </button>
+                        <button id="embed-btn" class="btn btn-outline-primary" onclick="showEmbedCode()">
+                            <i class="fas fa-code me-1"></i> Embed
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- Embed code modal -->
@@ -519,23 +567,23 @@
                     text: objectName,
                     font: {
                         family: 'Inter, Arial, sans-serif',
-                        size: 18,
+                        size: 16, // Reduced from 18
                         color: '#222222' // Ink Black
                     },
-                    y: 0.98, // Move title up
-                    pad: { b: 20 } // Add padding below title
+                    y: 0.95, // Moved down slightly from 0.98
+                    pad: { b: 10 } // Reduced padding below title from 20 to 10
                 },
                 annotations: [
                     {
                         text: subtitleText,
                         font: { 
                             family: 'Inter, Arial, sans-serif',
-                            size: 14,
+                            size: 12, // Reduced from 14
                             color: '#222222' // Ink Black
                         },
                         showarrow: false,
                         x: 0.5,
-                        y: 1.15,  // Move subtitle up significantly from 1.02 to 1.15
+                        y: 1.15, // Moved down from 0.99
                         xref: 'paper',
                         yref: 'paper',
                         align: 'center',
@@ -547,16 +595,16 @@
                         text: '', // Remove the "Date" label
                         font: { 
                             family: 'IBM Plex Sans, Arial, sans-serif',
-                            size: 12,
+                            size: 10, // Reduced from 12
                             color: '#222222' // Ink Black
                         },
-                        standoff: 40 // Push the axis title further away from the axis
+                        standoff: 30 // Reduced from 40
                     },
                     showgrid: false,
                     tickformat: isYearlyData ? '%Y' : '%b %Y',
                     tickfont: { 
                         family: 'IBM Plex Sans, Arial, sans-serif',
-                        size: 11,
+                        size: 9, // Reduced from 11
                         color: '#222222' // Ink Black
                     },
                     // Custom tick labels - Use actual data points for ticks, not the padded range
@@ -584,29 +632,30 @@
                     // Add a secondary axis below for the years
                     dividercolor: 'transparent',
                     dividerwidth: 0,
-                    ticklen: 4, // Add tick marks for months too
+                    ticklen: 3, // Reduced from 4
                     tickcolor: '#222222', // Match font color
                     // Ensure all months are displayed with padding on both sides
                     range: [
-                        // Start with the first month in the data with 30 days padding before
-                        new Date(formattedDates[0].getTime() - 30 * 24 * 60 * 60 * 1000),
-                        // End with the last month in the data with 30 days padding after
-                        new Date(formattedDates[formattedDates.length - 1].getTime() + 30 * 24 * 60 * 60 * 1000)
+                        // Start with the first month in the data with 20 days padding before (reduced from 30)
+                        new Date(formattedDates[0].getTime() - 20 * 24 * 60 * 60 * 1000),
+                        // End with the last month in the data with 20 days padding after (reduced from 30)
+                        new Date(formattedDates[formattedDates.length - 1].getTime() + 20 * 24 * 60 * 60 * 1000)
                     ],
                     showline: true,
                     linecolor: '#e5e7eb',
                     linewidth: 1,
                     // Create space between month and year labels
-                    tickpadding: 15
+                    tickpadding: 10 // Reduced from 15
                 },
                 yaxis: {
                     title: {
                         text: yAxisLabel,
                         font: { 
                             family: 'IBM Plex Sans, Arial, sans-serif',
-                            size: 12,
+                            size: 10, // Reduced from 12
                             color: '#222222' // Ink Black
-                        }
+                        },
+                        standoff: 15 // Added standoff to move label away from axis
                     },
                     showgrid: true,
                     gridcolor: 'rgba(232, 233, 235, 0.5)', // Cloud Gray with transparency
@@ -614,7 +663,7 @@
                     rangemode: 'tozero',
                     tickfont: { 
                         family: 'IBM Plex Sans, Arial, sans-serif',
-                        size: 10,
+                        size: 9, // Reduced from 10
                         color: '#222222' // Ink Black
                     }
                 },
@@ -622,17 +671,17 @@
                 legend: {
                     orientation: 'h',
                     x: 0.5,
-                    y: -0.26, // Move legend down from -0.15 to -0.2
+                    y: -0.12, // Moved up from -0.15
                     xanchor: 'center',
                     yanchor: 'top',
                     font: { 
                         family: 'IBM Plex Sans, Arial, sans-serif',
-                        size: 10,
+                        size: 9, // Reduced from 10
                         color: '#222222' // Ink Black
                     },
                     bgcolor: 'rgba(246, 241, 234, 0.7)' // Soft Sand with transparency
                 },
-                margin: { t: 70, b: 120, l: 60, r: 60 }, // Reduced top margin from 100 to 60
+                margin: { t: 40, b: 30, l: 50, r: 30 }, // Reduced top and bottom margins
                 height: null, // Remove fixed height
                 width: null, // Remove fixed width
                 autosize: true, // Enable autosize
@@ -645,7 +694,7 @@
                     bordercolor: '#4A7463', // Spruce Green
                     font: { 
                         family: 'IBM Plex Sans, Arial, sans-serif',
-                        size: 10,
+                        size: 9, // Reduced from 10
                         color: '#222222' // Ink Black
                     }
                 },
@@ -662,7 +711,7 @@
                     anchor: 'free',
                     showline: false,
                     tickfont: {
-                        size: 12,
+                        size: 10, // Reduced from 12
                     },
                     side: 'bottom',
                     overlaying: 'x'
@@ -685,14 +734,14 @@
                 x: lastDate,
                 y: lastValue,
                 arrowhead: 2,
-                ax: -50,
-                ay: 20,
+                ax: -40, // Reduced from -50
+                ay: 15, // Reduced from 20
                 bgcolor: 'rgba(0, 123, 255, 0.7)', // Bright Blue with transparency
                 bordercolor: '#007BFF', // Bright Blue
                 borderwidth: 1,
                 font: { 
                     family: 'IBM Plex Sans, Arial, sans-serif',
-                    size: 12, // Increased font size
+                    size: 10, // Reduced from 12
                     color: '#222222' // Ink Black
                 },
                 showarrow: true,
@@ -780,7 +829,7 @@
                     },
                     showarrow: false,
                     x: 0.5,
-                    y: -0.35, // Move filters up from -0.45 to -0.35
+                    y: -0.16, // Moved up from -0.18
                     xref: 'paper',
                     yref: 'paper',
                     align: 'center',
@@ -797,13 +846,13 @@
                 datasfLink.style.color = '#71B2CA';
                 datasfLink.style.textDecoration = 'none';
                 datasfLink.style.position = 'absolute';
-                datasfLink.style.bottom = '10px'; // Move DataSF link down from 20px to 10px
-                datasfLink.style.left = '50%';
-                datasfLink.style.transform = 'translateX(-50%)';
-                datasfLink.style.fontSize = '12px';
+                datasfLink.style.bottom = '5px'; // Moved up from 10px
+                datasfLink.style.left = '10px';  // Changed from 50%
+                datasfLink.style.transform = 'none'; // Removed translateX(-50%)
+                datasfLink.style.fontSize = '11px'; // Reduced from 12px
                 datasfLink.style.zIndex = '1000';
                 datasfLink.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
-                datasfLink.style.padding = '5px 10px';
+                datasfLink.style.padding = '3px 8px'; // Reduced padding
                 datasfLink.style.borderRadius = '4px';
                 datasfLink.innerHTML = 'Source: DataSF <i class="fas fa-external-link-alt"></i>';
                 
@@ -859,6 +908,43 @@
                 }
             };
             
+            // Add responsive resize handler to update layout on window resize
+            function resizePlot() {
+                const plotElement = document.getElementById('time-series-plot');
+                if (!plotElement) return;
+                
+                // Get the current dimensions
+                const chartWidth = plotElement.clientWidth;
+                
+                // Adjust title and annotation font sizes based on chart width
+                let update = {
+                    'title.font.size': Math.max(12, Math.min(16, chartWidth / 25)),
+                    'annotations[0].font.size': Math.max(10, Math.min(12, chartWidth / 35)),
+                    'legend.font.size': Math.max(8, Math.min(9, chartWidth / 45))
+                };
+                
+                // For very small screens, adjust vertical positioning
+                if (chartWidth < 400) {
+                    update['title.y'] = 1;         // Move title down slightly
+                    update['annotations[0].y'] = 1.10; // Move subtitle down
+                    update['legend.y'] = -0.10;        // Move legend up
+                    update['margin.b'] = 55;          // Reduce bottom margin
+                    update['margin.t'] = 45;          // Reduce top margin
+                }
+                
+                // Apply the updates
+                Plotly.relayout(plotElement, update);
+            }
+
+            // Update plot dimensions when the window is resized
+            window.addEventListener('resize', () => {
+                const plotElement = document.getElementById('time-series-plot');
+                if (plotElement) {
+                    Plotly.Plots.resize(plotElement);
+                    setTimeout(resizePlot, 100); // Apply font sizing after resize
+                }
+            });
+            
             // Create the plot
             Plotly.newPlot('time-series-plot', traces, layout, config).then(() => {
                 // Add window resize handler for responsiveness
@@ -866,6 +952,7 @@
                     const plotElement = document.getElementById('time-series-plot');
                     if (plotElement) {
                         Plotly.Plots.resize(plotElement);
+                        setTimeout(resizePlot, 100); // Apply font sizing after resize
                     }
                 });
                 
@@ -874,6 +961,7 @@
                 if (plotElement) {
                     // No need to set explicit dimensions as we're using aspect ratio
                     Plotly.Plots.resize(plotElement);
+                    setTimeout(resizePlot, 100); // Apply initial font sizing
                 }
             });
             
@@ -925,9 +1013,9 @@
                 });
                 
                 // Format group counts
-                groupCounts = '<div class="mt-3"><strong>Groups:</strong> ';
+                groupCounts = '<div class="mt-2"><strong>Groups:</strong> ';
                 for (const [group, count] of Object.entries(groupCounter)) {
-                    groupCounts += `<span class="badge bg-secondary me-2">${group} (${count})</span>`;
+                    groupCounts += `<span class="badge bg-secondary me-1 mb-1">${group} (${count})</span>`;
                 }
                 groupCounts += '</div>';
             }
@@ -954,16 +1042,16 @@
             // Create HTML for metadata
             let html = `
                 <div class="row">
-                    <div class="col-md-6">
-                        <h5>${metricName}</h5>
-                        <p><strong>District:</strong> ${districtName}</p>
-                        <p><strong>Period:</strong> ${dateRange}</p>
-                        ${hasGroups && metadata.group_field ? `<p><strong>Group Field:</strong> ${metadata.group_field}</p>` : ''}
+                    <div class="col-sm-6">
+                        <h5 class="fs-6">${metricName}</h5>
+                        <p class="mb-1"><strong>District:</strong> ${districtName}</p>
+                        <p class="mb-1"><strong>Period:</strong> ${dateRange}</p>
+                        ${hasGroups && metadata.group_field ? `<p class="mb-1"><strong>Group Field:</strong> ${metadata.group_field}</p>` : ''}
                     </div>
-                    <div class="col-md-6">
-                        <p><strong>Mean:</strong> ${formatValue(mean)}</p>
-                        <p><strong>Standard Deviation:</strong> ${formatValue(stdDev)}</p>
-                        <p><strong>Range:</strong> ${formatValue(min)} - ${formatValue(max)}</p>
+                    <div class="col-sm-6">
+                        <p class="mb-1"><strong>Mean:</strong> ${formatValue(mean)}</p>
+                        <p class="mb-1"><strong>Standard Deviation:</strong> ${formatValue(stdDev)}</p>
+                        <p class="mb-1"><strong>Range:</strong> ${formatValue(min)} - ${formatValue(max)}</p>
                     </div>
                 </div>
                 ${groupCounts}
@@ -975,9 +1063,9 @@
             // If groups are present, add a filter control
             if (hasGroups) {
                 const groupFilterDiv = document.createElement('div');
-                groupFilterDiv.className = 'mt-3 p-3 bg-light rounded';
+                groupFilterDiv.className = 'mt-2 p-2 bg-light rounded';
                 groupFilterDiv.innerHTML = `
-                    <h6>Filter by Groups</h6>
+                    <h6 class="fs-6">Filter by Groups</h6>
                     <div id="group-checkboxes" class="mb-2"></div>
                     <div class="d-flex gap-2">
                         <button id="apply-group-filter" class="btn btn-sm btn-primary">Apply Filter</button>
@@ -1124,7 +1212,7 @@
                 const chartContainer = document.getElementById('chart-section');
                 if (chartContainer) {
                     chartContainer.style.margin = '0 auto';
-                    chartContainer.style.maxWidth = '600px';
+                    chartContainer.style.maxWidth = '100%'; // Changed from 600px to 100%
                     chartContainer.style.width = '100%';
                     chartContainer.style.display = 'flex';
                     chartContainer.style.justifyContent = 'center';
@@ -1140,7 +1228,7 @@
                         permalinkBtn.style.bottom = '5px';
                         permalinkBtn.style.right = '5px';
                         permalinkBtn.style.zIndex = '1000';
-                        permalinkBtn.style.fontSize = '12px';
+                        permalinkBtn.style.fontSize = '10px'; // Reduced from 12px
                         permalinkBtn.style.color = '#888888';
                         permalinkBtn.style.textDecoration = 'none';
                         permalinkBtn.style.border = 'none';

@@ -358,6 +358,9 @@
             const chartData = anomaly.anomaly.chart_data;
             const metadata = anomaly.anomaly.metadata || {};
             
+            // Variable to store filter text for later use
+            let filterText = '';
+            
             // Determine labels based on metadata
             let yAxisLabel = metadata.y_axis_label || anomaly.anomaly.field_name || "Value";
             let xAxisLabel = "Date";
@@ -375,29 +378,29 @@
                     // Parse the date string into a Date object
                     let dateObj;
                     try {
-                        // First try to parse as ISO date string
-                        dateObj = new Date(dateStr);
+                        // Improved handling of partial date strings like '2025-03'
+                        if (dateStr.includes('-') && dateStr.split('-').length === 2) {
+                            // Handle date formats like '2025-03' (year-month)
+                            const [year, month] = dateStr.split('-').map(Number);
+                            
+                            // For a month-only date, we'll use the last day to correctly represent that month
+                            const lastDay = new Date(year, month, 0).getDate();
+                            dateObj = new Date(year, month - 1, lastDay);
+                            
+                            // When displaying "Mar" it should show March data, not February
+                            console.log(`Parsed month-only date: ${dateStr} as ${year}-${month}-${lastDay} => ${dateObj.toISOString()}`);
+                        } else if (dateStr.includes('-') && dateStr.split('-').length === 3) {
+                            // Handle date formats like '2025-03-31' (year-month-day)
+                            const [year, month, day] = dateStr.split('-').map(Number);
+                            dateObj = new Date(year, month - 1, day); // month is 0-indexed in JS
+                        } else {
+                            // Fallback to standard date parsing
+                            dateObj = new Date(dateStr);
+                        }
                         
-                        // If the date is invalid, try parsing manually
                         if (isNaN(dateObj.getTime())) {
-                            // Handle date formats like '2025-03' or '2025-03-31'
-                            const dateParts = dateStr.split('-');
-                            if (dateParts.length >= 2) {
-                                const year = parseInt(dateParts[0]);
-                                const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
-                                const day = dateParts.length > 2 ? parseInt(dateParts[2]) : 1; // Default to 1st if no day
-                                
-                                // Validate the parsed values
-                                if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-                                    dateObj = new Date(year, month, day);
-                                } else {
-                                    console.error(`Invalid date parts: ${dateStr}`);
-                                    continue;
-                                }
-                            } else {
-                                console.error(`Invalid date format: ${dateStr}`);
-                                continue;
-                            }
+                            console.error(`Invalid date: ${dateStr}`);
+                            continue;
                         }
                         
                         // Add to appropriate arrays based on period
@@ -416,19 +419,51 @@
             
             // Create an array of unique date objects with just year and month (no day) for axis labels
             const allDates = [...comparisonDates, ...recentDates];
+            
+            // Sort dates chronologically
             allDates.sort((a, b) => a - b);
             
-            // Filter to unique year/month combinations
+            // Log all dates for debugging
+            console.log("All dates before unique filtering:", allDates.map(d => 
+                `${d.toISOString().slice(0, 10)} (${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()})`
+            ));
+            
+            // Filter to unique year/month combinations, keeping the last day of each month
             const uniqueDates = [];
             const uniqueYearMonths = new Set();
             
             allDates.forEach(date => {
                 const yearMonth = `${date.getFullYear()}-${date.getMonth()}`;
-                if (!uniqueYearMonths.has(yearMonth)) {
+                
+                // If this year-month combination already exists, replace it
+                // This ensures we keep the most recent date for each month
+                if (uniqueYearMonths.has(yearMonth)) {
+                    // Find and remove the previous entry
+                    const existingIndex = uniqueDates.findIndex(d => 
+                        d.getFullYear() === date.getFullYear() && 
+                        d.getMonth() === date.getMonth()
+                    );
+                    
+                    if (existingIndex !== -1) {
+                        // If the new date is later in the month, replace the existing one
+                        if (date.getDate() > uniqueDates[existingIndex].getDate()) {
+                            uniqueDates[existingIndex] = date;
+                        }
+                    }
+                } else {
+                    // New year-month combination
                     uniqueYearMonths.add(yearMonth);
                     uniqueDates.push(date);
                 }
             });
+            
+            // Sort again to ensure chronological order
+            uniqueDates.sort((a, b) => a - b);
+            
+            // Log unique dates for debugging
+            console.log("Unique dates after filtering:", uniqueDates.map(d => 
+                `${d.toISOString().slice(0, 10)} (${d.getFullYear()}-${d.getMonth() + 1})`
+            ));
             
             // Create a set of years that appear in the data
             const years = [...new Set(allDates.map(d => d.getFullYear()))];
@@ -499,7 +534,7 @@
                     y: comparisonValues,
                     type: 'scatter',
                     mode: 'lines+markers',
-                    name: 'Historical',
+                    name: 'Time Series',
                     line: { color: '#007BFF', width: 2 }, // Bright Blue
                     marker: { color: '#007BFF', size: 6 }, // Bright Blue
                     showlegend: true
@@ -513,10 +548,10 @@
                     y: recentValues,
                     type: 'scatter',
                     mode: 'lines+markers',
-                    name: 'Recent',
+                    name: 'Time Series',
                     line: { color: '#007BFF', width: 2 }, // Bright Blue
                     marker: { color: '#007BFF', size: 6 }, // Bright Blue
-                    showlegend: true
+                    showlegend: false // Hide duplicate legend entry
                 });
             }
             
@@ -550,8 +585,8 @@
                         size: 12,
                         color: '#222222'
                     },
-                    y: 0.98, // Move title up
-                    pad: { b: 20 } // Add padding below title
+                    y: 0.99, // Move title higher
+                    pad: { b: 5 } // Reduce padding below title
                 },
                 annotations: [
                     {
@@ -563,7 +598,7 @@
                         },
                         showarrow: false,
                         x: 0.5,
-                        y: 1.15,  // Move subtitle up significantly
+                        y: 0.92,  // Positioned much closer to title
                         xref: 'paper',
                         yref: 'paper',
                         align: 'center',
@@ -610,8 +645,12 @@
                             return '';
                         }
                         
-                        // Show only the first letter of the month capitalized
                         const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                        
+                        // Log for debugging
+                        console.log(`Tick label for date: ${d.toISOString()} month: ${month} (${fullMonths[month].charAt(0)}) year: ${year}`);
+                        
+                        // Show only the first letter of the month capitalized
                         let label = fullMonths[month].charAt(0);
                         
                         // If this is the first month of a year in our dataset, add year below
@@ -680,7 +719,7 @@
                     },
                     bgcolor: 'rgba(246, 241, 234, 0.7)' // Soft Sand with transparency
                 },
-                margin: { t: 70, b: 120, l: 60, r: 60 }, // Reduced top margin
+                margin: { t: 35, b: 120, l: 40, r: 40 }, // Further reduced top margin
                 height: null, // Remove fixed height
                 width: null, // Remove fixed width
                 autosize: true, // Enable autosize
@@ -716,51 +755,9 @@
                 }
             };
             
-            // Add annotation for the most recent data point
-            let lastDate, lastValue;
-            
-            if (recentDates.length > 0) {
-                lastDate = recentDates[recentDates.length - 1];
-                lastValue = recentValues[recentDates.length - 1];
-            } else {
-                lastDate = comparisonDates[comparisonDates.length - 1];
-                lastValue = comparisonValues[comparisonValues.length - 1];
-            }
-            
-            // Format date properly for display
-            const month = lastDate.getMonth();
-            const year = lastDate.getFullYear();
-            const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-            const formattedDate = `${fullMonths[month]} ${year}`;
-            
-            // Update the annotation color to match
-            layout.annotations.push({
-                text: `${formattedDate}:<br>${formatValue(lastValue)}`,
-                x: lastDate,
-                y: lastValue,
-                arrowhead: 2,
-                ax: -50,
-                ay: 20,
-                bgcolor: 'rgba(0, 123, 255, 0.7)', // Bright Blue with transparency
-                bordercolor: '#007BFF', // Bright Blue
-                borderwidth: 1,
-                font: { 
-                    family: 'IBM Plex Sans, Arial, sans-serif',
-                    size: 12,
-                    color: '#222222' // Ink Black
-                },
-                showarrow: true,
-                arrowcolor: '#007BFF', // Bright Blue
-                arrowwidth: 1,
-                arrowside: 'end',
-                axref: 'pixel',
-                ayref: 'pixel'
-            });
-            
             // Add filter conditions as an annotation if available
             if (metadata.filter_conditions) {
                 // Format the filter conditions properly
-                let filterText = '';
                 
                 // Check if filter_conditions is an array
                 if (Array.isArray(metadata.filter_conditions)) {
@@ -824,29 +821,6 @@
                         filterText = JSON.stringify(metadata.filter_conditions);
                     }
                 }
-                
-                // Add DataSF link if available
-                let datasfLinkHtml = '';
-                if (metadata.executed_query_url) {
-                    // Remove DataSF link from filter conditions
-                    datasfLinkHtml = '';
-                }
-                
-                layout.annotations.push({
-                    text: `<b>Filters:</b> ${filterText}`,
-                    font: { 
-                        family: 'IBM Plex Sans, Arial, sans-serif',
-                        size: 7, // Decreased font size from 8 to 7
-                        color: '#999999' // Lighter grey color
-                    },
-                    showarrow: false,
-                    x: 0.5,
-                    y: -0.45, // Moved down from -0.4 to -0.45
-                    xref: 'paper',
-                    yref: 'paper',
-                    align: 'center',
-                    html: true // Enable HTML formatting
-                });
             }
             
             const config = {
@@ -859,6 +833,56 @@
                 }
             };
             
+            // Add responsive resize handler to update layout on window resize
+            function resizePlot() {
+                const plotElement = document.getElementById('anomaly-plot');
+                if (!plotElement) return;
+                
+                // Get the current dimensions
+                const chartWidth = plotElement.clientWidth;
+                const chartHeight = plotElement.clientHeight;
+                
+                // Adjust title and annotation font sizes based on chart dimensions
+                let update = {
+                    'title.font.size': Math.max(10, Math.min(12, chartWidth / 30)),
+                    'annotations[0].font.size': Math.max(12, Math.min(14, chartWidth / 35))
+                };
+                
+                // Adjust vertical spacing based on chart dimensions
+                if (chartHeight < 250) {
+                    // Very small height (e.g. mobile in landscape)
+                    update['title.y'] = 0.99;
+                    update['annotations[0].y'] = 1; // Subtitle directly below title
+                    update['title.font.size'] = Math.max(10, Math.min(11, chartWidth / 35));
+                    update['annotations[0].font.size'] = Math.max(10, Math.min(11, chartWidth / 35));
+                    update['margin.t'] = 25; // Minimal top margin
+                } else if (chartHeight < 400) {
+                    // Small height
+                    update['title.y'] = 0.99;
+                    update['annotations[0].y'] = 1.11;
+                    update['margin.t'] = 40;
+                } else if (chartHeight < 600) {
+                    // Medium height
+                    update['title.y'] = 0.99;
+                    update['annotations[0].y'] = 0.92;
+                    update['margin.t'] = 35;
+                } else {
+                    // Large height
+                    update['title.y'] = 0.99;
+                    update['annotations[0].y'] = 0.93;
+                    update['margin.t'] = 40;
+                }
+                
+                // Adjust for width constraints
+                if (chartWidth < 400) {
+                    update['title.font.size'] = Math.max(9, Math.min(11, chartWidth / 35));
+                    update['annotations[0].font.size'] = Math.max(9, Math.min(11, chartWidth / 35));
+                }
+                
+                // Apply the updates
+                Plotly.relayout(plotElement, update);
+            }
+
             // Create the plot
             Plotly.newPlot('anomaly-plot', traces, layout, config).then(() => {
                 // Add window resize handler for responsiveness
@@ -866,6 +890,8 @@
                     const plotElement = document.getElementById('anomaly-plot');
                     if (plotElement) {
                         Plotly.Plots.resize(plotElement);
+                        // Apply responsive adjustments after resize
+                        setTimeout(resizePlot, 100);
                     }
                 });
                 
@@ -874,8 +900,28 @@
                     const plotElement = document.getElementById('anomaly-plot');
                     if (plotElement) {
                         Plotly.Plots.resize(plotElement);
+                        // Initial responsive adjustments
+                        resizePlot();
                     }
                 }, 100);
+                
+                // Add filter conditions div if available
+                if (metadata.filter_conditions && filterText) {
+                    // Create a filter conditions div below the chart
+                    const filterConditionsDiv = document.createElement('div');
+                    filterConditionsDiv.id = 'filter-conditions';
+                    filterConditionsDiv.style.fontSize = '12px';
+                    filterConditionsDiv.style.color = '#666666';
+                    filterConditionsDiv.style.padding = '10px';
+                    filterConditionsDiv.style.marginTop = '10px';
+                    filterConditionsDiv.style.backgroundColor = 'rgba(246, 241, 234, 0.5)';
+                    filterConditionsDiv.style.borderRadius = '4px';
+                    filterConditionsDiv.style.textAlign = 'center';
+                    filterConditionsDiv.innerHTML = `<b>Filters:</b> ${filterText}`;
+                    
+                    // Add the filter conditions div after the chart
+                    document.querySelector('.chart-container').insertAdjacentElement('afterend', filterConditionsDiv);
+                }
             });
             
             // Apply styling directly without setTimeout
@@ -919,8 +965,8 @@
                 datasfLink.style.textDecoration = 'none';
                 datasfLink.style.position = 'absolute';
                 datasfLink.style.bottom = '10px';
-                datasfLink.style.left = '50%';
-                datasfLink.style.transform = 'translateX(-50%)';
+                datasfLink.style.left = '10px';  // Changed from '50%' to '10px'
+                datasfLink.style.transform = 'none'; // Removed 'translateX(-50%)'
                 datasfLink.style.fontSize = '12px';
                 datasfLink.style.zIndex = '10';
                 datasfLink.innerHTML = 'Source: DataSF <i class="fas fa-external-link-alt"></i>';
@@ -1067,6 +1113,7 @@
             const shareBtn = document.getElementById('share-btn');
             const embedBtn = document.getElementById('embed-btn');
             const backButton = document.querySelector('a[href="javascript:history.back()"]');
+            const filterConditions = document.getElementById('filter-conditions');
             
             // Add or remove chart-section-mode class on body
             document.body.classList.toggle('chart-section-mode', isChartSection);
@@ -1081,6 +1128,7 @@
                 if (shareBtn) shareBtn.style.display = 'none';
                 if (embedBtn) embedBtn.style.display = 'none';
                 if (backButton) backButton.style.display = 'none';
+                if (filterConditions) filterConditions.style.display = 'none';
                 
                 // Set chart container to maintain aspect ratio
                 const chartContainer = document.getElementById('chart-section');
@@ -1154,6 +1202,7 @@
                 if (shareBtn) shareBtn.style.display = 'block';
                 if (embedBtn) embedBtn.style.display = 'block';
                 if (backButton) backButton.style.display = 'block';
+                if (filterConditions) filterConditions.style.display = 'block';
                 
                 // Remove permalink button if it exists
                 const permalinkBtn = document.getElementById('chart-section-permalink');
