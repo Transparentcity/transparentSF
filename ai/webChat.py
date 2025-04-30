@@ -78,34 +78,34 @@ except Exception as e:
     raise
 
 # Configure root logger first
-logging.basicConfig(
-    level=logging.INFO,  # Set to INFO level
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),  # Log to stdout for debugging
-        logging.FileHandler(log_file, mode='a', encoding='utf-8')
-    ]
-)
+# logging.basicConfig( # REMOVED: Configuration should happen in main.py
+#     level=logging.INFO,  # Set to INFO level
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         logging.StreamHandler(sys.stdout),  # Log to stdout for debugging
+#         logging.FileHandler(log_file, mode='a', encoding='utf-8')
+#     ]
+# )
 
 # Configure our module's logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+# logger.setLevel(logging.INFO) # REMOVED: Inherit level from root logger
 
-# Remove any existing handlers to avoid duplication
-for handler in logger.handlers[:]:
-    logger.removeHandler(handler)
+# Remove any existing handlers to avoid duplication # REMOVED: Let root logger handle handlers
+# for handler in logger.handlers[:]:
+#     logger.removeHandler(handler)
 
-# Add handlers specifically for our logger
-file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
-stream_handler = logging.StreamHandler(sys.stdout)
+# Add handlers specifically for our logger # REMOVED: Let root logger handle handlers
+# file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+# stream_handler = logging.StreamHandler(sys.stdout)
 
-# Create a custom formatter
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-stream_handler.setFormatter(formatter)
+# Create a custom formatter # REMOVED: Let root logger handle handlers
+# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# file_handler.setFormatter(formatter)
+# stream_handler.setFormatter(formatter)
 
-logger.addHandler(file_handler)
-logger.addHandler(stream_handler)
+# logger.addHandler(file_handler)
+# logger.addHandler(stream_handler)
 
 # Test the logger
 logger.info(f"WebChat logging initialized at {datetime.now()}")

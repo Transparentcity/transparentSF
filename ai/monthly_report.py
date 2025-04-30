@@ -14,6 +14,10 @@ from io import BytesIO
 from PIL import Image
 import time
 import re
+from dateutil.relativedelta import relativedelta
+import plotly.graph_objects as go
+import plotly.io as pio
+from plotly.subplots import make_subplots
 
 # Set up paths to look for .env file
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -40,79 +44,8 @@ from webChat import get_dashboard_metric, anomaly_explainer_agent, swarm_client,
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Only configure handlers if they haven't been configured yet
-if not logger.handlers:
-    # Create logs directory if it doesn't exist
-    logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
-    os.makedirs(logs_dir, exist_ok=True)
-    
-    # Set the logging level
-    logger.setLevel(logging.INFO)
-    
-    # Create formatters
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    # Create and configure file handler
-    file_handler = logging.FileHandler(os.path.join(logs_dir, 'monthly_report.log'))
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)
-    logger.addHandler(file_handler)
-    
-    # Create and configure console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(logging.INFO)
-    logger.addHandler(console_handler)
-
-    # Store handlers for use with other loggers
-    handlers = {
-        'file': file_handler,
-        'console': console_handler
-    }
-else:
-    # Extract existing handlers if already configured
-    handlers = {
-        'file': next((h for h in logger.handlers if isinstance(h, logging.FileHandler)), None),
-        'console': next((h for h in logger.handlers if isinstance(h, logging.StreamHandler)), None)
-    }
-
-# Configure the root logger to capture all logs
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-# Remove existing handlers to avoid duplicates
-for handler in root_logger.handlers[:]:
-    root_logger.removeHandler(handler)
-# Add our handlers
-for handler_name, handler in handlers.items():
-    if handler:
-        root_logger.addHandler(handler)
-
-# Also explicitly configure logging for the explainer agent and related modules
-log_modules = [
-    'explainer_agent',              # Explainer agent logs
-    'swarm_client',                 # Swarm client logs
-    'swarm',                        # Swarm library logs
-    'anomaly_analyzer',             # Anomaly analyzer logs
-    'tools.anomaly_detection',      # Tools module logs
-    'ai.anomalyAnalyzer',           # AI module logs
-    'tools',                        # All tools
-    'webChat',                      # Web chat agent logs
-    ''                              # Root logger (again to be sure)
-]
-
-for log_name in log_modules:
-    module_logger = logging.getLogger(log_name)
-    module_logger.setLevel(logging.INFO)
-    # Remove any existing handlers to avoid duplicates
-    for handler in module_logger.handlers[:]:
-        module_logger.removeHandler(handler)
-    # Add our handlers
-    for handler_name, handler in handlers.items():
-        if handler:
-            module_logger.addHandler(handler)
-
+# Now log initialization messages
 logger.info("Monthly report logging initialized")
-logger.info(f"Log file path: {os.path.join(logs_dir, 'monthly_report.log')}")
 
 # Load environment variables
 load_dotenv()
@@ -142,6 +75,41 @@ except ValueError:
 # API Base URL
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 logger.info(f"Using API_BASE_URL: {API_BASE_URL}")
+
+# Perplexity API Key
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
+if PERPLEXITY_API_KEY:
+    logger.info("Perplexity API key found")
+else:
+    logger.warning("No Perplexity API key found. Perplexity API features will not be available.")
+
+# Global variable to store prompts
+_PROMPTS = None
+
+def load_prompts():
+    """
+    Load prompts from the JSON file and store them in the global _PROMPTS variable.
+    Only loads the prompts once.
+    
+    Returns:
+        Dictionary containing all prompts
+    """
+    global _PROMPTS
+    
+    if _PROMPTS is None:
+        try:
+            prompts_path = Path(__file__).parent / 'data' / 'prompts.json'
+            logger.info(f"Loading prompts from {prompts_path}")
+            
+            with open(prompts_path, 'r') as f:
+                _PROMPTS = json.load(f)
+                
+            logger.info(f"Successfully loaded prompts with keys: {list(_PROMPTS.keys())}")
+        except Exception as e:
+            logger.error(f"Error loading prompts: {str(e)}")
+            raise
+    
+    return _PROMPTS
 
 def initialize_monthly_reporting_table():
     """
@@ -893,16 +861,12 @@ def generate_explanations(report_ids):
                 report_date = datetime.strptime(report_date, "%Y-%m-%d").date()
             
             # Get the previous month's date (the more recent month in the comparison)
-            if report_date.month == 1:  # January case
-                previous_month_date = report_date.replace(month=12, year=report_date.year-1)
-            else:
-                previous_month_date = report_date.replace(month=report_date.month-1)
+            # Using a safer approach to handle edge cases with month days
+            previous_month_date = report_date - relativedelta(months=1)
             
             # Get the month before the previous month (the earlier month in the comparison)
-            if previous_month_date.month == 1:  # January case
-                comparison_month_date = previous_month_date.replace(month=12, year=previous_month_date.year-1)
-            else:
-                comparison_month_date = previous_month_date.replace(month=previous_month_date.month-1)
+            # Using a safer approach to handle edge cases with month days
+            comparison_month_date = previous_month_date - relativedelta(months=1)
             
             # Format the month names
             recent_month = previous_month_date.strftime("%B %Y")
@@ -1254,6 +1218,9 @@ def generate_monthly_report(report_date=None, district="0"):
         cursor.execute("""
             SELECT *, 
                    metadata->>'anomaly_id' as anomaly_id, -- Extract potential anomaly_id from metadata
+                   metadata->>'perplexity_context' as perplexity_context,
+                   metadata->'perplexity_response' as perplexity_response_json,
+                   metadata->'perplexity_response'->'citations' as perplexity_citations,
                    metric_id -- Placeholder for metric_id, needs proper retrieval logic
             FROM monthly_reporting 
             WHERE report_date = %s AND district = %s
@@ -1308,6 +1275,119 @@ def generate_monthly_report(report_date=None, district="0"):
                     chart_placeholder = f"[CHART:time_series:{metric_id}:{item['district']}:{item['period_type']}]"
                 except (ValueError, TypeError, KeyError):
                     metric_id = None # Invalid data
+                    
+            # Format Perplexity citations if available
+            perplexity_citations_text = ""
+            citation_map = {}  # Map to store citation numbers for reference matching
+            
+            # Direct extraction of citations from the database column
+            # This is the most reliable way to get the citations
+            perplexity_citations = item.get("perplexity_citations")
+            logger.info(f"Raw perplexity_citations for {item['metric_name']}: {json.dumps(perplexity_citations)[:300]}...")
+            
+            # Try to format the citations
+            if perplexity_citations:
+                try:
+                    # Handle string format (needs parsing)
+                    if isinstance(perplexity_citations, str):
+                        try:
+                            perplexity_citations = json.loads(perplexity_citations)
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to parse perplexity_citations as JSON: {perplexity_citations}")
+                    
+                    # Handle list format
+                    if isinstance(perplexity_citations, list) and len(perplexity_citations) > 0:
+                        perplexity_citations_text = "\n\nRelevant Sources:\n"
+                        for idx, citation in enumerate(perplexity_citations, 1):
+                            if isinstance(citation, str):
+                                # Simple URL citation
+                                citation_map[str(idx)] = citation
+                                perplexity_citations_text += f"{idx}. {citation}\n"
+                            elif isinstance(citation, dict):
+                                # Citation with title and URL
+                                title = citation.get("title", "Untitled")
+                                url = citation.get("url", citation.get("link", "No URL"))
+                                citation_map[str(idx)] = {"title": title, "url": url}
+                                perplexity_citations_text += f"{idx}. {title}: {url}\n"
+                        
+                        logger.info(f"Formatted {len(perplexity_citations)} citations for {item['metric_name']}")
+                        logger.info(f"Citation map: {json.dumps(citation_map)}")
+                except Exception as e:
+                    logger.error(f"Error formatting citations: {e}")
+                    logger.error(f"Problematic citations data: {perplexity_citations}")
+            
+            # If no citations found yet, try a fallback approach
+            if not perplexity_citations_text:
+                logger.warning(f"No citations found for {item['metric_name']} in primary method, trying fallback approaches")
+                
+                # Fallback 1: Try to get the full perplexity_response and extract citations
+                try:
+                    perplexity_response_json = item.get("perplexity_response_json")
+                    if perplexity_response_json:
+                        # Handle string format (needs parsing)
+                        if isinstance(perplexity_response_json, str):
+                            try:
+                                perplexity_response_json = json.loads(perplexity_response_json)
+                            except json.JSONDecodeError:
+                                logger.error(f"Failed to parse perplexity_response_json as JSON")
+                        
+                        # Extract citations from the response JSON
+                        if isinstance(perplexity_response_json, dict) and "citations" in perplexity_response_json:
+                            citations = perplexity_response_json["citations"]
+                            if isinstance(citations, list) and len(citations) > 0:
+                                perplexity_citations_text = "\n\nRelevant Sources:\n"
+                                for idx, citation in enumerate(citations, 1):
+                                    if isinstance(citation, str):
+                                        citation_map[str(idx)] = citation
+                                        perplexity_citations_text += f"{idx}. {citation}\n"
+                                    elif isinstance(citation, dict):
+                                        title = citation.get("title", "Untitled")
+                                        url = citation.get("url", citation.get("link", "No URL"))
+                                        citation_map[str(idx)] = {"title": title, "url": url}
+                                        perplexity_citations_text += f"{idx}. {title}: {url}\n"
+                                
+                                logger.info(f"Fallback: Extracted {len(citations)} citations from perplexity_response_json")
+                except Exception as e:
+                    logger.error(f"Error in citation fallback approach: {e}")
+            
+            # Process the perplexity context to match citation references
+            perplexity_context = item.get("perplexity_context", "")
+            processed_context = perplexity_context
+            
+            # Only process if we have both citations and context
+            if citation_map and perplexity_context:
+                # Look for citation references like [1], [2], etc.
+                try:
+                    # Find all citation references in the format [n]
+                    citation_pattern = r'\[(\d+)\]'
+                    citation_refs = re.findall(citation_pattern, perplexity_context)
+                    
+                    # Sort and deduplicate the citation references
+                    unique_refs = sorted(set(citation_refs), key=int)
+                    
+                    logger.info(f"Found citation references in context: {unique_refs}")
+                    
+                    # Replace each citation reference with a hyperlink if possible
+                    for ref in unique_refs:
+                        if ref in citation_map:
+                            citation = citation_map[ref]
+                            if isinstance(citation, dict):
+                                url = citation.get("url", "")
+                                if url:
+                                    # Replace [n] with [n](url)
+                                    processed_context = processed_context.replace(
+                                        f"[{ref}]", 
+                                        f"[{ref}]({url})"
+                                    )
+                            elif isinstance(citation, str) and citation.startswith("http"):
+                                # If citation is just a URL string
+                                processed_context = processed_context.replace(
+                                    f"[{ref}]", 
+                                    f"[{ref}]({citation})"
+                                )
+                except Exception as e:
+                    logger.error(f"Error processing citation references: {e}")
+                    # Keep the original context if there's an error
 
             report_data.append({
                 "metric": item["metric_name"],
@@ -1323,8 +1403,15 @@ def generate_monthly_report(report_date=None, district="0"):
                 "chart_html": chart_html, # Keep original chart_html if already generated
                 "chart_placeholder": chart_placeholder, # Add the placeholder string
                 "trend_analysis": item["metadata"].get("trend_analysis", "") if item["metadata"] else "",
-                "follow_up": item["metadata"].get("follow_up", "") if item["metadata"] else ""
+                "follow_up": item["metadata"].get("follow_up", "") if item["metadata"] else "",
+                "perplexity_context": processed_context,  # Use the processed context with linked citations
+                "perplexity_citations_text": perplexity_citations_text,
+                "citation_map": citation_map,  # Include the citation map for reference
             })
+            
+            # Only add perplexity_response if it exists
+            if 'perplexity_response_json' in locals():
+                report_data[-1]["perplexity_response"] = perplexity_response_json
         
         cursor.close()
         
@@ -1364,6 +1451,14 @@ Detailed Analysis:
 {item['report_text']}
 
 """
+            # Add Perplexity context if available
+            if item['perplexity_context']:
+                report_items_text += f"Additional Context from Perplexity:\n{item['perplexity_context']}\n\n"
+
+            # Add Perplexity citations if available
+            if item['perplexity_citations_text']:
+                report_items_text += f"{item['perplexity_citations_text']}\n"
+                
             if item['chart_html']:
                 report_items_text += f"Chart Available: Yes\n"
         
@@ -1378,20 +1473,18 @@ Detailed Analysis:
         
         # Load prompt from JSON file
         try:
-            prompts_path = Path(__file__).parent / 'data' / 'prompts.json'
-            with open(prompts_path, 'r') as f:
-                prompts = json.load(f)
-                prompt_template = prompts['monthly_report']['generate_report']['prompt']
-                system_message = prompts['monthly_report']['generate_report']['system']
-                
-                # Format the prompt with the required variables
-                prompt = prompt_template.format(
-                    district_name=district_name,
-                    current_month=current_month,
-                    official_name=official_name,
-                    official_role=official_role,
-                    report_items_text=report_items_text
-                )
+            prompts = load_prompts()
+            prompt_template = prompts['monthly_report']['generate_report']['prompt']
+            system_message = prompts['monthly_report']['generate_report']['system']
+            
+            # Format the prompt with the required variables
+            prompt = prompt_template.format(
+                district_name=district_name,
+                current_month=current_month,
+                official_name=official_name,
+                official_role=official_role,
+                report_items_text=report_items_text
+            )
         except Exception as e:
             logger.error(f"Error loading prompts from JSON: {e}")
             raise
@@ -1711,42 +1804,24 @@ def proofread_and_revise_report(report_path):
         with open(report_path, 'r', encoding='utf-8') as f:
             newsletter_text = f.read()
         
-        # Create a prompt for proofreading
-        prompt = f"""You are a professional editor tasked with proofreading and improving a citizen-focused newsletter for San Francisco.
+        # Load prompt from JSON file
+        prompts = load_prompts()
+        prompt_template = prompts['monthly_report']['proofread']['prompt']
+        system_message = prompts['monthly_report']['proofread']['system']
+        
+        # Format the prompt with the newsletter text
+        prompt = prompt_template.format(
+            newsletter_text=newsletter_text
+        )
 
-BRAND GUIDELINES:
-- Voice: Intelligent but accessible, civic-minded (not partisan)
-- Tone: Factual, clear, non-righteous, with occasional dry wit
-- Focus: Impact over ideology, precision over polish
-- Approach: Assume no ill intention from public officials, drive accountability while being fair and data-driven
-- Style: Clean and clear in design and tone, calm and credible
-
-Please review the following newsletter and make these improvements:
-
-
-1. Fix any grammatical or spelling errors
-3. Ensure consistent formatting and style
-6. Ensure the tone aligns with our brand guidelines - intelligent but accessible, civic-minded, and focused on impact
-7. Make sure the HTML formatting is clean and consistent
-8. Ensure the newsletter feels like a communication to citizens, not a formal report
-9. Remove any refereces to markdown calls for embeddd charts that remain in the file and haven't been swapped for HTML. 
-
-Here's the newsletter:
-
-{newsletter_text}
-
-Please provide the revised version of the newsletter, maintaining the same overall structure but with your improvements.
-Keep all HTML tags intact and ensure the formatting remains clean and consistent.
-"""
-
-        # Make API call for proofreading
+        # Use the AGENT_MODEL directly
+        logger.info("Using AGENT_MODEL for proofreading")
         response = client.chat.completions.create(
             model=AGENT_MODEL,
-            messages=[{"role": "system", "content": "You are a professional editor and proofreader for a civic transparency organization."},
+            messages=[{"role": "system", "content": system_message},
                      {"role": "user", "content": prompt}],
             temperature=0.1
         )
-
         revised_text = response.choices[0].message.content
         
         # Save the revised newsletter
@@ -1767,6 +1842,156 @@ Keep all HTML tags intact and ensure the formatting remains clean and consistent
         
     except Exception as e:
         error_msg = f"Error in proofread_and_revise_report: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {"status": "error", "message": error_msg}
+
+def get_perplexity_context(report_items):
+    """
+    Use the Perplexity API to get additional context and information about 
+    each individual item in the report. Enriches each item with relevant real-time information.
+    
+    Args:
+        report_items: List of report items with metric information
+        
+    Returns:
+        Dictionary with status and the enriched report items with context
+    """
+    logger.info(f"Getting additional context from Perplexity API for {len(report_items)} report items")
+    
+    # Check if Perplexity API key is available
+    if not PERPLEXITY_API_KEY:
+        logger.warning("No Perplexity API key available. Skipping context enrichment.")
+        return {"status": "error", "message": "No Perplexity API key available"}
+    
+    try:
+        # Load prompt from prompts.json
+        prompts = load_prompts()
+        prompt_template = prompts['monthly_report']['context_enrichment']['prompt']
+        system_message = prompts['monthly_report']['context_enrichment']['system']
+        
+        # Process each item individually
+        for item in report_items:
+            metric_name = item.get("metric")
+            group_value = item.get("group")
+            recent_mean = item.get("recent_mean")
+            comparison_mean = item.get("comparison_mean")
+            percent_change = item.get("percent_change")
+            explanation = item.get("explanation", "")
+            report_text = item.get("report_text", "")
+            
+            # Prepare item-specific context for the prompt
+            item_context = f"""
+Metric: {metric_name}
+Group: {group_value}
+Recent Value: {recent_mean}
+Previous Value: {comparison_mean}
+Percent Change: {percent_change:+.2f}%
+Explanation: {explanation}
+Detailed Analysis: {report_text}
+"""
+
+            # Format the prompt with the item context
+            prompt = prompt_template.format(
+                text_content=item_context
+            )
+            
+            # log the prompt
+            logger.info(f"Prompt for Perplexity API:\nSystem: {system_message}\nUser: {prompt}")
+            
+            # Make the API call to Perplexity
+            url = "https://api.perplexity.ai/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {PERPLEXITY_API_KEY}"
+            }
+            
+            payload = {
+                "model": "sonar",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": system_message
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            }
+            
+            # Make the API request
+            logger.info(f"Sending request to Perplexity API for {metric_name}")
+            response = requests.post(url, json=payload, headers=headers)
+            
+            # Check if the request was successful
+            if response.status_code == 200:
+                logger.info(f"Successfully received response from Perplexity API for {metric_name}")
+                result = response.json()
+                
+                # Log the raw response for debugging
+                logger.info(f"Raw Perplexity response: {json.dumps(result)[:1000]}...")
+                
+                # Extract the content from the response
+                context_content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                
+                if not context_content:
+                    logger.warning(f"Received empty content from Perplexity API for {metric_name}")
+                    continue
+                
+                # Initialize metadata if it doesn't exist
+                if not item.get("metadata"):
+                    item["metadata"] = {}
+                
+                # Store the context content
+                item["metadata"]["perplexity_context"] = context_content
+                
+                # Store the complete response for citations and other data
+                # Extract the relevant parts from the response to avoid storing unnecessary data
+                perplexity_response = {}
+                
+                # FIXED: Extract citations from the top level of the response (not from message)
+                if "citations" in result:
+                    perplexity_response["citations"] = result["citations"]
+                    logger.info(f"Found top-level citations: {json.dumps(result['citations'])}")
+                else:
+                    logger.info("No top-level citations found in Perplexity response")
+                    
+                    # Fallback: Check if citations are in the message
+                    if "choices" in result and len(result["choices"]) > 0:
+                        message = result["choices"][0].get("message", {})
+                        logger.info(f"Message from Perplexity: {json.dumps(message)[:1000]}...")
+                        
+                        if "citations" in message:
+                            perplexity_response["citations"] = message["citations"]
+                            logger.info(f"Found message-level citations: {json.dumps(message['citations'])}")
+                        else:
+                            logger.info("No message-level citations found in Perplexity response")
+                
+                # Store other relevant fields from the top level
+                for field in ["links", "search_queries", "attachments", "tool_calls"]:
+                    if field in result:
+                        perplexity_response[field] = result[field]
+                        logger.info(f"Found top-level {field} in Perplexity response")
+                
+                # Save the full response data
+                if perplexity_response:
+                    item["metadata"]["perplexity_response"] = perplexity_response
+                    logger.info(f"Added Perplexity response data to {metric_name}: {json.dumps(perplexity_response)}")
+                else:
+                    logger.warning(f"No perplexity_response data found for {metric_name}")
+                
+                logger.info(f"Added Perplexity context to {metric_name} (length: {len(context_content)})")
+            else:
+                logger.error(f"Perplexity API error for {metric_name}: {response.status_code} - {response.text}")
+        
+        logger.info("Successfully retrieved additional context from Perplexity API for all items")
+        return {
+            "status": "success", 
+            "report_items": report_items
+        }
+        
+    except Exception as e:
+        error_msg = f"Error in get_perplexity_context: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return {"status": "error", "message": error_msg}
 
@@ -1819,23 +2044,251 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
         if explanation_result.get("status") != "success":
             return explanation_result
             
-        # Step 4: Generate the monthly newsletter
-        logger.info("Step 4: Generating monthly newsletter")
+        # Get the report data for context enrichment
+        def get_report_items_operation(connection):
+            cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            
+            # Get all report items for this district, ordered by priority
+            cursor.execute("""
+                SELECT mr.*, r.id as report_id 
+                FROM monthly_reporting mr
+                JOIN reports r ON mr.report_id = r.id
+                WHERE r.district = %s
+                ORDER BY mr.priority
+            """, (district,))
+            
+            items = cursor.fetchall()
+            
+            # Format the report data
+            report_data = []
+            for item in items:
+                report_data.append({
+                    "metric": item["metric_name"],
+                    "metric_id": item["metric_id"],
+                    "group": item["group_value"],
+                    "recent_mean": item["recent_mean"],
+                    "comparison_mean": item["comparison_mean"],
+                    "difference": item["difference"],
+                    "percent_change": item["percent_change"],
+                    "explanation": item["explanation"],
+                    "report_text": item["report_text"],
+                    "priority": item["priority"],
+                    "metadata": item["metadata"] if item["metadata"] else {}
+                })
+            
+            cursor.close()
+            return report_data
+        
+        # Step 4: Get report items for context enrichment
+        logger.info("Step 4: Getting report items for Perplexity context enrichment")
+        result = execute_with_connection(
+            operation=get_report_items_operation,
+            db_host=DB_HOST,
+            db_port=DB_PORT,
+            db_name=DB_NAME,
+            db_user=DB_USER,
+            db_password=DB_PASSWORD
+        )
+        
+        if result["status"] != "success":
+            logger.warning(f"Failed to get report items for context enrichment: {result['message']}")
+            report_items = []
+        else:
+            report_items = result["result"]
+            
+        # Step 5: Get additional context for each report item
+        if report_items:
+            logger.info("Step 5: Getting additional context from Perplexity API for each report item")
+            context_result = get_perplexity_context(report_items)
+            
+            if context_result.get("status") == "success":
+                # Update the items in the database with the new context
+                def update_items_with_context_operation(connection):
+                    cursor = connection.cursor()
+                    updated_count = 0
+                    
+                    for item in context_result.get("report_items", []):
+                        metric_name = item["metric"]
+                        group_value = item["group"]
+                        
+                        if "perplexity_context" in item.get("metadata", {}):
+                            perplexity_context = item["metadata"]["perplexity_context"]
+                            logger.info(f"Updating perplexity_context for {metric_name} - {group_value} (length: {len(perplexity_context)})")
+                            
+                            # Find the item in the database by metric_name and group_value
+                            cursor.execute("""
+                                UPDATE monthly_reporting
+                                SET metadata = jsonb_set(
+                                    CASE WHEN metadata IS NULL THEN '{}'::jsonb ELSE metadata END, 
+                                    '{perplexity_context}', 
+                                    %s::jsonb
+                                )
+                                WHERE metric_name = %s AND group_value = %s AND district = %s
+                                RETURNING id
+                            """, (
+                                json.dumps(perplexity_context),
+                                metric_name,
+                                group_value,
+                                district
+                            ))
+                            updated_ids = cursor.fetchall()
+                            updated_count += len(updated_ids)
+                            logger.info(f"Updated {len(updated_ids)} records for perplexity_context ({metric_name} - {group_value})")
+                        
+                        # Also update perplexity_response if available
+                        if "perplexity_response" in item.get("metadata", {}):
+                            perplexity_response = item["metadata"]["perplexity_response"]
+                            logger.info(f"Updating perplexity_response for {metric_name} - {group_value}: {json.dumps(perplexity_response)[:100]}...")
+                            
+                            try:
+                                # FIXED: Ensure perplexity_response is properly serialized to JSON as a string
+                                # PostgreSQL jsonb_set expects a string that can be parsed as JSON
+                                perplexity_response_json = json.dumps(perplexity_response)
+                                
+                                # Log the JSON string we're using
+                                logger.info(f"Serialized perplexity_response JSON: {perplexity_response_json[:100]}...")
+                                
+                                # Here's the corrected SQL query:
+                                # - We need to cast the JSON string to jsonb using ::jsonb
+                                # - We're using the ? operator to check if a key exists in the JSONB
+                                cursor.execute("""
+                                    UPDATE monthly_reporting
+                                    SET metadata = jsonb_set(
+                                        CASE WHEN metadata IS NULL THEN '{}'::jsonb ELSE metadata END, 
+                                        '{perplexity_response}', 
+                                        %s::jsonb
+                                    )
+                                    WHERE metric_name = %s AND group_value = %s AND district = %s
+                                    RETURNING id
+                                """, (
+                                    perplexity_response_json,
+                                    metric_name,
+                                    group_value,
+                                    district
+                                ))
+                                response_updated_ids = cursor.fetchall()
+                                logger.info(f"Updated {len(response_updated_ids)} records for perplexity_response ({metric_name} - {group_value})")
+                                
+                                # Verify this specific update worked
+                                cursor.execute("""
+                                    SELECT metadata->'perplexity_response' 
+                                    FROM monthly_reporting 
+                                    WHERE metric_name = %s AND group_value = %s AND district = %s
+                                    LIMIT 1
+                                """, (metric_name, group_value, district))
+                                result = cursor.fetchone()
+                                if result and result[0]:
+                                    logger.info(f"Verification successful! perplexity_response was stored for {metric_name}: {json.dumps(result[0])[:100]}...")
+                                else:
+                                    logger.warning(f"Verification failed! perplexity_response was not stored for {metric_name}")
+                            except Exception as e:
+                                logger.error(f"Error updating perplexity_response: {str(e)}")
+                                logger.error(f"Problematic perplexity_response: {perplexity_response}")
+                                
+                                # Try a direct update as a fallback (update the entire metadata)
+                                try:
+                                    logger.info("Attempting fallback update method for perplexity_response...")
+                                    
+                                    # First get the current metadata
+                                    cursor.execute("""
+                                        SELECT metadata FROM monthly_reporting
+                                        WHERE metric_name = %s AND group_value = %s AND district = %s
+                                        LIMIT 1
+                                    """, (metric_name, group_value, district))
+                                    
+                                    current_metadata = cursor.fetchone()[0] or {}
+                                    if not isinstance(current_metadata, dict):
+                                        current_metadata = {}
+                                    
+                                    # Update the metadata with the new perplexity_response
+                                    current_metadata['perplexity_response'] = perplexity_response
+                                    
+                                    # Update the entire metadata object
+                                    cursor.execute("""
+                                        UPDATE monthly_reporting
+                                        SET metadata = %s::jsonb
+                                        WHERE metric_name = %s AND group_value = %s AND district = %s
+                                        RETURNING id
+                                    """, (
+                                        json.dumps(current_metadata),
+                                        metric_name,
+                                        group_value,
+                                        district
+                                    ))
+                                    
+                                    fallback_updated_ids = cursor.fetchall()
+                                    logger.info(f"Fallback update successful for {len(fallback_updated_ids)} records")
+                                except Exception as fallback_error:
+                                    logger.error(f"Fallback update also failed: {str(fallback_error)}")
+                    
+                    # Verify the updates worked
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM monthly_reporting 
+                        WHERE district = %s AND metadata ? 'perplexity_context'
+                    """, (district,))
+                    context_count = cursor.fetchone()[0]
+                    
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM monthly_reporting 
+                        WHERE district = %s AND metadata ? 'perplexity_response'
+                    """, (district,))
+                    response_count = cursor.fetchone()[0]
+                    
+                    logger.info(f"Verification counts: {context_count} records with perplexity_context, {response_count} with perplexity_response")
+                    
+                    connection.commit()
+                    cursor.close()
+                    return updated_count
+                
+                # Update the items in the database
+                logger.info("Step 5.5: Updating database with Perplexity context")
+                update_result = execute_with_connection(
+                    operation=update_items_with_context_operation,
+                    db_host=DB_HOST,
+                    db_port=DB_PORT,
+                    db_name=DB_NAME,
+                    db_user=DB_USER,
+                    db_password=DB_PASSWORD
+                )
+                
+                if update_result["status"] == "success":
+                    logger.info(f"Updated {update_result['result']} items with Perplexity context")
+                else:
+                    logger.warning(f"Failed to update items with Perplexity context: {update_result['message']}")
+            else:
+                logger.warning(f"Failed to get additional context: {context_result.get('message')}")
+                # Don't fail the process if context retrieval fails
+            
+        # Step 6: Generate the monthly newsletter (with enriched context already in the database)
+        logger.info("Step 6: Generating monthly newsletter")
         newsletter_result = generate_monthly_report(district=district)
         if newsletter_result.get("status") != "success":
             return newsletter_result
             
-        # Step 4.5: Expand chart references in the newsletter
-        logger.info("Step 4.5: Expanding chart references in the newsletter")
+        # Step 7: Expand chart references in the newsletter
+        logger.info("Step 7: Expanding chart references in the newsletter")
         expand_result = expand_chart_references(newsletter_result.get("report_path"))
         if not expand_result:
             logger.warning("Failed to expand chart references in the newsletter")
-            
-        # Step 5: Proofread and revise the newsletter
-        logger.info("Step 5: Proofreading and revising newsletter")
+
+        # Step 8: Proofread and revise the newsletter
+        logger.info("Step 8: Proofreading and revising newsletter")
         revised_result = proofread_and_revise_report(newsletter_result.get("report_path"))
         if revised_result.get("status") != "success":
             return revised_result
+        
+        # Use the revised newsletter path
+        revised_newsletter_path = revised_result.get("revised_report_path")
+        
+        # Step 9: Generate an email-compatible version of the newsletter
+        logger.info("Step 9: Generating email-compatible version of newsletter")
+        email_result = None
+        if revised_newsletter_path:
+            email_result = generate_email_compatible_report(revised_newsletter_path)
+            if email_result:
+                logger.info(f"Generated email-compatible newsletter at {email_result}")
+            else:
+                logger.warning("Failed to generate email-compatible newsletter")
             
         # Update the district's top_level.json with the revised report filename
         try:
@@ -1851,7 +2304,7 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
                     top_level_data = json.load(f)
                 
                 # Add the revised report filename
-                top_level_data['monthly_report'] = Path(revised_result['revised_report_path']).name
+                top_level_data['monthly_report'] = Path(revised_newsletter_path).name
                 
                 # Save the updated top_level.json
                 with open(top_level_file, 'w', encoding='utf-8') as f:
@@ -1863,28 +2316,12 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
             logger.error(f"Error updating top_level.json: {str(e)}")
             # Don't fail the process if this update fails
             
-        # Use the original newsletter path since proofreading is skipped
-        revised_newsletter_path = newsletter_result.get("report_path")
-        
-        # # Step 6: Generate an email-compatible version of the report
-        # logger.info("Step 6: Generating email-compatible version")
-        # email_result = generate_email_compatible_report(revised_newsletter_path) # Use original path
-        # if not email_result:
-        #     logger.warning("Failed to generate email-compatible report")
-            
-        # # Step 7: Generate an inline version of the report with data URLs
-        # logger.info("Step 7: Generating inline version")
-        # inline_result = generate_inline_report(revised_newsletter_path) # Use original path
-        # if not inline_result:
-        #     logger.warning("Failed to generate inline report")
-            
         logger.info("Monthly newsletter process completed successfully")
         return {
             "status": "success",
             "newsletter_path": newsletter_result.get("report_path"),
-            "revised_newsletter_path": revised_newsletter_path # Return original path as revised path
-        #     "email_newsletter_path": email_result,
-        #     "inline_newsletter_path": inline_result
+            "revised_newsletter_path": revised_newsletter_path,
+            "email_newsletter_path": email_result
          }
         
     except Exception as e:
@@ -2152,78 +2589,166 @@ def generate_email_compatible_report(report_path, output_path=None):
         with open(report_path, 'r', encoding='utf-8') as f:
             report_html = f.read()
         
-        # Expand chart references in the report
+        # Expand chart references FIRST if they exist (e.g., [CHART:...])
+        # This ensures we are working with iframe tags
         logger.info(f"Expanding chart references in report for email compatibility: {report_path}")
-        expand_result = expand_chart_references(report_path)
+        expand_result = expand_chart_references(report_path) # This modifies the file in place
         if not expand_result:
             logger.warning("Failed to expand chart references in the report for email compatibility")
             
-        # Read the report again after expanding chart references
+        # Read the potentially modified report again
         with open(report_path, 'r', encoding='utf-8') as f:
             report_html = f.read()
         
-        # Find all iframe elements
-        import re
-        iframe_pattern = r'<iframe[^>]*src="([^"]*)"[^>]*></iframe>'
-        iframes = re.findall(iframe_pattern, report_html)
+        # Create directory for charts if it doesn't exist within the reports directory
+        reports_dir = Path(report_path).parent
+        charts_dir = reports_dir / 'charts'
+        charts_dir.mkdir(exist_ok=True)
+        
+        # Find all iframe elements using a more robust regex
+        # This regex looks for <iframe> tags and captures the src attribute value
+        iframe_pattern = r'<iframe.*?src=["\']([^"\']+)["\'].*?>.*?</iframe>'
+        iframes = re.findall(iframe_pattern, report_html, re.IGNORECASE | re.DOTALL)
+        logger.info(f"Found {len(iframes)} potential iframe URLs to process.")
+        
+        processed_html = report_html
+        replacements_made = 0
         
         # Replace each iframe with a static image
-        for iframe_url in iframes:
+        for iframe_url_encoded in iframes:
+            # Decode HTML entities like &amp;
+            import html
+            iframe_url = html.unescape(iframe_url_encoded)
+            logger.info(f"Processing iframe URL: {iframe_url}")
+            
             # Extract chart type and parameters from the URL
             if 'time-series-chart' in iframe_url:
+                chart_type = 'time_series'
                 # Extract parameters from URL
                 params = {}
-                for param in iframe_url.split('?')[1].split('&'):
-                    key, value = param.split('=')
-                    params[key] = value
+                if '?' in iframe_url:
+                    # Handle potential fragments before splitting params
+                    url_parts = iframe_url.split('?')[1]
+                    query_string = url_parts.split('#')[0]
+                    for param in query_string.split('&'):
+                        if '=' in param:
+                            key, value = param.split('=')
+                            params[key] = value
+                        else: # Handle cases where a param might not have a value
+                            params[param] = ''
                 
-                # Generate a static image for the time series chart
-                image_path = generate_time_series_chart_image(
-                    metric_id=params.get('metric_id', 1),
-                    district=params.get('district', 0),
-                    period_type=params.get('period_type', 'year')
-                )
-                if not image_path:
-                    logger.warning(f"Failed to generate image for {iframe_url}")
-                    continue
+                metric_id = params.get('metric_id', 'unknown')
+                district = params.get('district', 'unknown')
+                period_type = params.get('period_type', 'unknown')
                 
-                # Create an img tag to replace the iframe
-                img_tag = f'<img src="cid:{image_path.name}" alt="Time Series Chart" style="max-width: 100%; height: auto;" />'
+                # Generate a unique filename
+                timestamp = int(time.time())
+                img_filename = f"time_series_{metric_id}_{district}_{period_type}_{timestamp}.png"
+                img_path = charts_dir / img_filename
                 
-                # Replace the iframe with the img tag
-                iframe_tag = f'<iframe[^>]*src="{iframe_url}"[^>]*></iframe>'
-                report_html = re.sub(iframe_tag, img_tag, report_html)
+                logger.info(f"Requesting time-series image for metric={metric_id}, district={district}, period={period_type}")
+                # Request the chart image
+                success = request_chart_image('time_series', params, img_path)
+                
+                if success:
+                    # Create an img tag with a relative path
+                    img_tag = f'<div style="text-align: center;"><img src="charts/{img_filename}" alt="Time Series Chart for Metric {metric_id}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" /></div>'
+                    
+                    # More specific regex for replacement to avoid unintended changes
+                    # Match the full iframe tag based on the specific src
+                    specific_iframe_pattern = r'<iframe.*?src=["\']' + re.escape(iframe_url_encoded) + r'["\'].*?>.*?</iframe>'
+                    
+                    # Perform replacement
+                    new_html, count = re.subn(specific_iframe_pattern, img_tag, processed_html, flags=re.IGNORECASE | re.DOTALL)
+                    if count > 0:
+                        processed_html = new_html
+                        replacements_made += count
+                        logger.info(f"Replaced time series chart iframe (src: {iframe_url_encoded}) with image: {img_filename} ({count} occurrence(s))")
+                    else:
+                        logger.warning(f"Could not find exact iframe tag to replace for src: {iframe_url_encoded}")
+                else:
+                    logger.warning(f"Failed to generate image for time series chart ({iframe_url}), skipping replacement.")
                 
             elif 'anomaly-chart' in iframe_url:
                 chart_type = 'anomaly'
                 # Extract parameters from URL
                 params = {}
-                for param in iframe_url.split('?')[1].split('&'):
-                    key, value = param.split('=')
-                    params[key] = value
+                if '?' in iframe_url:
+                    url_parts = iframe_url.split('?')[1]
+                    query_string = url_parts.split('#')[0]
+                    for param in query_string.split('&'):
+                        if '=' in param:
+                            key, value = param.split('=')
+                            params[key] = value
+                        else:
+                             params[param] = ''
                 
-                # Generate a static image for the chart
-                image_path = generate_chart_image(chart_type, params)
-                if not image_path:
-                    logger.warning(f"Failed to generate image for {iframe_url}")
-                    continue
+                anomaly_id = params.get('id', 'unknown')
                 
-                # Create an img tag to replace the iframe
-                img_tag = f'<img src="cid:{image_path.name}" alt="Chart" style="max-width: 100%; height: auto;" />'
+                # Generate a unique filename
+                timestamp = int(time.time())
+                img_filename = f"anomaly_{anomaly_id}_{timestamp}.png"
+                img_path = charts_dir / img_filename
                 
-                # Replace the iframe with the img tag
-                iframe_tag = f'<iframe[^>]*src="{iframe_url}"[^>]*></iframe>'
-                report_html = re.sub(iframe_tag, img_tag, report_html)
+                logger.info(f"Requesting anomaly image for id={anomaly_id}")
+                # Request the chart image
+                success = request_chart_image('anomaly', params, img_path)
+                
+                if success:
+                    # Create an img tag with a relative path
+                    img_tag = f'<div style="text-align: center;"><img src="charts/{img_filename}" alt="Anomaly Chart for ID {anomaly_id}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" /></div>'
+                    
+                    # More specific regex for replacement
+                    specific_iframe_pattern = r'<iframe.*?src=["\']' + re.escape(iframe_url_encoded) + r'["\'].*?>.*?</iframe>'
+                    new_html, count = re.subn(specific_iframe_pattern, img_tag, processed_html, flags=re.IGNORECASE | re.DOTALL)
+                    if count > 0:
+                        processed_html = new_html
+                        replacements_made += count
+                        logger.info(f"Replaced anomaly chart iframe (src: {iframe_url_encoded}) with image: {img_filename} ({count} occurrence(s))")
+                    else:
+                         logger.warning(f"Could not find exact iframe tag to replace for src: {iframe_url_encoded}")
+                else:
+                     logger.warning(f"Failed to generate image for anomaly chart ({iframe_url}), skipping replacement.")
             else:
-                logger.warning(f"Unsupported iframe URL: {iframe_url}")
-                continue
+                logger.warning(f"Skipping unsupported iframe URL: {iframe_url}")
+                
+        logger.info(f"Total iframe replacements made: {replacements_made}")
         
-        # Write the email-compatible report
+        # # Add a note at the top of the email about interactive charts (only if replacements were made)
+        # if replacements_made > 0:
+        #     note_html = '<div style="padding: 15px; margin-top: 20px; margin-bottom: 20px; background-color: #f8f9fa; border-left: 4px solid #007BFF; border-radius: 4px;"><p style="margin: 0; font-size: 14px;">Some interactive charts have been replaced with static images in this email version. <a href="https://transparentsf.com" style="color: #007BFF; text-decoration: underline;">View the full interactive version online</a>.</p></div>'
+            
+        #     # Find a good place to insert the note - after the logo container if it exists
+        #     if '<div class="logo-container">' in processed_html:
+        #         # Try to insert after the closing div of the logo container
+        #         insert_point = processed_html.find('<div class="logo-container">')
+        #         if insert_point != -1:
+        #             end_logo_div = processed_html.find('</div>', insert_point)
+        #             if end_logo_div != -1:
+        #                  processed_html = processed_html[:end_logo_div+6] + '\n    ' + note_html + processed_html[end_logo_div+6:]
+        #             else: # Fallback if closing div not found immediately
+        #                  processed_html = processed_html.replace('<body>', '<body>\n    ' + note_html)
+        #         else:
+        #             processed_html = processed_html.replace('<body>', '<body>\n    ' + note_html)
+        #     else:
+        #         # Insert at the beginning of the body as fallback
+        #         processed_html = processed_html.replace('<body>', '<body>\n    ' + note_html)
+
+        #     # Add a footer note with link to full version
+        #     footer_note = '<div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; font-size: 13px; color: #666;">This is an email version with some interactive elements replaced by static images. <a href="https://transparentsf.com" style="color: #007BFF;">View the full interactive version online</a>.</div>'
+            
+            # # Add the footer note before the closing body tag
+            # if '</body>' in processed_html:
+            #     processed_html = processed_html.replace('</body>', footer_note + '\n</body>')
+            # else:
+            #     processed_html += footer_note # Append if no body tag found
+        
+        # Write the processed HTML to the output file
         with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(report_html)
+            f.write(processed_html)
         
         logger.info(f"Generated email-compatible report at {output_path}")
-        return output_path
+        return str(output_path)
         
     except Exception as e:
         logger.error(f"Error generating email-compatible report: {str(e)}", exc_info=True)
@@ -2540,8 +3065,10 @@ def expand_chart_references(report_path):
             anomaly_id = match.group(1)
             
             return f"""
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 60%; margin-bottom: 30px;">
+  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
     <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
+  </div>
 </div>
 """
         
@@ -2559,7 +3086,7 @@ def expand_chart_references(report_path):
                     anomaly_id = parts[1].split(".")[0]  # Remove file extension
                     
                     return f"""
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 60%; margin-bottom: 30px;">
   <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
     <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
   </div>
@@ -2581,7 +3108,7 @@ def expand_chart_references(report_path):
                     anomaly_id = parts[1].split(".")[0]  # Remove file extension
                     
                     return f"""
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 60%; margin-bottom: 30px;">
   <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
     <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
   </div>
@@ -2608,6 +3135,140 @@ def expand_chart_references(report_path):
         error_msg = f"Error in expand_chart_references: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return report_path
+
+def request_chart_image(chart_type, params, output_path):
+    """
+    Request a rendered chart image from the chart endpoint.
+    
+    Args:
+        chart_type: Type of chart ('time_series' or 'anomaly')
+        params: Parameters for the chart (metric_id, district, etc.)
+        output_path: Path to save the image
+        
+    Returns:
+        Boolean indicating success
+    """
+    logger.info(f"Requesting {chart_type} chart image with params: {params}")
+    
+    try:
+        # Construct the URL for the chart based on chart type
+        if chart_type == 'time_series':
+            metric_id = params.get('metric_id', '1')
+            district = params.get('district', '0')
+            period_type = params.get('period_type', 'year')
+            
+            # Clean period_type: Remove any fragments like #chart-section
+            if '#' in period_type:
+                period_type = period_type.split('#')[0]
+                logger.debug(f"Cleaned period_type to: {period_type}")
+            
+            url = f"{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}&format=image"
+        elif chart_type == 'anomaly':
+            anomaly_id = params.get('id', '27338')
+            url = f"{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}&format=image"
+        else:
+            logger.error(f"Unsupported chart type: {chart_type}")
+            return False
+        
+        logger.info(f"Requesting chart image from URL: {url}") # Log the final URL
+        
+        # Make the request
+        response = requests.get(url, timeout=30)  # Add timeout to prevent hanging
+        
+        if response.status_code != 200:
+            logger.error(f"Failed to get chart image: {response.status_code} - {response.text}")
+            # DO NOT create fallback if the request itself failed
+            return False
+        
+        # Request was successful (status 200), now check content type
+        content_type = response.headers.get('content-type', '')
+        if 'image' in content_type:
+            # Save the image directly
+            with open(output_path, 'wb') as f:
+                f.write(response.content)
+            logger.info(f"Successfully saved chart image to {output_path}")
+            return True
+        elif 'application/json' in content_type:
+            # Check if the response contains an image as base64
+            try:
+                data = response.json()
+                if 'image' in data:
+                    image_data = base64.b64decode(data['image'])
+                    with open(output_path, 'wb') as f:
+                        f.write(image_data)
+                    logger.info(f"Successfully saved chart image from JSON to {output_path}")
+                    return True
+                else:
+                    logger.error(f"JSON response doesn't contain image data: {data}")
+            except Exception as e:
+                logger.error(f"Error processing JSON response: {e}")
+        else:
+            logger.error(f"Unexpected content type: {content_type}")
+            
+        # If we got here, the request succeeded but didn't return a valid image
+        # Generate a fallback image with text
+        logger.warning(f"Request successful but no valid image found. Generating fallback for {chart_type}.")
+        create_fallback_chart_image(chart_type, params, output_path)
+        return True # Return True as we created a fallback
+        
+    except Exception as e:
+        logger.error(f"Error requesting chart image: {e}", exc_info=True)
+        # DO NOT create fallback on general exception during request
+        return False
+
+def create_fallback_chart_image(chart_type, params, output_path):
+    """
+    Create a fallback chart image with placeholder text.
+    
+    Args:
+        chart_type: Type of chart ('time_series' or 'anomaly')
+        params: Parameters for the chart (metric_id, district, etc.)
+        output_path: Path to save the image
+    """
+    try:
+        # Create a simple plot with Plotly
+        fig = go.Figure()
+        
+        # Add text explaining this is a placeholder
+        if chart_type == 'time_series':
+            metric_id = params.get('metric_id', '1')
+            district = params.get('district', '0')
+            district_name = "Citywide" if district == '0' else f"District {district}"
+            title = f"Time Series Chart - Metric {metric_id} - {district_name}"
+        else:  # anomaly
+            anomaly_id = params.get('id', '27338')
+            title = f"Anomaly Chart - ID {anomaly_id}"
+        
+        fig.add_annotation(
+            text="This chart is only available in the web version<br>Please view online for interactive charts",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=20)
+        )
+        
+        # Set layout
+        fig.update_layout(
+            title=title,
+            width=800,
+            height=500,
+            plot_bgcolor='#f8f9fa',
+            paper_bgcolor='#f8f9fa',
+            margin=dict(t=80, b=80, l=80, r=80)
+        )
+        
+        # Save the figure
+        fig.write_image(output_path)
+        logger.info(f"Created fallback chart image at {output_path}")
+    except Exception as e:
+        logger.error(f"Error creating fallback chart image: {e}", exc_info=True)
+        # Last resort - create a blank image
+        try:
+            img = Image.new('RGB', (800, 500), color=(248, 249, 250))
+            img.save(output_path)
+            logger.info(f"Created blank fallback image at {output_path}")
+        except Exception as e2:
+            logger.error(f"Error creating blank image: {e2}")
 
 if __name__ == "__main__":
     # Run the monthly report process

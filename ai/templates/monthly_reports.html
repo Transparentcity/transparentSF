@@ -191,13 +191,18 @@
         .report-link {
             display: inline-flex;
             align-items: center;
-            color: #007BFF;
             text-decoration: none;
             font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-weight: normal;
+            background-color: #f5f5f5;
+            color: #333;
         }
         
         .report-link:hover {
-            text-decoration: underline;
+            background-color: #e0e0e0;
+            text-decoration: none;
         }
         
         .report-link svg {
@@ -223,18 +228,35 @@
         }
         
         .action-btn {
-            background-color: #6c757d;
-            color: white;
-            border: none;
             padding: 8px 12px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 13px;
             margin-right: 5px;
+            font-weight: normal;
+            border: none;
+            background-color: #cbcbcb;
+            color: #333;
         }
         
         .action-btn:hover {
-            background-color: #5a6268;
+            background-color: #e0e0e0;
+        }
+        
+        .action-btn.delete-btn {
+            color:crimson/* Removed color and background-color */
+        }
+        
+        .action-btn.delete-btn:hover {
+            background-color: #e0e0e0; /* Standard hover */
+        }
+        
+        .action-btn.primary-btn {
+            /* Removed background-color and color */
+        }
+        
+        .action-btn.primary-btn:hover {
+            background-color: #e0e0e0; /* Standard hover */
         }
         
         .loading {
@@ -380,10 +402,30 @@
         }
         
         .report-metadata {
-            margin-bottom: 1.5rem;
-            padding: 1rem;
-            background-color: #f5f5f5;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .metadata-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .metadata-item {
+            padding: 5px 10px;
+            background-color: #fff;
             border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            font-size: 13px;
+        }
+        
+        .metadata-item strong {
+            margin-right: 5px;
+            color: #555;
         }
         
         .metric-item {
@@ -393,10 +435,38 @@
             border-radius: 4px;
             border-left: 4px solid #4CAF50;
         }
-        
+
         .metric-item h4 {
             margin-top: 0;
             color: #333;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .metric-item h4::after {
+            content: '▼';
+            font-size: 12px;
+            color: #666;
+            transition: transform 0.2s ease;
+        }
+
+        .metric-item.collapsed h4::after {
+            transform: rotate(-90deg);
+        }
+
+        .metric-details {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+            display: none; /* Hidden by default */
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .metric-item.expanded .metric-details {
+            display: block;
         }
 
         .metrics-container {
@@ -404,31 +474,6 @@
             padding: 15px;
             background-color: #f8f9fa;
             border-radius: 8px;
-        }
-
-        .metric-item {
-            margin-bottom: 20px;
-            padding: 15px;
-            background-color: white;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .metric-item h4 {
-            margin: 0 0 10px 0;
-            color: #2c3e50;
-            font-size: 1.1em;
-        }
-
-        .metric-details {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #eee;
-        }
-
-        .metric-details p {
-            margin: 8px 0;
-            line-height: 1.4;
         }
 
         .positive-change {
@@ -450,15 +495,9 @@
             margin-top: 20px;
         }
 
-        .report-metadata {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
         .report-metadata p {
             margin: 5px 0;
+            display: none; /* Hide the old paragraph style */
         }
 
         /* Modal styles */
@@ -497,6 +536,323 @@
         .close:hover {
             color: #000;
         }
+
+        .citation-link {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .citation-link:hover {
+            text-decoration: underline;
+        }
+
+        .citation-item {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            padding-left: 10px;
+            background-color: #f8f9fa;
+        }
+
+        .citation-number {
+            font-weight: bold;
+            color: #007bff;
+            margin-right: 5px;
+        }
+
+        .citation-url {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .citation-url:hover {
+            text-decoration: underline;
+        }
+
+        .perplexity-context {
+            margin-top: 5px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            line-height: 1.5;
+        }
+
+        .citations-container {
+            margin-top: 10px;
+            margin-bottom: 15px;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+
+        .change-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .positive-change {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .negative-change {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .neutral-change {
+            background-color: #e2e3e5;
+            color: #383d41;
+        }
+
+        .metrics-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .metrics-header h3 {
+            margin: 0;
+        }
+
+        .metric-header {
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            gap: 10px;
+        }
+
+        /* Style to indicate the header is clickable */
+        .metric-header:hover {
+            color: #007bff;
+        }
+
+        .metrics-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .expand-all-btn, .collapse-all-btn {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        /* Make sure items are initially collapsed after loading */
+        .metric-item {
+            margin-bottom: 10px;
+        }
+
+        .report-content-sections {
+            margin-top: 30px;
+        }
+
+        .report-section {
+            background: #f9f9f9;
+            border-radius: 4px;
+            border: 1px solid #eee;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .report-section.collapsed .section-content {
+            display: none;
+        }
+
+        .report-section.hidden {
+            display: none;
+        }
+
+        .section-header {
+            margin: 0;
+            padding: 15px;
+            color: #333;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            background-color: #f1f1f1;
+            border-bottom: 1px solid #eee;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .section-header::after {
+            content: '▼';
+            font-size: 12px;
+            color: #666;
+            position: absolute;
+            right: 15px;
+            transition: transform 0.3s ease;
+        }
+
+        .report-section.collapsed .section-header::after {
+            transform: rotate(-90deg);
+        }
+
+        .section-content {
+            padding: 15px;
+            transition: max-height 0.3s ease;
+            overflow-y: auto;
+            max-height: 600px;
+        }
+
+        .embedded-newsletter {
+            background-color: #fff;
+            border-radius: 4px;
+            padding: 20px;
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        .loading-indicator {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+        }
+
+        .error-message {
+            color: #dc3545;
+            padding: 15px;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .metric-stats {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-left: auto;
+        }
+
+        .stat-item {
+            font-size: 12px;
+            color: #555;
+            background-color: #f5f5f5;
+            padding: 3px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .stat-label {
+            font-weight: 600;
+            color: #333;
+            margin-right: 4px;
+        }
+
+        @media (max-width: 768px) {
+            .metric-stats {
+                margin-top: 5px;
+                margin-left: 0;
+                width: 100%;
+            }
+            
+            .metric-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* Styles for the prompt editor */
+        .prompt-templates {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .prompt-button {
+            padding: 8px 15px;
+            background-color: #818181;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+
+        .prompt-button:hover {
+            background-color: #e0e0e0;
+        }
+
+        #prompt-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .prompt-modal-content {
+            width: 90%;
+            max-width: 1000px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            margin: 5vh auto;
+        }
+
+        .prompt-editor-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+            padding: 10px 0;
+            flex: 1;
+        }
+
+        .editor-row {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .prompt-textarea {
+            width: 100%;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        #promptContent {
+            height: 500px;
+        }
+
+        .editor-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .template-placeholder {
+            color: #007bff;
+            background-color: #e7f1ff;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-style: italic;
+        }
+
+        #savePromptBtn {
+            position: relative;
+        }
     </style>
 </head>
 <body>
@@ -504,7 +860,15 @@
         <h1>Monthly Newsletters</h1>
         
         <div class="section">
-            <h2>Generate New Report</h2>
+            <h2>Prompt Templates</h2>
+            <div class="prompt-templates">
+                <div class="loading-indicator" id="prompts-loading">Loading prompts...</div>
+                <div id="prompt-buttons" style="display: none; gap: 10px;"></div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Generate New Newsletter</h2>
             <form id="generate-report-form">
                 <div style="display: flex; align-items: flex-end; gap: 15px; margin-bottom: 10px;">
                     <div style="width: 200px;">
@@ -525,40 +889,39 @@
                         </select>
                     </div>
                     
-                    <div style="width: 150px;">
+                    <div style="width: 80px;">
                         <label for="max-items">Max Items</label>
-                        <select id="max-items" style="width: 100%;">
-                            <option value="1">1 items</option>
-                            <option value="3">3 items</option>
-                            <option value="5">5 items</option>
-                            <option value="10">10 items</option>
-                        </select>
+                        <input type="number" id="max-items" value="1" min="1" style="width: 100%;">
                     </div>
                     
-                    <button type="submit" id="generate-btn" style="height: 32px; margin-top: 0;">Generate Report</button>
+                    <button type="submit" id="generate-btn" style="height: 32px; margin-left: 20px;">Generate Newsletter</button>
                 </div>
                 <div id="generate-status" class="status-message" style="display: none;"></div>
             </form>
         </div>
         
         <div class="section">
-            <h2>View Reports</h2>
-            <div class="report-selector">
-                <label for="report-select">Select a Report</label>
-                <select id="report-select">
-                    <option value="">-- Select a report --</option>
-                </select>
-            </div>
-            
-            <div id="report-details" class="report-details-container">
-                <h3>Report Details</h3>
-                <div class="report-actions" style="margin-bottom: 15px;">
-                    <button id="rerunReportBtn" class="btn btn-primary" onclick="rerunReportGeneration()">
+            <h2>View Newsletters</h2>
+            <div class="report-selector" style="display: flex; align-items: flex-end; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="width: 300px;">
+                    <label for="report-select">Select a Newsletter</label>
+                    <select id="report-select" style="width: 100%;">
+                        <option value="">-- Select a newsletter --</option>
+                    </select>
+                </div>
+                
+                <div class="report-actions" style="display: flex; gap: 10px; align-items: flex-end;">
+                    <button id="rerunReportBtn" class="action-btn primary-btn">
                         Re-write newsletter
                     </button>
                     <button id="rerun-proofreading" class="action-btn">Re-run Proofreading</button>
-                    <button id="delete-report" class="action-btn delete-btn">Delete Report</button>
+                    <button id="publish-to-ghost" class="action-btn" >Publish</button>
+                    <button id="delete-report" class="action-btn delete-btn">Delete Newsletter</button>
                 </div>
+            </div>
+            
+            <div id="report-details" class="report-details-container">
+                <h3>Newsletter Details</h3>
                 <div id="report-metrics"></div>
             </div>
         </div>
@@ -567,8 +930,25 @@
     <div id="reportDetailsModal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
-            <h2>Report Details</h2>
+            <h2>Newsletter Details</h2>
             <div id="reportDetails"></div>
+        </div>
+    </div>
+    
+    <div id="promptEditModal" class="modal">
+        <div class="modal-content prompt-modal-content">
+            <span class="close">&times;</span>
+            <h2 id="promptModalTitle">Edit Prompt</h2>
+            <div class="prompt-editor-container">
+                <div class="editor-row">
+                    <label for="promptContent">Prompt Content:</label>
+                    <textarea id="promptContent" rows="20" class="prompt-textarea"></textarea>
+                </div>
+                <div class="editor-actions">
+                    <button id="savePromptBtn" class="action-btn primary-btn">Save Changes</button>
+                    <button id="cancelPromptBtn" class="action-btn">Cancel</button>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -580,13 +960,38 @@
             const reportSelect = document.getElementById('report-select');
             const reportDetails = document.getElementById('report-details');
             const reportMetrics = document.getElementById('report-metrics');
+            const reportActions = document.querySelector('.report-actions');
             const modal = document.getElementById('reportDetailsModal');
             const closeBtn = document.querySelector('.close');
+            const promptsLoadingEl = document.getElementById('prompts-loading');
+            const promptButtonsEl = document.getElementById('prompt-buttons');
+            const promptEditModal = document.getElementById('promptEditModal');
+            const promptModalCloseBtn = promptEditModal.querySelector('.close');
+            const promptModalTitle = document.getElementById('promptModalTitle');
+            const promptContent = document.getElementById('promptContent');
+            const savePromptBtn = document.getElementById('savePromptBtn');
+            const cancelPromptBtn = document.getElementById('cancelPromptBtn');
+            
+            // Store prompts data globally
+            let promptsData = {};
+            let currentPromptKey = '';
+            let currentPromptCategory = '';
+            
+            // Initialize the prompt editor components
+            initPromptEditor();
+            
+            // Initially hide the action buttons
+            if (reportActions) {
+                reportActions.style.display = 'none';
+            }
+            
+            // Load prompts
+            loadPrompts();
             
             // Load reports into the selector
             loadReports();
             
-            // Modal event handlers
+            // Modal event handlers for report details
             closeBtn.onclick = function() {
                 modal.style.display = "none";
             }
@@ -594,6 +999,250 @@
             window.onclick = function(event) {
                 if (event.target == modal) {
                     modal.style.display = "none";
+                } else if (event.target == promptEditModal) {
+                    promptEditModal.style.display = "none";
+                }
+            }
+            
+            // Modal event handlers for prompt editor
+            promptModalCloseBtn.onclick = function() {
+                promptEditModal.style.display = "none";
+            }
+            
+            cancelPromptBtn.onclick = function() {
+                promptEditModal.style.display = "none";
+            }
+            
+            savePromptBtn.onclick = function() {
+                savePromptChanges();
+            }
+            
+            // Function to load prompts from prompts.json
+            async function loadPrompts() {
+                try {
+                    promptsLoadingEl.style.display = 'block';
+                    promptButtonsEl.style.display = 'none';
+                    
+                    const response = await fetch('/backend/get_prompts');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success' && data.prompts) {
+                        promptsData = data.prompts;
+                        displayPromptButtons();
+                    } else {
+                        throw new Error(data.message || 'Failed to load prompts');
+                    }
+                } catch (error) {
+                    console.error('Error loading prompts:', error);
+                    promptsLoadingEl.textContent = `Error loading prompts: ${error.message}`;
+                } finally {
+                    promptsLoadingEl.style.display = 'none';
+                    promptButtonsEl.style.display = 'flex';
+                }
+            }
+            
+            // Function to display prompt buttons
+            function displayPromptButtons() {
+                promptButtonsEl.innerHTML = '';
+                
+                // Only show monthly_report prompts for now
+                const monthlyReportPrompts = promptsData.monthly_report || {};
+                
+                for (const [key, value] of Object.entries(monthlyReportPrompts)) {
+                    const button = document.createElement('button');
+                    button.className = 'prompt-button';
+                    button.textContent = key.replace(/_/g, ' ');
+                    button.dataset.category = 'monthly_report';
+                    button.dataset.key = key;
+                    button.onclick = () => openPromptEditor('monthly_report', key);
+                    promptButtonsEl.appendChild(button);
+                }
+            }
+            
+            // Function to open the prompt editor
+            function openPromptEditor(category, key) {
+                const prompt = promptsData[category][key];
+                if (!prompt) {
+                    alert(`Prompt ${category}.${key} not found`);
+                    return;
+                }
+                
+                currentPromptCategory = category;
+                currentPromptKey = key;
+                
+                promptModalTitle.textContent = `Edit Prompt: ${key.replace(/_/g, ' ')}`;
+                
+                // Set the content - handle both string and object formats
+                let promptText = '';
+                if (typeof prompt === 'string') {
+                    promptText = prompt;
+                } else if (typeof prompt === 'object') {
+                    // If it's an object, get the prompt field
+                    promptText = prompt.prompt || '';
+                }
+                
+                promptContent.value = promptText;
+                
+                // Optional: Highlight template variables - disabled for now as it affects editing
+                // highlightTemplateVariables(promptContent, promptText);
+                
+                promptEditModal.style.display = 'block';
+            }
+            
+            // Function to highlight template variables
+            function highlightTemplateVariables(textarea, text) {
+                // This is a basic implementation that could be enhanced with a proper editor like CodeMirror
+                const templateVarRegex = /\{([^{}]+)\}/g;
+                let matches = [];
+                let match;
+                
+                // Find all template variables
+                while ((match = templateVarRegex.exec(text)) !== null) {
+                    matches.push({
+                        variable: match[0],
+                        start: match.index,
+                        end: match.index + match[0].length
+                    });
+                }
+                
+                // Sort matches by position (in reverse order to avoid index shifting)
+                matches.sort((a, b) => b.start - a.start);
+                
+                // Replace each match with a highlighted version
+                let highlightedText = text;
+                for (const match of matches) {
+                    highlightedText = 
+                        highlightedText.substring(0, match.start) + 
+                        `<span class="template-placeholder">${match.variable}</span>` + 
+                        highlightedText.substring(match.end);
+                }
+                
+                // Create a container for the highlighted text
+                const container = document.createElement('div');
+                container.innerHTML = highlightedText;
+                container.style.position = 'absolute';
+                container.style.top = '0';
+                container.style.left = '0';
+                container.style.right = '0';
+                container.style.bottom = '0';
+                container.style.pointerEvents = 'none';
+                container.style.zIndex = '1';
+                container.style.overflow = 'auto';
+                
+                // Replace the textarea with the highlighted container
+                textarea.parentNode.style.position = 'relative';
+                textarea.parentNode.appendChild(container);
+            }
+            
+            // Function to save prompt changes
+            async function savePromptChanges() {
+                if (!currentPromptCategory || !currentPromptKey) {
+                    alert('No prompt selected for editing');
+                    return;
+                }
+                
+                // Get the current prompt data
+                const currentPrompt = promptsData[currentPromptCategory][currentPromptKey];
+                
+                // Keep the system message if it exists, otherwise use an empty prompt object
+                const updatedPrompt = {
+                    system: currentPrompt.system || '',
+                    prompt: promptContent.value
+                };
+                
+                try {
+                    savePromptBtn.disabled = true;
+                    const originalText = savePromptBtn.textContent;
+                    savePromptBtn.textContent = 'Saving...';
+                    
+                    const response = await fetch('/backend/update_prompt', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            category: currentPromptCategory,
+                            key: currentPromptKey,
+                            prompt: updatedPrompt
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        // Update local data
+                        if (!promptsData[currentPromptCategory]) {
+                            promptsData[currentPromptCategory] = {};
+                        }
+                        promptsData[currentPromptCategory][currentPromptKey] = updatedPrompt;
+                        
+                        alert('Prompt updated successfully!');
+                        promptEditModal.style.display = 'none';
+                    } else {
+                        throw new Error(data.message || 'Failed to update prompt');
+                    }
+                } catch (error) {
+                    console.error('Error saving prompt:', error);
+                    alert(`Error saving prompt: ${error.message}`);
+                } finally {
+                    savePromptBtn.disabled = false;
+                    savePromptBtn.textContent = 'Save Changes';
+                }
+            }
+            
+            // Load reports into the selector
+            async function loadReports() {
+                try {
+                    const response = await fetch('/backend/get_monthly_reports');
+                    const data = await response.json();
+                    
+                    console.log("Newsletters data received:", data);
+                    
+                    if (data.status === 'success' && data.reports && data.reports.length > 0) {
+                        // Clear existing options except the first one
+                        while (reportSelect.options.length > 1) {
+                            reportSelect.remove(1);
+                        }
+                        
+                        // Add new options
+                        data.reports.forEach(report => {
+                            const option = document.createElement('option');
+                            // Use the original_filename as the value
+                            option.value = report.original_filename;
+                            // Format the display text with district name and date
+                            const reportDate = new Date(report.report_date);
+                            const formattedDate = reportDate.toLocaleDateString();
+                            option.textContent = `${report.district_name} - ${formattedDate}`;
+                            // Store revised filename as a data attribute
+                            option.dataset.revisedFilename = report.revised_filename || ''; 
+                            reportSelect.appendChild(option);
+                            console.log("Added option:", option.value, option.textContent);
+                        });
+                        
+                        // If there's only one report, select it automatically
+                        if (data.reports.length === 1) {
+                            reportSelect.value = data.reports[0].original_filename;
+                            // Trigger the change event to load the report details
+                            const event = new Event('change');
+                            reportSelect.dispatchEvent(event);
+                        }
+                    } else {
+                        console.log("No newsletters found or empty newsletters array");
+                        // Add a message if no reports are found
+                        const option = document.createElement('option');
+                        option.value = "";
+                        option.textContent = "No newsletters available";
+                        option.disabled = true;
+                        reportSelect.appendChild(option);
+                    }
+                } catch (error) {
+                    console.error('Error loading newsletters:', error);
+                    // Add an error message to the dropdown
+                    const option = document.createElement('option');
+                    option.value = "";
+                    option.textContent = "Error loading newsletters";
+                    option.disabled = true;
+                    reportSelect.appendChild(option);
                 }
             }
             
@@ -601,8 +1250,12 @@
             reportSelect.addEventListener('change', () => {
                 const selectedReport = reportSelect.value;
                 if (selectedReport) {
-                    console.log("Selected report:", selectedReport);
+                    console.log("Selected newsletter:", selectedReport);
                     reportDetails.style.display = 'block';
+                    // Show action buttons
+                    if (reportActions) {
+                        reportActions.style.display = 'flex';
+                    }
                     loadReportDetails(selectedReport);
                     
                     // Set up the delete button
@@ -613,59 +1266,58 @@
                         };
                     }
                     
-                    // --- Add links for original and revised reports ---
-                    const reportActionsDiv = document.getElementById('report-details').querySelector('.report-actions');
-                    let linkContainer = reportActionsDiv.querySelector('.view-links-container');
-                    if (!linkContainer) {
-                        linkContainer = document.createElement('div');
-                        linkContainer.className = 'view-links-container';
-                        linkContainer.style.display = 'flex'; // Basic styling
-                        linkContainer.style.gap = '10px';
-                        reportActionsDiv.prepend(linkContainer); // Add it at the start of actions
-                    }
-                    
-                    const selectedOption = reportSelect.options[reportSelect.selectedIndex];
-                    const originalFilename = selectedOption.value;
-                    const revisedFilename = selectedOption.dataset.revisedFilename;
-
-                    const originalLink = `<a href="/backend/monthly-report/file/${originalFilename}" target="_blank" class="report-link action-btn">View Original</a>`;
-                    const revisedLink = revisedFilename ? `<a href="/backend/monthly-report/file/${revisedFilename}" target="_blank" class="report-link action-btn">View Revised</a>` : '';
-                    
-                    // Set the content of the container
-                    linkContainer.innerHTML = originalLink + (revisedFilename ? '&nbsp;' + revisedLink : ''); // Use &nbsp; for spacing
-                    // --- End of adding links ---
-
                     // Set up the view full report button
                     const viewFullReportBtn = document.getElementById('view-full-report');
-                    viewFullReportBtn.onclick = () => {
-                        console.log("Opening full report:", selectedReport);
-                        window.open(`/backend/monthly-report/file/${selectedReport}`, '_blank');
-                    };
+                    if (viewFullReportBtn) {
+                        viewFullReportBtn.onclick = () => {
+                            console.log("Opening full newsletter:", selectedReport);
+                            window.open(`/backend/monthly-report/file/${selectedReport}`, '_blank');
+                        };
+                    }
                     
                     // Set up the view email version button
                     const viewEmailReportBtn = document.getElementById('view-email-report');
-                    viewEmailReportBtn.onclick = () => {
-                        console.log("Opening email version:", selectedReport);
-                        // Replace .html with _email.html in the filename
-                        const emailFilename = selectedReport.replace('.html', '_email.html');
-                        window.open(`/backend/monthly-report/file/${emailFilename}`, '_blank');
-                    };
+                    if (viewEmailReportBtn) {
+                        viewEmailReportBtn.onclick = () => {
+                            console.log("Opening email version:", selectedReport);
+                            // Replace .html with _email.html in the filename
+                            const emailFilename = selectedReport.replace('.html', '_revised_email.html');
+                            window.open(`/backend/monthly-report/file/${emailFilename}`, '_blank');
+                        };
+                    }
                     
                     // Set up the re-run generation button
                     const rerunReportBtn = document.getElementById('rerunReportBtn');
-                    rerunReportBtn.onclick = () => {
-                        console.log("Re-running report generation for:", selectedReport);
-                        rerunReportGeneration(selectedReport);
-                    };
+                    if (rerunReportBtn) {
+                        rerunReportBtn.onclick = () => {
+                            console.log("Re-running newsletter generation for:", selectedReport);
+                            rerunReportGeneration(selectedReport);
+                        };
+                    }
                     
                     // Set up the re-run proofreading button
                     const rerunProofreadingBtn = document.getElementById('rerun-proofreading');
-                    rerunProofreadingBtn.onclick = () => {
-                        console.log("Re-running proofreading for:", selectedReport);
-                        rerunProofreading(selectedReport);
-                    };
+                    if (rerunProofreadingBtn) {
+                        rerunProofreadingBtn.onclick = () => {
+                            console.log("Re-running proofreading for:", selectedReport);
+                            rerunProofreading(selectedReport);
+                        };
+                    }
+
+                    // Set up the publish to Ghost button
+                    const publishToGhostBtn = document.getElementById('publish-to-ghost');
+                    if (publishToGhostBtn) {
+                        publishToGhostBtn.onclick = () => {
+                            console.log("Publishing to Ghost:", selectedReport);
+                            publishToGhost(selectedReport);
+                        };
+                    }
                 } else {
                     reportDetails.style.display = 'none';
+                    // Hide action buttons
+                    if (reportActions) {
+                        reportActions.style.display = 'none';
+                    }
                 }
             });
             
@@ -698,13 +1350,13 @@
                     
                     if (data.status === 'success') {
                         generateStatus.className = 'status-message success';
-                        generateStatus.textContent = 'Report generated successfully!';
+                        generateStatus.textContent = 'Newsletter generated successfully!';
                         generateStatus.style.display = 'block';
                         
                         // Reload the reports list
                         loadReports();
                     } else {
-                        throw new Error(data.message || 'Failed to generate report');
+                        throw new Error(data.message || 'Failed to generate newsletter');
                     }
                 } catch (error) {
                     generateStatus.className = 'status-message error';
@@ -713,73 +1365,17 @@
                 } finally {
                     // Reset button state
                     generateBtn.disabled = false;
-                    generateBtn.textContent = 'Generate Report';
+                    generateBtn.textContent = 'Generate Newsletter';
                 }
             });
-            
-            // Function to load reports into the selector
-            async function loadReports() {
-                try {
-                    const response = await fetch('/backend/get_monthly_reports');
-                    const data = await response.json();
-                    
-                    console.log("Reports data received:", data);
-                    
-                    if (data.status === 'success' && data.reports && data.reports.length > 0) {
-                        // Clear existing options except the first one
-                        while (reportSelect.options.length > 1) {
-                            reportSelect.remove(1);
-                        }
-                        
-                        // Add new options
-                        data.reports.forEach(report => {
-                            const option = document.createElement('option');
-                            // Use the original_filename as the value
-                            option.value = report.original_filename;
-                            // Format the display text with district name and date
-                            const reportDate = new Date(report.report_date);
-                            const formattedDate = reportDate.toLocaleDateString();
-                            option.textContent = `${report.district_name} - ${formattedDate}`;
-                            // Store revised filename as a data attribute
-                            option.dataset.revisedFilename = report.revised_filename || ''; 
-                            reportSelect.appendChild(option);
-                            console.log("Added option:", option.value, option.textContent);
-                        });
-                        
-                        // If there's only one report, select it automatically
-                        if (data.reports.length === 1) {
-                            reportSelect.value = data.reports[0].original_filename;
-                            // Trigger the change event to load the report details
-                            const event = new Event('change');
-                            reportSelect.dispatchEvent(event);
-                        }
-                    } else {
-                        console.log("No reports found or empty reports array");
-                        // Add a message if no reports are found
-                        const option = document.createElement('option');
-                        option.value = "";
-                        option.textContent = "No reports available";
-                        option.disabled = true;
-                        reportSelect.appendChild(option);
-                    }
-                } catch (error) {
-                    console.error('Error loading reports:', error);
-                    // Add an error message to the dropdown
-                    const option = document.createElement('option');
-                    option.value = "";
-                    option.textContent = "Error loading reports";
-                    option.disabled = true;
-                    reportSelect.appendChild(option);
-                }
-            }
             
             // Function to load report details
             async function loadReportDetails(filename) {
                 try {
-                    console.log("Loading report details for:", filename);
+                    console.log("Loading newsletter details for:", filename);
                     
                     // Show loading state
-                    reportMetrics.innerHTML = '<p>Loading report details...</p>';
+                    reportMetrics.innerHTML = '<p>Loading newsletter details...</p>';
                     reportDetails.style.display = 'block';
                     
                     // Extract the report ID from the filename
@@ -893,13 +1489,13 @@
                             }
                         }
                     } else {
-                        console.error("Error loading report:", reportResponse.status, reportResponse.statusText);
-                        reportMetrics.innerHTML = `<p>Error loading report: ${reportResponse.status} ${reportResponse.statusText}</p>`;
+                        console.error("Error loading newsletter:", reportResponse.status, reportResponse.statusText);
+                        reportMetrics.innerHTML = `<p>Error loading newsletter: ${reportResponse.status} ${reportResponse.statusText}</p>`;
                         reportDetails.style.display = 'block';
                     }
                 } catch (error) {
-                    console.error('Error loading report details:', error);
-                    reportMetrics.innerHTML = `<p>Error loading report details: ${error.message}</p>`;
+                    console.error('Error loading newsletter details:', error);
+                    reportMetrics.innerHTML = `<p>Error loading newsletter details: ${error.message}</p>`;
                     reportDetails.style.display = 'block';
                 }
             }
@@ -980,14 +1576,73 @@
                 }
             }
             
+            // Function to publish newsletter to Ghost
+            async function publishToGhost(filename) {
+                try {
+                    // Get the selected option to extract title and check for revised version
+                    const selectedOption = reportSelect.options[reportSelect.selectedIndex];
+                    const reportTitle = selectedOption.textContent;
+                    const revisedFilename = selectedOption.dataset.revisedFilename;
+                    const originalFilename = selectedOption.value;
+                    const emailFilename = originalFilename ? originalFilename.replace('.html', '_revised_email.html') : null;
+                    
+                    // Use revised version if available, otherwise use original
+                    const fileToPublish = revisedFilename || filename;
+                    
+                    // Show loading state
+                    const publishBtn = document.getElementById('publish-to-ghost');
+                    publishBtn.disabled = true;
+                    publishBtn.innerHTML = '<span class="loading"></span> Publishing...';
+                    
+                    // Confirm with the user 
+                    if (!confirm(`Are you sure you want to publish "${reportTitle}" to the blog?`)) {
+                        publishBtn.disabled = false;
+                        publishBtn.textContent = 'Publish';
+                        return;
+                    }
+                    
+                    // Call the API to publish to Ghost
+                    const response = await fetch('/backend/publish_to_ghost', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            filename: fileToPublish,
+                            title: reportTitle
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        // Open the post URL in a new tab
+                        if (data.url) {
+                            window.open(data.url, '_blank');
+                        }
+                        alert(`Newsletter published successfully!\n${data.url || ''}`);
+                    } else {
+                        throw new Error(data.message || 'Failed to publish newsletter');
+                    }
+                } catch (error) {
+                    console.error('Error publishing to Ghost:', error);
+                    alert(`Error publishing to Ghost: ${error.message}`);
+                } finally {
+                    // Reset button state
+                    const publishBtn = document.getElementById('publish-to-ghost');
+                    publishBtn.disabled = false;
+                    publishBtn.textContent = 'Publish';
+                }
+            }
+            
             // Function to delete a report
             async function deleteReport(filename) {
                 if (!filename) {
-                    alert('No report selected');
+                    alert('No newsletter selected');
                     return;
                 }
 
-                if (!confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
+                if (!confirm('Are you sure you want to delete this newsletter? This action cannot be undone.')) {
                     return;
                 }
 
@@ -1020,20 +1675,20 @@
                     const deleteData = await deleteResponse.json();
 
                     if (deleteData.status === 'success') {
-                        alert('Report deleted successfully!');
+                        alert('Newsletter deleted successfully!');
                         // Reload the reports list
                         loadReports();
                         // Hide the report details
                         reportDetails.style.display = 'none';
                     } else {
-                        throw new Error(deleteData.message || 'Failed to delete report');
+                        throw new Error(deleteData.message || 'Failed to delete newsletter');
                     }
                 } catch (error) {
-                    alert(`Error deleting report: ${error.message}`);
+                    alert(`Error deleting newsletter: ${error.message}`);
                 } finally {
                     const deleteBtn = document.getElementById('delete-report');
                     deleteBtn.disabled = false;
-                    deleteBtn.textContent = 'Delete Report';
+                    deleteBtn.textContent = 'Delete Newsletter';
                 }
             }
             
@@ -1046,21 +1701,21 @@
                         displayReportDetails(data.report);
                         document.getElementById('reportDetailsModal').style.display = 'block';
                     } else {
-                        alert('Error loading report details: ' + data.message);
+                        alert('Error loading newsletter details: ' + data.message);
                     }
                 } catch (error) {
                     console.error('Error:', error);
-                    alert('Error loading report details');
+                    alert('Error loading newsletter details');
                 }
             }
 
             function displayReportDetails(report) {
-                console.log("Displaying report details:", report);
+                console.log("Displaying newsletter details:", report);
                 const detailsContainer = document.getElementById('reportDetails');
                 const metricsContainer = document.getElementById('report-metrics');
                 
                 if (!report) {
-                    metricsContainer.innerHTML = '<p>Error: No report data available</p>';
+                    metricsContainer.innerHTML = '<p>Error: No newsletter data available</p>';
                     return;
                 }
                 
@@ -1071,11 +1726,13 @@
                 // Create the HTML content for the metrics container
                 let metricsHtml = `
                     <div class="report-metadata">
-                        <p><strong>District:</strong> ${report.district_name || report.district || 'N/A'}</p>
-                        <p><strong>Period Type:</strong> ${report.period_type || 'N/A'}</p>
-                        <p><strong>Max Items:</strong> ${report.max_items || 'N/A'}</p>
-                        <p><strong>Created:</strong> ${createdDate}</p>
-                        <p><strong>Last Updated:</strong> ${updatedDate}</p>
+                        <div class="metadata-row">
+                            <div class="metadata-item"><strong>District:</strong> ${report.district_name || report.district || 'N/A'}</div>
+                            <div class="metadata-item"><strong>Period Type:</strong> ${report.period_type || 'N/A'}</div>
+                            <div class="metadata-item"><strong>Max Items:</strong> ${report.max_items || 'N/A'}</div>
+                            <div class="metadata-item"><strong>Created:</strong> ${createdDate}</div>
+                            <div class="metadata-item"><strong>Last Updated:</strong> ${updatedDate}</div>
+                        </div>
                     </div>
                 `;
                 
@@ -1083,7 +1740,13 @@
                 if (report.metrics && Array.isArray(report.metrics) && report.metrics.length > 0) {
                     metricsHtml += `
                         <div class="metrics-container">
-                            <h3>Metrics</h3>
+                            <div class="metrics-header">
+                                <h3>Items</h3>
+                                <div class="metrics-actions">
+                                    <button class="action-btn collapse-all-btn">Collapse All</button>
+                                    <button class="action-btn expand-all-btn">Expand All</button>
+                                </div>
+                            </div>
                             ${report.metrics.map((metric, index) => {
                                 if (!metric) return '';
                                 
@@ -1095,18 +1758,160 @@
                                     changeClass = 'negative-change';
                                 }
                                 
+                                // Extract perplexity context and citations from metadata if they exist
+                                let perplexityContext = '';
+                                let citations = '';
+                                let citationLinks = [];
+
+                                if (metric.metadata) {
+                                    try {
+                                        // If metadata is a string, try to parse it as JSON
+                                        const metadata = typeof metric.metadata === 'string' 
+                                            ? JSON.parse(metric.metadata) 
+                                            : metric.metadata;
+                                        
+                                        perplexityContext = metadata.perplexity_context || '';
+                                        
+                                        // Get citations from perplexity_response if available
+                                        if (metadata.perplexity_response && metadata.perplexity_response.citations) {
+                                            // Store the original citations array for creating links
+                                            citationLinks = Array.isArray(metadata.perplexity_response.citations) 
+                                                ? metadata.perplexity_response.citations 
+                                                : [metadata.perplexity_response.citations];
+                                            
+                                            // Format citations for display
+                                            citations = citationLinks.map((citation, idx) => {
+                                                const anchorId = `citation-${idx + 1}`;
+                                                if (typeof citation === 'string') {
+                                                    return `<div id="${anchorId}" class="citation-item"><span class="citation-number">[${idx + 1}]</span> ${citation}</div>`;
+                                                } else if (citation.url && citation.title) {
+                                                    return `<div id="${anchorId}" class="citation-item"><span class="citation-number">[${idx + 1}]</span> <a href="${citation.url}" target="_blank" class="citation-url">${citation.title}</a>${citation.text ? ` - ${citation.text}` : ''}</div>`;
+                                                } else {
+                                                    return `<div id="${anchorId}" class="citation-item"><span class="citation-number">[${idx + 1}]</span> ${JSON.stringify(citation)}</div>`;
+                                                }
+                                            }).join('');
+                                            
+                                            // Replace citation references in perplexity context with hyperlinks
+                                            if (perplexityContext && citationLinks.length > 0) {
+                                                // Regular expression to find citation references like [1], [2], etc.
+                                                const citationRegex = /\[(\d+)\]/g;
+                                                perplexityContext = perplexityContext.replace(citationRegex, (match, citationNumber) => {
+                                                    const idx = parseInt(citationNumber) - 1;
+                                                    if (idx >= 0 && idx < citationLinks.length) {
+                                                        const citation = citationLinks[idx];
+                                                        if (typeof citation === 'string') {
+                                                            return `<a href="#citation-${idx+1}" class="citation-link">[${citationNumber}]</a>`;
+                                                        } else if (citation.url) {
+                                                            return `<a href="${citation.url}" target="_blank" class="citation-link">[${citationNumber}]</a>`;
+                                                        }
+                                                    }
+                                                    return match; // Keep original if no matching citation
+                                                });
+                                            }
+                                        } else {
+                                            citations = '';
+                                        }
+                                    } catch (error) {
+                                        console.error('Error parsing metadata:', error);
+                                    }
+                                }
+                                
+                                // Format the percent change to display with one decimal point
+                                const formatPercentChange = (value) => {
+                                    if (!value && value !== 0) return 'N/A';
+                                    
+                                    // Convert to number if it's a string
+                                    const numValue = typeof value === 'string' ? parseFloat(value) : value;
+                                    
+                                    // Check if it's a valid number
+                                    if (isNaN(numValue)) return 'N/A';
+                                    
+                                    // Round to one decimal place and add % sign
+                                    return numValue.toFixed(1) + '%';
+                                };
+
+                                // Format number with commas and decimal places
+                                const formatNumber = (value, decimals = 1) => {
+                                    if (value === undefined || value === null) return 'N/A';
+                                    
+                                    // Convert to number if it's a string
+                                    const numValue = typeof value === 'string' ? parseFloat(value) : value;
+                                    
+                                    // Check if it's a valid number
+                                    if (isNaN(numValue)) return 'N/A';
+                                    
+                                    // Format with commas and specified decimal places
+                                    return numValue.toLocaleString(undefined, {
+                                        minimumFractionDigits: decimals,
+                                        maximumFractionDigits: decimals
+                                    });
+                                };
+
+                                // Extract statistical values from metric data
+                                let recentMean = 'N/A';
+                                let comparisonMean = 'N/A';
+                                let difference = 'N/A';
+                                let stdDev = 'N/A';
+
+                                // Try to extract values directly from metric first
+                                recentMean = metric.recent_mean !== undefined ? formatNumber(metric.recent_mean) : 'N/A';
+                                comparisonMean = metric.comparison_mean !== undefined ? formatNumber(metric.comparison_mean) : 'N/A';
+                                difference = metric.difference !== undefined ? formatNumber(metric.difference) : 'N/A';
+                                stdDev = metric.std_dev !== undefined ? formatNumber(metric.std_dev) : 'N/A';
+
+                                // If not found in metric, try metadata
+                                if ((recentMean === 'N/A' || comparisonMean === 'N/A' || difference === 'N/A' || stdDev === 'N/A') && metric.metadata) {
+                                    try {
+                                        const metadata = typeof metric.metadata === 'string' 
+                                            ? JSON.parse(metric.metadata) 
+                                            : metric.metadata;
+                                        
+                                        if (recentMean === 'N/A') {
+                                            recentMean = metadata.recent_mean !== undefined ? formatNumber(metadata.recent_mean) : 'N/A';
+                                        }
+                                        if (comparisonMean === 'N/A') {
+                                            comparisonMean = metadata.comparison_mean !== undefined ? formatNumber(metadata.comparison_mean) : 'N/A';
+                                        }
+                                        if (difference === 'N/A') {
+                                            difference = metadata.difference !== undefined ? formatNumber(metadata.difference) : 'N/A';
+                                        }
+                                        if (stdDev === 'N/A') {
+                                            stdDev = metadata.std_dev !== undefined ? formatNumber(metadata.std_dev) : 'N/A';
+                                        }
+                                    } catch (error) {
+                                        console.error('Error parsing metadata for statistical values:', error);
+                                    }
+                                }
+
                                 return `
-                                    <div class="metric-item">
-                                        <h4>${metric.item_title || metric.metric_name || 'Unnamed Metric'}</h4>
-                                        <p><strong>Change:</strong> <span class="${changeClass}">${metric.percent_change || metric.change_percentage || 'N/A'}%</span></p>
+                                    <div class="metric-item collapsed">
+                                        <h4 class="metric-header">
+                                            ${metric.item_title || metric.metric_name || 'Unnamed Item'}
+                                            <div class="metric-stats">
+                                                <span class="stat-item"><span class="stat-label">Recent Mean:</span> ${recentMean}</span>
+                                                <span class="stat-item"><span class="stat-label">Comparison Mean:</span> ${comparisonMean}</span>
+                                                <span class="stat-item"><span class="stat-label">Difference:</span> ${difference}</span>
+                                                <span class="stat-item"><span class="stat-label">Std Dev:</span> ${stdDev}</span>
+                                                <span class="change-badge ${changeClass}">${formatPercentChange(metric.percent_change || metric.change_percentage)}</span>
+                                            </div>
+                                        </h4>
                                         <div class="metric-details">
-                                            <p><strong>Explanation:</strong></p>
-                                            <p>${metric.explanation || 'No explanation available'}</p>
-                                            <p><strong>Trend Analysis:</strong></p>
-                                            <p>${metric.trend_analysis || 'No trend analysis available'}</p>
+                                            <p><strong>Rationale for including:</strong></p>
+                                            <p>${metric.explanation || 'No rationale available'}</p>
+                                            
                                             ${metric.report_text ? `
-                                                <p><strong>Report Text:</strong></p>
+                                                <p><strong>Explanation:</strong></p>
                                                 <p>${metric.report_text}</p>
+                                            ` : ''}
+                                            
+                                            ${perplexityContext ? `
+                                                <p><strong>Perplexity Context:</strong></p>
+                                                <div class="perplexity-context">${perplexityContext}</div>
+                                            ` : ''}
+                                            
+                                            ${citations ? `
+                                                <p><strong>Citations:</strong></p>
+                                                <div class="citations-container">${citations}</div>
                                             ` : ''}
                                         </div>
                                     </div>
@@ -1114,15 +1919,96 @@
                             }).join('')}
                         </div>
                     `;
+                    
+                    // After setting the HTML, add event listeners for the expand/collapse all buttons
+                    setTimeout(() => {
+                        const expandAllBtn = document.querySelector('.expand-all-btn');
+                        const collapseAllBtn = document.querySelector('.collapse-all-btn');
+                        
+                        // Make sure all items are initially collapsed
+                        document.querySelectorAll('.metric-item').forEach(item => {
+                            item.classList.add('collapsed');
+                            item.classList.remove('expanded');
+                        });
+                        
+                        // Add click handlers to all metric headers
+                        document.querySelectorAll('.metric-header').forEach(header => {
+                            header.addEventListener('click', () => {
+                                const parent = header.closest('.metric-item');
+                                parent.classList.toggle('collapsed');
+                                parent.classList.toggle('expanded');
+                            });
+                        });
+                        
+                        if (expandAllBtn) {
+                            expandAllBtn.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                document.querySelectorAll('.metric-item').forEach(item => {
+                                    item.classList.remove('collapsed');
+                                    item.classList.add('expanded');
+                                });
+                            });
+                        }
+                        
+                        if (collapseAllBtn) {
+                            collapseAllBtn.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                document.querySelectorAll('.metric-item').forEach(item => {
+                                    item.classList.add('collapsed');
+                                    item.classList.remove('expanded');
+                                });
+                            });
+                        }
+                    }, 100);
                 } else {
                     // If no metrics, show a message
                     metricsHtml += `
                         <div class="metrics-container">
-                            <h3>Metrics</h3>
-                            <p>No metrics data available for this report.</p>
+                            <h3>Items</h3>
+                            <p>No items data available for this newsletter.</p>
                         </div>
                     `;
                 }
+                
+                // Add HTML for the original and revised report sections
+                const selectedOption = reportSelect.options[reportSelect.selectedIndex];
+                const revisedFilename = selectedOption.dataset.revisedFilename;
+                const originalFilename = selectedOption.value;
+                const emailFilename = originalFilename ? originalFilename.replace('.html', '_revised_email.html') : null;
+
+                metricsHtml += `
+                    <div class="report-content-sections">
+                        <div class="report-section collapsed">
+                            <div class="section-header">
+                                <h4>Original Newsletter Content</h4>
+                                <a href="#" class="open-link" data-type="original" style="margin-left: 10px; font-size: 12px; font-weight: normal;" target="_blank">Open in new tab</a>
+                            </div>
+                            <div class="section-content" id="original-content">
+                                <div class="loading-indicator">Loading content...</div>
+                            </div>
+                        </div>
+                        
+                        <div class="report-section collapsed ${!revisedFilename ? 'hidden' : ''}">
+                             <div class="section-header">
+                                <h4>Revised Newsletter Content</h4>
+                                <a href="#" class="open-link" data-type="revised" style="margin-left: 10px; font-size: 12px; font-weight: normal;" target="_blank">Open in new tab</a>
+                             </div>
+                            <div class="section-content" id="revised-content">
+                                <div class="loading-indicator">Loading content...</div>
+                            </div>
+                        </div>
+
+                        <div class="report-section collapsed ${!emailFilename ? 'hidden' : ''}">
+                             <div class="section-header">
+                                <h4>Email Version Content</h4>
+                                <a href="#" class="open-link" data-type="email" style="margin-left: 10px; font-size: 12px; font-weight: normal;" target="_blank">Open in new tab</a>
+                             </div>
+                            <div class="section-content" id="email-content">
+                                <div class="loading-indicator">Loading content...</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
                 
                 // Update the metrics container
                 metricsContainer.innerHTML = metricsHtml;
@@ -1131,6 +2017,135 @@
                 if (detailsContainer) {
                     detailsContainer.innerHTML = metricsHtml;
                 }
+
+                // Add event listeners for toggling sections and loading content
+                setTimeout(() => {
+                    // ... existing timeouts for expand/collapse buttons ...
+                    
+                    // Add click handlers for report sections
+                    document.querySelectorAll('.section-header').forEach(header => {
+                        // Find the text node directly inside the header to attach the collapse/expand listener
+                        let headerTextNode = null;
+                        for(let node of header.childNodes) {
+                            if(node.nodeType === Node.ELEMENT_NODE && node.tagName === 'H4') {
+                                headerTextNode = node;
+                                break;
+                            }
+                        }
+
+                        if (headerTextNode) {
+                             headerTextNode.addEventListener('click', async () => {
+                                const section = header.closest('.report-section');
+                                const contentDiv = section.querySelector('.section-content');
+                                const isOriginal = contentDiv.id === 'original-content';
+                                const isRevised = contentDiv.id === 'revised-content';
+                                const isEmail = contentDiv.id === 'email-content';
+                                
+                                // Toggle collapsed state
+                                section.classList.toggle('collapsed');
+                                
+                                // Only load content if we're expanding and content hasn't been loaded yet
+                                if (!section.classList.contains('collapsed') && 
+                                    contentDiv.querySelector('.loading-indicator')) {
+                                    
+                                    // Get the filename based on section type
+                                    const selectedOption = reportSelect.options[reportSelect.selectedIndex];
+                                    let filename = null;
+                                    if (isOriginal) {
+                                        filename = selectedOption.value;
+                                    } else if (isRevised) {
+                                        filename = selectedOption.dataset.revisedFilename;
+                                    } else if (isEmail && selectedOption.value) {
+                                        filename = selectedOption.value.replace('.html', '_revised_email.html');
+                                    }
+                                    
+                                    if (filename) {
+                                        try {
+                                            // Show loading state
+                                            contentDiv.innerHTML = '<div class="loading-indicator">Loading content...</div>';
+                                            
+                                            // Fetch the content
+                                            const response = await fetch(`/backend/monthly-report/file/${filename}?t=${Date.now()}`); // Added cache-busting parameter
+                                            if (response.ok) {
+                                                const htmlContent = await response.text();
+                                                contentDiv.innerHTML = `<div class="embedded-newsletter">${htmlContent}</div>`;
+                                            } else {
+                                                contentDiv.innerHTML = `<div class="error-message">Error loading content: ${response.status} ${response.statusText}</div>`;
+                                            }
+                                        } catch (error) {
+                                            console.error(`Error loading ${isOriginal ? 'original' : isRevised ? 'revised' : 'email'} content:`, error);
+                                            contentDiv.innerHTML = `<div class="error-message">Error loading content: ${error.message}</div>`;
+                                        }
+                                    } else {
+                                        contentDiv.innerHTML = '<div class="error-message">No file available</div>';
+                                    }
+                                }
+                            });
+                        }
+                    });
+
+                    // Add hrefs to the open links
+                    document.querySelectorAll('.open-link').forEach(link => {
+                        const type = link.dataset.type;
+                        const selectedOption = reportSelect.options[reportSelect.selectedIndex];
+                        let filename = null;
+                        if (type === 'original') {
+                            filename = selectedOption.value;
+                        } else if (type === 'revised') {
+                            filename = selectedOption.dataset.revisedFilename;
+                        } else if (type === 'email' && selectedOption.value) {
+                            filename = selectedOption.value.replace('.html', '_revised_email.html');
+                        }
+                        
+                        if (filename) {
+                            link.href = `/backend/monthly-report/file/${filename}`; 
+                        } else {
+                            link.style.display = 'none'; // Hide link if file doesn't exist
+                        }
+                    });
+                }, 100);
+            }
+
+            // Initialize event handlers for prompt editor
+            function initPromptEditor() {
+                // Add keyboard shortcuts
+                promptContent.addEventListener('keydown', function(e) {
+                    // Ctrl+S or Cmd+S to save
+                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                        e.preventDefault();
+                        if (!savePromptBtn.disabled) {
+                            savePromptChanges();
+                        }
+                    }
+                    
+                    // Escape to cancel
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        promptEditModal.style.display = 'none';
+                    }
+                    
+                    // Tab key handling for indentation
+                    if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const start = this.selectionStart;
+                        const end = this.selectionEnd;
+                        
+                        // Insert a tab at the caret position
+                        this.value = this.value.substring(0, start) + '    ' + this.value.substring(end);
+                        
+                        // Put caret at right position again
+                        this.selectionStart = this.selectionEnd = start + 4;
+                    }
+                });
+                
+                // Make textarea auto-resize
+                promptContent.addEventListener('input', function() {
+                    // Reset height to avoid problems when deleting text
+                    this.style.height = 'auto';
+                    
+                    // Set height based on scrollHeight, add some padding
+                    this.style.height = (this.scrollHeight + 10) + 'px';
+                });
             }
         });
     </script>

@@ -1,23 +1,28 @@
 import os
 import json
+import pandas as pd
+import numpy as np
+import psycopg2
+import psycopg2.extras
 import logging
 import traceback
 import time
 import asyncio
-from datetime import datetime
+import requests
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
 from openai import OpenAI
 from swarm import Swarm, Agent
-from fastapi import APIRouter, Request
-from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
-import math
-import uuid
-from typing import Dict, Any, List
-from fastapi import FastAPI, Response, status
+
+from fastapi import APIRouter, Request, HTTPException, FastAPI, Response, status
+from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-import pandas as pd
+import math
+import uuid
+from typing import Dict, Any, List
 
 # Import tools
 from tools.data_fetcher import set_dataset
@@ -29,28 +34,28 @@ from webChat import get_dashboard_metric
 from tools.store_anomalies import get_anomalies, get_anomaly_details as get_anomaly_details_from_db  # Import the new functions
 
 # Configure logging
-log_level = os.getenv("LOG_LEVEL", "INFO")
-if log_level.upper() == "DEBUG":
-    log_level = logging.DEBUG
-elif log_level.upper() == "INFO":
-    log_level = logging.INFO
-elif log_level.upper() == "WARNING":
-    log_level = logging.WARNING
-elif log_level.upper() == "ERROR":
-    log_level = logging.ERROR
-elif log_level.upper() == "CRITICAL":
-    log_level = logging.CRITICAL
-else:
-    log_level = logging.INFO
+# log_level = os.getenv("LOG_LEVEL", "INFO") # REMOVED: Configured in main.py
+# if log_level.upper() == "DEBUG":
+#     log_level = logging.DEBUG
+# elif log_level.upper() == "INFO":
+#     log_level = logging.INFO
+# elif log_level.upper() == "WARNING":
+#     log_level = logging.WARNING
+# elif log_level.upper() == "ERROR":
+#     log_level = logging.ERROR
+# elif log_level.upper() == "CRITICAL":
+#     log_level = logging.CRITICAL
+# else:
+#     log_level = logging.INFO
 
-logging.basicConfig(
-    level=log_level,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'logs', 'anomalyAnalyzer.log')),
-        logging.StreamHandler()
-    ]
-)
+# logging.basicConfig( # REMOVED: Configured in main.py
+#     level=log_level,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         logging.FileHandler(os.path.join(os.path.dirname(__file__), 'logs', 'anomalyAnalyzer.log')),
+#         logging.StreamHandler()
+#     ]
+# )
 logger = logging.getLogger(__name__)
 
 # Initialize API router
@@ -2016,7 +2021,255 @@ async def get_anomaly_details_endpoint(anomaly_id: int):
 
 @router.get("/anomaly-chart")
 async def anomaly_chart_page(request: Request):
-    """Serve the dedicated anomaly chart page."""
+    """
+    Serve the dedicated anomaly chart page.
+    
+    Query Parameters:
+        id: ID of the anomaly to display
+        format: Set to 'image' to return a static image instead of HTML
+    """
+    # Check if format=image is in the query parameters
+    format_param = request.query_params.get('format')
+    
+    if format_param == 'image':
+        try:
+            # Extract parameters for the chart
+            anomaly_id = request.query_params.get('id')
+            
+            if not anomaly_id:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "id is required for image export"}
+                )
+            
+            # Get anomaly details
+            context_variables = {}
+            anomaly_data = get_anomaly_details(context_variables, int(anomaly_id))
+            
+            if anomaly_data.get('status') != 'success' or not anomaly_data.get('anomaly'):
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": "No anomaly found with the specified ID"}
+                )
+            
+            # Use Plotly to create the chart image
+            import plotly.graph_objects as go
+            import plotly.io as pio
+            from io import BytesIO
+            import base64
+            from datetime import datetime
+            
+            # Create the figure
+            fig = go.Figure()
+            
+            # Get anomaly data
+            anomaly = anomaly_data.get('anomaly', {})
+            chart_data = anomaly.get('chart_data', {})
+            metadata = anomaly.get('metadata', {})
+            
+            # Process chart data
+            recent_dates = []
+            recent_values = []
+            comparison_dates = []
+            comparison_values = []
+            
+            if chart_data.get('dates') and chart_data.get('values') and chart_data.get('periods'):
+                for i, date_str in enumerate(chart_data.get('dates', [])):
+                    value = chart_data.get('values', [])[i] if i < len(chart_data.get('values', [])) else None
+                    period = chart_data.get('periods', [])[i] if i < len(chart_data.get('periods', [])) else None
+                    
+                    if value is None or period is None:
+                        continue
+                    
+                    # Convert date string to datetime
+                    try:
+                        # Handle different date formats
+                        if len(date_str.split('-')) == 2:  # Format YYYY-MM
+                            year, month = date_str.split('-')
+                            date_obj = datetime(int(year), int(month), 1)
+                        else:  # Full date
+                            date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                        
+                        # Add to appropriate array based on period
+                        if period == 'recent':
+                            recent_dates.append(date_obj)
+                            recent_values.append(value)
+                        elif period == 'comparison':
+                            comparison_dates.append(date_obj)
+                            comparison_values.append(value)
+                    except Exception as date_error:
+                        logger.error(f"Error parsing date {date_str}: {date_error}")
+            
+            # Sort dates chronologically
+            recent_data = sorted(zip(recent_dates, recent_values), key=lambda x: x[0])
+            comparison_data = sorted(zip(comparison_dates, comparison_values), key=lambda x: x[0])
+            
+            # Unzip after sorting
+            recent_dates = [d for d, v in recent_data] if recent_data else []
+            recent_values = [v for d, v in recent_data] if recent_data else []
+            comparison_dates = [d for d, v in comparison_data] if comparison_data else []
+            comparison_values = [v for d, v in comparison_data] if comparison_data else []
+            
+            # Calculate normal range
+            comparison_mean = anomaly.get('comparison_mean', 0)
+            std_dev = anomaly.get('std_dev', 0)
+            
+            # Add normal range area
+            if comparison_mean is not None and std_dev is not None:
+                all_dates = sorted(comparison_dates + recent_dates)
+                if all_dates:
+                    upper_bound = [comparison_mean + 2 * std_dev] * len(all_dates)
+                    lower_bound = [max(comparison_mean - 2 * std_dev, 0)] * len(all_dates)
+                    
+                    # Add lower bound trace (invisible)
+                    fig.add_trace(go.Scatter(
+                        x=all_dates,
+                        y=lower_bound,
+                        mode='lines',
+                        line=dict(color='rgba(0,0,0,0)'),
+                        showlegend=False
+                    ))
+                    
+                    # Add normal range area
+                    fig.add_trace(go.Scatter(
+                        x=all_dates,
+                        y=upper_bound,
+                        mode='none',
+                        fill='tonexty',
+                        fillcolor='rgba(74, 116, 99, 0.15)',  # Spruce Green with transparency
+                        name='Normal Range',
+                        showlegend=True
+                    ))
+            
+            # Add comparison period trace
+            if comparison_dates and comparison_values:
+                fig.add_trace(go.Scatter(
+                    x=comparison_dates,
+                    y=comparison_values,
+                    mode='lines+markers',
+                    name='Time Series',
+                    line=dict(color='#007BFF', width=2),  # Bright Blue
+                    marker=dict(color='#007BFF', size=6)
+                ))
+            
+            # Add recent period trace
+            if recent_dates and recent_values:
+                fig.add_trace(go.Scatter(
+                    x=recent_dates,
+                    y=recent_values,
+                    mode='lines+markers',
+                    name='Time Series',
+                    line=dict(color='#007BFF', width=2),  # Bright Blue
+                    marker=dict(color='#007BFF', size=6),
+                    showlegend=False  # Hide duplicate legend entry
+                ))
+            
+            # Add connector line between comparison and recent periods
+            if comparison_dates and comparison_values and recent_dates and recent_values:
+                fig.add_trace(go.Scatter(
+                    x=[comparison_dates[-1], recent_dates[0]],
+                    y=[comparison_values[-1], recent_values[0]],
+                    mode='lines',
+                    line=dict(color='#007BFF', width=2),  # Bright Blue
+                    showlegend=False
+                ))
+            
+            # Get the metric name from metadata
+            object_name = metadata.get('object_name', anomaly.get('field_name', 'Value'))
+            
+            # Create subtitle with district if present
+            group_field_name = anomaly.get('group_field_name', 'Group')
+            group_value = anomaly.get('group_value', 'Value')
+            subtitle = f"{group_field_name}: {group_value}"
+            
+            # Update layout
+            fig.update_layout(
+                title={
+                    'text': object_name,
+                    'y': 0.95,
+                    'font': {'size': 16, 'color': '#222222'}
+                },
+                annotations=[
+                    dict(
+                        text=f"{'Spike' if anomaly.get('percent_change', 0) > 0 else 'Drop'} in {subtitle}",
+                        showarrow=False,
+                        xref="paper", 
+                        yref="paper",
+                        x=0.5, 
+                        y=0.9,
+                        font={'size': 14, 'color': '#222222'}
+                    )
+                ],
+                xaxis={
+                    'title': '',
+                    'showgrid': False,
+                    'showline': True,
+                    'linecolor': '#e5e7eb',
+                    'linewidth': 1,
+                    'tickmode': 'auto',
+                    'tickformat': '%b %Y',
+                    'tickangle': 0
+                },
+                yaxis={
+                    'title': metadata.get('y_axis_label', object_name),
+                    'showgrid': True,
+                    'gridcolor': 'rgba(232, 233, 235, 0.5)',
+                    'zeroline': False,
+                    'rangemode': 'tozero'
+                },
+                legend={
+                    'orientation': 'h',
+                    'x': 0.5,
+                    'y': -0.12,
+                    'xanchor': 'center',
+                    'yanchor': 'top',
+                    'bgcolor': 'rgba(246, 241, 234, 0.7)'
+                },
+                autosize=False,
+                width=1000,
+                height=600,
+                margin=dict(l=80, r=80, t=120, b=100),
+                plot_bgcolor='rgba(255,255,255,0.9)',
+                paper_bgcolor='rgba(255,255,255,0.9)'
+            )
+            
+            # Add annotation for most recent value if available
+            if recent_dates and recent_values:
+                fig.add_annotation(
+                    x=recent_dates[-1],
+                    y=recent_values[-1],
+                    text=f"{recent_dates[-1].strftime('%b %Y')}: {recent_values[-1]:.2f}",
+                    showarrow=True,
+                    arrowhead=2,
+                    ax=-50,
+                    ay=30,
+                    bgcolor='rgba(0, 123, 255, 0.7)',
+                    bordercolor='#007BFF',
+                    borderwidth=1
+                )
+            
+            # Convert to PNG image
+            img_bytes = BytesIO()
+            fig.write_image(img_bytes, format='png')
+            img_bytes.seek(0)
+            
+            # Return the image
+            return StreamingResponse(
+                img_bytes, 
+                media_type="image/png",
+                headers={
+                    "Content-Disposition": f"attachment; filename=anomaly_{anomaly_id}.png"
+                }
+            )
+        
+        except Exception as e:
+            logger.error(f"Error generating anomaly chart image: {str(e)}", exc_info=True)
+            return JSONResponse(
+                status_code=500,
+                content={"detail": f"Error generating chart image: {str(e)}"}
+            )
+    
+    # Default behavior - return HTML page
     # Use the templates instance set by main.py
     if templates is None:
         logger.error("Templates not initialized in anomalyAnalyzer router")

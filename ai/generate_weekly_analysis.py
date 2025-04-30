@@ -40,48 +40,12 @@ DEFAULT_METRICS = [
     "14"   # Public Works Projects
 ]
 
-# Configure root logger first
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-
-# Create formatter for consistent log formatting
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-# Remove any existing handlers from root logger to avoid duplicate logs
-for handler in root_logger.handlers[:]:
-    root_logger.removeHandler(handler)
-
-# Log file path for weekly analysis
-log_file_path = os.path.join(logs_dir, 'weekly_metric_analysis.log')
-
-# Add file handler to root logger
-try:
-    root_file_handler = logging.FileHandler(log_file_path)
-    root_file_handler.setFormatter(formatter)
-    root_file_handler.setLevel(logging.INFO)
-    root_logger.addHandler(root_file_handler)
-except Exception as e:
-    print(f"Error setting up file handler for {log_file_path}: {str(e)}")
-    # Continue without file handler, just console output
-    
-# Add console handler to root logger for terminal output
-try:
-    root_console_handler = logging.StreamHandler()
-    root_console_handler.setFormatter(formatter)
-    root_console_handler.setLevel(logging.INFO)
-    root_logger.addHandler(root_console_handler)
-except Exception as e:
-    print(f"Error setting up console handler: {str(e)}")
-
 # Create module logger
-logger = logging.getLogger('generate_weekly_analysis')
-logger.setLevel(logging.INFO)
-logger.propagate = True  # Ensure logs propagate to root logger
+logger = logging.getLogger(__name__)
 
 # Log a message to confirm logging is set up
 logger.info("==========================================================")
 logger.info("Logging configured for generate_weekly_analysis.py")
-logger.info(f"Log file: {log_file_path}")
 logger.info(f"Python version: {sys.version}")
 logger.info(f"Current working directory: {os.getcwd()}")
 logger.info("==========================================================")

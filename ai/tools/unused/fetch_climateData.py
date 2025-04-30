@@ -8,9 +8,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 import logging
-from tools.anomaly_detection import custom_parse_date
 import datetime
 import shutil
+import glob
+from pathlib import Path
+import tempfile
 
 # Configure logging
 logging.basicConfig(
@@ -92,6 +94,15 @@ def clean_data(dataframe):
 
     return dataframe
 
+def custom_parse_date(date_str):
+    """Parse date strings in various formats."""
+    # Implement custom date parsing logic if needed
+    # This function is mentioned in clean_data but isn't defined in the original code
+    try:
+        return pd.to_datetime(date_str).date()
+    except:
+        return None
+
 def save_fixed_csv(dataframe, original_path):
     """Save the cleaned DataFrame to a new CSV file."""
     base_name = os.path.basename(original_path)
@@ -101,10 +112,26 @@ def save_fixed_csv(dataframe, original_path):
 
 def load_and_clean_csv(file_path):
     """Load, clean, and save the corrected CSV."""
+    if not os.path.exists(file_path):
+        logging.error(f"File not found: {file_path}")
+        return
     
-    df = pd.read_csv(file_path)
-    cleaned_df = clean_data(df)
-    save_fixed_csv(cleaned_df, file_path)
+    try:
+        df = pd.read_csv(file_path)
+        cleaned_df = clean_data(df)
+        
+        # Save to a separate location in our data directory
+        output_dir = os.path.join(os.getcwd(), 'data', 'climate')
+        os.makedirs(output_dir, exist_ok=True)
+        
+        base_name = os.path.basename(file_path)
+        clean_path = os.path.join(output_dir, f"cleaned_{base_name}")
+        cleaned_df.to_csv(clean_path, index=False)
+        logging.info(f"Saved cleaned data to {clean_path}")
+        return clean_path
+    except Exception as e:
+        logging.error(f"Error processing file {file_path}: {e}")
+        return None
 
 def download_car_data_selenium():
     """Use Selenium to click the JavaScript download button on the CAR page."""
@@ -152,44 +179,164 @@ def download_acm_data():
         logging.error(f"Failed to download ACM data. Status Code: {response.status_code}")
 
 def download_verra_data():
-    """Download latest credit retirement data from Verra by automating search and CSV download"""
-    # Initialize WebDriver with WebDriverManager
-    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()))
+    """Download latest credit retirement data from Verra directly to the project directory"""
+    # Create output directory
+    output_dir = os.path.join(os.getcwd(), 'data', 'climate')
+    os.makedirs(output_dir, exist_ok=True)
+    logging.info(f"Ensuring output directory exists: {output_dir}")
     
-    # Go to the Verra registry page
-    url = REGISTRIES['Verra']
-    driver.get(url)
+    # Set up Chrome options to download directly to our project directory
+    chrome_options = webdriver.ChromeOptions()
     
-    # Allow time for the page to load
-    time.sleep(5)
+    # Disable the Chrome download prompt and specify download directory
+    prefs = {
+        "download.default_directory": output_dir,
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True
+    }
+    chrome_options.add_experimental_option("prefs", prefs)
+    
+    # Initialize WebDriver with WebDriverManager and our custom options
+    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
     
     try:
-        # Find and click the search button
-        search_button = driver.find_element(By.CSS_SELECTOR, "button.btn.btn-primary[type='submit']")
-        search_button.click()
-        logging.info("Clicked search button")
+        # Go to the Verra registry page
+        url = REGISTRIES['Verra']
+        driver.get(url)
         
-        # Wait for results to load
-        time.sleep(10)
+        # Allow time for the page to load
+        time.sleep(5)
+        
+        # Click on the "VCUs" tab in the tabnav first
+        try:
+            # Print all available tabs for debugging
+            tabs = driver.find_elements(By.CSS_SELECTOR, "a.nav-link")
+            logging.info("Available tabs:")
+            for tab in tabs:
+                logging.info(f"Tab text: '{tab.text.strip()}', href: '{tab.get_attribute('href')}'")
+            
+            # Use a more specific XPath to find the VCUs tab
+            vcus_tab = driver.find_element(By.XPATH, "//a[contains(@class, 'nav-link') and contains(normalize-space(.), 'VCUs')]")
+            
+            logging.info(f"Found VCUs tab with text: '{vcus_tab.text}'")
+            
+            # Scroll to the element to ensure it's visible
+            driver.execute_script("arguments[0].scrollIntoView(true);", vcus_tab)
+            time.sleep(1)
+            
+            # Try to click using JavaScript if regular click might be intercepted
+            driver.execute_script("arguments[0].click();", vcus_tab)
+            logging.info("Clicked on the VCUs tab using JavaScript")
+            
+            # Wait for the tab contents to load
+            time.sleep(5)
+        except Exception as e:
+            logging.warning(f"Could not find or click the VCUs tab: {e}")
+            logging.info("Continuing without clicking the VCUs tab...")
+            
+            # Take a screenshot for debugging
+            try:
+                screenshot_file = os.path.join(output_dir, "verra_page_screenshot.png")
+                driver.save_screenshot(screenshot_file)
+                logging.info(f"Saved screenshot to {screenshot_file}")
+            except Exception as ss_error:
+                logging.warning(f"Failed to take screenshot: {ss_error}")
+        
+        # Find and click the search button
+        try:
+            search_button = driver.find_element(By.CSS_SELECTOR, "button.btn.btn-primary[type='submit']")
+            driver.execute_script("arguments[0].click();", search_button)
+            logging.info("Clicked search button")
+        except Exception as e:
+            logging.error(f"Could not find or click the search button: {e}")
+            return None
+        
+        # Wait longer for results to load
+        logging.info("Waiting for search results to load...")
+        time.sleep(20)  # Increased from 10 to 20 seconds
+        
+        # Make sure we're still on the VCUs tab before downloading
+        try:
+            # Check if we're on the VCUs tab
+            active_tab = driver.find_element(By.CSS_SELECTOR, "a.nav-link.active")
+            logging.info(f"Currently active tab: '{active_tab.text.strip()}'")
+            
+            # If not on VCUs tab, try to click it again
+            if "VCUs" not in active_tab.text:
+                logging.info("Not on VCUs tab, clicking it again")
+                vcus_tab = driver.find_element(By.XPATH, "//a[contains(@class, 'nav-link') and contains(normalize-space(.), 'VCUs')]")
+                driver.execute_script("arguments[0].click();", vcus_tab)
+                logging.info("Clicked on the VCUs tab again")
+                time.sleep(10)  # Increased from 5 to 10 seconds
+        except Exception as e:
+            logging.warning(f"Error checking or resetting to VCUs tab: {e}")
+        
+        # Wait for page to be completely stable before clicking download
+        logging.info("Ensuring page is stable before downloading...")
+        time.sleep(10)  # Additional wait to ensure page stability
         
         # Find and click the CSV download button
-        csv_button = driver.find_element(By.CSS_SELECTOR, "i.fas.fa-file-csv")
-        csv_button.click()
-        logging.info("Clicked CSV download button")
+        try:
+            # Take a screenshot before attempting to click download
+            screenshot_before_download = os.path.join(output_dir, "before_download.png")
+            driver.save_screenshot(screenshot_before_download)
+            logging.info(f"Saved screenshot before download to {screenshot_before_download}")
+            
+            csv_button = driver.find_element(By.CSS_SELECTOR, "i.fas.fa-file-csv")
+            
+            # Scroll to make the button visible
+            driver.execute_script("arguments[0].scrollIntoView(true);", csv_button)
+            time.sleep(2)  # Wait after scrolling
+            
+            # Click the download button
+            driver.execute_script("arguments[0].click();", csv_button)
+            logging.info("Clicked CSV download button")
+        except Exception as e:
+            logging.error(f"Could not find or click the CSV download button: {e}")
+            return None
         
-        # Wait for download to complete
-        time.sleep(10)
+        # Wait longer for download to complete
+        logging.info("Waiting for download to complete...")
+        time.sleep(30)  # Increased from 15 to 30 seconds
         
-        # Move downloaded file to correct location
-        os.makedirs('data/climate', exist_ok=True)
-        downloaded_file = max([f for f in os.listdir(os.path.expanduser("~/Downloads")) if f.endswith('.csv')], 
-                            key=lambda x: os.path.getctime(os.path.join(os.path.expanduser("~/Downloads"), x)))
-        shutil.move(os.path.join(os.path.expanduser("~/Downloads"), downloaded_file),
-                   os.path.join('data/climate', 'Verra_credißt_retirement.csv'))
-        logging.info("Verra data downloaded successfully")
+        # Check for downloaded file in our project directory
+        possible_files = [
+            os.path.join(output_dir, "allvcus.csv"),
+            os.path.join(output_dir, "vcus.csv"),
+            os.path.join(output_dir, "allprojects.csv"),
+            # Check for any CSV file if none of the above are found
+            *glob.glob(os.path.join(output_dir, "*.csv"))
+        ]
+        
+        # Check if any of the expected files exist
+        for file_path in possible_files:
+            if os.path.exists(file_path):
+                logging.info(f"Found downloaded file: {file_path}")
+                return file_path
+        
+        logging.error("No CSV files found in the output directory")
+        
+        # Use a direct download method if the file wasn't downloaded to our directory
+        try:
+            # Get the download link from the page if possible
+            download_link = driver.find_element(By.CSS_SELECTOR, "a.csv-download-link").get_attribute("href")
+            if download_link:
+                output_file = os.path.join(output_dir, "verra_vcus.csv")
+                response = requests.get(download_link)
+                with open(output_file, 'wb') as f:
+                    f.write(response.content)
+                logging.info(f"Downloaded file directly to {output_file}")
+                return output_file
+        except Exception as e:
+            logging.error(f"Error getting direct download link: {e}")
+            return None
+        
+        return None
         
     except Exception as e:
-        logging.error(f"Error downloading Verra data: {e}")
+        logging.error(f"Error during Verra data download: {e}")
+        return None
     finally:
         driver.quit()
 
@@ -217,22 +364,22 @@ def download_gsm_data():
 
 def main():
     # Create output directory if it doesn't exist
-    if not os.path.exists('data/climate'):
-        os.makedirs('data/climate')
-        logging.info("Created 'data/climate' directory")
+    os.makedirs('data/climate', exist_ok=True)
+    logging.info("Ensured 'data/climate' directory exists")
 
-    # Change working directory to store the data
+    # Download and get path to Verra data
+    verra_file = download_verra_data()
     
-    # Call the functions to download data for each registry
-    # download_car_data_selenium()  # Updated to use Selenium
-    # download_acm_data()
-    # download_verra_data()
-    # download_puro_data()
-    # download_gsm_data()
-    data_folder = 'data/climate'
-    vera_file = os.path.join(data_folder, 'vcus-2025.csv')
+    # Process the downloaded file
+    if verra_file and os.path.exists(verra_file):
+        logging.info(f"Processing Verra data from: {verra_file}")
+        cleaned_file = load_and_clean_csv(verra_file)
+        if cleaned_file:
+            logging.info(f"Successfully processed Verra data. Cleaned file saved to: {cleaned_file}")
+        else:
+            logging.error("Failed to process Verra data")
+    else:
+        logging.error("Verra data file not available for cleaning")
 
-    # Load and clean the CSV files
-    load_and_clean_csv(vera_file)
 if __name__ == '__main__':
     main()

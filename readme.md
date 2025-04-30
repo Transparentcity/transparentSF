@@ -1,10 +1,10 @@
 # TransparentSF
 
-A data analysis and visualization platform for San Francisco city data, focusing on public data and governmental transparency.
+A data analysis and visualization platform for San Francisco city data
 
 ## Overview
 
-TransparentSF is a web-based application that provides interactive visualizations and analysis of San Francisco city data. It includes features for:
+TransparentSF is a web-based application that combined AI agents with public data to answer questions, build interactive visualizations and deep analysis of San Francisco public city data. It includes features for:
 
 - Automated analysis of public datasets
 - AI-powered insights generation
@@ -53,6 +53,14 @@ TransparentSF is a web-based application that provides interactive visualization
    OPENAI_API_KEY=your_openai_api_key
    GHOST_URL=your_ghost_cms_url
    GHOST_ADMIN_API_KEY=your_ghost_admin_api_key
+   PERPLEXITY_API_KEY=your_perplexity_api_key # Optional: For automated newsletter generation
+   
+   # PostgreSQL Connection Details (Defaults are usually sufficient if running locally)
+   PG_HOST=localhost 
+   PG_PORT=5432
+   PG_USER=postgres
+   PG_PASSWORD=your_postgres_password # Set this if you configured a password
+   PG_DBNAME=transparentsf 
    ```
 
 4. **Set up PostgreSQL:**
@@ -82,7 +90,6 @@ TransparentSF is a web-based application that provides interactive visualization
    ```bash
    python ai/tools/init_postgres_db.py --host localhost --port 5432 --user postgres --password <pass> --dbname transparentsf
    ```
-
 ## Usage
 
 1. **Start all services:**

@@ -9,26 +9,110 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from generate_dashboard_metrics import main as generate_metrics
-from generate_weekly_analysis import run_weekly_analysis, generate_weekly_newsletter
 from dotenv import load_dotenv
 import re
 import glob
+
+# --- Logging Configuration Moved Up ---
+# Get the absolute path to the current directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Load environment variables from .env file in the current directory
+dotenv_path = os.path.join(current_dir, '.env')
+load_dotenv(dotenv_path=dotenv_path)
+
+# Configure logging based on environment variable
+log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+# Map to Python logging levels for potential internal use if needed
+log_level_map = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
+log_level = log_level_map.get(log_level_str, logging.INFO)
+
+# Use Python logging getLogger for initial setup messages BEFORE Uvicorn takes over
+# These might still appear depending on exact timing, but Uvicorn config below is key
+temp_logger = logging.getLogger("__main__") 
+# Optionally set a level here if you *want* these startup messages regardless of .env
+# temp_logger.setLevel(logging.INFO) 
+
+temp_logger.debug(f"Current directory: {current_dir}") # Use temp_logger
+temp_logger.info(f"Loaded environment variables from {dotenv_path}") # Use temp_logger
+temp_logger.info(f"Root log level determined from .env: {log_level_str}") # Use temp_logger
+
+# --- Uvicorn Logging Configuration Dictionary ---
+
+LOGGING_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False, # Preserve existing loggers
+    "formatters": {
+        "default": {
+            "()": "uvicorn.logging.DefaultFormatter",
+            "fmt": "%(asctime)s - %(name)s - %(levelname)s - %(message)s", # Keep your format
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+            "use_colors": None,
+        },
+        "access": {
+            "()": "uvicorn.logging.AccessFormatter",
+            "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
+             "use_colors": None,
+        },
+    },
+    "handlers": {
+        "default": {
+            "formatter": "default",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr", # Log general messages to stderr
+        },
+        "access": {
+             "formatter": "access",
+             "class": "logging.StreamHandler",
+             "stream": "ext://sys.stdout", # Log access messages to stdout
+        },
+         # Optional: Define a file handler if you want Uvicorn to manage file logging
+         # "file": {
+         #     "formatter": "default",
+         #     "class": "logging.FileHandler",
+         #     "filename": os.path.join(logs_dir, 'app.log'), # Make sure logs_dir is defined if used
+         # },
+    },
+    "loggers": {
+        # Root logger configuration
+        "": {
+            "handlers": ["default"], # Use handlers defined above (e.g., "default", "file")
+            "level": log_level_str, # Use uppercase level
+            "propagate": True, # Allow propagation if needed
+        },
+        # Uvicorn's own loggers
+        "uvicorn": {"handlers": ["default"], "level": log_level_str, "propagate": False}, # Use uppercase level
+        "uvicorn.error": {"level": log_level_str, "propagate": True}, # Use uppercase level
+        "uvicorn.access": {"handlers": ["access"], "level": log_level_str, "propagate": False}, # Use uppercase level
+
+        # Explicitly set levels for known application/library loggers if needed
+        # This ensures they obey the overall level setting
+        "webChat": {"level": log_level_str, "propagate": True},
+        "backend": {"level": log_level_str, "propagate": True},
+        "anomalyAnalyzer": {"level": log_level_str, "propagate": True},
+        "generate_weekly_analysis": {"level": log_level_str, "propagate": True},
+        # Add other module loggers here if they misbehave
+        "httpx": {"level": log_level_str, "propagate": True}, 
+    },
+}
+# --- End Logging Configuration ---
+
+# Get the main logger for use within main.py itself
+# This logger will inherit the configuration from LOGGING_CONFIG via Uvicorn
+logger = logging.getLogger(__name__)
+
+# --- End Uvicorn Logging Configuration Dictionary ---
 
 # Import routers
 from webChat import router as webchat_router
 from backend import router as backend_router, set_templates, get_chart_by_metric, get_chart_data
 from anomalyAnalyzer import router as anomaly_analyzer_router, set_templates as set_anomaly_templates
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Get the absolute path to the current directory
-current_dir = os.path.dirname(os.path.abspath(__file__))
-logger.debug(f"Current directory: {current_dir}")
 
 app = FastAPI()
 
@@ -591,46 +675,6 @@ async def schedule_metrics_generation():
             logger.error(f"Error in metrics generation scheduler: {str(e)}")
             await asyncio.sleep(300)  # Wait 5 minutes before retrying if there's an error
 
-async def schedule_weekly_analysis():
-    """Schedule weekly analysis to run every Thursday at 11 AM."""
-    while True:
-        try:
-            # Calculate time until next Thursday at 11 AM
-            now = datetime.now()
-            days_until_thursday = (3 - now.weekday()) % 7  # Thursday is weekday 3
-            
-            # If it's Thursday and already past 11 AM, schedule for next week
-            if days_until_thursday == 0 and now.hour >= 11:
-                days_until_thursday = 7
-                
-            target_run = now.replace(hour=11, minute=0, second=0, microsecond=0)
-            target_run += timedelta(days=days_until_thursday)
-            
-            # Wait until the scheduled time
-            wait_seconds = (target_run - now).total_seconds()
-            logger.info(f"Next weekly analysis scheduled for {target_run} (in {wait_seconds/3600:.2f} hours)")
-            await asyncio.sleep(wait_seconds)
-            
-            # Run weekly analysis
-            logger.info("Starting scheduled weekly analysis...")
-            try:
-                # Run analysis for default metrics with district processing
-                results = run_weekly_analysis(process_districts=True)
-                
-                # Generate the newsletter
-                newsletter_path = generate_weekly_newsletter(results)
-                
-                if newsletter_path:
-                    logger.info(f"Weekly analysis completed successfully, newsletter saved to {newsletter_path}")
-                else:
-                    logger.warning("Weekly analysis completed but no newsletter was generated")
-            except Exception as e:
-                logger.error(f"Error during weekly analysis: {str(e)}")
-                
-        except Exception as e:
-            logger.error(f"Error in weekly analysis scheduler: {str(e)}")
-            await asyncio.sleep(300)  # Wait 5 minutes before retrying if there's an error
-
 async def cleanup_logs():
     """Trim log files to keep only the last 7 days of logs. Runs daily."""
     while True:
@@ -715,15 +759,17 @@ async def startup_event():
     asyncio.create_task(schedule_metrics_generation())
     logger.info("Started metrics generation scheduler")
     
-    # Start the weekly analysis scheduler
-    asyncio.create_task(schedule_weekly_analysis())
-    logger.info("Started weekly analysis scheduler")
-    
     # Start the log cleanup scheduler
     asyncio.create_task(cleanup_logs())
     logger.info("Started log cleanup scheduler")
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting server...")
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+    # Use the temporary logger for this final startup message
+    temp_logger.info("Starting server with Uvicorn...") 
+    # Pass the config dictionary to uvicorn.run, remove log_level argument
+    uvicorn.run("main:app", 
+                host="0.0.0.0", 
+                port=8000, 
+                reload=True, 
+                log_config=LOGGING_CONFIG) 

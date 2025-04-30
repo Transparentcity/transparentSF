@@ -22,7 +22,7 @@ delete process.env.REPLIT_GHOST_API_KEY;
 
 // Load .env file with override option
 dotenv.config({ 
-    path: path.join(__dirname, '../../../.env'),
+    path: path.join(__dirname, '../../.env'),
     override: true 
 });
 
@@ -163,76 +163,106 @@ const uploadImageToGhost = async (imageBuffer, imageName, api) => {
 
 app.post('/create-post', async (req, res) => {
     try {
-        console.log("Request received:", req.body); // Debug incoming request
-        const { title, content } = req.body; // Destructure title and content
+        console.log("Request received for /create-post"); 
+        const { title, content } = req.body; 
 
         if (!title || !content) {
+            console.error("Missing title or content in request body.");
             return res.status(400).json({ success: false, error: "Title and content are required." });
         }
 
         // Load the HTML content into cheerio
         const $ = cheerio.load(content);
 
-        // Find all <img> tags
-        const imgTags = $('img');
+        // --- Image Upload Logic --- 
+        // Select only images with src starting with 'charts/'
+        const imgTags = $('img[src^="charts/"]'); 
+        console.log(`Found ${imgTags.length} local chart image(s) to upload.`);
 
-        console.log(`Found ${imgTags.length} image(s) in the content.`);
+        // Define the base path to the reports directory relative to this script
+        // ghostBridge.js is in ai/tools/ghost_bridge/, reports are in ai/output/reports/
+        const reportsBasePath = path.resolve(__dirname, '..', '..', 'output', 'reports');
+        console.log(`Reports base path resolved to: ${reportsBasePath}`);
 
-        // Iterate over each <img> tag
-        for (let i = 0; i < imgTags.length; i++) {
-            const img = imgTags[i];
-            const src = $(img).attr('src');
+        // Use Promise.all to handle uploads concurrently (optional, but can speed things up)
+        const uploadPromises = [];
 
-            if (src) {
-                console.log(`Processing image source: ${src}`);
+        imgTags.each((index, imgElement) => {
+            const img = $(imgElement);
+            const originalSrc = img.attr('src');
+            
+            if (originalSrc && originalSrc.startsWith('charts/')) {
+                console.log(`Processing image source: ${originalSrc}`);
 
-                // Handle only local image paths (you may need to adjust this based on your use case)
-                // For example, src might be "/images/photo.jpg" or an absolute path
-                // Adjust the path resolution as necessary
-                const imagePath = path.resolve(__dirname, '..', src); // Adjust the relative path as needed
+                // Construct the full local path to the image file
+                const imagePath = path.join(reportsBasePath, originalSrc);
                 const imageName = path.basename(imagePath);
+                console.log(`Attempting to read image file at: ${imagePath}`);
 
-                try {
-                    // Check if the file exists
-                    await fs.access(imagePath);
-                    console.log(`Image file exists at: ${imagePath}`);
+                // Create a promise for each image processing task
+                const uploadPromise = (async () => {
+                    try {
+                        // Check if the file exists using fs.promises.access
+                        await fs.access(imagePath);
+                        console.log(`Image file exists at: ${imagePath}`);
 
-                    // Read the image file
-                    const imageBuffer = await fs.readFile(imagePath);
+                        // Read the image file
+                        const imageBuffer = await fs.readFile(imagePath);
+                        console.log(`Read image file: ${imageName}, size: ${imageBuffer.length} bytes`);
 
-                    // Upload to Ghost and get the new URL
-                    const imageUrl = await uploadImageToGhost(imageBuffer, imageName, api);
-                    console.log(`Image URL from Ghost: ${imageUrl}`);
+                        // Upload to Ghost and get the new URL
+                        const imageUrl = await uploadImageToGhost(imageBuffer, imageName, api);
+                        console.log(`Image successfully uploaded. Ghost URL: ${imageUrl}`);
 
-                    // Replace the src attribute with the new URL
-                    $(img).attr('src', imageUrl);
-                    console.log(`Replaced image src with Ghost URL: ${imageUrl}`);
-                } catch (error) {
-                    console.error(`Error processing image ${imagePath}:`, error);
-                    // Optionally, you can decide to remove the image or leave it as is
-                    // For now, we'll leave it unchanged and continue
-                }
+                        // Replace the src attribute with the new URL
+                        img.attr('src', imageUrl);
+                        console.log(`Replaced local src "${originalSrc}" with Ghost URL: ${imageUrl}`);
+
+                    } catch (error) {
+                        if (error.code === 'ENOENT') {
+                            console.error(`Image file not found at ${imagePath}. Skipping upload.`);
+                        } else {
+                            console.error(`Error processing image ${imagePath}:`, error.message);
+                            // Optionally decide how to handle other errors (e.g., remove the img tag, leave src as is)
+                        }
+                        // Don't re-throw here, allow other images to process
+                    }
+                })();
+                uploadPromises.push(uploadPromise);
             }
-        }
-
-        // Get the updated HTML content
-        const updatedContent = $.html();
-        console.log("Updated content after processing images:", updatedContent);
-
-        // Create the new post in Ghost
-        const newPost = await api.posts.add({
-            title: title,
-            html: updatedContent, // Use updated HTML content
-            status: 'draft'
-        }, {
-            source: 'html' // Specify source=html in query params
         });
 
-        console.log(`Ghost post created: ${newPost.url}`);
-        res.json({ success: true, post: newPost }); // Send newPost in the response
+        // Wait for all image uploads and replacements to complete
+        await Promise.all(uploadPromises);
+        console.log("Finished processing all local images.");
+        // --- End Image Upload Logic ---
+
+        // Get the updated HTML content after all replacements
+        const updatedContent = $.html();
+        // Optional: Log a snippet of the updated HTML for verification
+        // console.log("Updated HTML snippet:", updatedContent.substring(0, 500)); 
+
+        // Create the new post in Ghost using the updated HTML
+        console.log(`Creating Ghost post with title: "${title}"`);
+        const newPost = await api.posts.add({
+            title: title,
+            html: updatedContent, 
+            status: 'draft' 
+        }, {
+            source: 'html' 
+        });
+
+        console.log(`Ghost post created successfully: ${newPost.url}`);
+        res.json({ success: true, post: newPost }); 
     } catch (error) {
-        console.error("Error creating post:", error.message); // Log errors
-        res.status(500).json({ success: false, error: error.message });
+        // Log the detailed error, including stack trace if available
+        console.error("Error creating post:", error.message, error.stack);
+        // Provide a more informative error response
+        res.status(500).json({ 
+            success: false, 
+            error: error.message, 
+            details: error.cause || error.stack // Include cause or stack if available
+        });
     }
 });
 

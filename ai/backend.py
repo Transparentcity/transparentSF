@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from fastapi.staticfiles import StaticFiles
@@ -28,17 +28,10 @@ import re
 import psycopg2
 import psycopg2.extras
 import asyncio
+# Import the new function
+from tools.genGhostPost import publish_newsletter_to_ghost
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,  # Changed from DEBUG to INFO
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("app_debug.log"),  # Log to file
-        logging.StreamHandler()                # Log to console
-    ]
-)
-
+# Use the root logger configured elsewhere (e.g., in monthly_report.py)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -3819,123 +3812,203 @@ async def time_series_chart_page(request: Request):
         district: District ID (default: 0 for citywide)
         period_type: Period type (year, month, etc.)
         groups: Comma-separated list of group values to include (optional)
+        format: Set to 'image' to return a static image instead of HTML
     """
+    # Check if format=image is in the query parameters
+    format_param = request.query_params.get('format')
+    
+    if format_param == 'image':
+        try:
+            # Extract parameters for the chart
+            metric_id = request.query_params.get('metric_id')
+            district = request.query_params.get('district', '0')
+            period_type = request.query_params.get('period_type', 'year')
+            
+            if not metric_id:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "metric_id is required for image export"}
+                )
+            
+            # Get chart data
+            chart_data_response = await get_chart_by_metric(
+                metric_id=metric_id,
+                district=int(district),
+                period_type=period_type
+            )
+            
+            # Check if the response was successful and parse the JSON body
+            if chart_data_response.status_code == 200:
+                try:
+                    # The body is bytes, decode it and parse JSON
+                    chart_data = json.loads(chart_data_response.body.decode('utf-8'))
+                    logger.info(f"Successfully parsed chart data from JSONResponse for metric {metric_id}")
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"Failed to parse JSON from get_chart_by_metric response: {json_err}")
+                    return JSONResponse(
+                        status_code=500,
+                        content={"detail": "Failed to parse chart data response"}
+                    )
+            else:
+                # Handle non-200 response from get_chart_by_metric
+                logger.error(f"get_chart_by_metric returned status {chart_data_response.status_code}")
+                # Try to return the original error detail if possible
+                error_detail = "Failed to fetch chart data"
+                try:
+                    error_body = json.loads(chart_data_response.body.decode('utf-8'))
+                    error_detail = error_body.get("detail", error_detail)
+                except: # Ignore errors parsing the error body
+                    pass
+                    
+                return JSONResponse(
+                    status_code=chart_data_response.status_code, # Forward the status code
+                    content={"detail": error_detail}
+                )
+                
+            # Now, use the parsed chart_data dictionary
+            if not chart_data or not chart_data.get('data'):
+                logger.warning(f"No chart data found in parsed response for metric {metric_id}")
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": "No chart data found for the specified parameters"}
+                )
+            
+            # Use Plotly to create the chart image
+            import plotly.graph_objects as go
+            import plotly.io as pio
+            from io import BytesIO
+            import base64
+            
+            # Create the figure
+            fig = go.Figure()
+            
+            # Get metadata
+            metadata = chart_data.get('metadata', {})
+            object_name = metadata.get('object_name', 'Time Series')
+            
+            # Group data by group_value if it exists
+            data_by_group = {}
+            for item in chart_data.get('data', []):
+                group = item.get('group_value', 'Default')
+                if group not in data_by_group:
+                    data_by_group[group] = []
+                data_by_group[group].append(item)
+            
+            # Define colors for groups
+            colors = [
+                '#007BFF', '#FF6B5A', '#4A7463', '#71B2CA', '#FFC107', 
+                '#9C27B0', '#2196F3', '#E91E63', '#4CAF50', '#FF5722'
+            ]
+            
+            # Add traces for each group
+            for i, (group, data) in enumerate(data_by_group.items()):
+                color = colors[i % len(colors)]
+                
+                # Sort data by time_period
+                data.sort(key=lambda x: x.get('time_period', ''))
+                
+                # Extract x and y values
+                x_values = [item.get('time_period', '') for item in data]
+                y_values = [item.get('numeric_value', 0) for item in data]
+                
+                # Add trace
+                fig.add_trace(go.Scatter(
+                    x=x_values,
+                    y=y_values,
+                    mode='lines+markers',
+                    name=group,
+                    line=dict(color=color, width=2),
+                    marker=dict(color=color, size=8)
+                ))
+            
+            # Calculate overall mean for reference line
+            all_values = [item.get('numeric_value', 0) for item in chart_data.get('data', [])]
+            if all_values:
+                mean_value = sum(all_values) / len(all_values)
+                
+                # Add mean line
+                fig.add_trace(go.Scatter(
+                    x=[x_values[0], x_values[-1]] if len(x_values) > 0 else [],
+                    y=[mean_value, mean_value],
+                    mode='lines',
+                    name=f'Average: {mean_value:.2f}',
+                    line=dict(color='rgba(0,0,0,0.3)', width=1, dash='dash')
+                ))
+            
+            # Update layout
+            district_name = "Citywide" if district == "0" else f"District {district}"
+            fig.update_layout(
+                title=f"{object_name} - {district_name}",
+                xaxis_title="Date",
+                yaxis_title=metadata.get('y_axis_label', 'Value'),
+                legend=dict(orientation="h", y=-0.2),
+                autosize=False,
+                width=1000,
+                height=600,
+                margin=dict(l=80, r=80, t=100, b=100),
+                plot_bgcolor='rgba(255,255,255,0.9)',
+                paper_bgcolor='rgba(255,255,255,0.9)'
+            )
+            
+            # Convert to PNG image
+            img_bytes = BytesIO()
+            fig.write_image(img_bytes, format='png')
+            img_bytes.seek(0)
+            
+            # Return the image
+            return StreamingResponse(
+                img_bytes, 
+                media_type="image/png",
+                headers={
+                    "Content-Disposition": f"attachment; filename=time_series_{metric_id}_{district}_{period_type}.png"
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Error generating time series chart image: {str(e)}", exc_info=True)
+            return JSONResponse(
+                status_code=500,
+                content={"detail": f"Error generating chart image: {str(e)}"}
+            )
+    
+    # Default behavior - return HTML page
     return templates.TemplateResponse("time_series_chart.html", {"request": request})
 
 @router.get("/monthly-report/file/{filename}")
 async def get_monthly_report_file(filename: str):
     """
-    Serve a monthly report file directly by filename.
+    Serve a monthly report file directly by filename from the output/reports directory.
     """
     try:
         logger.info(f"Requesting monthly report file: {filename}")
         
-        # Connect to database
-        conn = psycopg2.connect(
-            host=os.environ.get("POSTGRES_HOST", "localhost"),
-            database=os.environ.get("POSTGRES_DB", "transparentsf"),
-            user=os.environ.get("POSTGRES_USER", "postgres"),
-            password=os.environ.get("POSTGRES_PASSWORD", "postgres")
-        )
-        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        
-        # Get the report details
-        cur.execute("""
-            SELECT id, district, period_type, max_items, created_at, updated_at, 
-                   original_filename, revised_filename
-            FROM reports
-            WHERE original_filename = %s OR revised_filename = %s
-        """, (filename, filename))
-        
-        report = cur.fetchone()
-        
-        if not report:
-            logger.error(f"Monthly report not found with filename: {filename}")
-            return JSONResponse(
-                status_code=404,
-                content={"detail": f"Monthly report not found with filename: {filename}"}
-            )
-        
-        # Get the report ID
-        report_id = report['id']
-        
-        # Get the metrics for this report
-        cur.execute("""
-            SELECT *
-            FROM monthly_reporting
-            WHERE report_id = %s
-            ORDER BY priority ASC
-        """, (report_id,))
-        
-        metrics = cur.fetchall()
-        
-        if not metrics:
-            logger.error(f"No metrics found for report ID: {report_id}")
-            return JSONResponse(
-                status_code=404,
-                content={"detail": f"No metrics found for report ID: {report_id}"}
-            )
-        
-        # Format the report data
-        report_data = {
-            "id": report_id,
-            "district": report['district'],
-            "district_name": "Citywide" if report['district'] == "0" else f"District {report['district']}",
-            "period_type": report['period_type'],
-            "max_items": report['max_items'],
-            "created_at": report['created_at'].isoformat(),
-            "updated_at": report['updated_at'].isoformat(),
-            "metrics": []
-        }
-        
-        for metric in metrics:
-            report_data["metrics"].append({
-                "id": metric['id'],
-                "metric_name": metric['metric_name'],
-                "group_value": metric['group_value'],
-                "group_field_name": metric['group_field_name'],
-                "period_type": metric['period_type'],
-                "comparison_mean": metric['comparison_mean'],
-                "recent_mean": metric['recent_mean'],
-                "difference": metric['difference'],
-                "std_dev": metric['std_dev'],
-                "percent_change": metric['percent_change'],
-                "explanation": metric['explanation'],
-                "priority": metric['priority'],
-                "report_text": metric['report_text'],
-                "chart_data": metric['chart_data'],
-                "metadata": metric['metadata']
-            })
-        
-        # Close database connection
-        cur.close()
-        conn.close()
-        
-        # Check if the file exists in the output directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        output_dir = os.path.join(current_dir, "output")
-        reports_dir = os.path.join(output_dir, "reports")
+        # Construct the path to the reports directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        reports_dir = os.path.join(script_dir, "output", "reports")
         file_path = os.path.join(reports_dir, filename)
         
-        if os.path.exists(file_path):
-            # Return the file directly
-            return FileResponse(file_path)
-        else:
-            # If the file doesn't exist, generate it from the database data
-            # This would require implementing a function to generate the HTML from the database data
-            logger.error(f"Monthly report file not found at: {file_path}")
-            return JSONResponse(
-                status_code=404,
-                content={"detail": f"Monthly report file not found at: {file_path}"}
-            )
+        # Security check to prevent accessing files outside the reports directory
+        if not os.path.abspath(file_path).startswith(os.path.abspath(reports_dir)):
+            logger.error(f"Security check failed: Attempt to access file outside reports directory: {filename}")
+            raise HTTPException(status_code=403, detail="Access denied")
             
+        # Check if the file exists
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            logger.info(f"Serving file: {file_path}")
+            # Determine media type based on extension
+            media_type = "text/html" if filename.lower().endswith(".html") else "application/octet-stream"
+            return FileResponse(file_path, media_type=media_type)
+        else:
+            logger.error(f"Monthly report file not found at: {file_path}")
+            raise HTTPException(status_code=404, detail=f"Monthly report file not found: {filename}")
+            
+    except HTTPException as http_exc:
+        # Re-raise HTTPException to ensure correct status code is sent
+        raise http_exc
     except Exception as e:
         error_message = f"Error getting monthly report file: {str(e)}"
         logger.error(error_message, exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content={"detail": error_message}
-        )
+        raise HTTPException(status_code=500, detail=error_message)
 
 @router.post("/rerun_monthly_report_generation")
 async def rerun_monthly_report_generation(request: Request):
@@ -4387,3 +4460,134 @@ async def clear_logs():
             "status": "error",
             "message": str(e)
         })
+
+@router.get("/get_prompts")
+async def get_prompts():
+    """Get all prompts from the prompts.json file."""
+    try:
+        # Get file path to prompts.json
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        prompts_file = os.path.join(script_dir, "data", "prompts.json")
+        
+        if not os.path.exists(prompts_file):
+            logger.error(f"Prompts file not found at: {prompts_file}")
+            return JSONResponse({
+                "status": "error",
+                "message": "Prompts file not found"
+            }, status_code=404)
+        
+        # Read the prompts file
+        with open(prompts_file, 'r', encoding='utf-8') as f:
+            prompts = json.load(f)
+        
+        return JSONResponse({
+            "status": "success",
+            "prompts": prompts
+        })
+    except Exception as e:
+        error_message = f"Error getting prompts: {str(e)}"
+        logger.error(error_message)
+        return JSONResponse({
+            "status": "error",
+            "message": error_message
+        }, status_code=500)
+
+@router.post("/update_prompt")
+async def update_prompt(request: Request):
+    """Update a specific prompt in the prompts.json file."""
+    try:
+        # Get request data
+        data = await request.json()
+        category = data.get("category")
+        key = data.get("key")
+        prompt = data.get("prompt")
+        
+        if not category or not key or not prompt:
+            return JSONResponse({
+                "status": "error",
+                "message": "Missing required parameters: category, key, or prompt"
+            }, status_code=400)
+        
+        # Get file path to prompts.json
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        prompts_file = os.path.join(script_dir, "data", "prompts.json")
+        
+        if not os.path.exists(prompts_file):
+            logger.error(f"Prompts file not found at: {prompts_file}")
+            return JSONResponse({
+                "status": "error",
+                "message": "Prompts file not found"
+            }, status_code=404)
+        
+        # Read the prompts file
+        with open(prompts_file, 'r', encoding='utf-8') as f:
+            prompts = json.load(f)
+        
+        # Check if the category and key exist
+        if category not in prompts:
+            prompts[category] = {}
+        
+        # Preserve the existing system message if available and not included in the update
+        if category in prompts and key in prompts[category] and isinstance(prompts[category][key], dict):
+            existing_prompt = prompts[category][key]
+            
+            # If the prompt is an object with a 'prompt' field but no 'system' field,
+            # add the system field from the existing prompt if available
+            if isinstance(prompt, dict) and 'prompt' in prompt and 'system' not in prompt and 'system' in existing_prompt:
+                prompt['system'] = existing_prompt['system']
+        
+        # Update the prompt
+        prompts[category][key] = prompt
+        
+        # Write the updated prompts back to the file
+        with open(prompts_file, 'w', encoding='utf-8') as f:
+            json.dump(prompts, f, indent=4)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": f"Prompt {category}.{key} updated successfully"
+        })
+    except Exception as e:
+        error_message = f"Error updating prompt: {str(e)}"
+        logger.error(error_message)
+        return JSONResponse({
+            "status": "error",
+            "message": error_message
+        }, status_code=500)
+
+@router.post("/publish_to_ghost")
+async def publish_to_ghost(request: Request):
+    """Publish a newsletter to Ghost CMS."""
+    try:
+        data = await request.json()
+        filename = data.get("filename")
+        title = data.get("title")
+        
+        if not filename:
+            return JSONResponse({
+                "status": "error",
+                "message": "No filename provided"
+            }, status_code=400)
+        
+        # Call the function to publish the newsletter
+        result = publish_newsletter_to_ghost(filename, title)
+        
+        # Check if the result is an error message
+        if isinstance(result, str) and result.startswith("Error:"):
+            return JSONResponse({
+                "status": "error",
+                "message": result
+            }, status_code=500)
+        
+        # Return success with the post URL
+        return JSONResponse({
+            "status": "success",
+            "message": "Newsletter published successfully to AnomalousSF blog",
+            "url": result
+        })
+    except Exception as e:
+        logger.exception(f"Error publishing newsletter to Ghost: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Error publishing newsletter to Ghost: {str(e)}"
+        }, status_code=500)
