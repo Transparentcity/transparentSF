@@ -534,7 +534,8 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
         uses_avg=uses_avg,
         agg_functions=agg_functions,
         district=0,  # Use 0 for citywide analysis
-        metric_id=metric_id
+        metric_id=metric_id,
+        base_metric_name=metric_info.get('query_name', metric_id)
     )
     
     if process_analysis_result:
@@ -601,7 +602,8 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                     uses_avg=uses_avg,
                     agg_functions=agg_functions,
                     district=district,
-                    metric_id=metric_id
+                    metric_id=metric_id,
+                    base_metric_name=metric_info.get('query_name', metric_id)
                 )
                 
                 if district_result:
@@ -633,7 +635,7 @@ def clean_metric_name(query_name):
 
 def process_single_analysis(context_variables, category_fields, period_type, period_field, 
                            filter_conditions, query_name, period_desc, value_field,
-                           recent_period, comparison_period, uses_avg, agg_functions, district=None, metric_id=None):
+                           recent_period, comparison_period, uses_avg, agg_functions, district=None, metric_id=None, base_metric_name=None):
     """Process a single analysis with the given parameters."""
     # Get a copy of the dataset to avoid modifying the original
     dataset = context_variables['dataset'].copy()
@@ -686,7 +688,7 @@ def process_single_analysis(context_variables, category_fields, period_type, per
             store_in_db=True,  # Enable database storage
             object_type='dashboard_metric',  # Add object type
             object_id=metric_id,  # Add object ID (metric_id)
-            object_name=query_name  # Use the query name as object_name
+            object_name=base_metric_name if base_metric_name else query_name # Use base name if available
         )
         
         logging.info(f"Successfully generated main time series chart for {query_name}")
@@ -751,7 +753,7 @@ def process_single_analysis(context_variables, category_fields, period_type, per
                 store_in_db=True,  # Enable database storage
                 object_type='dashboard_metric_category',  # Add object type with category suffix
                 object_id=metric_id,  # Use just the metric ID
-                object_name=f"{query_name} by {category_field_display}"  # Use query name with category as object_name
+                object_name=f"{base_metric_name if base_metric_name else query_name} by {category_field_display}" # Use base name if available
             )
             
             logging.info(f"Successfully generated chart for {category_field_name} for {query_name}")
@@ -922,6 +924,10 @@ def transform_query_for_period(original_query, date_field, category_fields, peri
                                 r'\1' + value + r'\2', 
                                 modified_query)
     
+    # Ensure consistent use of <= instead of < for date upper bounds
+    modified_query = re.sub(r'<\s*current_date', f"<= '{recent_end}'", modified_query)
+    modified_query = re.sub(r'<\s*\'{recent_end}\'', f"<= '{recent_end}'", modified_query)
+    
     # Determine if it's a YTD query by checking format
     is_ytd_query = ('as date, COUNT(*)' in modified_query or 
                    'as date,' in modified_query or 
@@ -943,6 +949,8 @@ def transform_query_for_period(original_query, date_field, category_fields, peri
             
             # Remove current_date references and replace with our recent_end
             where_part = re.sub(r'<=\s*current_date', f"<= '{recent_end}'", where_part)
+            # Also handle the case where "< current_date" is used instead of "<= current_date"
+            where_part = re.sub(r'<\s*current_date', f"<= '{recent_end}'", where_part)
             
             # Generate appropriate date_trunc based on period_type
             if period_type == 'year':
@@ -990,6 +998,9 @@ def transform_query_for_period(original_query, date_field, category_fields, peri
             {group_by_clause}
             ORDER BY {period_field}
             """
+            
+            # Make sure we're using <= consistently by directly replacing potential leftover < operators
+            transformed_query = transformed_query.replace(f"{date_field_match} < '{recent_end}'", f"{date_field_match} <= '{recent_end}'")
             
             return transformed_query
         else:

@@ -90,8 +90,62 @@ def create_anomalies_table(connection):
             table_exists = cursor.fetchone()[0]
             
             if not table_exists:
-                logging.error("Anomalies table does not exist. Please run the database initialization script.")
-                return False
+                # Create the table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE anomalies (
+                        id SERIAL PRIMARY KEY,
+                        group_value TEXT,
+                        group_field_name TEXT,
+                        period_type TEXT,
+                        comparison_mean FLOAT,
+                        recent_mean FLOAT,
+                        difference FLOAT,
+                        std_dev FLOAT,
+                        out_of_bounds BOOLEAN,
+                        recent_date DATE,
+                        comparison_dates JSONB,
+                        comparison_counts JSONB,
+                        recent_dates JSONB,
+                        recent_counts JSONB,
+                        metadata JSONB,
+                        field_name TEXT,
+                        object_type TEXT,
+                        object_id TEXT, 
+                        object_name TEXT,
+                        recent_data JSONB,
+                        comparison_data JSONB,
+                        district INTEGER,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Create indexes
+                cursor.execute("""
+                    CREATE INDEX idx_anomalies_created_at ON anomalies (created_at);
+                    CREATE INDEX idx_anomalies_object_id ON anomalies (object_id);
+                    CREATE INDEX idx_anomalies_is_active ON anomalies (is_active);
+                """)
+                
+                connection.commit()
+                logging.info("Created anomalies table")
+                return True
+            
+            # Check if is_active column exists
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.columns 
+                    WHERE table_name = 'anomalies' AND column_name = 'is_active'
+                );
+            """)
+            column_exists = cursor.fetchone()[0]
+            
+            if not column_exists:
+                # Add is_active column if it doesn't exist
+                cursor.execute("ALTER TABLE anomalies ADD COLUMN is_active BOOLEAN DEFAULT TRUE")
+                cursor.execute("CREATE INDEX idx_anomalies_is_active ON anomalies (is_active)")
+                connection.commit()
+                logging.info("Added is_active column to anomalies table")
                 
             # Check if required indexes exist
             cursor.execute("""
@@ -105,7 +159,7 @@ def create_anomalies_table(connection):
             if not index_exists:
                 logging.warning("Some indexes on anomalies table may be missing. Performance might be affected.")
             
-            return table_exists
+            return True
     except Exception as e:
         logging.error(f"Error checking anomalies table: {e}")
         import traceback
@@ -174,8 +228,21 @@ def store_anomalies_in_db(connection, results, metadata):
                 except:
                     pass
         
+        # First, deactivate any existing active anomalies with the same parameters
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                UPDATE anomalies 
+                SET is_active = FALSE
+                WHERE object_type = %s 
+                AND object_id = %s
+                AND object_name = %s
+                AND field_name = %s
+                AND period_type = %s
+                AND district::TEXT = %s
+                AND is_active = TRUE
+            """, (object_type, object_id, object_name, field_name, period_type, str(district)))
+            
         inserted_count = 0
-        
         
         with connection.cursor() as cursor:
             for result in results:
@@ -257,8 +324,8 @@ def store_anomalies_in_db(connection, results, metadata):
                     (group_value, group_field_name, period_type, comparison_mean, recent_mean, 
                      difference, std_dev, out_of_bounds, recent_date, comparison_dates, 
                      comparison_counts, recent_dates, recent_counts, metadata, field_name, 
-                     object_type, object_id, object_name, recent_data, comparison_data, district)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     object_type, object_id, object_name, recent_data, comparison_data, district, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                 """, (
                     result['group_value'],
                     group_field_name,
@@ -280,7 +347,7 @@ def store_anomalies_in_db(connection, results, metadata):
                     object_name,
                     Json(recent_data),
                     Json(comparison_data),
-                    district
+                    str(district)
                 ))
                 inserted_count += 1
         
@@ -362,6 +429,7 @@ def get_anomalies(
     district_filter=None,
     metric_id=None,
     period_type=None,
+    only_active=True,
     db_host=None,
     db_port=None,
     db_name=None,
@@ -382,6 +450,7 @@ def get_anomalies(
         district_filter: Filter by district
         metric_id: Filter by object_id (metric ID)
         period_type: Filter by period type (year, month, week, day)
+        only_active: Only return active anomalies (default: True)
         db_host: Database host
         db_port: Database port
         db_name: Database name
@@ -396,13 +465,16 @@ def get_anomalies(
         cursor = connection.cursor(cursor_factory=RealDictCursor)
         
         # Start building the query
-        query = "SELECT id, group_field_name, group_value, comparison_mean, recent_mean, difference, std_dev, out_of_bounds, created_at, metadata, district, object_id, period_type "
+        query = "SELECT id, group_field_name, group_value, comparison_mean, recent_mean, difference, std_dev, out_of_bounds, created_at, metadata, district, object_id, period_type, is_active "
         query += "FROM anomalies WHERE 1=1 "
         params = []
         
         # Apply filters based on parameters
         if only_anomalies:
             query += "AND out_of_bounds = true "
+            
+        if only_active:
+            query += "AND is_active = true "
             
         if group_filter:
             query += "AND group_value ILIKE %s "
@@ -423,8 +495,8 @@ def get_anomalies(
         
         if district_filter:
             # Filter by district
-            query += "AND district = %s "
-            params.append(district_filter)
+            query += "AND district::TEXT = %s "
+            params.append(str(district_filter))
             
         if metric_id:
             # Filter by object_id
@@ -561,7 +633,7 @@ def clear_anomalies_by_metrics_id(
     db_password=None
 ) -> Dict[str, Any]:
     """
-    Clear anomalies for a specific metrics_id and period_type.
+    Mark anomalies as inactive for a specific metrics_id and period_type.
     
     Args:
         metrics_id: The metrics ID to clear anomalies for
@@ -579,20 +651,20 @@ def clear_anomalies_by_metrics_id(
         # Create cursor
         cursor = connection.cursor()
         
-        # Delete anomalies for the specified metrics_id and period_type
+        # Mark anomalies as inactive instead of deleting them
         cursor.execute(
-            "DELETE FROM anomalies WHERE object_id = %s AND period_type = %s",
-            (metrics_id, period_type)
+            "UPDATE anomalies SET is_active = FALSE WHERE object_id = %s AND period_type = %s AND is_active = TRUE",
+            (str(metrics_id), period_type)
         )
         
-        # Get number of rows deleted
-        deleted_count = cursor.rowcount
+        # Get number of rows updated
+        updated_count = cursor.rowcount
         
         # Commit the transaction
         connection.commit()
         
         cursor.close()
-        return deleted_count
+        return updated_count
     
     result = execute_with_connection(
         operation=clear_operation,
@@ -604,11 +676,11 @@ def clear_anomalies_by_metrics_id(
     )
     
     if result["status"] == "success":
-        deleted_count = result["result"]
+        updated_count = result["result"]
         return {
             "status": "success",
-            "message": f"Successfully cleared {deleted_count} anomalies",
-            "deleted_count": deleted_count
+            "message": f"Successfully marked {updated_count} anomalies as inactive",
+            "updated_count": updated_count
         }
     else:
         return result 

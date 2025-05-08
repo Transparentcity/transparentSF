@@ -23,7 +23,8 @@
             font-family: 'IBM Plex Sans', Arial, sans-serif;
             color: var(--ink-black);
             background-color: white;
-            padding: 20px;
+            padding: 15px;
+            font-size: 14px;
         }
         
         .container {
@@ -51,106 +52,86 @@
             box-shadow: none;
             overflow: visible;
             position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            display: block;
             width: 100%;
-            max-width: 100%;
+            max-width: 600px;
             border: none;
             box-sizing: border-box;
         }
         
-        #anomaly-chart {
-            width: 100%;
-            height: 0;
-            padding-bottom: 65%;
-            position: relative;
-            overflow: visible;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            box-sizing: border-box;
-        }
-        
-        #anomaly-plot {
+        /* Add corner shading elements */
+        .chart-container::before {
+            content: '';
             position: absolute;
             top: 0;
+            right: 0;
+            width: 61.8%;
+            height: 61.8%;
+            border-top: 2px solid rgba(0, 0, 0, 0.2);
+            border-right: 2px solid rgba(0, 0, 0, 0.2);
+            border-top-right-radius: 8px;
+            display: block;
+            pointer-events: none;
+        }
+        
+        .chart-container::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
             left: 0;
-            width: 100% !important;
-            height: 100% !important;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        /* Responsive adjustments */
-        @media (max-width: 576px) {
-            body {
-                padding: 10px;
-            }
-            
-            .chart-container {
-                padding: 8px;
-            }
-            
-            #anomaly-chart {
-                padding-bottom: 100%; /* Taller aspect ratio on very small screens */
-            }
-        }
-        
-        /* Add media query for wider screens */
-        @media (min-width: 768px) {
-            #anomaly-chart {
-                padding-bottom: 60%; /* Lower aspect ratio for wider screens */
-            }
-        }
-        
-        @media (min-width: 1200px) {
-            #anomaly-chart {
-                padding-bottom: 50%; /* Even lower aspect ratio for very wide screens */
-            }
+            width: 61.8%;
+            height: 61.8%;
+            border-bottom: 2px solid rgba(0, 0, 0, 0.2);
+            border-left: 2px solid rgba(0, 0, 0, 0.2);
+            border-bottom-left-radius: 8px;
+            display: block;
+            pointer-events: none;
         }
         
         .header {
             color: var(--spruce-green);
-            margin-bottom: 20px;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
         }
         
         .loading {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 300px;
+            height: 250px;
             color: var(--spruce-green);
         }
         
         .error-message {
             color: var(--warm-coral);
-            padding: 15px;
+            padding: 12px;
             background-color: rgba(255, 107, 90, 0.1);
             border-radius: 5px;
+            font-size: 0.9rem;
         }
         
-        .anomaly-metadata {
+        .metadata {
             background-color: rgba(246, 241, 234, 0.7);
             border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
         }
         
         .chart-caption {
-            font-size: 12px;
-            padding: 8px;
+            font-size: 11px;
+            padding: 6px;
             background-color: rgba(246, 241, 234, 0.7);
             border-radius: 4px;
-            margin-top: 10px;
+            margin-top: 8px;
         }
         
         .badge {
             background-color: var(--spruce-green);
             color: white;
             font-weight: normal;
-            padding: 5px 10px;
+            padding: 3px 8px;
+            font-size: 0.75rem;
         }
         
         .positive-change {
@@ -167,7 +148,10 @@
             height: 100% !important;
             max-width: 100% !important;
             max-height: 100% !important;
-            padding: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 6px;
         }
         
         .main-svg {
@@ -177,50 +161,139 @@
             max-height: 100% !important;
         }
         
-        /* Ensure annotation text maintains its size */
-        .annotation-text {
-            font-size: 14px !important;
+        /* Responsive adjustments */
+        @media (max-width: 576px) {
+            body {
+                padding: 10px;
+            }
+            
+            .chart-container {
+                padding: 8px;
+            }
+            
+            .metadata {
+                padding: 10px;
+            }
+            
+            .mt-3.d-flex {
+                flex-direction: column;
+            }
+            
+            .mt-3.d-flex .btn {
+                margin: 5px 0;
+                width: 100%;
+            }
+            
+            #anomaly-chart {
+                padding-bottom: 100%; /* Maintain square aspect ratio on very small screens */
+            }
+        }
+        
+        /* Add media query for wider screens */
+        @media (min-width: 768px) {
+            #anomaly-chart {
+                padding-bottom: 100%; /* Maintain square aspect ratio on wider screens */
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            #anomaly-chart {
+                padding-bottom: 100%; /* Maintain square aspect ratio on very wide screens */
+            }
         }
         
         /* Ensure the container takes full height in chart section mode */
         body.chart-section-mode {
             margin: 0;
             padding: 0;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            height: auto;
+            min-height: auto;
+            background-color: transparent;
+            overflow: hidden;
         }
         
         body.chart-section-mode .container {
-            height: 100%;
             padding: 0;
             margin: 0;
+            width: 100%;
+            max-width: none;
+            height: auto;
         }
         
         body.chart-section-mode .row,
         body.chart-section-mode .col-12 {
-            height: 100%;
             margin: 0;
             padding: 0;
+            width: 100%;
+            max-width: none;
+            height: auto;
         }
         
-        /* Fix for iframe embedding */
         body.chart-section-mode .chart-container {
-            height: 100%;
-            padding: 0;
             margin: 0;
-            padding-bottom: 0; /* Override the padding-bottom for aspect ratio */
+            box-shadow: none;
+            width: 100%;
+            max-width: none;
+            height: auto;
         }
-
-        body.chart-section-mode #anomaly-chart {
+        
+/* 
+        body.chart-section-mode #chart-section::before,
+        body.chart-section-mode #chart-section::after {
+            display: none;
+        }
+*/
+        
+        /* Ensure the modebar is hidden with CSS as well */
+        .modebar {
+            display: none !important;
+        }
+        
+        /* Ensure chart is square and contains text properly */
+        .square-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .square-container:before {
+            content: "";
+            display: block;
+            padding-top: 100%; /* 1:1 Aspect Ratio */
+        }
+        
+        .square-content {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
+        }
+        
+        /* Ensure text wraps properly */
+        .annotation-text {
+            white-space: normal !important;
+            overflow-wrap: break-word !important;
+            word-wrap: break-word !important;
+        }
+        
+        #anomaly-chart {
             width: 100%;
-            height: 100%;
+            height: 0;
+            padding-bottom: 100%;
+            position: relative;
+            overflow: visible;
+            display: block;
+            box-sizing: border-box;
+        }
+        
+        #anomaly-plot {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100% !important;
+            height: 100% !important;
         }
     </style>
 </head>
@@ -230,8 +303,8 @@
             <div class="col-12">
                 <h1 class="header">Anomaly Chart</h1>
                 
-                <!-- Anomaly metadata will be displayed here -->
-                <div id="anomaly-metadata" class="anomaly-metadata"></div>
+                <!-- Metadata will be displayed here -->
+                <div id="metadata" class="metadata"></div>
                 
                 <!-- Chart container -->
                 <div id="chart-section" class="chart-container">
@@ -245,17 +318,16 @@
                     <div id="datasf-link" class="mt-3" style="text-align: center;"></div>
                 </div>
                 
-                <div class="mt-3 d-flex flex-wrap justify-content-start gap-2">
-                    <a href="javascript:history.back()" class="btn btn-outline-secondary">Back</a>
-                    <button id="share-btn" class="btn btn-outline-success" onclick="copyShareLink()">
+                <div class="mt-3 d-flex justify-content-between flex-column flex-sm-row">
+                    <a href="javascript:history.back()" class="btn btn-outline-secondary mb-2 mb-sm-0">Back</a>
+                    <div class="d-flex flex-column flex-sm-row">
+                        <button id="share-btn" class="btn btn-outline-success mb-2 mb-sm-0 me-sm-2" onclick="copyShareLink()">
                         <i class="fas fa-share-alt me-1"></i> Share
                     </button>
                     <button id="embed-btn" class="btn btn-outline-primary" onclick="showEmbedCode()">
                         <i class="fas fa-code me-1"></i> Embed
                     </button>
-                    <a href="/anomaly-analyzer/anomaly-chart?id={{anomaly_id}}" class="btn btn-outline-info" target="_blank">
-                        <i class="fas fa-link me-1"></i> Permalink
-                    </a>
+                    </div>
                 </div>
                 
                 <!-- Embed code modal -->
@@ -301,14 +373,90 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        // Get anomaly ID from URL parameter
+        // Get parameters from URL
         const urlParams = new URLSearchParams(window.location.search);
         const anomalyId = urlParams.get('id');
+        const fullView = urlParams.get('full_view') === 'true';
+        
+        // Apply chart-section-mode by default unless full_view=true is specified
+        document.body.classList.toggle('chart-section-mode', !fullView);
         
         // Elements
         const loadingEl = document.getElementById('loading');
         const errorMessageEl = document.getElementById('error-message');
-        const anomalyMetadataEl = document.getElementById('anomaly-metadata');
+        const metadataEl = document.getElementById('metadata');
+        
+        // Hide non-chart elements by default unless full_view=true is specified
+        if (!fullView) {
+            const header = document.querySelector('.header');
+            const metadata = document.getElementById('metadata');
+            const buttons = document.querySelector('.mt-3');
+            const embedModal = document.getElementById('embedModal');
+            
+            if (header) header.style.display = 'none';
+            if (metadata) metadata.style.display = 'none';
+            if (buttons) buttons.style.display = 'none';
+            if (embedModal) embedModal.style.display = 'none';
+            
+            // Set chart container to maintain aspect ratio
+            const chartContainer = document.getElementById('chart-section');
+            if (chartContainer) {
+                chartContainer.style.margin = '0 auto';
+                chartContainer.style.maxWidth = '100%';
+                chartContainer.style.width = '100%';
+                chartContainer.style.display = 'flex';
+                chartContainer.style.justifyContent = 'center';
+                chartContainer.style.alignItems = 'center';
+                
+                // Add permalink button to chart section
+                let permalinkBtn = document.getElementById('chart-section-permalink');
+                if (!permalinkBtn) {
+                    permalinkBtn = document.createElement('button');
+                    permalinkBtn.id = 'chart-section-permalink';
+                    permalinkBtn.className = 'btn btn-sm btn-link';
+                    permalinkBtn.style.position = 'absolute';
+                    permalinkBtn.style.bottom = '5px';
+                    permalinkBtn.style.right = '5px';
+                    permalinkBtn.style.zIndex = '1000';
+                    permalinkBtn.style.fontSize = '10px';
+                    permalinkBtn.style.color = '#888888';
+                    permalinkBtn.style.textDecoration = 'none';
+                    permalinkBtn.style.border = 'none';
+                    permalinkBtn.style.background = 'none';
+                    permalinkBtn.style.padding = '0';
+                    permalinkBtn.style.cursor = 'pointer';
+                    permalinkBtn.innerHTML = '<i class="fas fa-share-alt me-1"></i>Share';
+                    permalinkBtn.onclick = function() {
+                        const fullUrl = window.location.href.split('#')[0];
+                        copyToClipboard(fullUrl);
+                    };
+                    chartContainer.appendChild(permalinkBtn);
+                    
+                    // Add full view button
+                    const fullViewBtn = document.createElement('button');
+                    fullViewBtn.id = 'full-view-btn';
+                    fullViewBtn.className = 'btn btn-sm btn-link';
+                    fullViewBtn.style.position = 'absolute';
+                    fullViewBtn.style.bottom = '5px';
+                    fullViewBtn.style.left = '5px';
+                    fullViewBtn.style.zIndex = '1000';
+                    fullViewBtn.style.fontSize = '10px';
+                    fullViewBtn.style.color = '#888888';
+                    fullViewBtn.style.textDecoration = 'none';
+                    fullViewBtn.style.border = 'none';
+                    fullViewBtn.style.background = 'none';
+                    fullViewBtn.style.padding = '0';
+                    fullViewBtn.style.cursor = 'pointer';
+                    fullViewBtn.innerHTML = '<i class="fas fa-expand me-1"></i>Full View';
+                    fullViewBtn.onclick = function() {
+                        const currentUrl = new URL(window.location.href);
+                        currentUrl.searchParams.set('full_view', 'true');
+                        window.open(currentUrl.toString(), '_blank');
+                    };
+                    chartContainer.appendChild(fullViewBtn);
+                }
+            }
+        }
         
         // Function to show loading state
         function showLoading() {
@@ -328,750 +476,225 @@
             loadingEl.style.display = 'none';
         }
         
-        // Function to format values for display
-        function formatValue(value) {
-            if (value === null || value === undefined || isNaN(value)) return '-';
-            return parseFloat(value).toLocaleString(undefined, {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 2
-            });
-        }
-        
-        // Function to render the anomaly chart
-        function renderAnomalyChart(anomaly) {
-            console.log("Rendering anomaly chart for anomaly:", anomaly);
-            
-            // Data preprocessing
-            const recentDates = [];
-            const recentValues = [];
-            const comparisonDates = [];
-            const comparisonValues = [];
-            
-            // Extract chart data from response
-            if (!anomaly || !anomaly.anomaly || !anomaly.anomaly.chart_data) {
-                showError('Invalid or incomplete anomaly data received. Missing chart_data.');
-                return;
-            }
-            
-            const chartData = anomaly.anomaly.chart_data;
-            const metadata = anomaly.anomaly.metadata || {};
-            
-            // Variable to store filter text for later use
-            let filterText = '';
-            
-            // Determine labels based on metadata
-            let yAxisLabel = metadata.y_axis_label || anomaly.anomaly.field_name || "Value";
-            let xAxisLabel = "Date";
-            
-            // Format dates properly
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            
-            // Process chart data based on periods
-            if (chartData.dates && chartData.values && chartData.periods) {
-                for (let i = 0; i < chartData.dates.length; i++) {
-                    const dateStr = chartData.dates[i];
-                    const value = chartData.values[i];
-                    const period = chartData.periods[i];
-                    
-                    // Parse the date string into a Date object
-                    let dateObj;
-                    try {
-                        // Improved handling of partial date strings like '2025-03'
-                        if (dateStr.includes('-') && dateStr.split('-').length === 2) {
-                            // Handle date formats like '2025-03' (year-month)
-                            const [year, month] = dateStr.split('-').map(Number);
-                            
-                            // For a month-only date, we'll use the last day to correctly represent that month
-                            const lastDay = new Date(year, month, 0).getDate();
-                            dateObj = new Date(year, month - 1, lastDay);
-                            
-                            // When displaying "Mar" it should show March data, not February
-                            console.log(`Parsed month-only date: ${dateStr} as ${year}-${month}-${lastDay} => ${dateObj.toISOString()}`);
-                        } else if (dateStr.includes('-') && dateStr.split('-').length === 3) {
-                            // Handle date formats like '2025-03-31' (year-month-day)
-                            const [year, month, day] = dateStr.split('-').map(Number);
-                            dateObj = new Date(year, month - 1, day); // month is 0-indexed in JS
-                        } else {
-                            // Fallback to standard date parsing
-                            dateObj = new Date(dateStr);
-                        }
-                        
-                        if (isNaN(dateObj.getTime())) {
-                            console.error(`Invalid date: ${dateStr}`);
-                            continue;
-                        }
-                        
-                        // Add to appropriate arrays based on period
-                        if (period === 'recent') {
-                            recentDates.push(dateObj);
-                            recentValues.push(value);
-                        } else if (period === 'comparison') {
-                            comparisonDates.push(dateObj);
-                            comparisonValues.push(value);
-                        }
-                    } catch (e) {
-                        console.error(`Error parsing date: ${dateStr}`, e);
-                    }
-                }
-            }
-            
-            // Create an array of unique date objects with just year and month (no day) for axis labels
-            const allDates = [...comparisonDates, ...recentDates];
-            
-            // Sort dates chronologically
-            allDates.sort((a, b) => a - b);
-            
-            // Log all dates for debugging
-            console.log("All dates before unique filtering:", allDates.map(d => 
-                `${d.toISOString().slice(0, 10)} (${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()})`
-            ));
-            
-            // Filter to unique year/month combinations, keeping the last day of each month
-            const uniqueDates = [];
-            const uniqueYearMonths = new Set();
-            
-            allDates.forEach(date => {
-                const yearMonth = `${date.getFullYear()}-${date.getMonth()}`;
-                
-                // If this year-month combination already exists, replace it
-                // This ensures we keep the most recent date for each month
-                if (uniqueYearMonths.has(yearMonth)) {
-                    // Find and remove the previous entry
-                    const existingIndex = uniqueDates.findIndex(d => 
-                        d.getFullYear() === date.getFullYear() && 
-                        d.getMonth() === date.getMonth()
-                    );
-                    
-                    if (existingIndex !== -1) {
-                        // If the new date is later in the month, replace the existing one
-                        if (date.getDate() > uniqueDates[existingIndex].getDate()) {
-                            uniqueDates[existingIndex] = date;
-                        }
-                    }
-                } else {
-                    // New year-month combination
-                    uniqueYearMonths.add(yearMonth);
-                    uniqueDates.push(date);
-                }
-            });
-            
-            // Sort again to ensure chronological order
-            uniqueDates.sort((a, b) => a - b);
-            
-            // Log unique dates for debugging
-            console.log("Unique dates after filtering:", uniqueDates.map(d => 
-                `${d.toISOString().slice(0, 10)} (${d.getFullYear()}-${d.getMonth() + 1})`
-            ));
-            
-            // Create a set of years that appear in the data
-            const years = [...new Set(allDates.map(d => d.getFullYear()))];
-            
-            // Create data points for January of each year (for year labels)
-            const yearDates = years.map(year => new Date(year, 0, 1));
-            
-            // Calculate comparison mean and standard deviation
-            const comparisonMean = anomaly.anomaly.comparison_mean || 0;
-            const stdDev = anomaly.anomaly.std_dev || 0;
-            
-            // Hide loading indicator
-            hideLoading();
-            
-            // Create a container for the chart
-            const chartElement = document.getElementById('anomaly-chart');
-            chartElement.innerHTML = ''; // Clear existing content
-            
-            // Check if we're in chart section mode (embedded)
-            const isChartSection = window.location.hash === '#chart-section';
-            
-            // Create a new div for the actual chart
-            const plotDiv = document.createElement('div');
-            plotDiv.id = 'anomaly-plot';
-            plotDiv.style.width = '100%';
-            plotDiv.style.height = '100%';
-            plotDiv.style.position = 'absolute';
-            plotDiv.style.top = '0';
-            plotDiv.style.left = '0';
-            chartElement.appendChild(plotDiv);
-            
-            // Create traces for the chart
-            const traces = [];
-            
-            // Add normal range shaded area if we have comparison data
-            if (comparisonDates.length > 0) {
-                const allDates = [...comparisonDates, ...recentDates].sort((a, b) => a - b);
-                const upperBound = allDates.map(() => comparisonMean + 2 * stdDev);
-                const lowerBound = allDates.map(() => Math.max(comparisonMean - 2 * stdDev, 0));
-                
-                // Add lower bound trace (invisible)
-                traces.push({
-                    x: allDates,
-                    y: lowerBound,
-                    type: 'scatter',
-                    mode: 'lines',
-                    line: { color: 'rgba(0,0,0,0)' },
-                    showlegend: false
-                });
-                
-                // Add normal range area
-                traces.push({
-                    x: allDates,
-                    y: upperBound,
-                    type: 'scatter',
-                    mode: 'none',
-                    fill: 'tonexty',
-                    fillcolor: 'rgba(74, 116, 99, 0.15)', // Spruce Green with transparency
-                    name: 'Normal Range',
-                    showlegend: true
-                });
-            }
-            
-            // Add comparison period trace using Bright Blue
-            if (comparisonDates.length > 0) {
-                traces.push({
-                    x: comparisonDates,
-                    y: comparisonValues,
-                    type: 'scatter',
-                    mode: 'lines+markers',
-                    name: 'Time Series',
-                    line: { color: '#007BFF', width: 2 }, // Bright Blue
-                    marker: { color: '#007BFF', size: 6 }, // Bright Blue
-                    showlegend: true
-                });
-            }
-            
-            // Add recent period trace using Bright Blue
-            if (recentDates.length > 0) {
-                traces.push({
-                    x: recentDates,
-                    y: recentValues,
-                    type: 'scatter',
-                    mode: 'lines+markers',
-                    name: 'Time Series',
-                    line: { color: '#007BFF', width: 2 }, // Bright Blue
-                    marker: { color: '#007BFF', size: 6 }, // Bright Blue
-                    showlegend: false // Hide duplicate legend entry
-                });
-            }
-            
-            // Add connector line between comparison and recent periods
-            if (comparisonDates.length > 0 && recentDates.length > 0) {
-                traces.push({
-                    x: [comparisonDates[comparisonDates.length - 1], recentDates[0]],
-                    y: [comparisonValues[comparisonValues.length - 1], recentValues[0]],
-                    type: 'scatter',
-                    mode: 'lines',
-                    line: { color: '#007BFF', width: 2 }, // Bright Blue
-                    showlegend: false
-                });
-            }
-            
-            // Get the metric name from metadata
-            const objectName = metadata.object_name || anomaly.anomaly.field_name || 'Value';
-            
-            // Create subtitle with district if present
-            let subtitleText = `<i>${anomaly.anomaly.group_field_name || 'Group'}</i>: "<b>${anomaly.anomaly.group_value || 'Value'}</b>"`;
-            
-            // Create xAxisYearLabels for year display
-            const xAxisYearLabels = yearDates.map(d => d.getFullYear().toString());
-
-            // Configuration for the plot
-            const layout = {
-                title: {
-                    text: objectName,
-                    font: {
-                        family: 'Inter, Arial, sans-serif',
-                        size: 12,
-                        color: '#222222'
-                    },
-                    y: 0.99, // Move title higher
-                    pad: { b: 5 } // Reduce padding below title
-                },
-                annotations: [
-                    {
-                        text: `${anomaly.anomaly.percent_change > 0 ? 'Spike' : 'Drop'} in ${subtitleText}`,
-                        font: { 
-                            family: 'Inter, Arial, sans-serif',
-                            size: 14,
-                            color: '#222222' // Ink Black
-                        },
-                        showarrow: false,
-                        x: 0.5,
-                        y: 0.92,  // Positioned much closer to title
-                        xref: 'paper',
-                        yref: 'paper',
-                        align: 'center',
-                        html: true, // Enable HTML formatting
-                        textangle: 0,
-                        borderpad: 4,
-                        borderwidth: 0,
-                        opacity: 1
-                    }
-                ],
-                xaxis: {
-                    title: {
-                        text: '', // Remove the "Date" label
-                        font: { 
-                            family: 'IBM Plex Sans, Arial, sans-serif',
-                            size: 11,
-                            color: '#888888' // Ink Black
-                        },
-                        standoff: 40 // Push the axis title further away from the axis
-                    },
-                    showgrid: false,
-                    tickformat: anomaly.anomaly.period_type === 'year' ? '%Y' : '%b %Y',
-                    tickfont: { 
-                        family: 'IBM Plex Sans, Arial, sans-serif',
-                        size: 11,
-                        color: '#222222' // Ink Black
-                    },
-                    // Custom tick labels - Use actual data points for ticks, not the padded range
-                    tickmode: 'array',
-                    tickvals: uniqueDates,
-                    ticktext: uniqueDates.map((d, index) => {
-                        // Ensure we have a valid date object
-                        if (!d || isNaN(d.getTime())) {
-                            console.error('Invalid date object in ticktext mapping');
-                            return '';
-                        }
-                        
-                        const month = d.getMonth();
-                        const year = d.getFullYear();
-                        
-                        // Validate month is in range
-                        if (month < 0 || month > 11) {
-                            console.error(`Invalid month value: ${month}`);
-                            return '';
-                        }
-                        
-                        const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                        
-                        // Log for debugging
-                        console.log(`Tick label for date: ${d.toISOString()} month: ${month} (${fullMonths[month].charAt(0)}) year: ${year}`);
-                        
-                        // Show only the first letter of the month capitalized
-                        let label = fullMonths[month].charAt(0);
-                        
-                        // If this is the first month of a year in our dataset, add year below
-                        if (index === 0 || uniqueDates[index - 1].getFullYear() !== year) {
-                            label += `<br>${year}`;
-                        } else {
-                            // Add empty line to maintain vertical spacing
-                            label += "<br> ";
-                        }
-                        
-                        return label;
-                    }),
-                    tickangle: 0, // Keep tick labels horizontal
-                    // Add a secondary axis below for the years
-                    dividercolor: 'transparent',
-                    dividerwidth: 0,
-                    ticklen: 4, // Add tick marks for months too
-                    tickcolor: '#222222', // Match font color
-                    // Ensure all months are displayed with padding on both sides
-                    range: [
-                        // Start with the first month in the data with 30 days padding before
-                        comparisonDates.length > 0 
-                            ? new Date(comparisonDates[0].getTime() - 30 * 24 * 60 * 60 * 1000) 
-                            : (recentDates.length > 0 ? new Date(recentDates[0].getTime() - 30 * 24 * 60 * 60 * 1000) : null),
-                        // End with the last month in the data with 30 days padding after
-                        recentDates.length > 0 
-                            ? new Date(recentDates[recentDates.length - 1].getTime() + 30 * 24 * 60 * 60 * 1000) 
-                            : (comparisonDates.length > 0 ? new Date(comparisonDates[comparisonDates.length - 1].getTime() + 30 * 24 * 60 * 60 * 1000) : null)
-                    ],
-                    showline: true,
-                    linecolor: '#e5e7eb',
-                    linewidth: 1,
-                    // Create space between month and year labels
-                    tickpadding: 15
-                },
-                yaxis: {
-                    title: {
-                        text: yAxisLabel,
-                        font: { 
-                            family: 'IBM Plex Sans, Arial, sans-serif',
-                            size: 12,
-                            color: '#222222' // Ink Black
-                        }
-                    },
-                    showgrid: true,
-                    gridcolor: 'rgba(232, 233, 235, 0.5)', // Cloud Gray with transparency
-                    zeroline: false,
-                    rangemode: 'tozero',
-                    tickfont: { 
-                        family: 'IBM Plex Sans, Arial, sans-serif',
-                        size: 10,
-                        color: '#222222' // Ink Black
-                    }
-                },
-                showlegend: true,
-                legend: {
-                    orientation: 'h',
-                    x: 0.5,
-                    y: -0.22,
-                    xanchor: 'center',
-                    yanchor: 'top',
-                    font: { 
-                        family: 'IBM Plex Sans, Arial, sans-serif',
-                        size: 10,
-                        color: '#222222' // Ink Black
-                    },
-                    bgcolor: 'rgba(246, 241, 234, 0.7)' // Soft Sand with transparency
-                },
-                margin: { t: 50, b: 40, l: 40, r: 40 }, // Reduced top margin
-                height: null, // Remove fixed height
-                width: null, // Remove fixed width
-                autosize: true, // Enable autosize
-                paper_bgcolor: 'rgba(255, 255, 255, 0.9)', // Slightly transparent white
-                plot_bgcolor: 'rgba(255, 255, 255, 0.9)', // Slightly transparent white
-                hovermode: 'closest',
-                hoverlabel: {
-                    bgcolor: '#F6F1EA', // Soft Sand
-                    bordercolor: '#4A7463', // Spruce Green
-                    font: { 
-                        family: 'IBM Plex Sans, Arial, sans-serif',
-                        size: 10,
-                        color: '#222222' // Ink Black
-                    }
-                },
-                // Add a second x-axis for years
-                xaxis2: {
-                    showgrid: false,
-                    zeroline: false,
-                    showticklabels: true,
-                    type: 'date',
-                    tickmode: 'array',
-                    tickvals: yearDates,
-                    ticktext: xAxisYearLabels,
-                    position: 0.95, // Position year labels much lower
-                    anchor: 'free',
-                    showline: false,
-                    tickfont: {
-                        size: 12,
-                    },
-                    side: 'bottom',
-                    overlaying: 'x'
-                }
-            };
-            
-            // Add filter conditions as an annotation if available
-            if (metadata.filter_conditions) {
-                // Format the filter conditions properly
-                
-                // Check if filter_conditions is an array
-                if (Array.isArray(metadata.filter_conditions)) {
-                    // Format each filter condition in the array
-                    filterText = metadata.filter_conditions.map(filter => {
-                        // Format each filter condition
-                        let conditionText = '';
-                        
-                        if (filter.field) {
-                            conditionText += filter.field;
-                        }
-                        
-                        if (filter.operator) {
-                            conditionText += ` ${filter.operator} `;
-                        }
-                        
-                        if (filter.value) {
-                            // Format date values if needed
-                            if (filter.is_date && typeof filter.value === 'string') {
-                                // Try to format the date nicely
-                                try {
-                                    const dateParts = filter.value.split('-');
-                                    if (dateParts.length >= 2) {
-                                        const year = dateParts[0];
-                                        const month = parseInt(dateParts[1]);
-                                        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                                                      'July', 'August', 'September', 'October', 'November', 'December'];
-                                        conditionText += `${months[month-1]} ${year}`;
-                                    } else {
-                                        conditionText += filter.value;
-                                    }
-                                } catch (e) {
-                                    conditionText += filter.value;
-                                }
-                            } else {
-                                conditionText += filter.value;
-                            }
-                        }
-                        
-                        return conditionText;
-                    }).join(' AND ');
-                } else if (typeof metadata.filter_conditions === 'string') {
-                    filterText = metadata.filter_conditions;
-                } else if (typeof metadata.filter_conditions === 'object') {
-                    // If it's an object, convert it to a readable string
-                    try {
-                        // Try to parse if it's a JSON string
-                        if (typeof metadata.filter_conditions === 'string') {
-                            const parsedFilters = JSON.parse(metadata.filter_conditions);
-                            filterText = Object.entries(parsedFilters)
-                                .map(([key, value]) => `${key}: ${value}`)
-                                .join(', ');
-                        } else {
-                            // If it's already an object
-                            filterText = Object.entries(metadata.filter_conditions)
-                                .map(([key, value]) => `${key}: ${value}`)
-                                .join(', ');
-                        }
-                    } catch (e) {
-                        // If parsing fails, use a fallback
-                        filterText = JSON.stringify(metadata.filter_conditions);
-                    }
-                }
-            }
-            
-            const config = {
-                responsive: true,
-                displayModeBar: !isChartSection,
-                toImageButtonOptions: {
-                    format: 'png',
-                    filename: 'anomaly_chart',
-                    scale: 2
-                }
-            };
-            
-            // Add responsive resize handler to update layout on window resize
-            function resizePlot() {
-                const plotElement = document.getElementById('anomaly-plot');
-                if (!plotElement) return;
-                
-                // Get the current dimensions
-                const chartWidth = plotElement.clientWidth;
-                const chartHeight = plotElement.clientHeight;
-                
-                // Adjust title and annotation font sizes based on chart dimensions
-                let update = {
-                    'title.font.size': Math.max(10, Math.min(12, chartWidth / 30)),
-                    'annotations[0].font.size': Math.max(12, Math.min(14, chartWidth / 35))
-                };
-                
-                // Adjust layout based on screen size
-                if (chartWidth < 400) {
-                    // Small screens
-                    update['margin.l'] = 40;
-                    update['margin.r'] = 40;
-                    update['margin.b'] = 40;
-                } else if (chartWidth >= 400 && chartWidth < 768) {
-                    // Medium screens
-                    update['margin.l'] = 40;
-                    update['margin.r'] = 40; 
-                    update['margin.b'] = 40;
-                } else if (chartWidth >= 768 && chartWidth < 1200) {
-                    // Large screens
-                    update['margin.l'] = 60;
-                    update['margin.r'] = 60;
-                    update['margin.b'] = 40;
-                } else {
-                    // Extra large screens
-                    update['margin.l'] = 40;
-                    update['margin.r'] = 40;
-                    update['margin.b'] = 40;
-                }
-                
-                // Adjust vertical spacing based on chart dimensions
-                if (chartHeight < 250) {
-                    // Very small height (e.g. mobile in landscape)
-                    update['title.y'] = 0.99;
-                    update['annotations[0].y'] = 1; // Subtitle directly below title
-                    update['title.font.size'] = Math.max(10, Math.min(11, chartWidth / 35));
-                    update['annotations[0].font.size'] = Math.max(10, Math.min(11, chartWidth / 35));
-                    update['margin.t'] = 25; // Minimal top margin
-                } else if (chartHeight < 400) {
-                    // Small height
-                    update['title.y'] = 0.99;
-                    update['annotations[0].y'] = 1.11;
-                    update['margin.t'] = 40;
-                } else if (chartHeight < 600) {
-                    // Medium height
-                    update['title.y'] = 0.99;
-                    update['annotations[0].y'] = 1.02;
-                    update['margin.t'] = 35;
-                } else {
-                    // Large height
-                    update['title.y'] = 0.99;
-                    update['annotations[0].y'] = 1;
-                    update['margin.t'] = 40;
-                }
-                
-                // Adjust for width constraints
-                if (chartWidth < 400) {
-                    update['title.font.size'] = Math.max(9, Math.min(11, chartWidth / 35));
-                    update['annotations[0].font.size'] = Math.max(9, Math.min(11, chartWidth / 35));
-                }
-                
-                // Apply the updates
-                Plotly.relayout(plotElement, update);
-            }
-
-            // Create the plot
-            Plotly.newPlot('anomaly-plot', traces, layout, config).then(() => {
-                // Apply resize right away to enforce aspect ratio
-                resizePlot();
-                
-                // Add window resize handler for responsiveness
-                window.addEventListener('resize', () => {
-                    const plotElement = document.getElementById('anomaly-plot');
-                    if (plotElement) {
-                        Plotly.Plots.resize(plotElement);
-                        // Apply responsive adjustments after resize
-                        setTimeout(resizePlot, 100);
-                    }
-                });
-                
-                // Add filter conditions div if available
-                if (metadata.filter_conditions && filterText) {
-                    // Create a filter conditions div below the chart
-                    const filterConditionsDiv = document.createElement('div');
-                    filterConditionsDiv.id = 'filter-conditions';
-                    filterConditionsDiv.style.fontSize = '12px';
-                    filterConditionsDiv.style.color = '#666666';
-                    filterConditionsDiv.style.padding = '10px';
-                    filterConditionsDiv.style.marginTop = '10px';
-                    filterConditionsDiv.style.backgroundColor = 'rgba(246, 241, 234, 0.5)';
-                    filterConditionsDiv.style.borderRadius = '4px';
-                    filterConditionsDiv.style.textAlign = 'center';
-                    filterConditionsDiv.innerHTML = `<b>Filters:</b> ${filterText}`;
-                    
-                    // Add the filter conditions div after the chart
-                    document.querySelector('.chart-container').insertAdjacentElement('afterend', filterConditionsDiv);
-                }
-            });
-            
-            // Apply styling directly without setTimeout
+        // Function to update chart aspect ratio
+        function updateChartAspectRatio() {
+            const chartContainer = document.getElementById('chart-section');
+            const anomalyChart = document.getElementById('anomaly-chart');
             const plotElement = document.getElementById('anomaly-plot');
+            
+            if (!chartContainer || !anomalyChart || !plotElement) return;
+            
+            // For embedded mode (chart-section-mode)
+            if (document.body.classList.contains('chart-section-mode')) {
+                // Style container for embedded view
+                chartContainer.style.maxWidth = '600px';
+                chartContainer.style.margin = '0 auto';
+                
+                // Ensure aspect ratio is square
+                const containerWidth = Math.min(window.innerWidth, 600);
+                chartContainer.style.width = containerWidth + 'px';
+                chartContainer.style.height = containerWidth + 'px';
+            } else {
+                // For full view mode
+                // Calculate available width up to 600px maximum
+                const availableWidth = Math.min(chartContainer.parentElement.clientWidth, 600);
+                chartContainer.style.width = availableWidth + 'px';
+                chartContainer.style.height = availableWidth + 'px';
+                chartContainer.style.maxWidth = '600px';
+                chartContainer.style.maxHeight = '600px';
+            }
+            
+            // Make sure the plot fills its container
             if (plotElement) {
-                // Fix any SVG positioning issues
-                const svgElement = plotElement.querySelector('svg');
-                if (svgElement) {
-                    svgElement.style.position = 'relative';
-                    svgElement.style.zIndex = '0'; // Lower z-index to prevent shading
-                    svgElement.style.width = '100%';
-                    svgElement.style.height = '100%';
-                    svgElement.style.maxWidth = '100%'; // Allow SVG to fill container
-                    svgElement.style.maxHeight = 'none'; // Remove height constraint
-                }
-                
-                // Make the plot container itself responsive
                 plotElement.style.width = '100%';
-                plotElement.style.maxWidth = '100%';
                 plotElement.style.height = '100%';
-                
-                // Style the annotation box
-                const annotations = plotElement.querySelectorAll('.annotation');
-                annotations.forEach(annotation => {
-                    const textElement = annotation.querySelector('.annotation-text');
-                    if (textElement) {
-                        textElement.style.padding = '10px';
-                        textElement.style.fontSize = '12px';
-                        textElement.style.lineHeight = '1.5';
-                    }
-                });
+                Plotly.Plots.resize(plotElement);
             }
-            
-            // Add DataSF link as a separate DOM element after the chart is rendered
-            if (metadata.executed_query_url) {
-                // Create the link element
-                const datasfLink = document.createElement('a');
-                datasfLink.href = metadata.executed_query_url;
-                datasfLink.target = '_blank';
-                datasfLink.style.color = '#71B2CA';
-                datasfLink.style.textDecoration = 'none';
-                datasfLink.style.position = 'absolute';
-                datasfLink.style.bottom = '10px';
-                datasfLink.style.left = '10px';  // Changed from '50%' to '10px'
-                datasfLink.style.transform = 'none'; // Removed 'translateX(-50%)'
-                datasfLink.style.fontSize = '12px';
-                datasfLink.style.zIndex = '10';
-                datasfLink.innerHTML = 'Source: DataSF <i class="fas fa-external-link-alt"></i>';
-                
-                // Add the link directly to the chart container
-                const chartContainer = document.getElementById('chart-section');
-                if (chartContainer) {
-                    chartContainer.appendChild(datasfLink);
-                    console.log('DataSF link added to chart container');
-                } else {
-                    console.error('Chart container not found');
-                }
-            }
-            
-            // Display metadata after rendering chart
-            displayMetadata(anomaly.anomaly);
         }
+
+        // Add window resize handler for responsiveness
+        window.addEventListener('resize', updateChartAspectRatio);
         
-        // Function to display metadata
-        function displayMetadata(anomaly) {
-            // Get metadata fields
-            const metadata = anomaly.metadata || {};
-            const metricName = metadata.object_name || anomaly.group_value || anomaly.field_name || 'Unknown Metric';
-            const district = anomaly.district === 0 || anomaly.district === '0' ? 'Citywide' : `District ${anomaly.district}`;
+        // Initial call to set aspect ratio
+        updateChartAspectRatio();
+
+        // Function to handle chart section visibility
+        function handleChartSection() {
+            const isChartSection = !fullView || window.location.hash === '#chart-section';
+            const header = document.querySelector('.header');
+            const metadata = document.getElementById('metadata');
+            const buttons = document.querySelector('.mt-3');
+            const embedModal = document.getElementById('embedModal');
+            const shareBtn = document.getElementById('share-btn');
+            const embedBtn = document.getElementById('embed-btn');
+            const backButton = document.querySelector('a[href="javascript:history.back()"]');
             
-            // Format the date properly
-            let recentPeriod = 'Unknown Period';
-            if (anomaly.recent_date) {
-                const dateParts = anomaly.recent_date.split('-');
-                const year = parseInt(dateParts[0]);
-                const month = parseInt(dateParts[1]) - 1;
-                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                recentPeriod = `${months[month]} ${year}`;
-            }
+            // Add or remove chart-section-mode class on body
+            document.body.classList.toggle('chart-section-mode', isChartSection);
             
-            // Format percent change with direction
-            const percentChange = anomaly.percent_change || 0;
-            const changeDirection = percentChange > 0 ? 'increase' : percentChange < 0 ? 'decrease' : 'no change';
-            const changeClass = percentChange > 0 ? 'positive-change' : 'negative-change';
-            
-            // Create HTML for metadata
-            let html = `
-                <div class="row">
-                    <div class="col-md-6">
-                        <h5>${metricName}</h5>
-                        <p><strong>District:</strong> ${district}</p>
-                        <p><strong>Period:</strong> ${recentPeriod}</p>
-                    </div>
-                    <div class="col-md-6">
-                        <p><strong>Recent Value:</strong> ${formatValue(anomaly.recent_mean)}</p>
-                        <p><strong>Historical Value:</strong> ${formatValue(anomaly.comparison_mean)}</p>
-                        <p><strong>Change:</strong> <span class="${changeClass}">${formatValue(anomaly.difference)} (${Math.abs(percentChange).toFixed(2)}% ${changeDirection})</span></p>
-                    </div>
-                </div>
-            `;
-            
-            // Set HTML
-            anomalyMetadataEl.innerHTML = html;
-            
-            // Add caption below the chart if available
-            if (anomaly.caption) {
-                // Create a container for the caption below the chart
+            if (isChartSection) {
+                // Hide ALL non-chart elements
+                if (header) header.style.display = 'none';
+                if (metadata) metadata.style.display = 'none';
+                if (buttons) buttons.style.display = 'none';
+                if (embedModal) embedModal.style.display = 'none';
+                if (shareBtn) shareBtn.style.display = 'none';
+                if (embedBtn) embedBtn.style.display = 'none';
+                if (backButton) backButton.style.display = 'none';
+                
+                // Set chart container to maintain aspect ratio
                 const chartContainer = document.getElementById('chart-section');
                 if (chartContainer) {
-                    // Check if caption element already exists
-                    let captionElement = document.getElementById('anomaly-caption');
-                    if (!captionElement) {
-                        captionElement = document.createElement('div');
-                        captionElement.id = 'anomaly-caption';
-                        captionElement.className = 'chart-caption';
-                        captionElement.style.width = '100%';
-                        captionElement.style.maxWidth = '900px';
-                        captionElement.style.margin = '20px auto 0';
-                        captionElement.style.padding = '15px';
-                        captionElement.style.backgroundColor = 'rgba(246, 241, 234, 0.7)';
-                        captionElement.style.borderRadius = '8px';
-                        captionElement.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-                        captionElement.style.fontFamily = 'IBM Plex Sans, Arial, sans-serif';
-                        captionElement.style.fontSize = '16px';
-                        captionElement.style.lineHeight = '1.5';
-                        captionElement.style.color = '#333';
-                        captionElement.style.textAlign = 'center';
-                        chartContainer.appendChild(captionElement);
-                    }
-                    
-                    // Set the caption text
-                    captionElement.innerHTML = anomaly.caption;
+                    chartContainer.style.margin = '0 auto';
+                    chartContainer.style.maxWidth = '600px';
+                    chartContainer.style.width = '100%';
+                    chartContainer.style.height = 'auto';
+                    chartContainer.style.display = 'block';
+                    chartContainer.style.padding = '10px';
+                }
+                
+                // Update chart dimensions
+                const anomalyChart = document.getElementById('anomaly-chart');
+                if (anomalyChart) {
+                    anomalyChart.style.width = '100%';
+                    anomalyChart.style.height = '0';
+                    anomalyChart.style.paddingBottom = '100%';
+                }
+                
+                // Update plot dimensions
+                const plotElement = document.getElementById('anomaly-plot');
+                if (plotElement) {
+                    plotElement.style.width = '100%';
+                    plotElement.style.height = '100%';
+                    Plotly.Plots.resize(plotElement);
+                }
+            } else {
+                // Show all elements
+                if (header) header.style.display = 'block';
+                if (metadata) metadata.style.display = 'block';
+                if (buttons) buttons.style.display = 'flex';
+                if (embedModal) embedModal.style.display = 'block';
+                if (shareBtn) shareBtn.style.display = 'block';
+                if (embedBtn) embedBtn.style.display = 'block';
+                if (backButton) backButton.style.display = 'block';
+                
+                // Reset chart container styles
+                const chartContainer = document.getElementById('chart-section');
+                if (chartContainer) {
+                    chartContainer.style.margin = '';
+                    chartContainer.style.maxWidth = '';
+                    chartContainer.style.width = '';
+                    chartContainer.style.height = '';
+                    chartContainer.style.display = '';
+                    chartContainer.style.padding = '';
                 }
             }
         }
-        
+
+        // Handle initial load and hash changes
+        handleChartSection();
+        window.addEventListener('hashchange', handleChartSection);
+
+        // Function to copy text to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const permalinkBtn = document.getElementById('chart-section-permalink');
+                if (permalinkBtn) {
+                    const originalHtml = permalinkBtn.innerHTML;
+                    permalinkBtn.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                    setTimeout(() => {
+                        permalinkBtn.innerHTML = originalHtml;
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
+        // Function to copy the current URL to clipboard
+        function copyShareLink() {
+            const url = window.location.href;
+            navigator.clipboard.writeText(url).then(() => {
+                const shareBtn = document.getElementById('share-btn');
+                const originalText = shareBtn.innerHTML;
+                
+                // Change button text to indicate success
+                shareBtn.innerHTML = '<i class="fas fa-check me-1"></i> Copied!';
+                shareBtn.classList.remove('btn-outline-success');
+                shareBtn.classList.add('btn-success');
+                
+                // Change back after 2 seconds
+                setTimeout(() => {
+                    shareBtn.innerHTML = originalText;
+                    shareBtn.classList.remove('btn-success');
+                    shareBtn.classList.add('btn-outline-success');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                alert('Failed to copy the link. Please try again.');
+            });
+        }
+
+        // Function to show the embed code modal
+        function showEmbedCode() {
+            // Generate the initial embed code
+            updateEmbedCode();
+            
+            // Show the modal
+            const embedModal = document.getElementById('embedModal');
+            embedModal.removeAttribute('inert');
+            const modal = new bootstrap.Modal(embedModal);
+            modal.show();
+        }
+
+        // Function to update the embed code
+        function updateEmbedCode() {
+            const width = document.getElementById('widthInput').value;
+            const height = document.getElementById('heightInput').value;
+            const isResponsive = document.getElementById('responsiveCheck').checked;
+            
+            let embedCode = `<iframe src="${window.location.href.split('#')[0].split('?')[0]}?id=${anomalyId}"`;
+            
+            if (isResponsive) {
+                embedCode += ` style="width: 100%; height: 100%; border: none;"`;
+            } else {
+                embedCode += ` width="${width}" height="${height}" style="border: none;"`;
+            }
+            
+            embedCode += ` frameborder="0" scrolling="no"></iframe>`;
+            
+            if (isResponsive) {
+                // Use square aspect ratio (100%) for anomaly charts
+                embedCode = `<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%;">\n  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">\n    ${embedCode}\n  </div>\n</div>`;
+            }
+            
+            document.getElementById('embedCode').value = embedCode;
+        }
+
+        // Function to copy the embed code to clipboard
+        function copyEmbedCode() {
+            const embedCode = document.getElementById('embedCode');
+            embedCode.select();
+            document.execCommand('copy');
+            
+            // Show a brief success message
+            const copyBtn = document.querySelector('#embedModal .btn-outline-primary');
+            const originalHtml = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<i class="fas fa-check"></i>';
+            
+            setTimeout(() => {
+                copyBtn.innerHTML = originalHtml;
+            }, 2000);
+        }
+
+        // Add event listener to handle modal closing
+        document.addEventListener('DOMContentLoaded', function() {
+            const embedModal = document.getElementById('embedModal');
+            embedModal.addEventListener('hidden.bs.modal', function() {
+                embedModal.setAttribute('inert', '');
+            });
+        });
+
         // Function to fetch anomaly data
         async function fetchAnomalyData() {
             // Check if anomaly ID is provided
@@ -1112,233 +735,382 @@
                 showError(`Error loading anomaly data: ${error.message}`);
             }
         }
+
+        // Function to render the anomaly chart
+        function renderAnomalyChart(data) {
+            console.log("Rendering anomaly chart for data:", data);
+            
+            // Check if we have valid data
+            if (!data || !data.anomaly || !data.anomaly.chart_data) {
+                showError('Invalid or incomplete anomaly data received.');
+                return;
+            }
+            
+            // Extract data from the API response
+            const anomaly = data.anomaly;
+            const chartData = anomaly.chart_data;
+            const metadata = anomaly.metadata || {};
+            
+            // Hide loading indicator
+            hideLoading();
+            
+            // Create a container for the chart
+            const chartElement = document.getElementById('anomaly-chart');
+            chartElement.innerHTML = ''; // Clear existing content
+            
+            // Create a new div for the actual chart
+            const plotDiv = document.createElement('div');
+            plotDiv.id = 'anomaly-plot';
+            plotDiv.style.width = '100%';
+            plotDiv.style.height = '100%';
+            chartElement.appendChild(plotDiv);
+            
+            // Process chart data
+            const recentDates = [];
+            const recentValues = [];
+            const comparisonDates = [];
+            const comparisonValues = [];
+            
+            // Process chart data based on periods
+            if (chartData.dates && chartData.values && chartData.periods) {
+                for (let i = 0; i < chartData.dates.length; i++) {
+                    const dateStr = chartData.dates[i];
+                    const value = chartData.values[i];
+                    const period = chartData.periods[i];
+                    
+                    // Parse the date string into a Date object
+                    let dateObj;
+                    try {
+                        const dateParts = dateStr.split('-');
+                        const year = parseInt(dateParts[0]);
+                        const month = parseInt(dateParts[1]) - 1;
+                        const day = dateParts.length > 2 ? parseInt(dateParts[2]) : 1;
+                        dateObj = new Date(year, month, day);
+                        
+                        if (isNaN(dateObj.getTime())) {
+                            console.error(`Invalid date: ${dateStr}`);
+                            continue;
+                        }
+                        
+                        // Add to appropriate arrays based on period
+                        if (period === 'recent') {
+                            recentDates.push(dateObj);
+                            recentValues.push(value);
+                        } else if (period === 'comparison') {
+                            comparisonDates.push(dateObj);
+                            comparisonValues.push(value);
+                        }
+                    } catch (e) {
+                        console.error(`Error parsing date: ${dateStr}`, e);
+                    }
+                }
+            }
+            
+            // Create traces for the chart
+            const traces = [];
+            
+            // Add normal range shaded area if we have comparison data
+            if (comparisonDates.length > 0) {
+                const allDates = [...comparisonDates, ...recentDates].sort((a, b) => a - b);
+                const upperBound = allDates.map(() => anomaly.comparison_mean + 2 * anomaly.std_dev);
+                const lowerBound = allDates.map(() => Math.max(anomaly.comparison_mean - 2 * anomaly.std_dev, 0));
+                
+                // Add lower bound trace (invisible)
+                traces.push({
+                    x: allDates,
+                    y: lowerBound,
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { color: 'rgba(0,0,0,0)' },
+                    showlegend: false
+                });
+                
+                // Add normal range area
+                traces.push({
+                    x: allDates,
+                    y: upperBound,
+                    type: 'scatter',
+                    mode: 'none',
+                    fill: 'tonexty',
+                    fillcolor: 'rgba(74, 116, 99, 0.15)', // Spruce Green with transparency
+                    name: 'Normal Range',
+                    showlegend: true
+                });
+            }
+            
+            // Add comparison period trace
+            if (comparisonDates.length > 0) {
+                traces.push({
+                    x: comparisonDates,
+                    y: comparisonValues,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'Time Series Data',
+                    line: { color: '#007BFF', width: 2 }, // Bright Blue
+                    marker: { color: '#007BFF', size: 6 }, // Bright Blue
+                    showlegend: true,
+                    hovertemplate: '%{x|%B %Y}<br>%{y}<extra></extra>'
+                });
+            }
+            
+            // Add recent period trace
+            if (recentDates.length > 0) {
+                traces.push({
+                    x: recentDates,
+                    y: recentValues,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'Recent Data',
+                    line: { color: '#007BFF', width: 2 }, // Same color as historical
+                    marker: { color: '#007BFF', size: 6 }, // Same color as historical
+                    showlegend: false,
+                    hovertemplate: '%{x|%B %Y}<br>%{y}<extra></extra>'
+                });
+            }
+            
+            // Add connecting line between last historical and first recent point
+            if (comparisonDates.length > 0 && recentDates.length > 0) {
+                const lastHistoricalDate = comparisonDates[comparisonDates.length - 1];
+                const lastHistoricalValue = comparisonValues[comparisonValues.length - 1];
+                const firstRecentDate = recentDates[0];
+                const firstRecentValue = recentValues[0];
+                
+                traces.push({
+                    x: [lastHistoricalDate, firstRecentDate],
+                    y: [lastHistoricalValue, firstRecentValue],
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { color: '#007BFF', width: 2, dash: 'dot' }, // Dotted line in same color
+                    showlegend: false
+                });
+            }
+            
+            // Get the metric name from metadata
+            const objectName = metadata.object_name || anomaly.field_name || 'Value';
+            
+            // Create subtitle with group if present
+            let subtitleText = '';
+            if (anomaly.group_field_name && anomaly.group_value) {
+                subtitleText = `<i>${anomaly.group_field_name}</i>: <b>${anomaly.group_value}</b>`;
+            }
+
+            // Add spike/drop information
+            const percentChange = anomaly.percent_change || 0;
+            const changeType = percentChange > 0 ? 'Spike' : 'Drop';
+            const changeText = `${changeType} in ${subtitleText}`;
+
+            // Combine title and subtitle - FLIPPED ORDER
+            const combinedTitleText = `${changeText}<br><span style="font-size: 0.8em;">${objectName}</span>`;
+
+            // Configuration for the plot
+            const layout = {
+                title: {
+                    text: combinedTitleText,
+                    font: {
+                        family: 'Inter, Arial, sans-serif',
+                        size: 14,
+                        color: '#222222'
+                    },
+                    y: 0.98,
+                    x: 0.5,
+                    xanchor: 'center',
+                    pad: { t: 10, b: 10 }
+                },
+                annotations: [
+                    // The original annotation for changeText (annotations[0]) is removed.
+                    // If other annotations existed, their indices would shift.
+                ],
+                xaxis: {
+                    title: {
+                        text: '',
+                        font: { 
+                            family: 'IBM Plex Sans, Arial, sans-serif',
+                            size: 10,
+                            color: '#222222'
+                        }
+                    },
+                    showgrid: false,
+                    tickformat: '%b %Y',
+                    tickfont: { 
+                        family: 'IBM Plex Sans, Arial, sans-serif',
+                        size: 9,
+                        color: '#222222'
+                    },
+                    tickmode: 'array',
+                    tickvals: [...comparisonDates, ...recentDates].sort((a, b) => a - b),
+                    ticktext: [...comparisonDates, ...recentDates].sort((a, b) => a - b).map((d, index) => {
+                        const month = d.getMonth();
+                        const year = d.getFullYear();
+                        const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                        let label = fullMonths[month].charAt(0);
+                        
+                        if (index === 0 || [...comparisonDates, ...recentDates].sort((a, b) => a - b)[index - 1].getFullYear() !== year) {
+                            label += `<br>${year}`;
+                        } else {
+                            label += "<br> ";
+                        }
+                        
+                        return label;
+                    }),
+                    tickangle: 0,
+                    ticklen: 3,
+                    tickcolor: '#222222',
+                    showline: true,
+                    linecolor: '#e5e7eb',
+                    linewidth: 1,
+                    tickpadding: 10
+                },
+                yaxis: {
+                    title: {
+                        text: metadata.y_axis_label || anomaly.field_name || "Value",
+                        font: { 
+                            family: 'IBM Plex Sans, Arial, sans-serif',
+                            size: 10,
+                            color: '#222222'
+                        }
+                    },
+                    showgrid: true,
+                    gridcolor: 'rgba(232, 233, 235, 0.5)',
+                    zeroline: false,
+                    rangemode: 'tozero',
+                    tickfont: { 
+                        family: 'IBM Plex Sans, Arial, sans-serif',
+                        size: 9,
+                        color: '#222222'
+                    }
+                },
+                showlegend: true,
+                legend: {
+                    orientation: 'h',
+                    x: 0.5,
+                    y: -0.12,
+                    xanchor: 'center',
+                    yanchor: 'top',
+                    font: { 
+                        family: 'IBM Plex Sans, Arial, sans-serif',
+                        size: 9,
+                        color: '#222222'
+                    },
+                    bgcolor: 'rgba(246, 241, 234, 0.7)'
+                },
+                margin: { t: 60, b: 30, l: 50, r: 30 },
+                height: null,
+                width: null,
+                autosize: true,
+                paper_bgcolor: 'rgba(255, 255, 255, 0.9)',
+                plot_bgcolor: 'rgba(255, 255, 255, 0.9)',
+                hovermode: 'closest',
+                hoverlabel: {
+                    bgcolor: '#F6F1EA',
+                    bordercolor: '#4A7463',
+                    font: { 
+                        family: 'IBM Plex Sans, Arial, sans-serif',
+                        size: 9,
+                        color: '#222222'
+                    }
+                }
+            };
+            
+            const config = {
+                responsive: true,
+                displayModeBar: false,
+                modeBarButtonsToRemove: ['toImage', 'pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d'],
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'anomaly_chart',
+                    scale: 2
+                }
+            };
+            
+            // Create the plot
+            Plotly.newPlot('anomaly-plot', traces, layout, config).then(() => {
+                // Update chart dimensions
+                updateChartAspectRatio();
+                
+                // Display metadata
+                displayMetadata(anomaly);
+            });
+            
+            // Add responsive resize handler to update layout on window resize
+            function resizePlot() {
+                const plotElement = document.getElementById('anomaly-plot');
+                if (!plotElement) return;
+                
+                // Get the current dimensions
+                const chartWidth = plotElement.clientWidth;
+                
+                // Adjust title and annotation font sizes based on chart width
+                let update = {
+                    'title.font.size': Math.max(12, Math.min(14, chartWidth / 30)),
+                    'legend.font.size': Math.max(8, Math.min(9, chartWidth / 45))
+                };
+                
+                // For very small screens, adjust vertical positioning
+                if (chartWidth < 400) {
+                    update['title.y'] = 0.98;
+                    update['legend.y'] = -0.10;
+                    update['margin.b'] = 55;
+                    update['margin.t'] = 60;
+                }
+                
+                // Apply the updates
+                Plotly.relayout(plotElement, update);
+            }
+        }
+        
+        // Function to display metadata
+        function displayMetadata(anomaly) {
+            // Get metadata fields
+            const metadata = anomaly.metadata || {};
+            const metricName = metadata.object_name || anomaly.field_name || 'Unknown Metric';
+            const district = anomaly.district === 0 ? 'Citywide' : `District ${anomaly.district}`;
+            
+            // Format the date properly
+            let recentPeriod = 'Unknown Period';
+            if (anomaly.recent_date) {
+                const dateParts = anomaly.recent_date.split('-');
+                const year = parseInt(dateParts[0]);
+                const month = parseInt(dateParts[1]) - 1;
+                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                recentPeriod = `${months[month]} ${year}`;
+            }
+            
+            // Format percent change with direction
+            const percentChange = anomaly.percent_change || 0;
+            const changeDirection = percentChange > 0 ? 'increase' : percentChange < 0 ? 'decrease' : 'no change';
+            const changeClass = percentChange > 0 ? 'positive-change' : 'negative-change';
+            
+            // Create HTML for metadata
+            let html = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>${metricName}</h5>
+                        <p><strong>District:</strong> ${district}</p>
+                        <p><strong>Period:</strong> ${recentPeriod}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Recent Value:</strong> ${formatValue(anomaly.recent_mean)}</p>
+                        <p><strong>Historical Value:</strong> ${formatValue(anomaly.comparison_mean)}</p>
+                        <p><strong>Change:</strong> <span class="${changeClass}">${formatValue(anomaly.difference)} (${Math.abs(percentChange).toFixed(2)}% ${changeDirection})</span></p>
+                    </div>
+                </div>
+            `;
+            
+            // Set HTML
+            metadataEl.innerHTML = html;
+        }
+
+        // Function to format values for display
+        function formatValue(value) {
+            if (value === null || value === undefined || isNaN(value)) return '-';
+            return parseFloat(value).toLocaleString(undefined, {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            });
+        }
         
         // Load data when the page loads
         document.addEventListener('DOMContentLoaded', fetchAnomalyData);
-
-        // Function to handle chart section visibility
-        function handleChartSection() {
-            const isChartSection = window.location.hash === '#chart-section';
-            const header = document.querySelector('.header');
-            const metadata = document.getElementById('anomaly-metadata');
-            const buttons = document.querySelector('.mt-3');
-            const embedModal = document.getElementById('embedModal');
-            const datasfLink = document.getElementById('datasf-link');
-            const shareBtn = document.getElementById('share-btn');
-            const embedBtn = document.getElementById('embed-btn');
-            const backButton = document.querySelector('a[href="javascript:history.back()"]');
-            const filterConditions = document.getElementById('filter-conditions');
-            
-            // Add or remove chart-section-mode class on body
-            document.body.classList.toggle('chart-section-mode', isChartSection);
-            
-            if (isChartSection) {
-                // Hide non-chart elements
-                if (header) header.style.display = 'none';
-                if (metadata) metadata.style.display = 'none';
-                if (buttons) buttons.style.display = 'none';
-                if (embedModal) embedModal.style.display = 'none';
-                if (datasfLink) datasfLink.style.display = 'none';
-                if (shareBtn) shareBtn.style.display = 'none';
-                if (embedBtn) embedBtn.style.display = 'none';
-                if (backButton) backButton.style.display = 'none';
-                if (filterConditions) filterConditions.style.display = 'none';
-                
-                // Set chart container to maintain aspect ratio
-                const chartContainer = document.getElementById('chart-section');
-                if (chartContainer) {
-                    chartContainer.style.margin = '0';
-                    chartContainer.style.padding = '0';
-                    chartContainer.style.width = '100%';
-                    chartContainer.style.height = '100%';
-                    chartContainer.style.maxHeight = 'none';
-                    
-                    // Add permalink button to chart section
-                    let permalinkBtn = document.getElementById('chart-section-permalink');
-                    if (!permalinkBtn) {
-                        permalinkBtn = document.createElement('button');
-                        permalinkBtn.id = 'chart-section-permalink';
-                        permalinkBtn.className = 'btn btn-sm btn-link';
-                        permalinkBtn.style.position = 'absolute';
-                        permalinkBtn.style.bottom = '5px';
-                        permalinkBtn.style.right = '5px';
-                        permalinkBtn.style.zIndex = '1000';
-                        permalinkBtn.style.fontSize = '12px';
-                        permalinkBtn.style.color = '#888888';
-                        permalinkBtn.style.textDecoration = 'none';
-                        permalinkBtn.style.border = 'none';
-                        permalinkBtn.style.background = 'none';
-                        permalinkBtn.style.padding = '0';
-                        permalinkBtn.style.cursor = 'pointer';
-                        permalinkBtn.innerHTML = '<i class="fas fa-share-alt me-1"></i>Share';
-                        permalinkBtn.onclick = function() {
-                            const fullUrl = window.location.href.split('#')[0];
-                            copyToClipboard(fullUrl);
-                        };
-                        chartContainer.appendChild(permalinkBtn);
-                    }
-                }
-                
-                // Update chart size to fit container
-                const plotElement = document.getElementById('anomaly-plot');
-                if (plotElement) {
-                    Plotly.Plots.resize(plotElement);
-                }
-                
-                // Send chart height to parent window
-                const sendHeight = () => {
-                    const chartElement = document.getElementById('anomaly-chart');
-                    if (chartElement) {
-                        // Use a square aspect ratio for anomaly charts
-                        const width = chartElement.offsetWidth;
-                        const height = width;
-                        window.parent.postMessage({
-                            type: 'chartHeight',
-                            height: height
-                        }, '*'); // Allow any origin for embedding
-                    }
-                };
-                
-                // Send height initially and after any changes
-                sendHeight();
-                const observer = new ResizeObserver(sendHeight);
-                const chartElement = document.getElementById('anomaly-chart');
-                if (chartElement) {
-                    observer.observe(chartElement);
-                }
-            } else {
-                // Show all elements
-                if (header) header.style.display = 'block';
-                if (metadata) metadata.style.display = 'block';
-                if (buttons) buttons.style.display = 'flex';
-                if (embedModal) embedModal.style.display = 'block';
-                if (datasfLink) datasfLink.style.display = 'block';
-                if (shareBtn) shareBtn.style.display = 'block';
-                if (embedBtn) embedBtn.style.display = 'block';
-                if (backButton) backButton.style.display = 'block';
-                if (filterConditions) filterConditions.style.display = 'block';
-                
-                // Remove permalink button if it exists
-                const permalinkBtn = document.getElementById('chart-section-permalink');
-                if (permalinkBtn) {
-                    permalinkBtn.remove();
-                }
-                
-                // Reset chart container styles
-                const chartContainer = document.getElementById('chart-section');
-                if (chartContainer) {
-                    chartContainer.style.margin = '';
-                    chartContainer.style.padding = '';
-                    chartContainer.style.width = '';
-                    chartContainer.style.height = '';
-                    chartContainer.style.maxHeight = '';
-                }
-            }
-        }
-
-        // Handle initial load and hash changes
-        handleChartSection();
-        window.addEventListener('hashchange', handleChartSection);
-
-        // Function to copy the current URL to clipboard
-        function copyShareLink() {
-            const url = window.location.href;
-            navigator.clipboard.writeText(url).then(() => {
-                const shareBtn = document.getElementById('share-btn');
-                const originalText = shareBtn.innerHTML;
-                
-                // Change button text to indicate success
-                shareBtn.innerHTML = '<i class="fas fa-check me-1"></i> Copied!';
-                shareBtn.classList.remove('btn-outline-success');
-                shareBtn.classList.add('btn-success');
-                
-                // Change back after 2 seconds
-                setTimeout(() => {
-                    shareBtn.innerHTML = originalText;
-                    shareBtn.classList.remove('btn-success');
-                    shareBtn.classList.add('btn-outline-success');
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy: ', err);
-                alert('Failed to copy the link. Please try again.');
-            });
-        }
-        
-        // Function to show the embed code modal
-        function showEmbedCode() {
-            // Generate the initial embed code
-            updateEmbedCode();
-            
-            // Show the modal
-            const embedModal = document.getElementById('embedModal');
-            embedModal.removeAttribute('inert');
-            const modal = new bootstrap.Modal(embedModal);
-            modal.show();
-        }
-        
-        // Function to update the embed code based on current settings
-        function updateEmbedCode() {
-            const width = document.getElementById('widthInput').value;
-            const height = document.getElementById('heightInput').value || width; // Default to same as width for square aspect ratio
-            const isResponsive = document.getElementById('responsiveCheck').checked;
-            
-            let embedCode = `<iframe src="${window.location.href.split('#')[0]}#chart-section"`;
-            
-            if (isResponsive) {
-                embedCode += ` style="width: 100%; height: 100%; border: none;"`;
-            } else {
-                embedCode += ` width="${width}" height="${height}"`;
-            }
-            
-            embedCode += ` frameborder="0" scrolling="no"></iframe>`;
-            
-            if (isResponsive) {
-                // Use square aspect ratio (100%) for anomaly charts 
-                embedCode = `<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%;">\n  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">\n    ${embedCode}\n  </div>\n</div>`;
-            }
-            
-            document.getElementById('embedCode').value = embedCode;
-        }
-        
-        // Function to copy the embed code to clipboard
-        function copyEmbedCode() {
-            const embedCode = document.getElementById('embedCode');
-            embedCode.select();
-            document.execCommand('copy');
-            
-            // Show a brief success message
-            const copyBtn = document.querySelector('#embedModal .btn-outline-primary');
-            const originalHtml = copyBtn.innerHTML;
-            copyBtn.innerHTML = '<i class="fas fa-check"></i>';
-            
-            setTimeout(() => {
-                copyBtn.innerHTML = originalHtml;
-            }, 2000);
-        }
-        
-        // Add event listener to handle modal closing
-        document.addEventListener('DOMContentLoaded', function() {
-            const embedModal = document.getElementById('embedModal');
-            embedModal.addEventListener('hidden.bs.modal', function() {
-                embedModal.setAttribute('inert', '');
-            });
-        });
-
-        // Function to copy text to clipboard
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                const permalinkBtn = document.getElementById('chart-section-permalink');
-                if (permalinkBtn) {
-                    const originalHtml = permalinkBtn.innerHTML;
-                    permalinkBtn.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
-                    setTimeout(() => {
-                        permalinkBtn.innerHTML = originalHtml;
-                    }, 2000);
-                }
-            }).catch(err => {
-                console.error('Failed to copy: ', err);
-            });
-        }
     </script>
 </body>
 </html> 

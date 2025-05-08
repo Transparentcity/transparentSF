@@ -39,7 +39,7 @@
             justify-content: center;
             align-items: center;
             width: 100%;
-            max-width: 100%;
+            max-width: 600px; /* Cap at 600px */
             border: none;
             box-sizing: border-box;
         }
@@ -122,7 +122,7 @@
         #time-series-chart {
             width: 100%;
             height: 0;
-            padding-bottom: 65%; /* Reduced from 90% to prevent cutting off on wide screens */
+            padding-bottom: 100%; /* Square 1:1 aspect ratio */
             position: relative;
             overflow: visible;
             display: flex;
@@ -185,20 +185,20 @@
             }
             
             #time-series-chart {
-                padding-bottom: 100%; /* Taller aspect ratio on very small screens */
+                padding-bottom: 100%; /* Maintain square aspect ratio on very small screens */
             }
         }
         
         /* Add media query for wider screens */
         @media (min-width: 768px) {
             #time-series-chart {
-                padding-bottom: 60%; /* Lower aspect ratio for wider screens */
+                padding-bottom: 100%; /* Maintain square aspect ratio on wider screens */
             }
         }
         
         @media (min-width: 1200px) {
             #time-series-chart {
-                padding-bottom: 50%; /* Even lower aspect ratio for very wide screens */
+                padding-bottom: 100%; /* Maintain square aspect ratio on very wide screens */
             }
         }
         
@@ -206,17 +206,18 @@
         body.chart-section-mode {
             margin: 0;
             padding: 0;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            height: auto;
+            min-height: auto;
+            background-color: transparent;
+            overflow: hidden;
         }
         
         body.chart-section-mode .container {
-            height: 100%;
             padding: 0;
             margin: 0;
+            width: 100%;
             max-width: none;
+            height: auto;
         }
         
         body.chart-section-mode .row,
@@ -224,6 +225,11 @@
             height: 100%;
             margin: 0;
             padding: 0;
+        }
+        
+        /* Ensure the modebar is hidden with CSS as well */
+        .modebar {
+            display: none !important;
         }
     </style>
 </head>
@@ -310,11 +316,88 @@
         const periodType = urlParams.get('period_type') || 'month';
         const groups = urlParams.get('groups'); // Get groups parameter from URL
         const groupField = urlParams.get('group_field'); // Get group_field parameter from URL
+        const fullView = urlParams.get('full_view') === 'true'; // Check if full view is requested
+        
+        // Apply chart-section-mode by default unless full_view=true is specified
+        document.body.classList.toggle('chart-section-mode', !fullView);
         
         // Elements
         const loadingEl = document.getElementById('loading');
         const errorMessageEl = document.getElementById('error-message');
         const metadataEl = document.getElementById('metadata');
+        
+        // Hide non-chart elements by default unless full_view=true is specified
+        if (!fullView) {
+            const header = document.querySelector('.header');
+            const metadata = document.getElementById('metadata');
+            const buttons = document.querySelector('.mt-3');
+            const embedModal = document.getElementById('embedModal');
+            
+            if (header) header.style.display = 'none';
+            if (metadata) metadata.style.display = 'none';
+            if (buttons) buttons.style.display = 'none';
+            if (embedModal) embedModal.style.display = 'none';
+            
+            // Set chart container to maintain aspect ratio
+            const chartContainer = document.getElementById('chart-section');
+            if (chartContainer) {
+                chartContainer.style.margin = '0 auto';
+                chartContainer.style.maxWidth = '100%';
+                chartContainer.style.width = '100%';
+                chartContainer.style.display = 'flex';
+                chartContainer.style.justifyContent = 'center';
+                chartContainer.style.alignItems = 'center';
+                
+                // Add permalink button to chart section
+                let permalinkBtn = document.getElementById('chart-section-permalink');
+                if (!permalinkBtn) {
+                    permalinkBtn = document.createElement('button');
+                    permalinkBtn.id = 'chart-section-permalink';
+                    permalinkBtn.className = 'btn btn-sm btn-link';
+                    permalinkBtn.style.position = 'absolute';
+                    permalinkBtn.style.bottom = '5px';
+                    permalinkBtn.style.right = '5px';
+                    permalinkBtn.style.zIndex = '1000';
+                    permalinkBtn.style.fontSize = '10px';
+                    permalinkBtn.style.color = '#888888';
+                    permalinkBtn.style.textDecoration = 'none';
+                    permalinkBtn.style.border = 'none';
+                    permalinkBtn.style.background = 'none';
+                    permalinkBtn.style.padding = '0';
+                    permalinkBtn.style.cursor = 'pointer';
+                    permalinkBtn.innerHTML = '<i class="fas fa-share-alt me-1"></i>Share';
+                    permalinkBtn.onclick = function() {
+                        const fullUrl = window.location.href.split('#')[0];
+                        copyToClipboard(fullUrl);
+                    };
+                    chartContainer.appendChild(permalinkBtn);
+                    
+                    // Add button to view full version
+                    const fullViewBtn = document.createElement('button');
+                    fullViewBtn.id = 'full-view-btn';
+                    fullViewBtn.className = 'btn btn-sm btn-link';
+                    fullViewBtn.style.position = 'absolute';
+                    fullViewBtn.style.bottom = '5px';
+                    fullViewBtn.style.left = '5px';
+                    fullViewBtn.style.zIndex = '1000';
+                    fullViewBtn.style.fontSize = '10px';
+                    fullViewBtn.style.color = '#888888';
+                    fullViewBtn.style.textDecoration = 'none';
+                    fullViewBtn.style.border = 'none';
+                    fullViewBtn.style.background = 'none';
+                    fullViewBtn.style.padding = '0';
+                    fullViewBtn.style.cursor = 'pointer';
+                    fullViewBtn.innerHTML = '<i class="fas fa-expand me-1"></i>Full View';
+                    fullViewBtn.onclick = function() {
+                        const baseUrl = window.location.href.split('#')[0]; // Get URL without hash
+                        const currentUrl = new URL(baseUrl);
+                        currentUrl.searchParams.set('full_view', 'true');
+                        window.open(currentUrl.toString(), '_blank');
+                    };
+                    chartContainer.appendChild(fullViewBtn);
+                }
+            }
+        }
         
         // Function to show loading state
         function showLoading() {
@@ -360,8 +443,8 @@
             // Check if we have grouped data
             const hasGroups = timeSeriesData.some(item => item.group_value);
             
-            // Determine labels based on metadata
-            let yAxisLabel = metadata.object_name || metadata.y_axis_label || "Value";
+            // Determine labels based on metadata - PRIORITIZE y_axis_label
+            let yAxisLabel = metadata.y_axis_label || metadata.object_name || "Value";
             let xAxisLabel = "Date";
             
             // Hide loading indicator
@@ -442,7 +525,7 @@
                         line: { color: colorPalette[colorIndex % colorPalette.length], width: 2 },
                         marker: { color: colorPalette[colorIndex % colorPalette.length], size: 6 },
                         showlegend: true,
-                        hovertemplate: '%{x|%B %Y}<br>%{y}<extra>Group: ' + groupValue + '</extra>',
+                        hovertemplate: '%{x|%B %Y}<br>%{y}<extra></extra>',
                         hoverlabel: {
                             bgcolor: '#F6F1EA', // Soft Sand
                             bordercolor: '#4A7463', // Spruce Green
@@ -549,9 +632,22 @@
             // Get the metric name from metadata
             const objectName = metadata.object_name || metadata.field_name || 'Time Series';
             
-            // Create subtitle with district if present
-            const districtName = metadata.district === 0 ? 'Citywide' : `District ${metadata.district}`;
-            let subtitleText = `${districtName} - ${metadata.period_type || periodType} Data`;
+            // --- START RE-ADD SUBTITLE LOGIC ---
+            let subtitleText = '';
+            let combinedTitleText = objectName; // Default to just objectName
+            const district = metadata.district;
+
+            if (district !== undefined && district !== null && district !== 0) {
+                // Only add subtitle if district is specified and not citywide (0)
+                const districtName = `District ${district}`;
+                subtitleText = `${districtName} - ${metadata.period_type || periodType} Data`;
+                combinedTitleText = `${objectName}<br><span style="font-size: 0.8em;">${subtitleText}</span>`; // Combine with smaller subtitle
+            } else {
+                // Optional: If district is 0 (Citywide), you could add a generic subtitle if desired
+                 subtitleText = `Citywide - ${metadata.period_type || periodType} Data`;
+                 combinedTitleText = `${objectName}<br><span style="font-size: 0.8em;">${subtitleText}</span>`; // Combine with smaller subtitle
+            }
+            // --- END RE-ADD SUBTITLE LOGIC ---
             
             // Create xAxisYearLabels for year display
             const years = [...new Set(formattedDates.map(d => d.getFullYear()))];
@@ -564,31 +660,21 @@
             // Configuration for the plot
             const layout = {
                 title: {
-                    text: objectName,
+                    text: combinedTitleText, // Use objectName or combined text
                     font: {
                         family: 'Inter, Arial, sans-serif',
-                        size: 16, // Reduced from 18
-                        color: '#222222' // Ink Black
+                        size: 16, 
+                        color: '#222222' 
                     },
-                    y: 0.95, // Moved down slightly from 0.98
-                    pad: { b: 10 } // Reduced padding below title from 20 to 10
+                    y: 0.98, 
+                    x: 0.5, // Ensure title is centered
+                    xanchor: 'center', // Ensure title is centered
+                    pad: { t:10, b: 10 } // Adjust padding as needed, t:10 was b:10 before
                 },
                 annotations: [
-                    {
-                        text: subtitleText,
-                        font: { 
-                            family: 'Inter, Arial, sans-serif',
-                            size: 12, // Reduced from 14
-                            color: '#222222' // Ink Black
-                        },
-                        showarrow: false,
-                        x: 0.5,
-                        y: 1.15, // Moved down from 0.99
-                        xref: 'paper',
-                        yref: 'paper',
-                        align: 'center',
-                        html: true // Enable HTML formatting
-                    }
+                    // Subtitle annotation (annotations[0]) is now removed
+                    // The next annotation was for the last data point, it will now be annotations[0]
+                    // Ensure its properties are correctly set or adjusted if it relied on the subtitle's presence
                 ],
                 xaxis: {
                     title: {
@@ -728,29 +814,33 @@
             const fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
             const formattedDate = isYearlyData ? `${year}` : `${fullMonths[month]} ${year}`;
             
-            // Add to existing annotations array
-            layout.annotations.push({
+            // Add to existing annotations array (which is now effectively empty or starts with the last point annotation)
+            // The last data point annotation will now be the first in the array (index 0)
+            const lastPointAnnotation = {
                 text: `${formattedDate}:<br>${formatValue(lastValue)}`,
                 x: lastDate,
                 y: lastValue,
                 arrowhead: 2,
                 ax: -40, // Reduced from -50
-                ay: 15, // Reduced from 20
-                bgcolor: 'rgba(0, 123, 255, 0.7)', // Bright Blue with transparency
-                bordercolor: '#007BFF', // Bright Blue
+                ay: -35, // Changed from 15 (down) to -35 (up)
+                bgcolor: '#F6F1EA', // Soft Sand (was rgba(0, 123, 255, 0.7))
+                bordercolor: '#4A7463', // Spruce Green (was #007BFF)
                 borderwidth: 1,
+                borderpad: 4, // Added padding
                 font: { 
                     family: 'IBM Plex Sans, Arial, sans-serif',
                     size: 10, // Reduced from 12
                     color: '#222222' // Ink Black
                 },
                 showarrow: true,
-                arrowcolor: '#007BFF', // Bright Blue
+                arrowcolor: '#4A7463', // Spruce Green (was #007BFF)
                 arrowwidth: 1,
                 arrowside: 'end',
                 axref: 'pixel',
-                ayref: 'pixel'
-            });
+                ayref: 'pixel',
+                align: 'left' // Added for better text flow
+            };
+            layout.annotations.push(lastPointAnnotation);
             
             // Add filter conditions as an annotation if available
             if (metadata.filter_conditions) {
@@ -820,6 +910,7 @@
                     }
                 }
                 
+                // This will be pushed as annotations[1] (or later if more are added)
                 layout.annotations.push({
                     text: `<b>Filters:</b> ${filterText}`,
                     font: { 
@@ -898,7 +989,8 @@
             
             const config = {
                 responsive: true,
-                displayModeBar: false,
+                displayModeBar: false, // Hide the Plotly modebar (menu) completely for cleaner embedded views
+                modeBarButtonsToRemove: ['toImage', 'pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d'], // Ensure all buttons are removed
                 toImageButtonOptions: {
                     format: 'png',
                     filename: 'time_series_chart',
@@ -916,17 +1008,15 @@
                 // Get the current dimensions
                 const chartWidth = plotElement.clientWidth;
                 
-                // Adjust title and annotation font sizes based on chart width
+                // Adjust title font size based on chart width (subtitle is part of title)
                 let update = {
-                    'title.font.size': Math.max(12, Math.min(16, chartWidth / 25)),
-                    'annotations[0].font.size': Math.max(10, Math.min(12, chartWidth / 35)),
+                    'title.font.size': Math.max(12, Math.min(15, chartWidth / 28)), // Reduced max size & adjusted divisor
                     'legend.font.size': Math.max(8, Math.min(9, chartWidth / 45))
                 };
                 
                 // For very small screens, adjust vertical positioning
                 if (chartWidth < 400) {
-                    update['title.y'] = 1;         // Move title down slightly
-                    update['annotations[0].y'] = 1.10; // Move subtitle down
+                    update['title.y'] = 0.98;         // Was 1
                     update['legend.y'] = -0.10;        // Move legend up
                     update['margin.b'] = 55;          // Reduce bottom margin
                     update['margin.t'] = 45;          // Reduce top margin
@@ -945,24 +1035,63 @@
                 }
             });
             
-            // Create the plot
-            Plotly.newPlot('time-series-plot', traces, layout, config).then(() => {
-                // Add window resize handler for responsiveness
-                window.addEventListener('resize', () => {
-                    const plotElement = document.getElementById('time-series-plot');
-                    if (plotElement) {
-                        Plotly.Plots.resize(plotElement);
-                        setTimeout(resizePlot, 100); // Apply font sizing after resize
-                    }
-                });
-                
-                // Set initial dimensions
+            // Function to update the chart aspect ratio and maintain square shape
+            function updateChartAspectRatio() {
+                const chartContainer = document.getElementById('chart-section');
+                const timeSeriesChart = document.getElementById('time-series-chart');
                 const plotElement = document.getElementById('time-series-plot');
-                if (plotElement) {
-                    // No need to set explicit dimensions as we're using aspect ratio
-                    Plotly.Plots.resize(plotElement);
-                    setTimeout(resizePlot, 100); // Apply initial font sizing
+                
+                if (!chartContainer || !timeSeriesChart || !plotElement) return;
+                
+                // For embedded mode (chart-section-mode)
+                if (document.body.classList.contains('chart-section-mode')) {
+                    // Style container for embedded view
+                    chartContainer.style.maxWidth = '600px';
+                    chartContainer.style.margin = '0 auto';
+                    
+                    // Ensure aspect ratio is square
+                    const containerWidth = Math.min(window.innerWidth, 600);
+                    chartContainer.style.width = containerWidth + 'px';
+                    chartContainer.style.height = containerWidth + 'px';
+
+                    // Adjust the parent Bootstrap container (.container) to also be square
+                    const bootstrapContainer = chartContainer.closest('.container');
+                    if (bootstrapContainer) {
+                        bootstrapContainer.style.height = containerWidth + 'px';
+                        // The width of bootstrapContainer is effectively containerWidth due to its
+                        // CSS (max-width: 600px and margin: 0 auto).
+                    }
+                } else {
+                    // For full view mode
+                    // Calculate available width up to 600px maximum
+                    const availableWidth = Math.min(chartContainer.parentElement.clientWidth, 600);
+                    chartContainer.style.width = availableWidth + 'px';
+                    chartContainer.style.height = availableWidth + 'px';
+                    chartContainer.style.maxWidth = '600px';
+                    chartContainer.style.maxHeight = '600px';
                 }
+                
+                // Make sure the plot fills its container
+                if (plotElement) {
+                    plotElement.style.width = '100%';
+                    plotElement.style.height = '100%';
+                    Plotly.Plots.resize(plotElement);
+                }
+            }
+            
+            // Add window resize handler for responsiveness
+            window.addEventListener('resize', updateChartAspectRatio);
+            
+            // Initial call to set aspect ratio
+            updateChartAspectRatio();
+            
+            // Create the plot and maintain aspect ratio
+            Plotly.newPlot('time-series-plot', traces, layout, config).then(() => {
+                // Set initial dimensions and maintain square aspect ratio
+                updateChartAspectRatio();
+                
+                // Apply initial font sizing
+                setTimeout(resizePlot, 100);
             });
             
             // Display metadata after rendering chart
@@ -1182,9 +1311,9 @@
         // Load data when the page loads
         document.addEventListener('DOMContentLoaded', fetchTimeSeriesData);
 
-        // Function to handle chart section visibility
+        // Function to handle chart section visibility - MODIFIED TO USE fullView PARAMETER
         function handleChartSection() {
-            const isChartSection = window.location.hash === '#chart-section';
+            const isChartSection = !fullView || window.location.hash === '#chart-section';
             const header = document.querySelector('.header');
             const metadata = document.getElementById('metadata');
             const buttons = document.querySelector('.mt-3');
@@ -1255,6 +1384,33 @@
                         };
                         chartContainer.appendChild(permalinkBtn);
                     }
+                    
+                    // Add full view button if it doesn't exist
+                    let fullViewBtn = document.getElementById('full-view-btn');
+                    if (!fullViewBtn) {
+                        fullViewBtn = document.createElement('button');
+                        fullViewBtn.id = 'full-view-btn';
+                        fullViewBtn.className = 'btn btn-sm btn-link';
+                        fullViewBtn.style.position = 'absolute';
+                        fullViewBtn.style.bottom = '5px';
+                        fullViewBtn.style.left = '5px';
+                        fullViewBtn.style.zIndex = '1000';
+                        fullViewBtn.style.fontSize = '10px';
+                        fullViewBtn.style.color = '#888888';
+                        fullViewBtn.style.textDecoration = 'none';
+                        fullViewBtn.style.border = 'none';
+                        fullViewBtn.style.background = 'none';
+                        fullViewBtn.style.padding = '0';
+                        fullViewBtn.style.cursor = 'pointer';
+                        fullViewBtn.innerHTML = '<i class="fas fa-expand me-1"></i>Full View';
+                        fullViewBtn.onclick = function() {
+                            const baseUrl = window.location.href.split('#')[0]; // Get URL without hash
+                            const currentUrl = new URL(baseUrl);
+                            currentUrl.searchParams.set('full_view', 'true');
+                            window.open(currentUrl.toString(), '_blank');
+                        };
+                        chartContainer.appendChild(fullViewBtn);
+                    }
                 }
                 
                 // Hide the chart caption
@@ -1279,7 +1435,7 @@
                         window.parent.postMessage({
                             type: 'chartHeight',
                             height: height
-                        }, window.location.origin);
+                        }, '*'); // Changed from window.location.origin to '*' to allow embedding on different origins
                     }
                 };
                 
@@ -1305,6 +1461,12 @@
                 const permalinkBtn = document.getElementById('chart-section-permalink');
                 if (permalinkBtn) {
                     permalinkBtn.remove();
+                }
+                
+                // Remove full view button if it exists
+                const fullViewBtn = document.getElementById('full-view-btn');
+                if (fullViewBtn) {
+                    fullViewBtn.remove();
                 }
                 
                 // Show the chart caption
@@ -1366,13 +1528,26 @@
             modal.show();
         }
         
-        // Function to update the embed code based on current settings
+        // Function to update the embed code based on current settings - MODIFIED TO NOT INCLUDE #chart-section
         function updateEmbedCode() {
             const width = document.getElementById('widthInput').value;
             const height = document.getElementById('heightInput').value;
             const isResponsive = document.getElementById('responsiveCheck').checked;
             
-            let embedCode = `<iframe src="${window.location.href}"`;
+            // No need to append #chart-section since we show the chart by default now
+            let embedCode = `<iframe src="${window.location.href.split('#')[0].split('?')[0]}?metric_id=${metricId}&district=${district}&period_type=${periodType}`;
+            
+            // Add groups parameter if present
+            if (groups) {
+                embedCode += `&groups=${encodeURIComponent(groups)}`;
+            }
+            
+            // Add group_field parameter if present
+            if (groupField) {
+                embedCode += `&group_field=${encodeURIComponent(groupField)}`;
+            }
+            
+            embedCode += `"`;
             
             if (isResponsive) {
                 embedCode += ` style="width: 100%; height: 100%; border: none;"`;
@@ -1383,7 +1558,8 @@
             embedCode += ` frameborder="0" scrolling="no"></iframe>`;
             
             if (isResponsive) {
-                embedCode = `<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">\n  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">\n    ${embedCode}\n  </div>\n</div>`;
+                // Use square aspect ratio (100%) for time series charts
+                embedCode = `<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%;">\n  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">\n    ${embedCode}\n  </div>\n</div>`;
             }
             
             document.getElementById('embedCode').value = embedCode;

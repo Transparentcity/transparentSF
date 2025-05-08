@@ -438,156 +438,6 @@ async def list_districts():
         logger.error(f"Error listing districts: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/api/weekly-analysis")
-async def trigger_weekly_analysis(metrics: str = None, include_districts: bool = False):
-    """
-    Trigger weekly analysis on demand.
-    
-    Parameters:
-    - metrics: Optional comma-separated list of metric IDs to analyze
-    - include_districts: Whether to include district-level analysis
-    
-    Returns:
-    - Analysis results summary
-    """
-    try:
-        logger.info(f"Manually triggered weekly analysis with metrics={metrics}, include_districts={include_districts}")
-        
-        # Parse metrics list if provided
-        metrics_list = metrics.split(",") if metrics else None
-        
-        # Run the analysis
-        results = run_weekly_analysis(
-            metrics_list=metrics_list,
-            process_districts=include_districts
-        )
-        
-        # Generate a newsletter
-        newsletter_path = generate_weekly_newsletter(results)
-        
-        # Prepare the response
-        analyzed_metrics = []
-        for result in results:
-            analyzed_metrics.append({
-                'metric_id': result.get('metric_id', ''),
-                'query_name': result.get('query_name', ''),
-                'file_path': os.path.relpath(result.get('file_path', ''), OUTPUT_DIR) if result.get('file_path') else None
-            })
-        
-        response = {
-            'success': True,
-            'analyzed_metrics': analyzed_metrics,
-            'newsletter': os.path.relpath(newsletter_path, OUTPUT_DIR) if newsletter_path else None,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        return JSONResponse(content=response)
-    except Exception as e:
-        logger.error(f"Error running weekly analysis: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                'success': False,
-                'error': str(e)
-            }
-        )
-
-@app.get("/weekly-report")
-async def view_weekly_report(request: Request):
-    """Serve the weekly analysis report."""
-    try:
-        # Find the most recent newsletter file
-        newsletter_files = []
-        for file in os.listdir(weekly_dir):
-            if file.startswith("weekly_newsletter_") and file.endswith(".md"):
-                file_path = os.path.join(weekly_dir, file)
-                newsletter_files.append({
-                    'path': file_path,
-                    'modified': os.path.getmtime(file_path),
-                    'filename': file
-                })
-        
-        if not newsletter_files:
-            return templates.TemplateResponse("weekly.html", {
-                "request": request,
-                "newsletter_content": "No weekly reports found. Generate one using the API.",
-                "metrics": [],
-                "start_date": "",
-                "end_date": ""
-            })
-        
-        # Sort by modified time (newest first)
-        newsletter_files.sort(key=lambda x: x['modified'], reverse=True)
-        latest_newsletter = newsletter_files[0]
-        
-        # Read the newsletter content
-        with open(latest_newsletter['path'], 'r') as f:
-            newsletter_content = f.read()
-        
-        # Extract date from filename (format: weekly_newsletter_YYYY-MM-DD.md)
-        report_date_str = latest_newsletter['filename'].replace("weekly_newsletter_", "").replace(".md", "")
-        report_date = datetime.strptime(report_date_str, "%Y-%m-%d")
-        
-        # Calculate the start and end dates of the report period
-        end_date = report_date - timedelta(days=1)  # Report is generated for period ending yesterday
-        start_date = end_date - timedelta(days=6)  # 7-day period
-        
-        # Find all analysis files from the same time period
-        metrics = []
-        for file in os.listdir(weekly_dir):
-            if file.endswith(".md") and not file.startswith("weekly_newsletter_"):
-                # Extract the date from filename (format: metric_id_YYYY-MM-DD.md)
-                parts = file.split("_")
-                if len(parts) >= 2 and parts[-1].endswith(".md"):
-                    file_date_str = parts[-1].replace(".md", "")
-                    try:
-                        file_date = datetime.strptime(file_date_str, "%Y-%m-%d")
-                        # If the file was created on the same day as the newsletter
-                        if file_date.date() == report_date.date():
-                            metric_id = "_".join(parts[:-1])
-                            
-                            # Try to get metric details from the file
-                            file_path = os.path.join(weekly_dir, file)
-                            with open(file_path, 'r') as f:
-                                file_content = f.read()
-                                # Extract title from markdown (# Title)
-                                title_match = re.search(r'^# (.*?)$', file_content, re.MULTILINE)
-                                query_name = title_match.group(1) if title_match else metric_id
-                                
-                                # Extract summary if available
-                                summary_match = re.search(r'\*\*Analysis Type:\*\* Weekly\s*\n\s*\n\*\*Period:\*\* (.*?)\s*\n\s*\n\*\*Filters:\*\* (.*?)$', 
-                                                        file_content, re.MULTILINE)
-                                summary = summary_match.group(0) if summary_match else ""
-                            
-                            metrics.append({
-                                'metric_id': metric_id,
-                                'query_name': query_name,
-                                'file_path': os.path.relpath(file_path, weekly_dir),
-                                'summary': summary
-                            })
-                    except:
-                        # Skip files with invalid date format
-                        pass
-        
-        # Render the template with the data
-        return templates.TemplateResponse("weekly.html", {
-            "request": request,
-            "newsletter_content": newsletter_content,
-            "metrics": metrics,
-            "start_date": start_date.strftime("%B %d, %Y"),
-            "end_date": end_date.strftime("%B %d, %Y")
-        })
-        
-    except Exception as e:
-        logger.error(f"Error serving weekly report: {str(e)}")
-        return templates.TemplateResponse("weekly.html", {
-            "request": request,
-            "newsletter_content": f"Error loading weekly report: {str(e)}",
-            "metrics": [],
-            "start_date": "",
-            "end_date": ""
-        })
-
 # Root route to serve index.html
 @app.get("/")
 async def root(request: Request):
@@ -619,6 +469,18 @@ logger.debug("Included anomaly analyzer router at /anomaly-analyzer")
 @app.get("/anomaly-analyzer")
 async def redirect_to_anomaly_analyzer():
     return RedirectResponse(url="/anomaly-analyzer/")
+
+# Add direct routes for API endpoints that need to be accessible without the /backend prefix
+@app.post("/api/add_subscriber")
+async def api_add_subscriber(request: Request):
+    """Forward API subscriber requests to the backend endpoint."""
+    logger.debug("Forwarding /api/add_subscriber request to backend handler")
+    
+    # Import the backend handler directly
+    from backend import add_subscriber as backend_add_subscriber
+    
+    # Forward the request to the backend handler
+    return await backend_add_subscriber(request)
 
 @app.get("/api/chart-by-metric")
 async def forward_chart_by_metric(

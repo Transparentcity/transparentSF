@@ -172,7 +172,7 @@
         }
         
         button {
-            background-color: var(--civic-blue);
+            background-color: #007BFF;
             color: white;
             border: none;
             cursor: pointer;
@@ -184,18 +184,18 @@
         }
         
         button:hover {
-            background-color: var(--civic-blue-light);
+            background-color: #0069d9;
             transform: translateY(-1px);
         }
         
         button.secondary {
             background-color: white;
-            color: var(--civic-blue);
-            border: 1px solid var(--civic-blue);
+            color: #007BFF;
+            border: 1px solid #007BFF;
         }
         
         button.secondary:hover {
-            background-color: var(--civic-blue-lighter);
+            background-color: #f0f8ff;
         }
         
         .button-group {
@@ -279,7 +279,7 @@
         }
         
         .action-button {
-            background-color: var(--civic-blue);
+            background-color: #007BFF;
             color: white;
             border: none;
             border-radius: 4px;
@@ -290,7 +290,7 @@
         }
         
         .action-button:hover {
-            background-color: var(--civic-blue-light);
+            background-color: #0069d9;
             transform: translateY(-1px);
         }
         
@@ -954,6 +954,14 @@
             </div>
             
             <div class="control-group">
+                <label for="display-mode">Display Mode</label>
+                <select id="display-mode">
+                    <option value="metrics" selected>Metric Changes</option>
+                    <option value="anomalies">Anomalies</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
                 <label for="limit-select">Show Top/Bottom</label>
                 <select id="limit-select">
                     <option value="5">5 + 5 Changes</option>
@@ -1001,12 +1009,12 @@
         <div id="periods-display" class="periods-display" style="display: none;">
             <div class="period-box">
                 <div class="period-label">Previous Period</div>
-                <div id="previous-period-value" class="period-value">Feb 2025</div>
+                <div id="previous-period-value" class="period-value">-</div>
             </div>
             <div class="period-arrow">→</div>
             <div class="period-box">
                 <div class="period-label">Current Period</div>
-                <div id="current-period-value" class="period-value">Mar 2025</div>
+                <div id="current-period-value" class="period-value">-</div>
             </div>
             <div style="flex: 1;"></div>
             <div class="period-info">
@@ -1018,20 +1026,21 @@
         
         <div class="metrics-panel">
             <div class="metrics-header">
-                <h2>Citywide Metric Changes</h2>
-                <p>Showing significant changes in key metrics across time periods</p>
+                <h2 id="panel-title">Citywide Metric Changes</h2>
+                <p id="panel-description">Showing significant changes in key metrics across time periods</p>
             </div>
             <div class="metrics-table-container">
                 <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
                     <table class="table table-striped table-hover" id="metrics-table">
                     <thead>
-                        <tr>
-                                <th>Metric Name</th>
-                                <th>Previous</th>
-                                <th>Recent</th>
+                        <tr id="table-headers">
+                            <th>Metric Name</th>
+                            <th>District</th>
+                            <th>Previous</th>
+                            <th>Recent</th>
                             <th>Change</th>
                             <th>% Change</th>
-                                <th>Analysis</th>
+                            <th>Analysis</th>
                         </tr>
                     </thead>
                         <tbody id="metrics-results">
@@ -1127,7 +1136,7 @@
             </div>
             <div id="modal-loader" class="loader"></div>
             <div id="modal-content">
-                <iframe id="webchat-iframe" style="width: 100%; height: 600px; border: none; display: none;"></iframe>
+                <iframe id="webchat-iframe" style="width: 100%; height: 600px; border: none; display: block;"></iframe>
             </div>
         </div>
     </div>
@@ -1147,6 +1156,7 @@
     <script>
         // DOM elements
         const periodSelect = document.getElementById('period-select');
+        const displayModeSelect = document.getElementById('display-mode');
         const limitSelect = document.getElementById('limit-select');
         const objectIdInput = document.getElementById('object-id');
         const districtSelect = document.getElementById('district');
@@ -1192,6 +1202,7 @@
         // Event listeners
         refreshButton.addEventListener('click', fetchMetricChanges);
         periodSelect.addEventListener('change', fetchMetricChanges);
+        displayModeSelect.addEventListener('change', fetchMetricChanges);
         limitSelect.addEventListener('change', fetchMetricChanges);
         districtSelect.addEventListener('change', fetchMetricChanges);
         clearFiltersButton.addEventListener('click', clearFilters);
@@ -1239,33 +1250,85 @@
             
             // Get selected values
             const periodType = periodSelect.value;
+            const displayMode = displayModeSelect.value;
             const limit = limitSelect.value;
             const objectId = objectIdInput.value.trim();
             const district = districtSelect.value;
             
-            // Update header based on district
-            const metricsHeader = document.querySelector('.metrics-header h2');
-            if (district === '0') {
-                metricsHeader.textContent = 'Citywide Metric Changes';
-            } else if (district === 'all') {
-                metricsHeader.textContent = 'All Districts Metric Changes';
-            } else {
-                metricsHeader.textContent = `District ${district} Metric Changes`;
+            // Update header based on display mode and district
+            const panelTitle = document.getElementById('panel-title');
+            const panelDescription = document.getElementById('panel-description');
+            const tableHeaders = document.getElementById('table-headers');
+            
+            if (displayMode === 'metrics') {
+                if (district === '0') {
+                    panelTitle.textContent = 'Citywide Metric Changes';
+                } else if (district === 'all') {
+                    panelTitle.textContent = 'All Districts Metric Changes';
+                } else {
+                    panelTitle.textContent = `District ${district} Metric Changes`;
+                }
+                
+                panelDescription.textContent = 'Showing significant changes in key metrics across time periods';
+                
+                // Set up headers for metrics display
+                tableHeaders.innerHTML = `
+                    <th>Metric Name</th>
+                    <th>District</th>
+                    <th>Previous</th>
+                    <th>Recent</th>
+                    <th>Change</th>
+                    <th>% Change</th>
+                    <th>Analysis</th>
+                `;
+                
+                // Fetch metrics data
+                fetchTopMetricChanges(periodType, limit, objectId, district);
+            } else if (displayMode === 'anomalies') {
+                if (district === '0') {
+                    panelTitle.textContent = 'Citywide Anomalies';
+                } else if (district === 'all') {
+                    panelTitle.textContent = 'All Districts Anomalies';
+                } else {
+                    panelTitle.textContent = `District ${district} Anomalies`;
+                }
+                
+                panelDescription.textContent = 'Showing significant statistical anomalies detected in metrics';
+                
+                // Set up headers for anomalies display
+                tableHeaders.innerHTML = `
+                    <th>Metric Name</th>
+                    <th>District</th>
+                    <th>Group</th>
+                    <th>Recent Value</th>
+                    <th>Previous Avg</th>
+                    <th>Std Dev</th>
+                    <th>Details</th>
+                `;
+                
+                // Fetch anomalies data
+                fetchAnomalies(periodType, limit, objectId, district);
             }
+        }
+        
+        // Function to fetch top metric changes
+        function fetchTopMetricChanges(periodType, limit, objectId, district) {
+            // Build API URL
+            let apiUrl = `/anomaly-analyzer/api/top-metric-changes?period_type=${periodType}&limit=${limit}`;
             
-            // Build query URL
-            let queryUrl = `/anomaly-analyzer/api/top-metric-changes?period_type=${periodType}&limit=${limit}&district=${district}`;
-            
-            // Only add object_id if it's not empty
             if (objectId) {
-                queryUrl += `&object_id=${encodeURIComponent(objectId)}`;
+                apiUrl += `&object_id=${encodeURIComponent(objectId)}`;
             }
             
-            // Fetch data from API
-            fetch(queryUrl)
+            if (district) {
+                apiUrl += `&district=${encodeURIComponent(district)}`;
+            }
+            
+            // Fetch data
+            fetch(apiUrl)
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error(`Server responded with status: ${response.status}`);
+                        throw new Error(`HTTP error ${response.status}`);
                     }
                     return response.json();
                 })
@@ -1273,228 +1336,326 @@
                     // Hide loader
                     loader.style.display = 'none';
                     
-                    const hasResults = (data.status === 'success' && 
-                                        ((data.top_results && data.top_results.length > 0) || 
-                                         (data.bottom_results && data.bottom_results.length > 0)));
-                    
-                    if (hasResults) {
-                        // Show table and populate data
-                        metricsTable.style.display = 'table';
+                    if (data.status === 'success') {
+                        // Display the periods
+                        periodsDisplay.style.display = 'flex';
                         
-                        // Get the periods from the first result that has them
-                        let previousPeriod = null;
-                        let currentPeriod = null;
-                        
-                        if (data.top_results && data.top_results.length > 0 && data.top_results[0].previous_period && data.top_results[0].recent_period) {
-                            previousPeriod = formatDate(data.top_results[0].previous_period);
-                            currentPeriod = formatDate(data.top_results[0].recent_period);
-                        } else if (data.bottom_results && data.bottom_results.length > 0 && data.bottom_results[0].previous_period && data.bottom_results[0].recent_period) {
-                            previousPeriod = formatDate(data.bottom_results[0].previous_period);
-                            currentPeriod = formatDate(data.bottom_results[0].recent_period);
-                        }
-                        
-                        // Update and show the periods display if we have period data
-                        if (previousPeriod && currentPeriod) {
-                            previousPeriodValue.textContent = previousPeriod;
-                            currentPeriodValue.textContent = currentPeriod;
-                            periodsDisplay.style.display = 'flex';
-                        }
-                        
-                        // First show largest changes
-                        if (data.top_results && data.top_results.length > 0) {
-                            // Add section header
-                            const headerRow = document.createElement('tr');
-                            headerRow.innerHTML = `<td colspan="7" class="section-header">Largest Percentage Increases</td>`;
-                            metricsTbody.appendChild(headerRow);
+                        if (data.top_results.length > 0) {
+                            // Display metric data
+                            displayMetricResults(data.top_results, data.bottom_results);
                             
-                            // Add top results
-                            const topDisplayCount = populateTable(data.top_results);
-                            if (topDisplayCount === 0) {
-                                // If no valid rows were displayed, show a message
-                                const noValidRow = document.createElement('tr');
-                                noValidRow.innerHTML = `<td colspan="7" style="text-align: center; font-style: italic; padding: 16px;">No valid data available</td>`;
-                                metricsTbody.appendChild(noValidRow);
+                            // Update period display if we have data
+                            if (data.top_results.length > 0) {
+                                const firstResult = data.top_results[0];
+                                previousPeriodValue.textContent = firstResult.previous_period || '-';
+                                currentPeriodValue.textContent = firstResult.recent_period || '-';
                             }
-                        }
-                        
-                        // Then show smallest changes
-                        if (data.bottom_results && data.bottom_results.length > 0) {
-                            // Add section header
-                            const headerRow = document.createElement('tr');
-                            headerRow.innerHTML = `<td colspan="7" class="section-header">Largest Percentage Decreases</td>`;
-                            metricsTbody.appendChild(headerRow);
-                            
-                            // Add bottom results
-                            const bottomDisplayCount = populateTable(data.bottom_results);
-                            if (bottomDisplayCount === 0) {
-                                // If no valid rows were displayed, show a message
-                                const noValidRow = document.createElement('tr');
-                                noValidRow.innerHTML = `<td colspan="7" style="text-align: center; font-style: italic; padding: 16px;">No valid data available</td>`;
-                                metricsTbody.appendChild(noValidRow);
-                            }
+                        } else {
+                            // No data returned
+                            noDataDiv.style.display = 'block';
+                            noDataDiv.textContent = 'No metrics found matching your criteria. Try different filters.';
                         }
                     } else {
-                        // Show no data message
-                        noDataDiv.textContent = data.message || 'No metrics data available for the selected period.';
-                        noDataDiv.style.display = 'block';
+                        // API returned an error
+                        errorContainer.style.display = 'block';
+                        errorText.textContent = data.message || 'Error fetching metric changes';
                     }
                 })
                 .catch(error => {
-                    console.error('Error fetching metric changes:', error);
+                    // Handle errors
                     loader.style.display = 'none';
-                    errorText.textContent = `Error loading data: ${error.message}. Please check the server logs for details.`;
                     errorContainer.style.display = 'block';
+                    errorText.textContent = `Error: ${error.message}`;
+                    console.error('Error fetching metrics:', error);
                 });
         }
         
-        // Function to populate the table with data
-        function populateTable(results) {
-            let displayCount = 0;
+        // Function to fetch anomalies
+        function fetchAnomalies(periodType, limit, objectId, district) {
+            // Build API URL
+            let apiUrl = `/anomaly-analyzer/api/query-anomalies?period_type=${periodType}&limit=${limit}&only_active=true&query_type=by_anomaly_severity`;
             
-            results.forEach(metric => {
-                // Skip rows with NA values in critical fields
-                if (metric.previous_value === null || 
-                    metric.recent_value === null || 
-                    metric.delta === null ||
-                    isNaN(metric.previous_value) || 
-                    isNaN(metric.recent_value) || 
-                    isNaN(metric.delta)) {
-                    return;
-                }
-                
-                const row = document.createElement('tr');
-                displayCount++;
-                
-                // Format values safely
-                const previousValue = parseFloat(metric.previous_value).toFixed(2);
-                const currentValue = parseFloat(metric.recent_value).toFixed(2);
-                const delta = parseFloat(metric.delta).toFixed(2);
-                
-                // Format dates
-                const recentPeriod = metric.recent_period ? formatDate(metric.recent_period) : 'N/A';
-                const previousPeriod = metric.previous_period ? formatDate(metric.previous_period) : 'N/A';
-                
-                // Calculate percent change class
-                const changeClass = parseFloat(delta) >= 0 ? 'positive-change' : 'negative-change';
-                
-                // Format percent change
-                let percentChange = '';
-                if (metric.percent_change !== null && !isNaN(metric.percent_change)) {
-                    percentChange = `${parseFloat(metric.percent_change).toFixed(2)}%`;
-                } else {
-                    percentChange = 'N/A';
-                }
-                
-                // Store the full metric data as a data attribute
-                row.setAttribute('data-metric', JSON.stringify({
-                    object_name: metric.object_name,
-                    object_id: metric.object_id,
-                    district: metric.district || districtSelect.value,
-                    previous_value: metric.previous_value,
-                    recent_value: metric.recent_value,
-                    delta: metric.delta,
-                    percent_change: metric.percent_change,
-                    previous_period: metric.previous_period,
-                    recent_period: metric.recent_period
-                }));
-                
-                // Use available fields
-                const displayTitle = metric.object_name || '';
-                const titleTooltip = metric.object_name || '';
-                const periodInfo = `${previousPeriod} → ${recentPeriod}`;
-                
-                // Create row content
-                row.innerHTML = `
-                    <td>
-                        <div class="metric-name" title="${titleTooltip}">${truncateText(displayTitle, 30)}</div>
-                    </td>
-                    <td>${metric.object_id || 'N/A'}</td>
-                    <td>${metric.district === '0' ? 'Citywide' : metric.district === 'all' ? 'All Districts' : `District ${metric.district}`}</td>
-                    <td title="${previousPeriod}">${previousValue}</td>
-                    <td title="${recentPeriod}">${currentValue}</td>
-                    <td class="${changeClass}" title="${periodInfo}">${delta}</td>
-                    <td class="${changeClass}">${percentChange}</td>
-                    <td><button class="action-button" onclick="showMetricDetails(${JSON.stringify(metric).replace(/"/g, '&quot;')})">Analyze</button></td>
-                `;
-                
-                // Add click event to highlight the row
-                row.addEventListener('click', function(e) {
-                    // Don't trigger row selection if clicking the button
-                    if (e.target.tagName === 'BUTTON') {
-                        return;
+            if (objectId) {
+                apiUrl += `&object_id=${encodeURIComponent(objectId)}`;
+            }
+            
+            if (district && district !== 'all') {
+                apiUrl += `&district=${encodeURIComponent(district)}`;
+            }
+            
+            // Fetch data
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error ${response.status}`);
                     }
+                    return response.json();
+                })
+                .then(data => {
+                    // Hide loader
+                    loader.style.display = 'none';
                     
-                    // Remove highlight from all rows
-                    const allRows = metricsTbody.querySelectorAll('tr');
-                    allRows.forEach(r => r.classList.remove('selected'));
-                    
-                    // Add highlight to clicked row
-                    this.classList.add('selected');
-                    
-                    // Optionally, populate the object ID filter with this row's ID
-                    if (metric.object_id) {
-                        objectIdInput.value = metric.object_id;
+                    if (data.status === 'success') {
+                        if (data.anomalies && data.anomalies.length > 0) {
+                            // Display anomaly data
+                            displayAnomalyResults(data.anomalies);
+                        } else {
+                            // No data returned
+                            noDataDiv.style.display = 'block';
+                            noDataDiv.textContent = 'No anomalies found matching your criteria. Try different filters.';
+                        }
+                    } else {
+                        // API returned an error
+                        errorContainer.style.display = 'block';
+                        errorText.textContent = data.message || 'Error fetching anomalies';
                     }
+                })
+                .catch(error => {
+                    // Handle errors
+                    loader.style.display = 'none';
+                    errorContainer.style.display = 'block';
+                    errorText.textContent = `Error: ${error.message}`;
+                    console.error('Error fetching anomalies:', error);
                 });
-                
-                metricsTbody.appendChild(row);
-            });
-            
-            // Add click events to all rows
-            addRowClickEvents();
-            
-            return displayCount;
         }
         
-        // Helper function to truncate text with ellipsis
-        function truncateText(text, maxLength) {
-            if (!text) return '';
-            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
-        }
-        
-        // Helper function to format dates
-        function formatDate(dateString) {
-            if (!dateString) return '';
+        // Function to display metric results
+        function displayMetricResults(topResults, bottomResults) {
+            // Show the table
+            metricsTable.style.display = 'table';
+            metricsTbody.innerHTML = '';
             
-            try {
-                const date = new Date(dateString);
-                // Check if the date is valid
-                if (isNaN(date.getTime())) return dateString;
-                
-                // Format as MMM YYYY (e.g. Jan 2023)
-                return date.toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    year: 'numeric' 
-                });
-            } catch (e) {
-                console.error('Error formatting date:', e);
-                return dateString;
+            // Add section header for top changes
+            const topHeader = document.createElement('tr');
+            topHeader.className = 'section-header';
+            topHeader.innerHTML = `<td colspan="7">Largest Increases</td>`;
+            metricsTbody.appendChild(topHeader);
+            
+            // Add top results
+            if (topResults.length > 0) {
+                topResults.forEach(metric => appendMetricRow(metric));
+            } else {
+                const noTopRow = document.createElement('tr');
+                noTopRow.innerHTML = `<td colspan="7" class="no-data">No significant increases found</td>`;
+                metricsTbody.appendChild(noTopRow);
+            }
+            
+            // Add section header for bottom changes
+            const bottomHeader = document.createElement('tr');
+            bottomHeader.className = 'section-header';
+            bottomHeader.innerHTML = `<td colspan="7">Largest Decreases</td>`;
+            metricsTbody.appendChild(bottomHeader);
+            
+            // Add bottom results
+            if (bottomResults.length > 0) {
+                bottomResults.forEach(metric => appendMetricRow(metric));
+            } else {
+                const noBottomRow = document.createElement('tr');
+                noBottomRow.innerHTML = `<td colspan="7" class="no-data">No significant decreases found</td>`;
+                metricsTbody.appendChild(noBottomRow);
             }
         }
         
-        // Function to analyze a metric via the modal window
+        // Function to display anomaly results
+        function displayAnomalyResults(anomalies) {
+            // Show the table
+            metricsTable.style.display = 'table';
+            metricsTbody.innerHTML = '';
+            
+            // Add all anomalies
+            if (anomalies.length > 0) {
+                anomalies.forEach(anomaly => appendAnomalyRow(anomaly));
+            } else {
+                const noDataRow = document.createElement('tr');
+                noDataRow.innerHTML = `<td colspan="7" class="no-data">No anomalies found</td>`;
+                metricsTbody.appendChild(noDataRow);
+            }
+        }
+        
+        // Function to append a metric row
+        function appendMetricRow(metric) {
+            const row = document.createElement('tr');
+            row.className = 'metric-row';
+            row.setAttribute('data-metric', JSON.stringify(metric));
+            
+            // Determine the change class
+            const changeClass = parseFloat(metric.percent_change) > 0 ? 'positive-change' : 'negative-change';
+            
+            // Format the district display
+            const districtDisplay = metric.district === '0' ? 'Citywide' : `District ${metric.district}`;
+            
+            // Create row HTML
+            row.innerHTML = `
+                <td>${metric.object_name}</td>
+                <td>${districtDisplay}</td>
+                <td>${formatValue(metric.previous_value)}</td>
+                <td>${formatValue(metric.recent_value)}</td>
+                <td class="${changeClass}">${formatValue(metric.delta)}</td>
+                <td class="${changeClass}">${formatPercentChange(metric.percent_change)}</td>
+                <td>
+                    <button class="action-button" onclick="analyzeMetricChange(${JSON.stringify(metric).replace(/"/g, '&quot;')})">
+                        Analyze
+                    </button>
+                </td>
+            `;
+            
+            // Add click event to show details
+            row.addEventListener('click', function(e) {
+                // Don't trigger if they clicked the analyze button
+                if (e.target.tagName === 'BUTTON') return;
+                
+                // Remove selected class from all rows
+                document.querySelectorAll('#metrics-results tr').forEach(r => {
+                    r.classList.remove('selected');
+                });
+                
+                // Add selected class to this row
+                this.classList.add('selected');
+                
+                // Show metric details
+                showMetricDetails(metric);
+            });
+            
+            metricsTbody.appendChild(row);
+        }
+        
+        // Function to append an anomaly row
+        function appendAnomalyRow(anomaly) {
+            const row = document.createElement('tr');
+            row.className = 'anomaly-row';
+            row.setAttribute('data-anomaly', JSON.stringify(anomaly));
+            
+            // Determine the change class
+            const changeClass = parseFloat(anomaly.percent_change) > 0 ? 'positive-change' : 'negative-change';
+            
+            // Format the district display
+            const districtDisplay = anomaly.district === '0' ? 'Citywide' : `District ${anomaly.district}`;
+            
+            // Create row HTML
+            row.innerHTML = `
+                <td>${anomaly.metric_name}</td>
+                <td>${districtDisplay}</td>
+                <td>${anomaly.group_value || 'N/A'}</td>
+                <td>${formatValue(anomaly.recent_mean)}</td>
+                <td>${formatValue(anomaly.comparison_mean)}</td>
+                <td class="${changeClass}">${formatPercentChange(anomaly.percent_change)}</td>
+                <td>
+                    <button class="action-button" onclick="viewAnomalyDetails(${anomaly.id})">
+                        Details
+                    </button>
+                </td>
+            `;
+            
+            // Add click event to show chart
+            row.addEventListener('click', function(e) {
+                // Don't trigger if they clicked the details button
+                if (e.target.tagName === 'BUTTON') return;
+                
+                // Remove selected class from all rows
+                document.querySelectorAll('#metrics-results tr').forEach(r => {
+                    r.classList.remove('selected');
+                });
+                
+                // Add selected class to this row
+                this.classList.add('selected');
+                
+                // Show anomaly chart
+                showAnomalyChart(this.getAttribute('data-anomaly'));
+            });
+            
+            metricsTbody.appendChild(row);
+        }
+        
+        // Helper function to format values
+        function formatValue(value) {
+            if (value === null || value === undefined || isNaN(value)) return '-';
+            return parseFloat(value).toLocaleString(undefined, {maximumFractionDigits: 2});
+        }
+        
+        // Helper function to format percent changes
+        function formatPercentChange(value) {
+            if (value === null || value === undefined || isNaN(value)) return '-';
+            return `${parseFloat(value).toFixed(2)}%`;
+        }
+        
+        // Function to analyze a metric change
         function analyzeMetricChange(metric) {
-            // Call the new showMetricDetails function first for immediate feedback
-            showMetricDetails(metric);
+            // Check URL parameters to see if we're in embed mode
+            const urlParams = new URLSearchParams(window.location.search);
+            const embedMode = urlParams.get('embed_mode') === 'true';
             
-            // Then optionally open the full analysis modal
-            modalTitle.textContent = `Analyzing ${metric.object_name || 'Metric Change'}`;
+            if (embedMode) {
+                // In embed mode, we'll skip the modal and display the webchat directly
+                const analysisContainer = document.getElementById('metrics-results');
+                if (analysisContainer) {
+                    // Clear existing content
+                    analysisContainer.innerHTML = '';
+                    
+                    // Create a container for the webchat
+                    const webchatContainer = document.createElement('div');
+                    webchatContainer.style.width = '100%';
+                    webchatContainer.style.height = '600px';
+                    webchatContainer.style.border = '1px solid var(--neutral-gray-light)';
+                    webchatContainer.style.borderRadius = '8px';
+                    webchatContainer.style.overflow = 'hidden';
+                    webchatContainer.style.marginTop = '20px';
+                    
+                    // Create and append the webchat iframe
+                    const webchatIframe = document.createElement('iframe');
+                    webchatIframe.style.width = '100%';
+                    webchatIframe.style.height = '100%';
+                    webchatIframe.style.border = 'none';
+                    webchatIframe.style.display = 'block';
+                    
+                    // Format values for chat prompt
+                    const metric_id = metric.object_id || '';
+                    const district = metric.district || '0';
+                    
+                    // Set chat initialization parameters
+                    webchatIframe.src = `/webchat?initialize=true&analyze=true&metric_id=${encodeURIComponent(metric_id)}&metric_name=${encodeURIComponent(metric.object_name || '')}&district=${encodeURIComponent(district)}&previous_value=${encodeURIComponent(metric.previous_value)}&recent_value=${encodeURIComponent(metric.recent_value)}&delta=${encodeURIComponent(metric.delta)}&previous_period=${encodeURIComponent(metric.previous_period)}&recent_period=${encodeURIComponent(metric.recent_period)}`;
+                    
+                    // Append iframe to container
+                    webchatContainer.appendChild(webchatIframe);
+                    analysisContainer.appendChild(webchatContainer);
+                    
+                    // Hide other UI elements
+                    const metricsTable = document.getElementById('metrics-table');
+                    if (metricsTable) {
+                        metricsTable.style.display = 'none';
+                    }
+                    
+                    // Add a back button
+                    const backButton = document.createElement('button');
+                    backButton.className = 'action-button';
+                    backButton.style.marginTop = '10px';
+                    backButton.innerHTML = '<i class="fas fa-arrow-left"></i> Back to metrics';
+                    backButton.onclick = function() {
+                        // Show the metrics table again
+                        if (metricsTable) {
+                            metricsTable.style.display = 'table';
+                        }
+                        // Remove the webchat container
+                        webchatContainer.remove();
+                        backButton.remove();
+                    };
+                    
+                    analysisContainer.appendChild(backButton);
+                }
+                return;
+            }
             
-            // Show the modal and loader
+            // Standard modal view for non-embed mode
+            // Show the modal
             analysisModal.style.display = 'block';
+            modalTitle.textContent = `Analyzing ${metric.object_name || 'Metric Change'}`;
             modalLoader.style.display = 'block';
             
-            // Create iframe for webchat
+            // Set up webchat iframe
             const webchatIframe = document.createElement('iframe');
-                webchatIframe.id = 'webchat-iframe';
-            webchatIframe.style.display = 'none';
-                webchatIframe.style.width = '100%';
-                webchatIframe.style.height = '600px';
-                webchatIframe.style.border = 'none';
-            
-            // Clear previous content and add iframe
+            webchatIframe.id = 'webchat-iframe';
+            webchatIframe.style.display = 'block';
             modalContent.innerHTML = '';
-                modalContent.appendChild(webchatIframe);
+            modalContent.appendChild(webchatIframe);
             
             // Format values for chat prompt
             const metric_id = metric.object_id || '';
@@ -1745,204 +1906,135 @@
             chartElement.appendChild(iframe);
         }
         
-        // Function to format values for display
-        function formatValue(value) {
-            if (value === null || value === undefined || isNaN(value)) return '-';
-            return parseFloat(value).toLocaleString(undefined, {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 2
-            });
-        }
-        
-        // Function to analyze a metric
-        function analyzeMetric(metricName) {
-            // This function can be implemented to perform deeper analysis
-            alert(`Analyzing ${metricName}. This feature is coming soon.`);
-        }
-        
-        // Function to update the row click events
-        function addRowClickEvents() {
-            const rows = document.querySelectorAll('#metrics-results tr');
+        // Function to view anomaly details
+        function viewAnomalyDetails(anomalyId) {
+            // Show the modal with loading state
+            analysisModal.style.display = 'block';
+            modalTitle.textContent = 'Anomaly Details';
+            modalLoader.style.display = 'block';
+            modalContent.innerHTML = '';
             
-            rows.forEach(row => {
-                // Skip section header rows
-                if (row.querySelector('.section-header')) {
-                    return;
-                }
-                
-                row.addEventListener('click', function(e) {
-                    // Don't trigger if we're clicking a button
-                    if (e.target.tagName === 'BUTTON') {
-                        return;
+            // Fetch the anomaly details
+            fetch(`/anomaly-analyzer/api/anomaly-details/${anomalyId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error ${response.status}`);
                     }
+                    return response.json();
+                })
+                .then(data => {
+                    modalLoader.style.display = 'none';
                     
-                    // Remove selected class from any selected row
-                    const selectedRow = document.querySelector('#metrics-results tr.selected');
-                    if (selectedRow) selectedRow.classList.remove('selected');
-                    
-                    // Add selected class to the clicked row
-                    this.classList.add('selected');
-                    
-                    // Get the metric data from the row's data attribute
-                    try {
-                        const metricData = JSON.parse(this.getAttribute('data-metric') || '{}');
+                    if (data.status === 'success' && data.anomaly) {
+                        // Create content for the modal
+                        const anomaly = data.anomaly;
+                        const metadata = anomaly.metadata || {};
                         
-                        // Show metric details (which now fetches anomalies)
-                        showMetricDetails(metricData);
-                    } catch (error) {
-                        console.error('Error parsing metric data from row:', error);
+                        // Format the percent change
+                        const percentChange = anomaly.percent_change || 
+                            (anomaly.comparison_mean && anomaly.comparison_mean !== 0 ? 
+                            (anomaly.difference / anomaly.comparison_mean) * 100 : 0);
+                        
+                        const formattedPercentChange = percentChange !== 0 ? 
+                            `${percentChange > 0 ? '+' : ''}${percentChange.toFixed(2)}%` : '0%';
+                            
+                        const changeClass = percentChange > 0 ? 'positive-change' : 'negative-change';
+                        
+                        // Create the HTML content
+                        const contentHtml = `
+                            <div class="anomaly-detail-container">
+                                <div class="anomaly-overview">
+                                    <h3>${metadata.object_name || 'Unnamed Metric'}</h3>
+                                    <p class="anomaly-subtitle">${anomaly.group_field_name || 'Group'}: <strong>${anomaly.group_value || 'N/A'}</strong></p>
+                                    <p class="anomaly-description">
+                                        This metric showed a <span class="${changeClass}">${formattedPercentChange}</span> change 
+                                        from the historical average.
+                                    </p>
+                                </div>
+                                
+                                <div class="anomaly-stats">
+                                    <div class="stat-grid">
+                                        <div class="stat-item">
+                                            <span class="stat-label">Recent Value</span>
+                                            <span class="stat-value">${formatValue(anomaly.recent_mean)}</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">Historical Average</span>
+                                            <span class="stat-value">${formatValue(anomaly.comparison_mean)}</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">Absolute Change</span>
+                                            <span class="stat-value ${changeClass}">${formatValue(anomaly.difference)}</span>
+                                        </div>
+                                        <div class="stat-item">
+                                            <span class="stat-label">Standard Deviation</span>
+                                            <span class="stat-value">${formatValue(anomaly.std_dev)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="anomaly-chart-wrapper">
+                                    <h4>Trend Over Time</h4>
+                                    <iframe src="/anomaly-analyzer/anomaly-chart?id=${anomaly.id}" 
+                                            style="width: 100%; height: 400px; border: none;"></iframe>
+                                </div>
+                                
+                                <div class="anomaly-explanation">
+                                    <h4>Statistical Significance</h4>
+                                    <p>
+                                        This anomaly is ${Math.abs(anomaly.difference) > 2 * anomaly.std_dev ? 
+                                        '<span class="high-significance">highly significant</span>' : 
+                                        '<span class="medium-significance">statistically significant</span>'}, 
+                                        deviating from the historical average by 
+                                        ${(Math.abs(anomaly.difference) / anomaly.std_dev).toFixed(2)} standard deviations.
+                                    </p>
+                                    
+                                    ${anomaly.explanation ? 
+                                    `<div class="explanation-section">
+                                        <h4>Automated Explanation</h4>
+                                        <p>${anomaly.explanation}</p>
+                                    </div>` : ''}
+                                </div>
+                                
+                                <div class="anomaly-actions">
+                                    <button class="action-button" onclick="analyzeAnomalyWithAI(${anomaly.id})">
+                                        Analyze with AI
+                                    </button>
+                                    <button class="action-button secondary" onclick="downloadAnomalyChart(${anomaly.id})">
+                                        Download Chart
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                        
+                        modalContent.innerHTML = contentHtml;
+                    } else {
+                        modalContent.innerHTML = `
+                            <div class="error-message">
+                                ${data.message || 'Failed to load anomaly details.'}
+                            </div>
+                        `;
                     }
+                })
+                .catch(error => {
+                    modalLoader.style.display = 'none';
+                    modalContent.innerHTML = `
+                        <div class="error-message">
+                            Error loading anomaly details: ${error.message}
+                        </div>
+                    `;
                 });
-            });
         }
-
-        function displayResults(results) {
-            const resultsContainer = document.getElementById('results-container');
-            if (!resultsContainer) {
-                console.error('Results container not found');
-                return;
-            }
-
-            if (!results || results.length === 0) {
-                resultsContainer.innerHTML = '<p>No results found.</p>';
-                return;
-            }
-
-            // Create a table to display the results
-            let tableHtml = `
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Metric</th>
-                            <th>Recent Value</th>
-                            <th>Previous Value</th>
-                            <th>Change</th>
-                            <th>Percent Change</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            // Add each result as a row in the table
-            results.forEach(metric => {
-                const absoluteChange = parseFloat(metric.delta);
-                const percentChange = parseFloat(metric.percent_change);
-                const changeClass = absoluteChange > 0 ? 'positive-change' : 'negative-change';
-                
-                tableHtml += `
-                    <tr class="clickable-row" data-metric='${JSON.stringify({
-                        objectName: metric.object_name,
-                        objectId: metric.object_id,
-                        recentValue: metric.recent_value,
-                        previousValue: metric.previous_value,
-                        absoluteChange: absoluteChange,
-                        percentChange: percentChange
-                    })}'>
-                        <td>${metric.object_name}</td>
-                        <td>${parseFloat(metric.recent_value).toLocaleString()}</td>
-                        <td>${parseFloat(metric.previous_value).toLocaleString()}</td>
-                        <td class="${changeClass}">${absoluteChange.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</td>
-                        <td class="${changeClass}">${percentChange.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}%</td>
-                    </tr>
-                `;
-            });
-
-            tableHtml += `
-                    </tbody>
-                </table>
-            `;
-
-            // Set the HTML of the results container
-            resultsContainer.innerHTML = tableHtml;
-
-            // Add event listeners to the rows
-            document.querySelectorAll('.clickable-row').forEach(row => {
-                row.addEventListener('click', function() {
-                    // Remove the 'selected' class from all rows
-                    document.querySelectorAll('.clickable-row').forEach(r => r.classList.remove('selected-row'));
-                    
-                    // Add the 'selected' class to the clicked row
-                    this.classList.add('selected-row');
-                    
-                    // Get the metric data from the row's data attribute
-                    const metricData = JSON.parse(this.getAttribute('data-metric'));
-                    
-                    // Show the metric details
-                    showMetricDetails(metricData);
-                });
-            });
+        
+        // Function to analyze an anomaly with AI
+        function analyzeAnomalyWithAI(anomalyId) {
+            // Redirect to the anomaly-chat page with the anomaly ID
+            window.open(`/anomaly-analyzer/api/anomaly-chat?anomaly_id=${anomalyId}`, '_blank');
         }
-
-        // Function to display anomaly list
-        function displayAnomalies(anomalies) {
-            const anomalyListEl = document.getElementById('anomaly-list');
-            
-            // Clear previous content
-            anomalyListEl.innerHTML = '';
-            
-            if (anomalies.length === 0) {
-                anomalyListEl.innerHTML = '<p>No anomalies found for this metric.</p>';
-                return;
-            }
-            
-            // Create table for anomalies
-            const table = document.createElement('table');
-            table.className = 'table table-hover';
-            
-            // Create table header
-            const thead = document.createElement('thead');
-            thead.innerHTML = `
-                <tr>
-                    <th>Period</th>
-                    <th>Group</th>
-                    <th>Value</th>
-                    <th>Change</th>
-                    <th>Actions</th>
-                </tr>
-            `;
-            table.appendChild(thead);
-            
-            // Create table body
-            const tbody = document.createElement('tbody');
-            
-            // Add each anomaly as a row
-            anomalies.forEach(anomaly => {
-                const tr = document.createElement('tr');
-                tr.className = 'clickable-row';
-                tr.setAttribute('data-anomaly-id', anomaly.id);
-                
-                // Format percent change
-                const percentChange = anomaly.percent_change || 0;
-                const changeClass = percentChange > 0 ? 'positive-change' : 'negative-change';
-                const changeDirection = percentChange > 0 ? '▲' : '▼';
-                
-                // Set row HTML
-                tr.innerHTML = `
-                    <td>${anomaly.period_date || '-'}</td>
-                    <td>${anomaly.group_value || '-'}</td>
-                    <td>${formatValue(anomaly.recent_mean)}</td>
-                    <td class="${changeClass}">${changeDirection} ${Math.abs(percentChange).toFixed(1)}%</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary view-anomaly-btn">View</button>
-                        <a href="/anomaly-analyzer/anomaly-chart?id=${anomaly.id}" target="_blank" class="btn btn-sm btn-outline-secondary">Open Chart</a>
-                    </td>
-                `;
-                
-                tbody.appendChild(tr);
-            });
-            
-            table.appendChild(tbody);
-            anomalyListEl.appendChild(table);
-            
-            // Add click events to rows
-            document.querySelectorAll('.view-anomaly-btn').forEach(button => {
-                button.addEventListener('click', function(e) {
-                    e.stopPropagation(); // Prevent row click
-                    const row = this.closest('tr');
-                    const anomalyId = row.getAttribute('data-anomaly-id');
-                    viewAnomalyDetails(anomalyId);
-                });
-            });
+        
+        // Function to download anomaly chart
+        function downloadAnomalyChart(anomalyId) {
+            window.open(`/anomaly-analyzer/anomaly-chart?id=${anomalyId}&format=image`, '_blank');
         }
     </script>
 </body>

@@ -1620,7 +1620,13 @@
                         if (data.url) {
                             window.open(data.url, '_blank');
                         }
-                        alert(`Newsletter published successfully!\n${data.url || ''}`);
+                        alert(`Newsletter published successfully!\nThe URL has been saved to the database.\n${data.url || ''}`);
+                        
+                        // Reload the report details to show the published URL
+                        const selectedReport = reportSelect.value;
+                        if (selectedReport) {
+                            loadReportDetails(selectedReport);
+                        }
                     } else {
                         throw new Error(data.message || 'Failed to publish newsletter');
                     }
@@ -1732,6 +1738,7 @@
                             <div class="metadata-item"><strong>Max Items:</strong> ${report.max_items || 'N/A'}</div>
                             <div class="metadata-item"><strong>Created:</strong> ${createdDate}</div>
                             <div class="metadata-item"><strong>Last Updated:</strong> ${updatedDate}</div>
+                            ${report.published_url ? `<div class="metadata-item"><strong>Published:</strong> <a href="${report.published_url}" target="_blank">View Published Post</a></div>` : ''}
                         </div>
                     </div>
                 `;

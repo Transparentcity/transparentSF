@@ -94,14 +94,28 @@ def store_time_series_in_db(connection, chart_data, metadata):
         # Get district from filter conditions if it exists
         district = extract_district_from_filter_conditions(serializable_metadata.get('filter_conditions', []))
         
-        # First, insert the metadata to get a chart_id
+        # First, deactivate any existing active charts with the same parameters
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                UPDATE time_series_metadata 
+                SET is_active = FALSE
+                WHERE object_type = %s 
+                AND object_id = %s
+                AND object_name = %s
+                AND field_name = %s
+                AND period_type = %s
+                AND district = %s
+                AND is_active = TRUE
+            """, (object_type, object_id, object_name, field_name, period_type, district))
+            
+        # Then, insert the metadata to get a chart_id
         chart_id = None
         with connection.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO time_series_metadata (
                     object_type, object_id, object_name, field_name, period_type,
-                    group_field, executed_query_url, caption, metadata, district
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    group_field, executed_query_url, caption, metadata, district, is_active
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                 RETURNING chart_id
             """, (
                 object_type, object_id, object_name, field_name, period_type,

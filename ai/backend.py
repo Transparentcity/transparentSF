@@ -3166,8 +3166,6 @@ async def get_chart_by_metric(
             query = f"""
                 SELECT 
                     chart_id, 
-                    chart_title, 
-                    y_axis_label, 
                     period_type, 
                     object_type, 
                     object_id, 
@@ -3177,7 +3175,7 @@ async def get_chart_by_metric(
                     group_field,
                     executed_query_url,
                     caption,
-                    filter_conditions
+                    metadata
                 FROM time_series_metadata 
                 WHERE object_id = %s AND district = %s 
                 AND (period_type = %s OR LOWER(period_type) = LOWER(%s))
@@ -3191,12 +3189,10 @@ async def get_chart_by_metric(
             else:
                 cursor.execute(query, (metric_id, district, db_period_type, db_period_type, group_field))
         else:
-            # Original query for other period types
+            # Original query for other period types (excluding y_axis_label, chart_title, filter_conditions)
             query = f"""
                 SELECT 
                     chart_id, 
-                    chart_title, 
-                    y_axis_label, 
                     period_type, 
                     object_type, 
                     object_id, 
@@ -3206,7 +3202,7 @@ async def get_chart_by_metric(
                     group_field,
                     executed_query_url,
                     caption,
-                    filter_conditions
+                    metadata
                 FROM time_series_metadata 
                 WHERE object_id = %s AND district = %s AND period_type = %s
                 {group_field_condition}
@@ -3227,8 +3223,6 @@ async def get_chart_by_metric(
             cursor.execute("""
                 SELECT 
                     chart_id, 
-                    chart_title, 
-                    y_axis_label, 
                     period_type, 
                     object_type, 
                     object_id, 
@@ -3238,7 +3232,7 @@ async def get_chart_by_metric(
                     group_field,
                     executed_query_url,
                     caption,
-                    filter_conditions
+                    metadata
                 FROM time_series_metadata 
                 WHERE object_id = %s AND district = %s AND period_type = %s
                 ORDER BY created_at DESC
@@ -3248,92 +3242,17 @@ async def get_chart_by_metric(
             metadata_result = cursor.fetchone()
             
             if not metadata_result:
-                # Fallback 2: Try without period_type constraint
-                logger.info(f"No chart found with period_type constraint, trying without period_type constraint")
-                cursor.execute("""
-                    SELECT 
-                        chart_id, 
-                        chart_title, 
-                        y_axis_label, 
-                        period_type, 
-                        object_type, 
-                        object_id, 
-                        object_name, 
-                        field_name, 
-                        district, 
-                        group_field,
-                        executed_query_url,
-                        caption,
-                        filter_conditions
-                    FROM time_series_metadata 
-                    WHERE object_id = %s AND district = %s
-                    ORDER BY created_at DESC
-                    LIMIT 1
-                """, (metric_id, district))
-                
-                metadata_result = cursor.fetchone()
-                
-                if not metadata_result:
-                    # Fallback 3: Try with just the metric_id
-                    logger.info(f"No chart found with district constraint, trying with just object_id")
-                    cursor.execute("""
-                        SELECT 
-                            chart_id, 
-                            chart_title, 
-                            y_axis_label, 
-                            period_type, 
-                            object_type, 
-                            object_id, 
-                            object_name, 
-                            field_name, 
-                            district, 
-                            group_field,
-                            executed_query_url,
-                            caption,
-                            filter_conditions
-                        FROM time_series_metadata 
-                        WHERE object_id = %s
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """, (metric_id,))
-                    
-                    metadata_result = cursor.fetchone()
-                    
-                    if not metadata_result:
-                        # DEBUGGING: Get a sample of what's actually in the database
-                        cursor.execute("""
-                            SELECT 
-                                chart_id, 
-                                chart_title, 
-                                object_id, 
-                                field_name, 
-                                period_type, 
-                                district,
-                                group_field
-                            FROM time_series_metadata 
-                            LIMIT 5
-                        """)
-                        
-                        sample_data = cursor.fetchall()
-                        logger.info(f"Sample data from time_series_metadata: {[dict(row) for row in sample_data]}")
-                        
-                        cursor.close()
-                        conn.close()
-                        
-                        # Provide more detailed error response
-                        return JSONResponse(
-                            status_code=404,
-                            content={
-                                "detail": f"Chart not found for object_id: {metric_id}, district: {district}, period_type: {period_type}, group_field: {group_field}",
-                                "available_metrics": available_metrics,
-                                "available_period_types": available_period_types,
-                                "sample_data": [dict(row) for row in sample_data] if sample_data else []
-                            }
-                        )
-                    else:
-                        logger.info(f"Found chart with object_id only: {metadata_result['object_id']}, period_type: {metadata_result['period_type']}, district: {metadata_result['district']}")
-                else:
-                    logger.info(f"Found chart with different period_type: {metadata_result['period_type']}")
+                # Return 404 with detailed error message
+                cursor.close()
+                conn.close()
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "detail": f"Chart not found for object_id: {metric_id}, district: {district}, period_type: {period_type}",
+                        "available_metrics": available_metrics,
+                        "available_period_types": available_period_types
+                    }
+                )
         
         chart_id = metadata_result["chart_id"]
         
@@ -3405,12 +3324,21 @@ async def get_chart_by_metric(
             'day': 'daily'
         }
         
+        # Get the JSON metadata field or initialize as empty dict if missing
+        json_metadata = metadata_result.get("metadata", {}) or {}
+        if isinstance(json_metadata, str):
+            try:
+                json_metadata = json.loads(json_metadata)
+            except:
+                json_metadata = {}
+        
         # Format the response according to the requested structure
+        # Prioritize fields from the metadata JSON for the three specified fields
         response = {
             "metadata": {
                 "chart_id": metadata_result["chart_id"],
-                "chart_title": metadata_result["chart_title"],
-                "y_axis_label": metadata_result["y_axis_label"],
+                "chart_title": json_metadata.get("chart_title", metadata_result.get("chart_title", "")),
+                "y_axis_label": json_metadata.get("y_axis_label", metadata_result.get("y_axis_label", "")),
                 "period_type": frontend_period_type_map.get(metadata_result["period_type"], metadata_result["period_type"]),
                 "object_type": metadata_result["object_type"],
                 "object_id": metadata_result["object_id"],
@@ -3419,7 +3347,7 @@ async def get_chart_by_metric(
                 "district": metadata_result["district"],
                 "executed_query_url": metadata_result["executed_query_url"],
                 "caption": metadata_result["caption"],
-                "filter_conditions": metadata_result["filter_conditions"]
+                "filter_conditions": json_metadata.get("filter_conditions", metadata_result.get("filter_conditions", ""))
             }
         }
         
@@ -3444,10 +3372,8 @@ async def get_chart_by_metric(
         logger.info(f"Retrieved chart data for object_id: {metric_id}, district: {district}, period_type: {period_type}, group_field: {group_field}")
         return JSONResponse(content=response)
         
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error getting chart data by metric: {str(e)}")
+        logger.error(f"Error retrieving chart data: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error retrieving chart data: {str(e)}")
 
 @router.get("/monthly-reports")
@@ -4579,15 +4505,190 @@ async def publish_to_ghost(request: Request):
                 "message": result
             }, status_code=500)
         
+        # Publication successful, save the URL to the database
+        post_url = result
+        logger.info(f"Newsletter published successfully. URL: {post_url}")
+        
+        # Find the report ID from the filename and update the database
+        conn = None
+        try:
+            conn = get_db_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    # Find the report by filename (either original or revised)
+                    cursor.execute("""
+                        SELECT id FROM reports 
+                        WHERE original_filename = %s OR revised_filename = %s
+                    """, (filename, filename))
+                    
+                    report = cursor.fetchone()
+                    
+                    if report:
+                        report_id = report[0]
+                        # Update the report with the published URL
+                        cursor.execute("""
+                            UPDATE reports 
+                            SET published_url = %s, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                        """, (post_url, report_id))
+                        
+                        conn.commit()
+                        logger.info(f"Updated report ID {report_id} with published URL: {post_url}")
+                    else:
+                        logger.warning(f"Could not find report with filename {filename}")
+        except Exception as e:
+            logger.error(f"Error updating database with published URL: {str(e)}")
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+        
         # Return success with the post URL
         return JSONResponse({
             "status": "success",
             "message": "Newsletter published successfully to AnomalousSF blog",
-            "url": result
+            "url": post_url
         })
     except Exception as e:
         logger.exception(f"Error publishing newsletter to Ghost: {str(e)}")
         return JSONResponse({
             "status": "error",
             "message": f"Error publishing newsletter to Ghost: {str(e)}"
+        }, status_code=500)
+
+@router.get("/get-monthly-report-by-district/{district}")
+async def get_monthly_report_by_district(district: str):
+    """
+    Get the latest revised monthly report by district.
+    
+    Args:
+        district: The district ID (0 for citywide)
+        
+    Returns:
+        The HTML content of the latest revised monthly report
+    """
+    logger.info(f"Getting latest revised monthly report for district {district}")
+    
+    conn = None
+    cursor = None
+    try:
+        # Get database connection
+        conn = get_db_connection()
+        if not conn:
+            error_msg = "Failed to connect to database"
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
+        
+        # Create cursor
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        
+        # Query the reports table to find the latest report for the specified district
+        cursor.execute("""
+            SELECT id, district, revised_filename, published_url
+            FROM reports
+            WHERE district = %s AND revised_filename IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (district,))
+        
+        report = cursor.fetchone()
+        
+        if not report:
+            error_msg = f"No revised monthly report found for district {district}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=404, detail=error_msg)
+        
+        report_dict = dict(report)
+        
+        # Close cursor and connection
+        cursor.close()
+        conn.close()
+        
+        # Get the report file
+        reports_dir = Path(__file__).parent / 'output' / 'reports'
+        report_path = reports_dir / report_dict['revised_filename']
+        
+        if not report_path.exists():
+            error_msg = f"Report file not found: {report_path}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=404, detail=error_msg)
+        
+        # Return the file content
+        with open(report_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        logger.info(f"Successfully retrieved latest revised monthly report for district {district}")
+        return JSONResponse({
+            "status": "success",
+            "district": district,
+            "report_id": report_dict['id'],
+            "filename": report_dict['revised_filename'],
+            "published_url": report_dict['published_url'],
+            "content": html_content
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Error retrieving monthly report: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise HTTPException(status_code=500, detail=error_msg)
+    finally:
+        # Ensure resources are closed
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+@router.post("/api/add_subscriber")
+@router.post("/backend/api/add_subscriber")  # Add an extra route
+async def add_subscriber(request: Request):
+    """Add a subscriber to Ghost CMS with district preferences."""
+    try:
+        data = await request.json()
+        name = data.get("name", "")
+        email = data.get("email")
+        districts = data.get("districts", [])
+        
+        if not email:
+            return JSONResponse({
+                "status": "error",
+                "message": "Email is required"
+            }, status_code=400)
+        
+        # Forward the request to Ghost Bridge service
+        ghost_bridge_url = os.environ.get("GHOST_BRIDGE_URL", "http://localhost:3000")
+        endpoint = f"{ghost_bridge_url}/add_subscriber"
+        
+        logger.info(f"Forwarding subscriber request to Ghost Bridge: {email}, districts: {districts}")
+        
+        import requests
+        response = requests.post(
+            endpoint,
+            json={
+                "name": name,
+                "email": email,
+                "districts": districts
+            },
+            timeout=10  # 10 second timeout
+        )
+        
+        # Forward the response from Ghost Bridge
+        response_data = response.json()
+        status_code = response.status_code
+        
+        if status_code == 200:
+            logger.info(f"Successfully added subscriber: {email}")
+            return JSONResponse(response_data)
+        else:
+            logger.error(f"Error from Ghost Bridge: {response_data}")
+            return JSONResponse(response_data, status_code=status_code)
+            
+    except Exception as e:
+        error_message = f"Error adding subscriber: {str(e)}"
+        logger.exception(error_message)
+        return JSONResponse({
+            "status": "error",
+            "message": error_message
         }, status_code=500)

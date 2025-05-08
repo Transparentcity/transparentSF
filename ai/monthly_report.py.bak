@@ -143,7 +143,6 @@ def initialize_monthly_reporting_table():
                         period_type TEXT DEFAULT 'month',
                         original_filename TEXT,
                         revised_filename TEXT,
-                        published_url TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
@@ -156,27 +155,6 @@ def initialize_monthly_reporting_table():
                 return False
         else:
             logger.info("Reports table already exists")
-            
-            # Check if the published_url column exists in the reports table
-            cursor.execute("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'reports' AND column_name = 'published_url'
-            """)
-            
-            published_url_exists = cursor.fetchone()
-            
-            if not published_url_exists:
-                logger.info("Adding published_url column to reports table")
-                try:
-                    cursor.execute("""
-                        ALTER TABLE reports ADD COLUMN published_url TEXT
-                    """)
-                    connection.commit()
-                    logger.info("Added published_url column to reports table")
-                except Exception as e:
-                    logger.error(f"Error adding published_url column: {e}")
-                    connection.rollback()
         
         # Now check if the monthly_reporting table exists and get its columns
         cursor.execute("""
@@ -523,25 +501,61 @@ def prioritize_deltas(deltas, max_items=10):
             
             changes_text += f"{idx}. {metric} for {group}: {recent:.1f} vs {comparison:.1f} ({pct_text}), District: {district}\n"
         
-        # Load prompt from JSON file
-        prompts = load_prompts()
-        prompt_template = prompts['monthly_report']['prioritize_deltas']['prompt']
-        system_message = prompts['monthly_report']['prioritize_deltas']['system']
-        
-        # Truncate notes_text for the prompt
-        notes_text_short = notes_text[:5000]
-        
-        # Format the prompt with the required variables
-        prompt = prompt_template.format(
-            max_items=max_items,
-            changes_text=changes_text,
-            notes_text_short=notes_text_short
-        )
+        # Create a prompt for the agent, asking for a structured JSON response
+        prompt = f"""You are a data journalist helping create a monthly newsletter.
+Given the following list of metrics with significant changes, identify EXACTLY {max_items} most important items to highlight in a monthly newsletter.
+
+Consider these factors when prioritizing:
+1. Magnitude of the change (both absolute and percentage)  higher is better
+2. Public importance of the metric (e.g., crime most important, then public safety, then housing, then the rest) higher is better
+3. Compare the direction of the change with teh Year to Date info about the metrtic.  Same direction is better. 
+4.- Represents a new development that requires special attention
+
+
+RECENT CHANGES:
+{changes_text}
+
+YEAR-TO-DATE METRICS AND NOTES:
+{notes_text[:5000]}
+
+Return your response as a JSON object with a property named "items" that contains an array of EXACTLY {max_items} objects with the following structure:
+```json
+{{
+  "items": [
+    {{
+      "index": 1,
+      "metric": "Metric Name",
+      "metric_id": "Metric ID",
+      "group": "Group Value",
+      "priority": 1,
+      "explanation": "Detailed explanation of why this change is significant",
+      "trend_analysis": "Whether this is a counter-trend or continuation of existing patterns",
+      "follow_up": "Suggested follow-up questions or additional context"
+    }},
+    {{
+      "index": 2,
+      ...
+    }},
+    ...more items to make exactly {max_items} total
+  ]
+}}
+```
+
+VERY IMPORTANT REQUIREMENTS:
+1. The "items" array MUST contain EXACTLY {max_items} objects, no more and no less.
+2. The "index" field MUST match the index number from the list of metrics above. This is essential for accurate processing.
+3. The array must be sorted by priority (1 being highest).
+4. Each object must include the exact metric name from the list above.
+5. The response must be valid JSON that can be parsed directly.
+6. Do not include any commentary or explanation outside the JSON structure.
+
+You MUST select {max_items} different metrics. This is a hard requirement.
+"""
 
         # Make API call to get prioritized list
         response = client.chat.completions.create(
             model=AGENT_MODEL,
-            messages=[{"role": "system", "content": system_message},
+            messages=[{"role": "system", "content": "You are a data analyst specializing in municipal data analysis. Provide responses in structured JSON format when requested."},
                      {"role": "user", "content": prompt}],
             temperature=0.1,
             response_format={"type": "json_object"}
@@ -1656,11 +1670,9 @@ Detailed Analysis:
         }}
         
         .chart-container {{
-            margin: 20px auto;
+            margin: 20px 0;
             padding: 15px;
             border-radius: 6px;
-            max-width: 600px;
-            background-color: var(--white); /* ADDED for consistency */
         }}
         
         .footer {{
@@ -2266,7 +2278,7 @@ def get_monthly_reports_list():
         # Query the reports table
         cursor.execute("""
             SELECT id, district, period_type, max_items, original_filename, revised_filename, 
-                   created_at, updated_at, published_url
+                   created_at, updated_at
             FROM reports
             ORDER BY created_at DESC
         """)
@@ -2312,7 +2324,6 @@ def get_monthly_reports_list():
                 "item_count": item_count,
                 "original_filename": report['original_filename'],
                 "revised_filename": report['revised_filename'],
-                "published_url": report['published_url'],
                 "created_at": report['created_at'].isoformat(),
                 "updated_at": report['updated_at'].isoformat()
             })
@@ -2552,13 +2563,7 @@ def generate_email_compatible_report(report_path, output_path=None):
             # Decode HTML entities like &amp;
             import html
             iframe_url = html.unescape(iframe_url_encoded)
-
-            # Use a stripped version for regex matching to avoid issues with leading/trailing whitespace
-            iframe_url_to_match = iframe_url_encoded.strip()
-
-            logger.info(f"Processing iframe URL (original captured): '{iframe_url_encoded}'")
-            logger.info(f"Processing iframe URL (stripped for matching): '{iframe_url_to_match}'")
-            logger.info(f"Processing iframe URL (unescaped for params): '{iframe_url}'")
+            logger.info(f"Processing iframe URL: {iframe_url}")
             
             # Extract chart type and parameters from the URL
             if 'time-series-chart' in iframe_url:
@@ -2595,24 +2600,24 @@ def generate_email_compatible_report(report_path, output_path=None):
                     
                     # More specific regex for replacement to avoid unintended changes
                     # First, try to match and replace the entire chart container if it exists
-                    chart_container_pattern = r'<div class="chart-container".*?>.*?<iframe.*?src=["\']' + re.escape(iframe_url_to_match) + r'["\'].*?>.*?</iframe>.*?</div>'
+                    chart_container_pattern = r'<div class="chart-container".*?>.*?<iframe.*?src=["\']' + re.escape(iframe_url_encoded) + r'["\'].*?>.*?</iframe>.*?</div>'
                     new_html, container_count = re.subn(chart_container_pattern, img_tag, processed_html, flags=re.IGNORECASE | re.DOTALL)
                     
                     if container_count > 0:
                         processed_html = new_html
                         replacements_made += container_count
-                        logger.info(f"Replaced entire chart container with iframe (src: {iframe_url_to_match}) with image container: {img_filename} ({container_count} occurrence(s))")
+                        logger.info(f"Replaced entire chart container with iframe (src: {iframe_url_encoded}) with image container: {img_filename} ({container_count} occurrence(s))")
                     else:
                         # If no chart container was found, try matching just the iframe
-                        specific_iframe_pattern = r'<iframe.*?src=["\']' + re.escape(iframe_url_to_match) + r'["\'].*?>.*?</iframe>'
+                        specific_iframe_pattern = r'<iframe.*?src=["\']' + re.escape(iframe_url_encoded) + r'["\'].*?>.*?</iframe>'
                         new_html, iframe_count = re.subn(specific_iframe_pattern, img_tag, processed_html, flags=re.IGNORECASE | re.DOTALL)
                         
                         if iframe_count > 0:
                             processed_html = new_html
                             replacements_made += iframe_count
-                            logger.info(f"Replaced time series chart iframe (src: {iframe_url_to_match}) with image: {img_filename} ({iframe_count} occurrence(s))")
+                            logger.info(f"Replaced time series chart iframe (src: {iframe_url_encoded}) with image: {img_filename} ({iframe_count} occurrence(s))")
                         else:
-                            logger.warning(f"Could not find exact iframe tag to replace for src: {iframe_url_to_match}")
+                            logger.warning(f"Could not find exact iframe tag to replace for src: {iframe_url_encoded}")
                 else:
                     logger.warning(f"Failed to generate image for time series chart ({iframe_url}), skipping replacement.")
                 
@@ -2646,14 +2651,14 @@ def generate_email_compatible_report(report_path, output_path=None):
                     img_tag = f'<div class="chart-container" style="margin-bottom: 30px; background-color: transparent; padding: 0;"><div style="position: relative; width: 100%; height: 0; padding-bottom: 100%;"><div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"><img src="charts/{img_filename}" alt="Anomaly Chart for ID {anomaly_id}" style="max-width: 100%; height: 100%; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" /></div></div></div>'
                     
                     # More specific regex for replacement
-                    specific_iframe_pattern = r'<iframe.*?src=["\']' + re.escape(iframe_url_to_match) + r'["\'].*?>.*?</iframe>'
+                    specific_iframe_pattern = r'<iframe.*?src=["\']' + re.escape(iframe_url_encoded) + r'["\'].*?>.*?</iframe>'
                     new_html, count = re.subn(specific_iframe_pattern, img_tag, processed_html, flags=re.IGNORECASE | re.DOTALL)
                     if count > 0:
                         processed_html = new_html
                         replacements_made += count
-                        logger.info(f"Replaced anomaly chart iframe (src: {iframe_url_to_match}) with image: {img_filename} ({count} occurrence(s))")
+                        logger.info(f"Replaced anomaly chart iframe (src: {iframe_url_encoded}) with image: {img_filename} ({count} occurrence(s))")
                     else:
-                         logger.warning(f"Could not find exact iframe tag to replace for src: {iframe_url_to_match}")
+                         logger.warning(f"Could not find exact iframe tag to replace for src: {iframe_url_encoded}")
                 else:
                      logger.warning(f"Failed to generate image for anomaly chart ({iframe_url}), skipping replacement.")
             else:
@@ -2989,7 +2994,7 @@ def expand_chart_references(report_path):
         
         # Define patterns for simplified chart references
         time_series_pattern = r'\[CHART:time_series:(\d+):(\d+):(\w+)\]'
-        anomaly_pattern = r'\[CHART:anomaly:([a-zA-Z0-9]+)\]'  # Changed to support alphanumeric IDs
+        anomaly_pattern = r'\[CHART:anomaly:(\d+)\]'
         
         # Define pattern for direct image references
         image_pattern_with_alt = r'<img[^>]*src="([^"]+)"[^>]*alt="([^"]+)"[^>]*>'
@@ -3002,30 +3007,28 @@ def expand_chart_references(report_path):
             period_type = match.group(3)
             
             return f"""
-<div class="chart-container">
-    <div style="position: relative; width: 100%; padding-bottom: 100%;">
-        <iframe src="/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section" 
-                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" 
-                frameborder="0" 
-                scrolling="no">
-        </iframe>
+<div class="chart-container" style="margin-bottom: 30px; background-color: transparent; padding: 0;">
+    <div style="position: relative; width: 100%; height: 0; padding-bottom: 100%;">
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+            <iframe src="/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
+        </div>
     </div>
-</div>"""
+</div>
+"""
         
         # Replace anomaly chart references
         def replace_anomaly(match):
             anomaly_id = match.group(1)
             
             return f"""
-<div class="chart-container">
-    <div style="position: relative; width: 100%; padding-bottom: 100%;">
-        <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" 
-                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" 
-                frameborder="0" 
-                scrolling="no">
-        </iframe>
+<div class="chart-container" style="margin-bottom: 30px; background-color: transparent; padding: 0;">
+    <div style="position: relative; width: 100%; height: 0; padding-bottom: 100%;">
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+            <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none;" frameborder="0" scrolling="no"></iframe>
+        </div>
     </div>
-</div>"""
+</div>
+"""
         
         # Replace direct image references with iframes
         def replace_image_with_alt(match):
@@ -3041,15 +3044,12 @@ def expand_chart_references(report_path):
                     anomaly_id = parts[1].split(".")[0]  # Remove file extension
                     
                     return f"""
-<div class="chart-container">
-    <div style="position: relative; width: 100%; padding-bottom: 100%;">
-        <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" 
-                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" 
-                frameborder="0" 
-                scrolling="no">
-        </iframe>
-    </div>
-</div>"""
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 100%; margin-bottom: 30px;">
+  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+    <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
+  </div>
+</div>
+"""
             
             # If we can't determine the chart type, keep the original image
             return img_tag
@@ -3066,15 +3066,12 @@ def expand_chart_references(report_path):
                     anomaly_id = parts[1].split(".")[0]  # Remove file extension
                     
                     return f"""
-<div class="chart-container">
-    <div style="position: relative; width: 100%; padding-bottom: 100%;">
-        <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" 
-                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" 
-                frameborder="0" 
-                scrolling="no">
-        </iframe>
-    </div>
-</div>"""
+<div style="position: relative; width: 100%; height: 0; padding-bottom: 60%; margin-bottom: 30px;">
+  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+    <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section" style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" frameborder="0" scrolling="no"></iframe>
+  </div>
+</div>
+"""
             
             # If we can't determine the chart type, keep the original image
             return img_tag

@@ -108,6 +108,7 @@ def init_database():
                 group_field TEXT,
                 executed_query_url TEXT,
                 caption TEXT,
+                is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)

@@ -1120,6 +1120,9 @@ async def get_top_metric_changes(
         # Filter for only charts where group_field is null
         where_conditions.append("group_field IS NULL")
         
+        # Filter for only active records
+        where_conditions.append("is_active = TRUE")
+        
         # Combine WHERE conditions
         where_clause = " AND ".join(where_conditions)
         
@@ -1718,20 +1721,34 @@ async def query_anomalies_endpoint(
     metric_name: str = None,
     object_id: str = None,
     period_type: str = None,
-    district: str = None
+    district: str = None,
+    only_active: bool = True
 ):
     """
     API endpoint to query anomalies for a specific metric.
     
     This endpoint allows fetching anomalies with various filters and is used
     by the metric detail view to show anomaly data for a selected metric.
+    
+    Parameters:
+        query_type: Type of query to run (recent, by_group, by_date, by_anomaly_severity, by_district)
+        limit: Maximum number of results to return
+        group_filter: Filter by group value (substring match)
+        date_start: Start date for filtering (format: YYYY-MM-DD)
+        date_end: End date for filtering (format: YYYY-MM-DD)
+        only_anomalies: If True, only return records where out_of_bounds=True
+        metric_name: Filter by metric name in metadata
+        object_id: Filter by object_id
+        period_type: Filter by period type (month, quarter, year)
+        district: Filter by district
+        only_active: If True, only return active anomalies (is_active=True)
     """
     try:
         # Create context_variables dict
         context_variables = {}
         
         # Log the request parameters
-        logging.info(f"Query anomalies request: metric_name={metric_name}, object_id={object_id}, district={district}, period_type={period_type}")
+        logging.info(f"Query anomalies request: metric_name={metric_name}, object_id={object_id}, district={district}, period_type={period_type}, only_active={only_active}")
         
         # Import the function here to make sure it's available
         try:
@@ -1818,6 +1835,10 @@ async def query_anomalies_endpoint(
             # Apply standard filters from get_anomalies logic
             if only_anomalies:
                 query += "AND out_of_bounds = true "
+                
+            # Filter for active anomalies if requested
+            if only_active:
+                query += "AND is_active = true "
                 
             if group_filter:
                 query += "AND group_value ILIKE %s "
@@ -1957,7 +1978,8 @@ async def query_anomalies_endpoint(
                         "std_dev": item.get("std_dev", 0),
                         "period_date": formatted_date,
                         "period_type": item_period_type,
-                        "explanation": item.get("explanation", "")
+                        "explanation": item.get("explanation", ""),
+                        "is_active": item.get("is_active", True)
                     })
                 except Exception as item_error:
                     logging.error(f"Error processing anomaly item: {item_error}")

@@ -17,8 +17,7 @@ const __dirname = dirname(__filename);
 // Clear any existing Ghost-related environment variables
 delete process.env.GHOST_URL;
 delete process.env.GHOST_ADMIN_API_KEY;
-delete process.env.REPLIT_GHOST_URL;
-delete process.env.REPLIT_GHOST_API_KEY;
+
 
 // Load .env file with override option
 dotenv.config({ 
@@ -26,17 +25,22 @@ dotenv.config({
     override: true 
 });
 
-// Immediately store the values we want
+// Store the values we want, ensuring we use .env values
 const GHOST_CONFIG = {
-    url: process.env.GHOST_URL,
-    adminApiKey: process.env.GHOST_ADMIN_API_KEY
+    url: process.env.GHOST_URL || '',
+    adminApiKey: process.env.GHOST_ADMIN_API_KEY || ''
 };
 
-
+// Log the configuration being used
 console.log('Using Ghost configuration:', {
     url: GHOST_CONFIG.url,
     keyPreview: GHOST_CONFIG.adminApiKey ? `${GHOST_CONFIG.adminApiKey.substring(0, 8)}...` : 'not set'
 });
+
+// Validate configuration
+if (!GHOST_CONFIG.url || !GHOST_CONFIG.adminApiKey) {
+    throw new Error('Ghost configuration is missing. Please check your .env file.');
+}
 
 // After loading the .env file but before creating the API instance
 const validateGhostApiKey = (key) => {
@@ -45,21 +49,25 @@ const validateGhostApiKey = (key) => {
     return parts.length === 2 && parts[0].length > 0 && parts[1].length > 0;
 };
 
-// Validate configuration
-if (!GHOST_CONFIG.url || !GHOST_CONFIG.adminApiKey) {
-    throw new Error('Ghost configuration is missing. Please check your .env file.');
-}
-
 if (!validateGhostApiKey(GHOST_CONFIG.adminApiKey)) {
     throw new Error('Invalid Ghost API key format. Expected format: {id}:{secret}');
 }
 
 // Add more detailed error handling in the API initialization
+console.log('Initializing Ghost API with:', {
+    url: GHOST_CONFIG.url.replace(/\/$/, ''),
+    keyPreview: GHOST_CONFIG.adminApiKey ? `${GHOST_CONFIG.adminApiKey.substring(0, 8)}...` : 'not set',
+    version: 'v5.0'
+});
+
 const api = new GhostAdminAPI({
     url: GHOST_CONFIG.url.replace(/\/$/, ''), // Just remove trailing slash
     key: GHOST_CONFIG.adminApiKey,
     version: 'v5.0'
 });
+
+// Log available API methods
+console.log('Available API methods:', Object.keys(api));
 
 // Force use of .env file values by temporarily storing Replit values
 const replitGhostUrl = process.env.GHOST_URL;
@@ -78,6 +86,7 @@ const validateGhostConnection = async () => {
         console.log('Attempting to connect to Ghost...');
         const response = await api.site.read();
         console.log('Successfully connected to Ghost instance at:', response.url);
+        console.log('Available API endpoints:', Object.keys(api));
         return true;
     } catch (error) {
         console.error('Failed to connect to Ghost:', {
@@ -340,6 +349,149 @@ app.get('/check-site', async (req, res) => {
             success: false,
             error: error.message,
             url: GHOST_CONFIG.url
+        });
+    }
+});
+
+// Add a new endpoint to add subscribers to Ghost
+app.post('/add_subscriber', async (req, res) => {
+    try {
+        console.log("Request received for /add_subscriber");
+        const { name, email, districts } = req.body;
+
+        // Validate required fields
+        if (!email) {
+            console.error("Missing email in request body");
+            return res.status(400).json({ success: false, error: "Email is required" });
+        }
+
+        // Validate email format (simple validation)
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            console.error("Invalid email format:", email);
+            return res.status(400).json({ success: false, error: "Invalid email format" });
+        }
+
+        // Check if API is properly initialized
+        if (!api || !api.members) {
+            console.error("Ghost API not properly initialized");
+            return res.status(500).json({ 
+                success: false, 
+                error: "Ghost API not properly initialized",
+                details: "The Ghost API client is not properly initialized. Please check the server logs."
+            });
+        }
+
+        // Add the subscriber
+        try {
+            console.log(`Adding subscriber with email: ${email}`);
+            console.log('Available API methods:', Object.keys(api));
+            console.log('Members API available:', !!api.members);
+            
+            // Use the members API instead of subscribers for Ghost v5.0
+            const newSubscriber = await api.members.add({
+                email: email,
+                name: name || '',
+                labels: districts ? districts.map(district => `district-${district}`) : []
+            });
+            console.log(`Subscriber added successfully: ${newSubscriber.email}`);
+
+            // Send magic link
+            try {
+                console.log(`Sending magic link to: ${email}`);
+                // Use the members API endpoint directly
+                const magicLinkResponse = await fetch(`${GHOST_CONFIG.url}/members/api/send-magic-link/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        emailType: 'subscribe'
+                    })
+                });
+
+                if (!magicLinkResponse.ok) {
+                    throw new Error(`Failed to send magic link: ${magicLinkResponse.status} ${magicLinkResponse.statusText}`);
+                }
+
+                console.log('Magic link sent successfully');
+                
+                res.json({ 
+                    success: true, 
+                    subscriber: newSubscriber,
+                    districts: districts || [],
+                    magicLinkSent: true
+                });
+            } catch (magicLinkError) {
+                console.error('Error sending magic link:', magicLinkError.message);
+                // Still return success for subscriber addition, but note magic link failure
+                res.json({ 
+                    success: true, 
+                    subscriber: newSubscriber,
+                    districts: districts || [],
+                    magicLinkSent: false,
+                    magicLinkError: magicLinkError.message
+                });
+            }
+        } catch (apiError) {
+            console.error('API Error details:', {
+                error: apiError.message,
+                status: apiError.response?.status,
+                data: apiError.response?.data
+            });
+            
+            // Handle case where the subscriber already exists
+            if (apiError.response?.status === 422 && 
+                apiError.response?.data?.errors?.some(e => 
+                    e.code === 'already_exists' || 
+                    (e.message && e.message.includes('already exists'))
+                )) {
+                
+                console.log(`Subscriber already exists: ${email}`);
+                
+                // Try to send magic link even for existing subscribers
+                try {
+                    console.log(`Sending magic link to existing subscriber: ${email}`);
+                    const magicLink = await api.members.sendSigninMagicLink({
+                        email: email,
+                        options: {
+                            emailType: 'subscribe'
+                        }
+                    });
+                    console.log('Magic link sent successfully to existing subscriber');
+                    
+                    return res.json({ 
+                        success: true, 
+                        message: 'Subscriber already exists',
+                        districts: districts || [],
+                        status: 'existing',
+                        magicLinkSent: true
+                    });
+                } catch (magicLinkError) {
+                    console.error('Error sending magic link to existing subscriber:', magicLinkError.message);
+                    return res.json({ 
+                        success: true, 
+                        message: 'Subscriber already exists',
+                        districts: districts || [],
+                        status: 'existing',
+                        magicLinkSent: false,
+                        magicLinkError: magicLinkError.message
+                    });
+                }
+            }
+            
+            // Re-throw other API errors
+            throw apiError;
+        }
+    } catch (error) {
+        console.error("Error adding subscriber:", error.message);
+        console.error("Error details:", error.response?.data || error.stack);
+        
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            details: error.response?.data || error.cause || error.stack
         });
     }
 });

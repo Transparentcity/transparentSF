@@ -187,7 +187,7 @@
                     "summary": "Total count of individuals booked into San Francisco City and County Jail.",
                     "definition": "Tracks the total number of jail bookings. Each booking represents when an individual is processed into jail custody after arrest. The booking process includes recording personal information, fingerprinting, and photographing. A single person may have multiple bookings.",
                     "data_sf_url": "https://data.sfgov.org/Public-Safety/Sheriff-Jail-Bookings-by-Age-Group/pfbp-75pz",
-                    "ytd_query": "SELECT date_trunc_ymd(month_and_year_of_booking) as date, SUM(count_of_bookings) as value WHERE month_and_year_of_booking >= last_year_start AND month_and_year_of_booking < current_date GROUP BY date ORDER BY date",
+                    "ytd_query": "SELECT date_trunc_ym(month_and_year_of_booking) as date, SUM(count_of_bookings) as value WHERE month_and_year_of_booking >= last_year_start AND month_and_year_of_booking <= current_date GROUP BY date ORDER BY date",
                     "metric_query": "SELECT 'Total Bookings' as label, max(month_and_year_of_booking) as max_date, SUM(CASE WHEN month_and_year_of_booking >= this_year_start AND month_and_year_of_booking <= this_year_end THEN count_of_bookings END) as this_year, SUM(CASE WHEN month_and_year_of_booking >= last_year_start AND month_and_year_of_booking <= last_year_end THEN count_of_bookings END) as last_year, (SUM(CASE WHEN month_and_year_of_booking >= this_year_start AND month_and_year_of_booking <= this_year_end THEN count_of_bookings END) - SUM(CASE WHEN month_and_year_of_booking >= last_year_start AND month_and_year_of_booking <= last_year_end THEN count_of_bookings END)) as delta, ((SUM(CASE WHEN month_and_year_of_booking >= this_year_start AND month_and_year_of_booking <= this_year_end THEN count_of_bookings END) - SUM(CASE WHEN month_and_year_of_booking >= last_year_start AND month_and_year_of_booking <= last_year_end THEN count_of_bookings END)) * 100.0 / NULLIF(SUM(CASE WHEN month_and_year_of_booking >= last_year_start AND month_and_year_of_booking <= last_year_end THEN count_of_bookings END), 0)) as perc_diff",
                     "dataset_title": "Sheriff Jail Bookings by Age Group",
                     "dataset_category": "Public Safety",
@@ -217,11 +217,6 @@
                     "location_fields": [],
                     "category_fields": [
                         {
-                            "name": "court_number",
-                            "fieldName": "court_number",
-                            "description": "Selected column for enhanced dashboard queries"
-                        },
-                        {
                             "name": "arresting_agency",
                             "fieldName": "arresting_agency",
                             "description": "Selected column for enhanced dashboard queries"
@@ -229,6 +224,11 @@
                         {
                             "name": "crime_type",
                             "fieldName": "crime_type",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "list_of_booked_charges",
+                            "fieldName": "list_of_booked_charges",
                             "description": "Selected column for enhanced dashboard queries"
                         },
                         {
@@ -371,11 +371,6 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "call_type_original_desc",
-                            "fieldName": "call_type_original_desc",
-                            "description": "Selected column for enhanced dashboard queries"
-                        },
-                        {
                             "name": "disposition",
                             "fieldName": "disposition",
                             "description": "Selected column for enhanced dashboard queries"
@@ -406,34 +401,9 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "call_type_original",
-                            "fieldName": "call_type_original",
-                            "description": "Call type code as originally coded/selected by dispatcher"
-                        },
-                        {
-                            "name": "call_type_original_desc",
-                            "fieldName": "call_type_original_desc",
-                            "description": "Standard description of original call type"
-                        },
-                        {
-                            "name": "call_type_original_notes",
-                            "fieldName": "call_type_original_notes",
-                            "description": "Any notes regarding the original call type entered by the dispatcher"
-                        },
-                        {
-                            "name": "call_type_final",
-                            "fieldName": "call_type_final",
-                            "description": "Final call type code as coded/selected by dispatcher. For closed calls this is the last call type code. For open calls this code may continue to change."
-                        },
-                        {
-                            "name": "call_type_final_desc",
-                            "fieldName": "call_type_final_desc",
-                            "description": "Standard description of final call type"
-                        },
-                        {
-                            "name": "call_type_final_notes",
-                            "fieldName": "call_type_final_notes",
-                            "description": "Any notes regarding the final call type entered by the dispatcher"
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 },
@@ -456,34 +426,9 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "call_type_original",
-                            "fieldName": "call_type_original",
-                            "description": "Call type code as originally coded/selected by dispatcher"
-                        },
-                        {
-                            "name": "call_type_original_desc",
-                            "fieldName": "call_type_original_desc",
-                            "description": "Standard description of original call type"
-                        },
-                        {
-                            "name": "call_type_original_notes",
-                            "fieldName": "call_type_original_notes",
-                            "description": "Any notes regarding the original call type entered by the dispatcher"
-                        },
-                        {
-                            "name": "call_type_final",
-                            "fieldName": "call_type_final",
-                            "description": "Final call type code as coded/selected by dispatcher. For closed calls this is the last call type code. For open calls this code may continue to change."
-                        },
-                        {
-                            "name": "call_type_final_desc",
-                            "fieldName": "call_type_final_desc",
-                            "description": "Standard description of final call type"
-                        },
-                        {
-                            "name": "call_type_final_notes",
-                            "fieldName": "call_type_final_notes",
-                            "description": "Any notes regarding the final call type entered by the dispatcher"
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 }
@@ -569,6 +514,11 @@
                         }
                     ],
                     "category_fields": [
+                        {
+                            "name": "administratively_closed",
+                            "fieldName": "administratively_closed",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
                         {
                             "name": "naic_code_description",
                             "fieldName": "naic_code_description",
