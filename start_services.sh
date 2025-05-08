@@ -123,7 +123,7 @@ start_postgres() {
             
             # Try to connect and get database info
             echo "Getting PostgreSQL info..."
-            psql -h localhost -c "\conninfo" 2>/dev/null || echo "Failed to get connection info"
+            psql -h localhost -c "\\conninfo" 2>/dev/null || echo "Failed to get connection info"
             
             # Create the database if it doesn't exist
             create_database
@@ -131,24 +131,33 @@ start_postgres() {
             return
         fi
 
-        # Try both potential data directory locations
-        if [ -d "/tmp/postgres_data" ] && [ -f "/tmp/postgres_data/PG_VERSION" ]; then
-            echo "Using existing PostgreSQL data directory in /tmp/postgres_data"
-            export PGDATA=/tmp/postgres_data
-        else
-            echo "Using home directory for PostgreSQL data"
-            export PGDATA=$HOME/postgres_data
-            
-            # Create data directory if needed
-            if [ ! -d "$PGDATA/base" ]; then
-                echo "Initializing PostgreSQL data directory..."
-                initdb -D "$PGDATA"
-            fi
+        echo "Using home directory for PostgreSQL data on Replit"
+        export PGDATA=$HOME/postgres_data # Always use persistent storage
 
-            # Modify postgresql.conf to avoid /run/postgresql
-            echo "Configuring PostgreSQL socket and PID locations..."
-            echo "unix_socket_directories = '$HOME'" >> "$PGDATA/postgresql.conf"
-            echo "external_pid_file = '$HOME/postgres.pid'" >> "$PGDATA/postgresql.conf"
+        # Create data directory and initialize if needed
+        if [ ! -d "$PGDATA/base" ]; then
+            echo "Initializing PostgreSQL data directory at $PGDATA..."
+            mkdir -p "$PGDATA" # Ensure the parent PGDATA directory exists
+            initdb -D "$PGDATA"
+            
+            CONF_FILE="$PGDATA/postgresql.conf"
+            echo "Configuring PostgreSQL socket and PID locations in $CONF_FILE..."
+
+            # Ensure unix_socket_directories is set correctly
+            if grep -q "^#*unix_socket_directories" "$CONF_FILE"; then
+                sed -i "s|^#*unix_socket_directories.*|unix_socket_directories = '$HOME'|" "$CONF_FILE"
+            else
+                echo "unix_socket_directories = '$HOME'" >> "$CONF_FILE"
+            fi
+            
+            # Ensure external_pid_file is set correctly
+            if grep -q "^#*external_pid_file" "$CONF_FILE"; then
+                sed -i "s|^#*external_pid_file.*|external_pid_file = '$HOME/postgres.pid'|" "$CONF_FILE"
+            else
+                echo "external_pid_file = '$HOME/postgres.pid'" >> "$CONF_FILE"
+            fi
+        else
+            echo "Using existing PostgreSQL data directory at $PGDATA"
         fi
 
         # Check for stale pid file

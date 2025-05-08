@@ -743,8 +743,9 @@ def generate_time_series_chart(
             )
 
             # Save the chart as an image
-            fig.write_image(image_path, engine="kaleido")
-            logging.info("Chart saved successfully at %s", image_path)
+            # fig.write_image(image_path, engine="kaleido") # Commented out to prevent Kaleido error
+            # logging.info("Chart saved successfully at %s", image_path) # Commented out related log
+            logging.info("Chart image saving with Kaleido is currently commented out.") # Added new log
 
             # Get the relative path from the output directory
             # First, find the 'output' directory in the path
