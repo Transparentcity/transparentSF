@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from fastapi.staticfiles import StaticFiles
 from urllib.parse import quote
+import secrets # Added for password comparison
+from fastapi.security import HTTPBasic, HTTPBasicCredentials # Added for basic auth
 
 import os
 import json
@@ -36,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = None  # Will be set by main.py
+security = HTTPBasic() # Added for basic auth
 
 # Define the absolute path to the output directory
 script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the /ai directory
@@ -65,6 +68,18 @@ def set_templates(t):
     templates = t
     logger.info("Templates set in backend router")
 
+# --- ADDED: Basic Authentication Dependency ---
+def get_current_username(credentials: HTTPBasicCredentials = Depends(security)) -> str:
+    correct_username = secrets.compare_digest(credentials.username, os.environ.get("BACKEND_USERNAME", "admin"))
+    correct_password = secrets.compare_digest(credentials.password, os.environ.get("BACKEND_PASSWORD", "password"))
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+# --- END: Basic Authentication Dependency ---
 
 def find_output_files_for_endpoint(endpoint: str, output_dir: str):
     """Search the output directory for files matching the endpoint."""
@@ -240,7 +255,7 @@ def get_md_file_date(output_files):
 
 
 @router.get("/")
-async def backend_root(request: Request):
+async def backend_root(request: Request, username: str = Depends(get_current_username)): # Added username dependency
     """Serve the backend interface."""
     logger.debug("Backend root route called")
     if templates is None:
