@@ -215,6 +215,16 @@
             border-radius: 4px;
             resize: vertical;
             margin-bottom: 15px;
+            font-size: 14px;
+            line-height: 1.5;
+            tab-size: 4;
+            white-space: pre;
+            background-color: #f8f9fa;
+        }
+        .sql-editor:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
         }
         .query-params {
             margin-bottom: 15px;
@@ -283,6 +293,51 @@
         .table-item:active {
             transform: translateY(0);
         }
+
+        /* Typeahead/Suggestions Box Styles */
+        .suggestions-container {
+            border: 1px solid #ddd;
+            border-top: none;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: white;
+            position: absolute;
+            z-index: 1000;
+            width: 100%;
+            box-sizing: border-box;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .suggestion-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+        .suggestion-item:hover, .suggestion-item.active {
+            background-color: #f0f0f0;
+        }
+        .suggestion-title {
+            font-weight: bold;
+            color: #333;
+        }
+        .suggestion-description {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 3px;
+            max-height: 3.6em;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        .endpoint-search-container {
+            position: relative;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
@@ -325,11 +380,17 @@
         <div class="query-section">
             <h2>API Query</h2>
             <form id="apiQueryForm">
-                <label for="endpoint">Endpoint:</label>
-                <input type="text" id="endpoint" name="endpoint" placeholder="Enter endpoint" required>
-                
-                <label for="query">Query:</label>
-                <input type="text" id="query" name="query" placeholder="Enter query" required>
+                <div class="endpoint-search-container">
+                    <label for="endpointSearch">Endpoint:</label>
+                    <input type="text" id="endpointSearch" name="endpointSearch" placeholder="Search dataset name or description..." autocomplete="off">
+                    <div id="endpointSuggestions" class="suggestions-container" style="display: none;"></div>
+                    <input type="hidden" id="selectedEndpoint" name="endpoint">
+                </div>
+
+                <div class="form-group">
+                    <label for="query">Query:</label>
+                    <textarea id="query" name="query" class="sql-editor" placeholder="Enter your query here..." required></textarea>
+                </div>
                 
                 <label for="format">Format:</label>
                 <select id="format" name="format">
@@ -457,6 +518,194 @@
                 select.appendChild(option);
             });
         }
+
+        // --- START: API Endpoint Typeahead ---
+        let allApiEndpoints = [];
+        let activeSuggestionIndex = -1;
+
+        async function loadApiEndpoints() {
+            try {
+                console.log('Loading API endpoints...');
+                const response = await fetch('/backend/api/list-datasets-for-typeahead');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch API endpoints');
+                }
+                allApiEndpoints = await response.json();
+                console.log('Loaded API endpoints:', allApiEndpoints.length);
+                
+                // Log a sample of endpoints for debugging
+                if (allApiEndpoints.length > 0) {
+                    console.log('Sample endpoint:', allApiEndpoints[0]);
+                }
+            } catch (error) {
+                console.error('Error loading API endpoints:', error);
+                const endpointSearch = document.getElementById('endpointSearch');
+                endpointSearch.placeholder = 'Error loading endpoints. Please try again.';
+            }
+        }
+
+        function displayEndpointSuggestions(searchTerm) {
+            console.log('Displaying suggestions for:', searchTerm);
+            const suggestionsContainer = document.getElementById('endpointSuggestions');
+            const selectedEndpointInput = document.getElementById('selectedEndpoint');
+            suggestionsContainer.innerHTML = '';
+            activeSuggestionIndex = -1;
+
+            if (!searchTerm.trim()) {
+                suggestionsContainer.style.display = 'none';
+                selectedEndpointInput.value = '';
+                return;
+            }
+
+            const lowerSearchTerm = searchTerm.toLowerCase();
+            const filteredEndpoints = allApiEndpoints.filter(endpoint => 
+                endpoint.title.toLowerCase().includes(lowerSearchTerm) ||
+                (endpoint.description && endpoint.description.toLowerCase().includes(lowerSearchTerm))
+            ).slice(0, 10);
+
+            console.log('Filtered endpoints:', filteredEndpoints.length);
+
+            if (filteredEndpoints.length > 0) {
+                filteredEndpoints.forEach((endpoint, index) => {
+                    const item = document.createElement('div');
+                    item.classList.add('suggestion-item');
+                    item.innerHTML = `
+                        <div class="suggestion-title">${highlightMatch(endpoint.title, searchTerm)}</div>
+                        <div class="suggestion-description">${highlightMatch(endpoint.description || '', searchTerm)}</div>
+                    `;
+                    item.addEventListener('click', () => {
+                        console.log('Selected endpoint:', endpoint);
+                        document.getElementById('endpointSearch').value = endpoint.title;
+                        selectedEndpointInput.value = endpoint.endpoint;
+                        suggestionsContainer.style.display = 'none';
+                        suggestionsContainer.innerHTML = '';
+                        document.getElementById('query').focus();
+                    });
+                    item.addEventListener('mouseenter', () => {
+                        setActiveSuggestion(index);
+                    });
+                    suggestionsContainer.appendChild(item);
+                });
+                suggestionsContainer.style.display = 'block';
+            } else {
+                suggestionsContainer.style.display = 'none';
+            }
+        }
+        
+        function highlightMatch(text, term) {
+            if (!text || !term) return text;
+            const lowerText = text.toLowerCase();
+            const lowerTerm = term.toLowerCase();
+            let startIndex = 0;
+            let result = '';
+            while(startIndex < text.length) {
+                const matchIndex = lowerText.indexOf(lowerTerm, startIndex);
+                if (matchIndex === -1) {
+                    result += text.substring(startIndex);
+                    break;
+                }
+                result += text.substring(startIndex, matchIndex);
+                result += `<strong>${text.substring(matchIndex, matchIndex + term.length)}</strong>`;
+                startIndex = matchIndex + term.length;
+            }
+            return result;
+        }
+
+
+        function setActiveSuggestion(index) {
+            const suggestionsContainer = document.getElementById('endpointSuggestions');
+            const items = suggestionsContainer.getElementsByClassName('suggestion-item');
+            if (activeSuggestionIndex >= 0 && items[activeSuggestionIndex]) {
+                items[activeSuggestionIndex].classList.remove('active');
+            }
+            activeSuggestionIndex = index;
+            if (activeSuggestionIndex >= 0 && items[activeSuggestionIndex]) {
+                items[activeSuggestionIndex].classList.add('active');
+                // Scroll into view if necessary
+                items[activeSuggestionIndex].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        document.getElementById('endpointSearch').addEventListener('input', function(e) {
+            displayEndpointSuggestions(e.target.value);
+        });
+        
+        document.getElementById('endpointSearch').addEventListener('focus', function(e) {
+            // Display suggestions if there's already text, e.g., if user tabs back
+            if (e.target.value.trim()) {
+                displayEndpointSuggestions(e.target.value);
+            }
+        });
+
+        document.getElementById('endpointSearch').addEventListener('keydown', function(e) {
+            const suggestionsContainer = document.getElementById('endpointSuggestions');
+            const items = suggestionsContainer.getElementsByClassName('suggestion-item');
+
+            if (suggestionsContainer.style.display === 'block' && items.length > 0) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setActiveSuggestion((activeSuggestionIndex + 1) % items.length);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setActiveSuggestion((activeSuggestionIndex - 1 + items.length) % items.length);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (activeSuggestionIndex >= 0 && items[activeSuggestionIndex]) {
+                        items[activeSuggestionIndex].click(); // Trigger click on active suggestion
+                    } else if (items.length === 1) { // If only one suggestion, auto-select it
+                        items[0].click();
+                    } else {
+                        // If no specific suggestion is active, but there's text, try to find an exact title match
+                        const currentSearchValue = e.target.value.toLowerCase();
+                        const exactMatch = allApiEndpoints.find(ep => ep.title.toLowerCase() === currentSearchValue);
+                        if (exactMatch) {
+                            document.getElementById('endpointSearch').value = exactMatch.title;
+                            document.getElementById('selectedEndpoint').value = exactMatch.endpoint;
+                            suggestionsContainer.style.display = 'none';
+                            suggestionsContainer.innerHTML = '';
+                            document.getElementById('query').focus();
+                        } else {
+                           // If no exact match and no suggestion selected, let the form submit as is (or handle as error)
+                           // For now, we let it proceed, the backend will handle if 'selectedEndpoint' is empty.
+                           document.getElementById('apiQueryForm').requestSubmit(); // Try to submit the form
+                        }
+                    }
+                } else if (e.key === 'Escape') {
+                    suggestionsContainer.style.display = 'none';
+                    suggestionsContainer.innerHTML = '';
+                }
+            } else if (e.key === 'Enter') {
+                 // If suggestions are not visible, but enter is pressed, submit the form.
+                 // This assumes the user might have typed/pasted an endpoint directly.
+                 // The 'selectedEndpoint' hidden input will be used if populated by a previous selection.
+                 // If not, the 'endpointSearch' field's value might be inadvertently used by the original form structure
+                 // if 'name="endpoint"' is still on it. We rely on the hidden 'selectedEndpoint' which has name="endpoint".
+                 
+                 // If endpointSearch has a value but selectedEndpoint is empty,
+                 // try to find an exact title match before submitting.
+                 if(e.target.value && !document.getElementById('selectedEndpoint').value) {
+                    const currentSearchValue = e.target.value.toLowerCase();
+                    const exactMatch = allApiEndpoints.find(ep => ep.title.toLowerCase() === currentSearchValue);
+                    if (exactMatch) {
+                        document.getElementById('selectedEndpoint').value = exactMatch.endpoint;
+                    }
+                 }
+                 // Allow normal form submission to proceed
+            }
+        });
+
+        // Hide suggestions if clicked outside
+        document.addEventListener('click', function(e) {
+            const endpointSearch = document.getElementById('endpointSearch');
+            const suggestionsContainer = document.getElementById('endpointSuggestions');
+            if (!endpointSearch.contains(e.target) && !suggestionsContainer.contains(e.target)) {
+                suggestionsContainer.style.display = 'none';
+            }
+        });
+
+        // Load API endpoints when DOM is ready
+        document.addEventListener('DOMContentLoaded', loadApiEndpoints);
+        // --- END: API Endpoint Typeahead ---
 
         // Handle API query form submission
         document.getElementById('apiQueryForm').addEventListener('submit', async (e) => {
@@ -754,7 +1003,7 @@
         
         function loadSampleQuery(tableName) {
             const sqlQuery = document.getElementById('sqlQuery');
-            sqlQuery.value = `SELECT * FROM ${tableName} LIMIT 5;`;
+            sqlQuery.value = `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT 5;`;
             
             // Scroll to the query form
             sqlQuery.scrollIntoView({ behavior: 'smooth' });

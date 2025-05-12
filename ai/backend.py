@@ -2541,6 +2541,56 @@ async def get_datasets_count():
             "change": 0.0
         })
 
+@router.get("/api/list-datasets-for-typeahead")
+async def list_datasets_for_typeahead():
+    """Get a list of datasets for the typeahead functionality."""
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        datasets_dir = os.path.join(current_dir, 'data', 'datasets')
+        fixed_datasets_dir = os.path.join(datasets_dir, 'fixed')
+        
+        # Get all JSON files from both directories
+        regular_json_files = [f for f in glob.glob(os.path.join(datasets_dir, '*.json')) 
+                            if os.path.basename(f) != 'analysis_map.json']
+        fixed_json_files = glob.glob(os.path.join(fixed_datasets_dir, '*.json')) if os.path.exists(fixed_datasets_dir) else []
+        
+        # Combine and deduplicate files (prefer fixed versions)
+        all_files = set()
+        for file in fixed_json_files:
+            all_files.add(os.path.basename(file))
+        for file in regular_json_files:
+            if os.path.basename(file) not in all_files:
+                all_files.add(os.path.basename(file))
+        
+        # Process each file to get dataset info
+        datasets = []
+        for filename in all_files:
+            try:
+                # Try fixed version first, then regular version
+                file_path = os.path.join(fixed_datasets_dir, filename)
+                if not os.path.exists(file_path):
+                    file_path = os.path.join(datasets_dir, filename)
+                
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                # Extract required information
+                dataset_info = {
+                    'endpoint': data.get('endpoint', filename.replace('.json', '')),
+                    'title': data.get('title', 'Untitled'),
+                    'description': data.get('description', ''),
+                    'category': data.get('category', 'Uncategorized')
+                }
+                datasets.append(dataset_info)
+            except Exception as e:
+                logger.error(f"Error processing file {filename}: {e}")
+                continue
+        
+        return JSONResponse(content=datasets)
+    except Exception as e:
+        logger.error(f"Error listing datasets for typeahead: {str(e)}")
+        return JSONResponse(content=[], status_code=500)
+
 @router.get("/api/time-series-count")
 async def get_time_series_count():
     """Get the count of rows in the time_series_metadata table."""
@@ -3925,8 +3975,11 @@ async def get_monthly_report_file(filename: str):
         
         # Construct the path to the reports directory
         script_dir = os.path.dirname(os.path.abspath(__file__))
+        logger.info(f"get_monthly_report_file - script_dir: {script_dir}") # ADDED LOGGING
         reports_dir = os.path.join(script_dir, "output", "reports")
+        logger.info(f"get_monthly_report_file - reports_dir: {reports_dir}") # ADDED LOGGING
         file_path = os.path.join(reports_dir, filename)
+        logger.info(f"get_monthly_report_file - constructed file_path: {file_path}") # ADDED LOGGING
         
         # Security check to prevent accessing files outside the reports directory
         if not os.path.abspath(file_path).startswith(os.path.abspath(reports_dir)):
@@ -3941,6 +3994,8 @@ async def get_monthly_report_file(filename: str):
             return FileResponse(file_path, media_type=media_type)
         else:
             logger.error(f"Monthly report file not found at: {file_path}")
+            logger.error(f"File exists check: {os.path.exists(file_path)}") # ADDED LOGGING
+            logger.error(f"Is file check: {os.path.isfile(file_path)}") # ADDED LOGGING
             raise HTTPException(status_code=404, detail=f"Monthly report file not found: {filename}")
             
     except HTTPException as http_exc:
@@ -4503,11 +4558,19 @@ async def publish_to_ghost(request: Request):
         data = await request.json()
         filename = data.get("filename")
         title = data.get("title")
+        report_id = data.get("report_id")
         
         if not filename:
             return JSONResponse({
                 "status": "error",
                 "message": "No filename provided"
+            }, status_code=400)
+            
+        # Validate that report_id is provided
+        if not report_id:
+            return JSONResponse({
+                "status": "error",
+                "message": "No report ID provided"
             }, status_code=400)
         
         # Call the function to publish the newsletter
@@ -4524,22 +4587,17 @@ async def publish_to_ghost(request: Request):
         post_url = result
         logger.info(f"Newsletter published successfully. URL: {post_url}")
         
-        # Find the report ID from the filename and update the database
+        # Update the database with the published URL using the provided report_id
         conn = None
         try:
             conn = get_db_connection()
             if conn:
                 with conn.cursor() as cursor:
-                    # Find the report by filename (either original or revised)
-                    cursor.execute("""
-                        SELECT id FROM reports 
-                        WHERE original_filename = %s OR revised_filename = %s
-                    """, (filename, filename))
-                    
+                    # Verify the report exists
+                    cursor.execute("SELECT id FROM reports WHERE id = %s", (report_id,))
                     report = cursor.fetchone()
                     
                     if report:
-                        report_id = report[0]
                         # Update the report with the published URL
                         cursor.execute("""
                             UPDATE reports 
@@ -4550,11 +4608,19 @@ async def publish_to_ghost(request: Request):
                         conn.commit()
                         logger.info(f"Updated report ID {report_id} with published URL: {post_url}")
                     else:
-                        logger.warning(f"Could not find report with filename {filename}")
+                        logger.warning(f"Could not find report with ID {report_id}")
+                        return JSONResponse({
+                            "status": "error",
+                            "message": f"Could not find report with ID {report_id}"
+                        }, status_code=404)
         except Exception as e:
             logger.error(f"Error updating database with published URL: {str(e)}")
             if conn:
                 conn.rollback()
+            return JSONResponse({
+                "status": "error",
+                "message": f"Error updating database: {str(e)}"
+            }, status_code=500)
         finally:
             if conn:
                 conn.close()

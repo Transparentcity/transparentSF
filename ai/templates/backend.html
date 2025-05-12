@@ -52,55 +52,8 @@
             margin-bottom: 10px;
         }
         
-        .logo-text {
-            font-weight: 400;
-            font-size: 20.4px;
-            color: #222;
-            margin-right: 6px;
-        }
-        
-        .logo-box {
-            position: relative;
-            border: 0;
-            border-radius: 8px;
-            padding: 0px 3px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 36px;
-            width: 38px;
-            margin-top: 1px;
-            background-color: transparent;
-            overflow: hidden;
-        }
-        
-        .logo-box-top-right {
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 61.8%;
-            height: 61.8%;
-            border-top: 3px solid #222;
-            border-right: 3px solid #222;
-            border-top-right-radius: 8px;
-        }
-        
-        .logo-box-bottom-left {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 61.8%;
-            height: 61.8%;
-            border-bottom: 3px solid #222;
-            border-left: 3px solid #222;
-            border-bottom-left-radius: 8px;
-        }
-        
-        .logo-box-text {
-            font-weight: 600;
-            font-size: 18.7px;
-            color: #222;
-            line-height: 22px;
+        #wordmark-logo {
+            height: 36px; /* Adjust as needed for visual balance */
         }
         
         .beta-container {
@@ -513,12 +466,7 @@
         <div class="sidebar">
             <div class="header">
                 <div class="logo-container" style="cursor: pointer;" id="dashboard-logo">
-                    <div class="logo-text">Transparent</div>
-                    <div class="logo-box">
-                        <div class="logo-box-top-right"></div>
-                        <div class="logo-box-bottom-left"></div>
-                        <div class="logo-box-text">SF</div>
-                    </div>
+                    <img src="/static/wordmark.png" alt="TransparentSF Logo" id="wordmark-logo">
                 </div>
                 <div class="beta-container">
                     <div class="beta-text">BETA</div>

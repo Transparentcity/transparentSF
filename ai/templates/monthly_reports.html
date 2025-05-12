@@ -653,68 +653,6 @@
             margin-bottom: 10px;
         }
 
-        .report-content-sections {
-            margin-top: 30px;
-        }
-
-        .report-section {
-            background: #f9f9f9;
-            border-radius: 4px;
-            border: 1px solid #eee;
-            margin-bottom: 15px;
-            overflow: hidden;
-        }
-
-        .report-section.collapsed .section-content {
-            display: none;
-        }
-
-        .report-section.hidden {
-            display: none;
-        }
-
-        .section-header {
-            margin: 0;
-            padding: 15px;
-            color: #333;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            background-color: #f1f1f1;
-            border-bottom: 1px solid #eee;
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-
-        .section-header::after {
-            content: '▼';
-            font-size: 12px;
-            color: #666;
-            position: absolute;
-            right: 15px;
-            transition: transform 0.3s ease;
-        }
-
-        .report-section.collapsed .section-header::after {
-            transform: rotate(-90deg);
-        }
-
-        .section-content {
-            padding: 15px;
-            transition: max-height 0.3s ease;
-            overflow-y: auto;
-            max-height: 600px;
-        }
-
-        .embedded-newsletter {
-            background-color: #fff;
-            border-radius: 4px;
-            padding: 20px;
-            overflow-y: auto;
-            height: 100%;
-        }
-
         .loading-indicator {
             text-align: center;
             padding: 30px;
@@ -977,6 +915,57 @@
             let currentPromptKey = '';
             let currentPromptCategory = '';
             
+            // Variable to store reports data 
+            let reportsData = null;
+            
+            // Define updateReportLinks function globally
+            const updateReportLinks = () => {
+                const selectedOption = reportSelect.options[reportSelect.selectedIndex];
+                if (!selectedOption || !selectedOption.value) return;
+                
+                const originalFilename = selectedOption.value;
+                const revisedFilename = selectedOption.dataset.revisedFilename;
+                const emailFilename = originalFilename ? originalFilename.replace('.html', '_revised_email.html') : null;
+                
+                // Original link
+                const originalLink = document.getElementById('view-original-report');
+                if (originalLink) {
+                    originalLink.href = `/backend/monthly-report/file/${originalFilename}`;
+                    originalLink.style.display = originalFilename ? 'inline-block' : 'none';
+                }
+                
+                // Revised link
+                const revisedLink = document.getElementById('view-revised-report');
+                if (revisedLink) {
+                    revisedLink.href = revisedFilename ? `/backend/monthly-report/file/${revisedFilename}` : '#';
+                    revisedLink.style.display = revisedFilename ? 'inline-block' : 'none';
+                }
+                
+                // Email link
+                const emailLink = document.getElementById('view-email-report');
+                if (emailLink) {
+                    emailLink.href = emailFilename ? `/backend/monthly-report/file/${emailFilename}` : '#';
+                    emailLink.style.display = emailFilename ? 'inline-block' : 'none';
+                }
+                
+                // Published link
+                const publishedLink = document.getElementById('view-published-report');
+                if (publishedLink) {
+                    // Find the report in the loaded data
+                    const report = reportsData?.reports?.find(r => r.original_filename === originalFilename);
+                    
+                    if (report && report.published_url) {
+                        publishedLink.href = report.published_url;
+                        publishedLink.style.display = 'inline-block';
+                        console.log("Found published URL:", report.published_url);
+                    } else {
+                        publishedLink.href = '#';
+                        publishedLink.style.display = 'none';
+                        console.log("No published URL found for report:", originalFilename);
+                    }
+                }
+            };
+            
             // Initialize the prompt editor components
             initPromptEditor();
             
@@ -1197,8 +1186,14 @@
                     const data = await response.json();
                     
                     console.log("Newsletters data received:", data);
+                    reportsData = data; // Store for later use
                     
                     if (data.status === 'success' && data.reports && data.reports.length > 0) {
+                        // Log each report's published_url for debugging
+                        data.reports.forEach(report => {
+                            console.log(`Report ${report.original_filename} published URL: ${report.published_url || 'none'}`);
+                        });
+                        
                         // Clear existing options except the first one
                         while (reportSelect.options.length > 1) {
                             reportSelect.remove(1);
@@ -1266,25 +1261,8 @@
                         };
                     }
                     
-                    // Set up the view full report button
-                    const viewFullReportBtn = document.getElementById('view-full-report');
-                    if (viewFullReportBtn) {
-                        viewFullReportBtn.onclick = () => {
-                            console.log("Opening full newsletter:", selectedReport);
-                            window.open(`/backend/monthly-report/file/${selectedReport}`, '_blank');
-                        };
-                    }
-                    
-                    // Set up the view email version button
-                    const viewEmailReportBtn = document.getElementById('view-email-report');
-                    if (viewEmailReportBtn) {
-                        viewEmailReportBtn.onclick = () => {
-                            console.log("Opening email version:", selectedReport);
-                            // Replace .html with _email.html in the filename
-                            const emailFilename = selectedReport.replace('.html', '_revised_email.html');
-                            window.open(`/backend/monthly-report/file/${emailFilename}`, '_blank');
-                        };
-                    }
+                    // Update report links for the selected report
+                    setTimeout(updateReportLinks, 500);
                     
                     // Set up the re-run generation button
                     const rerunReportBtn = document.getElementById('rerunReportBtn');
@@ -1601,7 +1579,13 @@
                         return;
                     }
                     
-                    // Call the API to publish to Ghost
+                    // Find the report ID from the reports data
+                    const report = reportsData?.reports?.find(r => r.original_filename === originalFilename);
+                    if (!report || !report.id) {
+                        throw new Error('Could not find report ID for the selected newsletter');
+                    }
+                    
+                    // Call the API to publish to Ghost, including the report ID
                     const response = await fetch('/backend/publish_to_ghost', {
                         method: 'POST',
                         headers: {
@@ -1609,7 +1593,8 @@
                         },
                         body: JSON.stringify({
                             filename: fileToPublish,
-                            title: reportTitle
+                            title: reportTitle,
+                            report_id: report.id
                         })
                     });
                     
@@ -1623,9 +1608,26 @@
                         alert(`Newsletter published successfully!\nThe URL has been saved to the database.\n${data.url || ''}`);
                         
                         // Reload the report details to show the published URL
-                        const selectedReport = reportSelect.value;
-                        if (selectedReport) {
-                            loadReportDetails(selectedReport);
+                        if (report && report.id) {
+                            // Load report directly with the ID to ensure we get the most up-to-date data
+                            const reportResponse = await fetch(`/backend/monthly-report/${report.id}`, {
+                                headers: {
+                                    'Accept': 'application/json'
+                                }
+                            });
+                            
+                            if (reportResponse.ok) {
+                                const reportData = await reportResponse.json();
+                                if (reportData.status === 'success' && reportData.report) {
+                                    // Update display
+                                    displayReportDetails(reportData.report);
+                                }
+                            } else {
+                                // Fall back to filename-based lookup if ID lookup fails
+                                loadReportDetails(originalFilename);
+                            }
+                        } else {
+                            loadReportDetails(originalFilename);
                         }
                     } else {
                         throw new Error(data.message || 'Failed to publish newsletter');
@@ -1738,7 +1740,13 @@
                             <div class="metadata-item"><strong>Max Items:</strong> ${report.max_items || 'N/A'}</div>
                             <div class="metadata-item"><strong>Created:</strong> ${createdDate}</div>
                             <div class="metadata-item"><strong>Last Updated:</strong> ${updatedDate}</div>
-                            ${report.published_url ? `<div class="metadata-item"><strong>Published:</strong> <a href="${report.published_url}" target="_blank">View Published Post</a></div>` : ''}
+                            ${report.published_url ? `<div class="metadata-item"><strong>Published URL:</strong> <a href="${report.published_url}" target="_blank">${report.published_url}</a></div>` : ''}
+                        </div>
+                        <div class="report-links" style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 15px;">
+                            <a href="#" id="view-original-report" target="_blank" style="text-decoration: none; color: #007BFF;">View Original</a>
+                            <a href="#" id="view-revised-report" target="_blank" style="text-decoration: none; color: #007BFF;">View Revised</a>
+                            <a href="#" id="view-email-report" target="_blank" style="text-decoration: none; color: #007BFF;">View Email Version</a>
+                            <a href="#" id="view-published-report" target="_blank" style="text-decoration: none; color: #007BFF;">View Published Post</a>
                         </div>
                     </div>
                 `;
@@ -1983,40 +1991,8 @@
                 const originalFilename = selectedOption.value;
                 const emailFilename = originalFilename ? originalFilename.replace('.html', '_revised_email.html') : null;
 
-                metricsHtml += `
-                    <div class="report-content-sections">
-                        <div class="report-section collapsed">
-                            <div class="section-header">
-                                <h4>Original Newsletter Content</h4>
-                                <a href="#" class="open-link" data-type="original" style="margin-left: 10px; font-size: 12px; font-weight: normal;" target="_blank">Open in new tab</a>
-                            </div>
-                            <div class="section-content" id="original-content">
-                                <div class="loading-indicator">Loading content...</div>
-                            </div>
-                        </div>
-                        
-                        <div class="report-section collapsed ${!revisedFilename ? 'hidden' : ''}">
-                             <div class="section-header">
-                                <h4>Revised Newsletter Content</h4>
-                                <a href="#" class="open-link" data-type="revised" style="margin-left: 10px; font-size: 12px; font-weight: normal;" target="_blank">Open in new tab</a>
-                             </div>
-                            <div class="section-content" id="revised-content">
-                                <div class="loading-indicator">Loading content...</div>
-                            </div>
-                        </div>
+                // Remove the report-content-sections div completely
 
-                        <div class="report-section collapsed ${!emailFilename ? 'hidden' : ''}">
-                             <div class="section-header">
-                                <h4>Email Version Content</h4>
-                                <a href="#" class="open-link" data-type="email" style="margin-left: 10px; font-size: 12px; font-weight: normal;" target="_blank">Open in new tab</a>
-                             </div>
-                            <div class="section-content" id="email-content">
-                                <div class="loading-indicator">Loading content...</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
                 // Update the metrics container
                 metricsContainer.innerHTML = metricsHtml;
                 
@@ -2025,91 +2001,8 @@
                     detailsContainer.innerHTML = metricsHtml;
                 }
 
-                // Add event listeners for toggling sections and loading content
                 setTimeout(() => {
-                    // ... existing timeouts for expand/collapse buttons ...
-                    
-                    // Add click handlers for report sections
-                    document.querySelectorAll('.section-header').forEach(header => {
-                        // Find the text node directly inside the header to attach the collapse/expand listener
-                        let headerTextNode = null;
-                        for(let node of header.childNodes) {
-                            if(node.nodeType === Node.ELEMENT_NODE && node.tagName === 'H4') {
-                                headerTextNode = node;
-                                break;
-                            }
-                        }
-
-                        if (headerTextNode) {
-                             headerTextNode.addEventListener('click', async () => {
-                                const section = header.closest('.report-section');
-                                const contentDiv = section.querySelector('.section-content');
-                                const isOriginal = contentDiv.id === 'original-content';
-                                const isRevised = contentDiv.id === 'revised-content';
-                                const isEmail = contentDiv.id === 'email-content';
-                                
-                                // Toggle collapsed state
-                                section.classList.toggle('collapsed');
-                                
-                                // Only load content if we're expanding and content hasn't been loaded yet
-                                if (!section.classList.contains('collapsed') && 
-                                    contentDiv.querySelector('.loading-indicator')) {
-                                    
-                                    // Get the filename based on section type
-                                    const selectedOption = reportSelect.options[reportSelect.selectedIndex];
-                                    let filename = null;
-                                    if (isOriginal) {
-                                        filename = selectedOption.value;
-                                    } else if (isRevised) {
-                                        filename = selectedOption.dataset.revisedFilename;
-                                    } else if (isEmail && selectedOption.value) {
-                                        filename = selectedOption.value.replace('.html', '_revised_email.html');
-                                    }
-                                    
-                                    if (filename) {
-                                        try {
-                                            // Show loading state
-                                            contentDiv.innerHTML = '<div class="loading-indicator">Loading content...</div>';
-                                            
-                                            // Fetch the content
-                                            const response = await fetch(`/backend/monthly-report/file/${filename}?t=${Date.now()}`); // Added cache-busting parameter
-                                            if (response.ok) {
-                                                const htmlContent = await response.text();
-                                                contentDiv.innerHTML = `<div class="embedded-newsletter">${htmlContent}</div>`;
-                                            } else {
-                                                contentDiv.innerHTML = `<div class="error-message">Error loading content: ${response.status} ${response.statusText}</div>`;
-                                            }
-                                        } catch (error) {
-                                            console.error(`Error loading ${isOriginal ? 'original' : isRevised ? 'revised' : 'email'} content:`, error);
-                                            contentDiv.innerHTML = `<div class="error-message">Error loading content: ${error.message}</div>`;
-                                        }
-                                    } else {
-                                        contentDiv.innerHTML = '<div class="error-message">No file available</div>';
-                                    }
-                                }
-                            });
-                        }
-                    });
-
-                    // Add hrefs to the open links
-                    document.querySelectorAll('.open-link').forEach(link => {
-                        const type = link.dataset.type;
-                        const selectedOption = reportSelect.options[reportSelect.selectedIndex];
-                        let filename = null;
-                        if (type === 'original') {
-                            filename = selectedOption.value;
-                        } else if (type === 'revised') {
-                            filename = selectedOption.dataset.revisedFilename;
-                        } else if (type === 'email' && selectedOption.value) {
-                            filename = selectedOption.value.replace('.html', '_revised_email.html');
-                        }
-                        
-                        if (filename) {
-                            link.href = `/backend/monthly-report/file/${filename}`; 
-                        } else {
-                            link.style.display = 'none'; // Hide link if file doesn't exist
-                        }
-                    });
+                    updateReportLinks();
                 }, 100);
             }
 

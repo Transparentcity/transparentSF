@@ -195,8 +195,7 @@ def generate_anomalies_summary_with_charts(results, metadata, output_dir='static
 
 def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
     """
-    Generates an HTML snippet containing a Plotly chart for the given anomaly
-    and saves the chart as a PNG image using Kaleido.
+    Generates an HTML snippet containing a Plotly chart for the given anomaly.
 
     Parameters:
     - item (dict): Anomaly data containing dates, counts, comparison_mean, etc.
@@ -207,7 +206,7 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
     Returns:
     - tuple: (chart_html, chart_id)
         chart_html (str): HTML string for the chart.
-        chart_id (str): The 8-char unique ID of this chart image.
+        chart_id (str): The 8-char unique ID of this chart.
     """
     
     # Extract data from the item
@@ -408,15 +407,8 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
         f"a {percent_difference:.1f}% {action}."
     )
 
-    # Save chart as PNG using Kaleido
+    # Generate a unique chart ID without saving an image
     chart_id = uuid.uuid4().hex[:8]
-    chart_filename = f"chart_{chart_id}.png"
-    chart_path = os.path.join(output_dir, chart_filename)
-    fig.write_image(chart_path, engine="kaleido")
-    logging.info(f"Chart image saved as {chart_path}")
-
-    # For markdown summary, we just need the filename since images are in same directory
-    chart_reference = chart_filename
 
     # Assemble the HTML snippet for the chart and its caption
     chart_html = f"""
@@ -433,7 +425,7 @@ def generate_chart_html(item, chart_title, metadata, chart_counter, output_dir):
 
 def generate_markdown_summary(table_data, metadata, output_dir):
     """
-    Generates a Markdown summary of the anomalies with links to chart images.
+    Generates a Markdown summary of the anomalies without links to chart images.
 
     Parameters:
     - table_data (list of dict): Data for all groups with anomaly status and chart_ids.
@@ -489,21 +481,9 @@ def generate_markdown_summary(table_data, metadata, output_dir):
             pct_diff = anomaly.get('percent_difference', 0)
             direction = "increase" if recent > comp else "decrease"
             
-            # Add chart reference if available
-            chart_id = anomaly.get('chart_id')
-            if chart_id:
-                # Get the chart image file path
-                img_path = os.path.join(output_dir, f"chart_{chart_id}.png")
-                rel_path = os.path.basename(img_path)
-                
-                # Add the anomaly description with link to chart
-                summary += f"{i}. **{group}**: {agg_function_display} {metadata.get('y_axis_label', 'Value')} {direction}d by **{abs(pct_diff):.1f}%** "
-                summary += f"(from {comp:.1f} to {recent:.1f})\n"
-                summary += f"   ![Anomaly Chart for {group}](/output/{os.path.basename(output_dir)}/{rel_path})\n\n"
-            else:
-                # Just add the anomaly description without chart
-                summary += f"{i}. **{group}**: {agg_function_display} {metadata.get('y_axis_label', 'Value')} {direction}d by **{abs(pct_diff):.1f}%** "
-                summary += f"(from {comp:.1f} to {recent:.1f})\n\n"
+            # Add the anomaly description without chart image
+            summary += f"{i}. **{group}**: {agg_function_display} {metadata.get('y_axis_label', 'Value')} {direction}d by **{abs(pct_diff):.1f}%** "
+            summary += f"(from {comp:.1f} to {recent:.1f})\n\n"
     else:
         summary += "**No anomalies were detected.**\n\n"
     

@@ -81,6 +81,11 @@
                             "description": "Selected column for enhanced dashboard queries"
                         },
                         {
+                            "name": "police_district",
+                            "fieldName": "police_district",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
                             "name": "supervisor_district",
                             "fieldName": "supervisor_district",
                             "description": "Selected column for enhanced dashboard queries"
@@ -224,11 +229,6 @@
                         {
                             "name": "crime_type",
                             "fieldName": "crime_type",
-                            "description": "Selected column for enhanced dashboard queries"
-                        },
-                        {
-                            "name": "list_of_booked_charges",
-                            "fieldName": "list_of_booked_charges",
                             "description": "Selected column for enhanced dashboard queries"
                         },
                         {
@@ -445,7 +445,7 @@
                     "definition": "Tracks net new housing units that have been certified for occupancy through building permits. Each record represents when new units were approved for occupancy via Initial TCO, Amended TCO, or Certificate of Final Completion (CFC).",
                     "data_sf_url": "https://data.sfgov.org/Housing-and-Buildings/Dwelling-Unit-Completion-Counts-by-Building-Permit/j67f-aayr",
                     "ytd_query": "SELECT date_trunc_ym(date_issued) as date, SUM(number_of_units_certified) as value WHERE date_issued >= last_year_start AND date_issued <= current_date GROUP BY date ORDER BY date",
-                    "metric_query": "SELECT '\ud83c\udfd7\ufe0f\ud83c\udfe0 New Housing Units' as label, max(date_issued) as max_date, SUM(CASE WHEN date_issued >= this_year_start AND date_issued <= this_year_end THEN number_of_units_certified END) as this_year, SUM(CASE WHEN date_issued >= last_year_start AND date_issued <= last_year_end THEN number_of_units_certified END) as last_year, (SUM(CASE WHEN date_issued >= this_year_start AND date_issued <= this_year_end THEN number_of_units_certified END) - SUM(CASE WHEN date_issued >= last_year_start AND date_issued <= last_year_end THEN number_of_units_certified END)) as delta, ((SUM(CASE WHEN date_issued >= this_year_start AND date_issued <= this_year_end THEN number_of_units_certified END) - SUM(CASE WHEN date_issued >= last_year_start AND date_issued <= last_year_end THEN number_of_units_certified END)) * 100.0 / NULLIF(SUM(CASE WHEN date_issued >= last_year_start AND date_issued <= last_year_end THEN number_of_units_certified END), 0)) as perc_diff",
+                    "metric_query": "SELECT '\ud83c\udfd7\ufe0f\ud83c\udfe0 New Housing Units' as label, max(date_issued) as max_date, SUM(CASE WHEN date_trunc_ym(date_issued) >= this_year_start AND date_trunc_ym(date_issued) <= this_year_end THEN number_of_units_certified END) as this_year, SUM(CASE WHEN date_trunc_ym(date_issued) >= last_year_start AND date_trunc_ym(date_issued) <= last_year_end THEN number_of_units_certified END) as last_year, (SUM(CASE WHEN date_trunc_ym(date_issued) >= this_year_start AND date_trunc_ym(date_issued) <= this_year_end THEN number_of_units_certified END) - SUM(CASE WHEN date_trunc_ym(date_issued) >= last_year_start AND date_trunc_ym(date_issued) <= last_year_end THEN number_of_units_certified END)) as delta, ((SUM(CASE WHEN date_trunc_ym(date_issued) >= this_year_start AND date_trunc_ym(date_issued) <= this_year_end THEN number_of_units_certified END) - SUM(CASE WHEN date_trunc_ym(date_issued) >= last_year_start AND date_trunc_ym(date_issued) <= last_year_end THEN number_of_units_certified END)) * 100.0 / NULLIF(SUM(CASE WHEN date_trunc_ym(date_issued) >= last_year_start AND date_trunc_ym(date_issued) <= last_year_end THEN number_of_units_certified END), 0)) as perc_diff",
                     "dataset_title": "Dwelling Unit Completion Counts by Building Permit",
                     "dataset_category": "Housing and Buildings",
                     "location_fields": [],
@@ -485,13 +485,13 @@
                             "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "lic_code_description",
-                            "fieldName": "lic_code_description",
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
                             "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "supervisor_district",
-                            "fieldName": "supervisor_district",
+                            "name": "business_corridor",
+                            "fieldName": "business_corridor",
                             "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
@@ -502,8 +502,8 @@
                     "summary": "Count of business closures in San Francisco.",
                     "definition": "Tracks business closures through the Treasurer & Tax Collector's Office. Includes businesses that have formally closed or been administratively closed after 3 years of no filing or communication.",
                     "data_sf_url": "https://data.sfgov.org/resource/g8m3-pdis.json",
-                    "ytd_query": "SELECT date_trunc_ymd(dba_end_date) as date, COUNT(*) as value WHERE dba_end_date >= last_year_start AND dba_end_date <= current_date GROUP BY date ORDER BY date",
-                    "metric_query": "SELECT 'Business Closures' as label, max(dba_end_date) as max_date, COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end THEN 1 END) as this_year, COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end THEN 1 END) as last_year, (COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end THEN 1 END) - COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end THEN 1 END)) as delta, ((COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end THEN 1 END) - COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end THEN 1 END)) * 100.0 / NULLIF(COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end THEN 1 END), 0)) as perc_diff, supervisor_district group by supervisor_district",
+                    "ytd_query": "SELECT date_trunc_ymd(dba_end_date) as date, COUNT(*) as value WHERE dba_end_date >= last_year_start AND dba_end_date <= current_date AND administratively_closed is null GROUP BY date ORDER BY date",
+                    "metric_query": "SELECT 'Business Closures' as label, max(dba_end_date) as max_date, COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end AND administratively_closed is null THEN 1 END) as this_year, COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND administratively_closed is null THEN 1 END) as last_year, (COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end AND administratively_closed is null THEN 1 END) - COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND administratively_closed is null THEN 1 END)) as delta, ((COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end AND administratively_closed is null THEN 1 END) - COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND administratively_closed is null THEN 1 END)) * 100.0 / NULLIF(COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND administratively_closed is null THEN 1 END), 0)) as perc_diff, supervisor_district group by supervisor_district",
                     "dataset_title": "Registered Business Locations - San Francisco",
                     "dataset_category": "Economy and Community",
                     "location_fields": [
@@ -514,11 +514,6 @@
                         }
                     ],
                     "category_fields": [
-                        {
-                            "name": "administratively_closed",
-                            "fieldName": "administratively_closed",
-                            "description": "Selected column for enhanced dashboard queries"
-                        },
                         {
                             "name": "naic_code_description",
                             "fieldName": "naic_code_description",
@@ -560,13 +555,13 @@
                             "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "lic_code_description",
-                            "fieldName": "lic_code_description",
+                            "name": "supervisor_district",
+                            "fieldName": "supervisor_district",
                             "description": "Selected column for enhanced dashboard queries"
                         },
                         {
-                            "name": "supervisor_district",
-                            "fieldName": "supervisor_district",
+                            "name": "business_corridor",
+                            "fieldName": "business_corridor",
                             "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
@@ -577,8 +572,8 @@
                     "summary": "Count of retail business closures in San Francisco.",
                     "definition": "Tracks retail business closures through the Treasurer & Tax Collector's Office. Uses NAICS code to identify retail businesses. Includes businesses that have formally closed or been administratively closed after 3 years of no filing or communication.",
                     "data_sf_url": "https://data.sfgov.org/resource/g8m3-pdis.json",
-                    "ytd_query": "SELECT date_trunc_ymd(dba_end_date) as date, COUNT(*) as value WHERE dba_end_date >= last_year_start AND dba_end_date <= current_date AND naic_code_description = 'Retail Trade' GROUP BY date ORDER BY date",
-                    "metric_query": "SELECT 'Retail Closures' as label, max(dba_end_date) as max_date, COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end AND naic_code_description = 'Retail Trade' THEN 1 END) as this_year, COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND naic_code_description = 'Retail Trade' THEN 1 END) as last_year, (COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end AND naic_code_description = 'Retail Trade' THEN 1 END) - COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND naic_code_description = 'Retail Trade' THEN 1 END)) as delta, ((COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end AND naic_code_description = 'Retail Trade' THEN 1 END) - COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND naic_code_description = 'Retail Trade' THEN 1 END)) * 100.0 / NULLIF(COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND naic_code_description = 'Retail Trade' THEN 1 END), 0)) as perc_diff, supervisor_district group by supervisor_district",
+                    "ytd_query": "SELECT date_trunc_ymd(dba_end_date) as date, COUNT(*) as value WHERE dba_end_date >= last_year_start AND dba_end_date <= current_date AND naic_code_description = 'Retail Trade' AND administratively_closed is null GROUP BY date ORDER BY date",
+                    "metric_query": "SELECT 'Retail Closures' as label, max(dba_end_date) as max_date, COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end AND naic_code_description = 'Retail Trade' AND administratively_closed is null THEN 1 END) as this_year, COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND naic_code_description = 'Retail Trade' AND administratively_closed is null THEN 1 END) as last_year, (COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end AND naic_code_description = 'Retail Trade' AND administratively_closed is null THEN 1 END) - COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND naic_code_description = 'Retail Trade' AND administratively_closed is null THEN 1 END)) as delta, ((COUNT(CASE WHEN dba_end_date >= this_year_start AND dba_end_date <= this_year_end AND naic_code_description = 'Retail Trade' AND administratively_closed is null THEN 1 END) - COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND naic_code_description = 'Retail Trade' AND administratively_closed is null THEN 1 END)) * 100.0 / NULLIF(COUNT(CASE WHEN dba_end_date >= last_year_start AND dba_end_date <= last_year_end AND naic_code_description = 'Retail Trade' AND administratively_closed is null THEN 1 END), 0)) as perc_diff, supervisor_district group by supervisor_district",
                     "dataset_title": "Registered Business Locations - San Francisco",
                     "dataset_category": "Economy and Community",
                     "location_fields": [
@@ -590,9 +585,14 @@
                     ],
                     "category_fields": [
                         {
-                            "name": "NAICS Code",
-                            "fieldName": "naic_code",
-                            "description": "The North American Industry Classification System (NAICS) is a standard used by Federal statistical agencies for the purpose of collecting, analyzing and publishing statistical data related to the U.S. business economy. A subset of these are options on the business registration form used in the administration of the City and County's tax code. The registrant indicates the business activity on the City and County's tax registration forms.\n\nSee NAICS Codes tab in the attached data dictionary under About > Attachments."
+                            "name": "naic_code_description",
+                            "fieldName": "naic_code_description",
+                            "description": "Selected column for enhanced dashboard queries"
+                        },
+                        {
+                            "name": "business_corridor",
+                            "fieldName": "business_corridor",
+                            "description": "Selected column for enhanced dashboard queries"
                         }
                     ]
                 }

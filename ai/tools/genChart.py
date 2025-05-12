@@ -504,23 +504,11 @@ def generate_time_series_chart(
             
             aggregated_df = filtered_agg
 
+        # Create output directory if needed
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        # Use output_dir if provided, otherwise fall back to static directory
         if output_dir:
             chart_dir = output_dir
-        else:
-            # Create subdirectory based on aggregation period
-            if aggregation_period == 'year':
-                chart_dir = os.path.join(script_dir, '..', 'output', 'annual')
-            else:
-                chart_dir = os.path.join(script_dir, '..', 'output', 'monthly')
-        os.makedirs(chart_dir, exist_ok=True)
-
-        # Use a short unique ID for the filename
-        chart_id = uuid.uuid4().hex[:6]
-        image_filename = f"chart_{chart_id}.png"
-        image_path = os.path.join(chart_dir, image_filename)
-        logging.debug("Image will be saved to: %s", image_path)
+            os.makedirs(chart_dir, exist_ok=True)
 
         try:
             if group_field:
@@ -742,18 +730,9 @@ def generate_time_series_chart(
                 xanchor='left'
             )
 
-            # Save the chart as an image
-            # fig.write_image(image_path, engine="kaleido") # Commented out to prevent Kaleido error
-            # logging.info("Chart saved successfully at %s", image_path) # Commented out related log
-            logging.info("Chart image saving with Kaleido is currently commented out.") # Added new log
-
-            # Get the relative path from the output directory
-            # First, find the 'output' directory in the path
-            path_parts = image_path.split(os.sep)
-            output_index = path_parts.index('output')
-            # Include only the subdirectory, not 'output' itself
-            relative_path = os.path.join(*path_parts[output_index+1:-1])
-            logging.debug(f"Using relative path: {relative_path}")
+            # Generate a unique chart ID without saving an image
+            chart_id = uuid.uuid4().hex[:6]
+            logging.info("Not saving chart as image, only generating chart ID")
 
             # Prepare crosstabbed data
             if group_field:
@@ -782,10 +761,9 @@ def generate_time_series_chart(
             # Convert crosstab to HTML table
             html_table = crosstab_df.to_html(classes='data-table', index=True)
 
-            # Create markdown content with full path
+            # Create markdown content without image reference
             markdown_content = f""" 
 {context_variables.get("chart_title", "Time Series Chart")}
-![Chart](/output/{relative_path}/{image_filename})
 Caption: {caption}
 
 ### Data Table
@@ -796,7 +774,9 @@ Caption: {caption}
             # Include crosstab data table with toggle in HTML content
             html_content = f'''
 <div style="width:100%" id="chart_{chart_id}">
-    <img src="/{relative_path}/{image_filename}" style="width:100%; max-width:1200px;" alt="{chart_title}"/>
+    <div style="width:100%; max-width:1200px;">
+        {fig.to_html(full_html=False)}
+    </div>
     <div> 
         {caption}
     </div>
@@ -837,7 +817,7 @@ function toggleDataTable(tableId) {{
 </style>
 '''
 
-            logging.info("Markdown content created with chart ID: %s", markdown_content)
+            logging.info("Markdown content created with chart ID: %s", chart_id)
 
             if return_html:
                 return markdown_content, html_content

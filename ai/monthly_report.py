@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import sys
 import psycopg2
 import psycopg2.extras
 import pandas as pd
@@ -22,6 +23,11 @@ from plotly.subplots import make_subplots
 # Set up paths to look for .env file
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
+
+# Add the project root and script directory to the Python path
+sys.path.insert(0, project_root)
+sys.path.insert(0, script_dir)
+
 possible_env_paths = [
     os.path.join(script_dir, '.env'),  # ai/.env
     os.path.join(project_root, '.env'),  # /.env (project root)
@@ -35,17 +41,109 @@ for env_path in possible_env_paths:
         load_dotenv(env_path)
         break
 
-# Import database utilities
-from tools.db_utils import get_postgres_connection, execute_with_connection, CustomJSONEncoder
+# Configure logging - IMPORTANT: Do this before importing any other modules
+# that might configure their own loggers
 
-# Import necessary functions from other modules
-from webChat import get_dashboard_metric, anomaly_explainer_agent, swarm_client, context_variables, client, AGENT_MODEL, load_and_combine_notes
-    
-# Configure logging
+# Get logging level from environment or default to INFO
+log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_name, logging.INFO)
+
+# Create logs directory if it doesn't exist
+logs_dir = os.path.join(script_dir, 'logs')
+os.makedirs(logs_dir, exist_ok=True)
+
+# Configure file handler with absolute path
+log_file = os.path.join(logs_dir, 'monthly_report.log')
+file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+file_handler.setLevel(log_level)  # Set handler level to match log_level
+
+# Configure console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(log_level)  # Set handler level to match log_level
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Configure the root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(log_level)  # Set root logger level to match log_level
+
+# Remove any existing handlers from the root logger to avoid duplicate logs
+for handler in root_logger.handlers[:]:
+    root_logger.removeHandler(handler)
+
+# Add handlers to root logger
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
+
+# Create a module-specific logger that will use the root logger's configuration
 logger = logging.getLogger(__name__)
 
 # Now log initialization messages
-logger.info("Monthly report logging initialized")
+logger.warning(f"Monthly report logging initialized with level: {log_level_name}")
+logger.info("This is an INFO level message - should not appear if LOG_LEVEL is WARNING")
+logger.warning(f"Log file location: {log_file}")
+logger.debug("This is a DEBUG level message - should never appear if LOG_LEVEL is WARNING")
+logger.warning(f"Current working directory: {os.getcwd()}")
+logger.warning(f"Script directory: {script_dir}")
+logger.warning(f"Project root: {project_root}")
+logger.info(f"Python path: {sys.path}")  # This should not appear if LOG_LEVEL is WARNING
+
+# Test write access to log file
+try:
+    with open(log_file, 'a', encoding='utf-8') as f:
+        f.write(f"\nTest write at {datetime.now()}\n")
+    logger.warning(f"Successfully wrote to log file: {log_file}")
+except Exception as e:
+    logger.error(f"Error writing to log file: {e}")
+
+# Prevent imported modules from modifying our logging configuration
+# This is done by defining a no-op basicConfig function
+original_basic_config = logging.basicConfig
+def no_op_basic_config(*args, **kwargs):
+    # If an imported module tries to configure logging, we'll maintain our settings
+    # But we'll log it at debug level to help troubleshoot if needed
+    logger.debug(f"Ignored attempt to call logging.basicConfig with args: {args}, kwargs: {kwargs}")
+    
+    # If the caller is trying to set a level, we'll check against our level
+    if 'level' in kwargs:
+        requested_level = kwargs['level']
+        logger.debug(f"Module requested logging level: {requested_level}, our level: {log_level}")
+    
+logging.basicConfig = no_op_basic_config
+
+# Import database utilities
+try:
+    # First try to import from the ai package
+    from ai.tools.db_utils import get_postgres_connection, execute_with_connection, CustomJSONEncoder
+    logger.warning("Successfully imported from ai.tools.db_utils")
+except ImportError:
+    try:
+        # If that fails, try to import from the local directory
+        from tools.db_utils import get_postgres_connection, execute_with_connection, CustomJSONEncoder
+        logger.warning("Successfully imported from tools.db_utils")
+    except ImportError:
+        logger.error("Failed to import from db_utils", exc_info=True)
+        raise
+
+# Import necessary functions from other modules
+try:
+    # First try to import from the ai package
+    from ai.webChat import get_dashboard_metric, anomaly_explainer_agent, swarm_client, context_variables, client, AGENT_MODEL, load_and_combine_notes
+    logger.warning("Successfully imported from ai.webChat")
+except ImportError:
+    try:
+        # If that fails, try to import from the local directory
+        from webChat import get_dashboard_metric, anomaly_explainer_agent, swarm_client, context_variables, client, AGENT_MODEL, load_and_combine_notes
+        logger.warning("Successfully imported from webChat")
+    except ImportError:
+        logger.error("Failed to import from webChat", exc_info=True)
+        raise
+
+# Restore original basicConfig if needed
+logging.basicConfig = original_basic_config
 
 # Load environment variables
 load_dotenv()
@@ -53,7 +151,7 @@ load_dotenv()
 # Only log non-sensitive environment variables
 non_sensitive_vars = {k: v for k, v in os.environ.items() 
                      if k.startswith('POSTGRES_') and not k.endswith('PASSWORD')}
-logger.info(f"Environment variables (excluding sensitive data): {non_sensitive_vars}")
+logger.warning(f"Environment variables (excluding sensitive data): {non_sensitive_vars}")
 
 # Database connection parameters - use POSTGRES_* variables directly
 DB_HOST = os.getenv("POSTGRES_HOST", 'localhost')
@@ -63,7 +161,7 @@ DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", 'postgres')
 DB_NAME = os.getenv("POSTGRES_DB", 'transparentsf')
 
 # Log only non-sensitive connection parameters
-logger.info(f"Using database connection parameters: HOST={DB_HOST}, PORT={DB_PORT}, USER={DB_USER}, DB={DB_NAME}")
+logger.warning(f"Using database connection parameters: HOST={DB_HOST}, PORT={DB_PORT}, USER={DB_USER}, DB={DB_NAME}")
 
 # Validate and convert DB_PORT to int if it exists
 try:
@@ -74,12 +172,12 @@ except ValueError:
 
 # API Base URL
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-logger.info(f"Using API_BASE_URL: {API_BASE_URL}")
+logger.warning(f"Using API_BASE_URL: {API_BASE_URL}")
 
 # Perplexity API Key
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 if PERPLEXITY_API_KEY:
-    logger.info("Perplexity API key found")
+    logger.warning("Perplexity API key found")
 else:
     logger.warning("No Perplexity API key found. Perplexity API features will not be available.")
 
@@ -176,6 +274,46 @@ def initialize_monthly_reporting_table():
                     logger.info("Added published_url column to reports table")
                 except Exception as e:
                     logger.error(f"Error adding published_url column: {e}")
+                    connection.rollback()
+
+            # Check if the proofread_feedback column exists in the reports table
+            cursor.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'reports' AND column_name = 'proofread_feedback'
+            """)
+            proofread_feedback_exists = cursor.fetchone()
+
+            if not proofread_feedback_exists:
+                logger.info("Adding proofread_feedback column to reports table")
+                try:
+                    cursor.execute("""
+                        ALTER TABLE reports ADD COLUMN proofread_feedback TEXT
+                    """)
+                    connection.commit()
+                    logger.info("Added proofread_feedback column to reports table")
+                except Exception as e:
+                    logger.error(f"Error adding proofread_feedback column: {e}")
+                    connection.rollback()
+
+            # Check if the headlines column exists in the reports table
+            cursor.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'reports' AND column_name = 'headlines'
+            """)
+            headlines_exists = cursor.fetchone()
+
+            if not headlines_exists:
+                logger.info("Adding headlines column to reports table")
+                try:
+                    cursor.execute("""
+                        ALTER TABLE reports ADD COLUMN headlines JSONB
+                    """)
+                    connection.commit()
+                    logger.info("Added headlines column to reports table")
+                except Exception as e:
+                    logger.error(f"Error adding headlines column: {e}")
                     connection.rollback()
         
         # Now check if the monthly_reporting table exists and get its columns
@@ -1673,9 +1811,6 @@ Detailed Analysis:
     </style>
 </head>
 <body>
-   
-    <div class="key-takaways">
-    </div>
     {report_text}
     <div class="footer">
         <p>Generated on {datetime.now().strftime('%B %d, %Y')} by TransparentSF</p>
@@ -1742,23 +1877,82 @@ def proofread_and_revise_report(report_path):
             model=AGENT_MODEL,
             messages=[{"role": "system", "content": system_message},
                      {"role": "user", "content": prompt}],
-            temperature=0.1
+            temperature=0.1,
+            response_format={"type": "json_object"}  # Expect JSON response
         )
-        revised_text = response.choices[0].message.content
+        response_content = response.choices[0].message.content
         
-        # Save the revised newsletter
+        # Parse the JSON response
+        try:
+            proofread_data = json.loads(response_content)
+            revised_newsletter_content = proofread_data.get("newsletter")
+            proofread_feedback = proofread_data.get("proofread_feedback")
+            headlines = proofread_data.get("headlines") # Extract headlines
+            
+            if not revised_newsletter_content:
+                logger.error("No 'newsletter' content found in proofread response.")
+                return {"status": "error", "message": "Proofread response missing 'newsletter' content."}
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse proofread response as JSON: {e}")
+            logger.error(f"Raw response: {response_content[:500]}...")
+            return {"status": "error", "message": f"Failed to parse proofread JSON response: {e}"}
+        
+        # Save the revised newsletter content
         report_path_obj = Path(report_path)
-        revised_path = report_path_obj.parent / f"{report_path_obj.stem}_revised{report_path_obj.suffix}"
+        revised_filename = f"{report_path_obj.stem}_revised{report_path_obj.suffix}"
+        revised_path = report_path_obj.parent / revised_filename
         
         with open(revised_path, 'w', encoding='utf-8') as f:
-            f.write(revised_text)
+            f.write(revised_newsletter_content)
         
         # Expand chart references in the revised report
         logger.info(f"Expanding chart references in revised report: {revised_path}")
         expand_result = expand_chart_references(revised_path)
         if not expand_result:
             logger.warning("Failed to expand chart references in the revised report")
-        
+
+        # Update the reports table with the revised filename and proofread_feedback
+        def update_report_record_operation(connection):
+            cursor = connection.cursor()
+            original_filename = report_path_obj.name # Assuming original filename is the name part of report_path
+            
+            # Find the report_id based on the original filename
+            # This assumes original_filename in the reports table matches report_path_obj.name
+            cursor.execute("""
+                SELECT id FROM reports WHERE original_filename = %s ORDER BY created_at DESC LIMIT 1
+            """, (original_filename,))
+            report_record = cursor.fetchone()
+            
+            if not report_record:
+                logger.error(f"Could not find report record for original_filename: {original_filename}")
+                return False
+            
+            report_id = report_record[0]
+            
+            update_query = """
+                UPDATE reports
+                SET revised_filename = %s, proofread_feedback = %s, headlines = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """
+            cursor.execute(update_query, (revised_filename, proofread_feedback, json.dumps(headlines) if headlines else None, report_id))
+            connection.commit()
+            logger.info(f"Updated report ID {report_id} with revised filename, proofread feedback, and headlines.")
+            return True
+
+        update_db_result = execute_with_connection(
+            operation=update_report_record_operation,
+            db_host=DB_HOST,
+            db_port=DB_PORT,
+            db_name=DB_NAME,
+            db_user=DB_USER,
+            db_password=DB_PASSWORD
+        )
+
+        if update_db_result["status"] != "success" or not update_db_result["result"]:
+            logger.error(f"Failed to update report table: {update_db_result.get('message')}")
+            # Continue, but log the error. The file is saved.
+
         logger.info(f"Revised newsletter saved to {revised_path}")
         return {"status": "success", "revised_report_path": str(revised_path)}
         
@@ -3099,7 +3293,8 @@ def expand_chart_references(report_path):
 
 def request_chart_image(chart_type, params, output_path):
     """
-    Request a rendered chart image from the chart endpoint.
+    Request a rendered chart image from the chart endpoint using Playwright to capture the exact
+    rendered chart with the original styling from the chart.html files.
     
     Args:
         chart_type: Type of chart ('time_series' or 'anomaly')
@@ -3112,6 +3307,8 @@ def request_chart_image(chart_type, params, output_path):
     logger.info(f"Requesting {chart_type} chart image with params: {params}")
     
     try:
+        from playwright.sync_api import sync_playwright
+        
         # Construct the URL for the chart based on chart type
         if chart_type == 'time_series':
             metric_id = params.get('metric_id', '1')
@@ -3123,59 +3320,207 @@ def request_chart_image(chart_type, params, output_path):
                 period_type = period_type.split('#')[0]
                 logger.debug(f"Cleaned period_type to: {period_type}")
             
-            url = f"{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}&format=image"
+            url = f"{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section"
+            landing_page_url = f"{API_BASE_URL}/backend/metric/{metric_id}?district={district}"
         elif chart_type == 'anomaly':
             anomaly_id = params.get('id', '27338')
-            url = f"{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}&format=image"
+            url = f"{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section"
+            landing_page_url = f"{API_BASE_URL}/anomaly-analyzer/anomaly/{anomaly_id}"
         else:
             logger.error(f"Unsupported chart type: {chart_type}")
             return False
         
-        logger.info(f"Requesting chart image from URL: {url}") # Log the final URL
+        logger.info(f"Capturing chart from URL: {url}")
         
-        # Make the request
-        response = requests.get(url, timeout=30)  # Add timeout to prevent hanging
-        
-        if response.status_code != 200:
-            logger.error(f"Failed to get chart image: {response.status_code} - {response.text}")
-            # DO NOT create fallback if the request itself failed
-            return False
-        
-        # Request was successful (status 200), now check content type
-        content_type = response.headers.get('content-type', '')
-        if 'image' in content_type:
-            # Save the image directly
-            with open(output_path, 'wb') as f:
-                f.write(response.content)
-            logger.info(f"Successfully saved chart image to {output_path}")
-            return True
-        elif 'application/json' in content_type:
-            # Check if the response contains an image as base64
-            try:
-                data = response.json()
-                if 'image' in data:
-                    image_data = base64.b64decode(data['image'])
-                    with open(output_path, 'wb') as f:
-                        f.write(image_data)
-                    logger.info(f"Successfully saved chart image from JSON to {output_path}")
-                    return True
-                else:
-                    logger.error(f"JSON response doesn't contain image data: {data}")
-            except Exception as e:
-                logger.error(f"Error processing JSON response: {e}")
-        else:
-            logger.error(f"Unexpected content type: {content_type}")
+        with sync_playwright() as p:
+            # Launch browser with larger viewport to ensure chart is fully visible
+            browser = p.chromium.launch()
+            context = browser.new_context(
+                viewport={'width': 1200, 'height': 800},
+                device_scale_factor=2.0  # Higher resolution for sharper images
+            )
+            page = context.new_page()
             
-        # If we got here, the request succeeded but didn't return a valid image
-        # Generate a fallback image with text
-        logger.warning(f"Request successful but no valid image found. Generating fallback for {chart_type}.")
-        create_fallback_chart_image(chart_type, params, output_path)
-        return True # Return True as we created a fallback
-        
+            # Navigate to the chart URL and wait for load
+            page.goto(url, wait_until="networkidle")
+            
+            # Wait for the chart to be fully rendered
+            try:
+                if chart_type == 'time_series':
+                    # Wait for the chart container to be visible
+                    page.wait_for_selector('#chart-section', state='visible', timeout=10000)
+                    
+                    # Then wait for plotly to be fully loaded
+                    page.wait_for_function('''
+                        () => {
+                            const plotDiv = document.querySelector('.js-plotly-plot');
+                            return plotDiv && 
+                                  plotDiv.querySelector('.main-svg') && 
+                                  !document.querySelector('.plot-container .loader');
+                        }
+                    ''', timeout=15000)
+                    
+                    # Get the chart container element
+                    element_selector = '#chart-section'
+                else:  # anomaly
+                    # Wait for the container to be visible
+                    page.wait_for_selector('#anomaly-chart', state='visible', timeout=10000)
+                    
+                    # Then wait for plotly to be fully loaded
+                    page.wait_for_function('''
+                        () => {
+                            const plotDiv = document.querySelector('.js-plotly-plot');
+                            return plotDiv && 
+                                  plotDiv.querySelector('.main-svg') && 
+                                  !document.querySelector('.plot-container .loader');
+                        }
+                    ''', timeout=15000)
+                    
+                    # Get the chart container element
+                    element_selector = '#anomaly-chart'
+            except Exception as wait_error:
+                # If specific selectors fail, try a more general approach
+                logger.warning(f"Specific selectors failed, trying general approach: {wait_error}")
+                # Just wait for any plotly chart to appear
+                page.wait_for_selector('.js-plotly-plot', state='visible', timeout=15000)
+                
+                # Use a more general selector
+                if chart_type == 'time_series':
+                    element_selector = '.chart-container'
+                else:  # anomaly
+                    element_selector = '.chart-container'
+            
+            # Give a little extra time for animations to complete
+            page.wait_for_timeout(1000)
+            
+            # Make sure the chart container is properly styled with the corner decorations
+            # AND remove the Full View and Share buttons
+            page.evaluate(f'''() => {{
+                // Make sure the chart container has the proper styling
+                const chartContainer = document.querySelector('.chart-container');
+                if (chartContainer) {{
+                    // Ensure the container is visible and properly sized
+                    chartContainer.style.display = 'block';
+                    chartContainer.style.position = 'relative';
+                    chartContainer.style.width = '600px';
+                    chartContainer.style.height = '600px';
+                    chartContainer.style.maxWidth = '600px';
+                    chartContainer.style.backgroundColor = 'white';
+                    chartContainer.style.borderRadius = '8px';
+                    chartContainer.style.padding = '10px';
+                    chartContainer.style.margin = '0 auto';
+                    chartContainer.style.boxShadow = 'none';
+                    chartContainer.style.overflow = 'visible';
+                    
+                    // Make sure the ::before and ::after pseudo-elements are visible
+                    // We can't directly manipulate pseudo-elements, but we can add actual elements to mimic them
+                    
+                    // Remove any existing corner elements
+                    const existingCorners = document.querySelectorAll('.chart-corner');
+                    existingCorners.forEach(el => el.remove());
+                    
+                    // Create top-right corner
+                    const topRightCorner = document.createElement('div');
+                    topRightCorner.className = 'chart-corner top-right';
+                    topRightCorner.style.position = 'absolute';
+                    topRightCorner.style.top = '0';
+                    topRightCorner.style.right = '0';
+                    topRightCorner.style.width = '61.8%';
+                    topRightCorner.style.height = '61.8%';
+                    topRightCorner.style.borderTop = '2px solid rgba(0, 0, 0, 0.2)';
+                    topRightCorner.style.borderRight = '2px solid rgba(0, 0, 0, 0.2)';
+                    topRightCorner.style.borderTopRightRadius = '8px';
+                    topRightCorner.style.pointerEvents = 'none';
+                    chartContainer.appendChild(topRightCorner);
+                    
+                    // Create bottom-left corner
+                    const bottomLeftCorner = document.createElement('div');
+                    bottomLeftCorner.className = 'chart-corner bottom-left';
+                    bottomLeftCorner.style.position = 'absolute';
+                    bottomLeftCorner.style.bottom = '0';
+                    bottomLeftCorner.style.left = '0';
+                    bottomLeftCorner.style.width = '61.8%';
+                    bottomLeftCorner.style.height = '61.8%';
+                    bottomLeftCorner.style.borderBottom = '2px solid rgba(0, 0, 0, 0.2)';
+                    bottomLeftCorner.style.borderLeft = '2px solid rgba(0, 0, 0, 0.2)';
+                    bottomLeftCorner.style.borderBottomLeftRadius = '8px';
+                    bottomLeftCorner.style.pointerEvents = 'none';
+                    chartContainer.appendChild(bottomLeftCorner);
+                    
+                    // Remove "Full View" and "Share" buttons
+                    const buttons = document.querySelectorAll('#full-view-btn, #share-btn, .btn-share, .btn-full-view');
+                    buttons.forEach(btn => {{
+                        btn.remove();
+                    }});
+                    
+                    // Add a "View Interactive Chart" link with an arrow icon
+                    const linkContainer = document.createElement('div');
+                    linkContainer.style.position = 'absolute';
+                    linkContainer.style.bottom = '8px';
+                    linkContainer.style.right = '8px';
+                    linkContainer.style.zIndex = '10';
+                    
+                    const interactiveLink = document.createElement('a');
+                    interactiveLink.href = "{landing_page_url}";
+                    interactiveLink.target = "_blank";
+                    interactiveLink.style.padding = '8px 12px';
+                    interactiveLink.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+                    interactiveLink.style.color = 'white';
+                    interactiveLink.style.borderRadius = '4px';
+                    interactiveLink.style.textDecoration = 'none';
+                    interactiveLink.style.fontSize = '12px';
+                    interactiveLink.style.fontWeight = 'bold';
+                    interactiveLink.style.display = 'flex';
+                    interactiveLink.style.alignItems = 'center';
+                    interactiveLink.style.gap = '4px';
+                    interactiveLink.innerHTML = 'View Interactive Chart <span>→</span>';
+                    
+                    linkContainer.appendChild(interactiveLink);
+                    chartContainer.appendChild(linkContainer);
+                    
+                    // Make sure the chart is visible
+                    const chartElement = document.querySelector('#time-series-chart, #anomaly-chart');
+                    if (chartElement) {{
+                        chartElement.style.display = 'block';
+                        chartElement.style.width = '100%';
+                        chartElement.style.height = '100%';
+                    }}
+                    
+                    // Make sure the plot is visible
+                    const plotElement = document.querySelector('#time-series-plot, #anomaly-plot');
+                    if (plotElement) {{
+                        plotElement.style.display = 'block';
+                        plotElement.style.width = '100%';
+                        plotElement.style.height = '100%';
+                    }}
+                }}
+            }}''')
+            
+            # Wait a moment for the styling to be applied
+            page.wait_for_timeout(500)
+            
+            # Take the screenshot of the chart container
+            chart_container = page.locator('.chart-container')
+            if chart_container.count() > 0:
+                chart_container.screenshot(path=output_path)
+                logger.info(f"Successfully captured chart image to {output_path}")
+            else:
+                # Fallback to the specific element selector if chart container not found
+                element = page.locator(element_selector)
+                element.screenshot(path=output_path)
+                logger.info(f"Captured chart image using fallback selector: {element_selector}")
+            
+            # Close browser
+            browser.close()
+            
+            return True
+            
     except Exception as e:
-        logger.error(f"Error requesting chart image: {e}", exc_info=True)
-        # DO NOT create fallback on general exception during request
-        return False
+        logger.error(f"Error capturing chart image: {e}", exc_info=True)
+        # If Playwright fails, try to create a fallback image
+        logger.warning(f"Falling back to basic chart image for {chart_type}.")
+        create_fallback_chart_image(chart_type, params, output_path)
+        return True
 
 def create_fallback_chart_image(chart_type, params, output_path):
     """

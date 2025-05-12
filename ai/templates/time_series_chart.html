@@ -757,7 +757,7 @@
                 legend: {
                     orientation: 'h',
                     x: 0.5,
-                    y: -0.12, // Moved up from -0.15
+                    y: -0.10, // Moved legend up
                     xanchor: 'center',
                     yanchor: 'top',
                     font: { 
@@ -767,7 +767,7 @@
                     },
                     bgcolor: 'rgba(246, 241, 234, 0.7)' // Soft Sand with transparency
                 },
-                margin: { t: 40, b: 30, l: 50, r: 30 }, // Reduced top and bottom margins
+                margin: { t: 40, b: 100, l: 50, r: 30 }, // Increased bottom margin from 30 to 60
                 height: null, // Remove fixed height
                 width: null, // Remove fixed width
                 autosize: true, // Enable autosize
@@ -920,10 +920,11 @@
                     },
                     showarrow: false,
                     x: 0.5,
-                    y: -0.16, // Moved up from -0.18
+                    y: -0.22, // Positioned at the bottom of the chart image
                     xref: 'paper',
                     yref: 'paper',
                     align: 'center',
+                    yanchor: 'bottom', // Anchor to the bottom of the text
                     html: true // Enable HTML formatting
                 });
             }

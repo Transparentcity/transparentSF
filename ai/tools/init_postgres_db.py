@@ -164,6 +164,8 @@ def init_database():
                 max_items INTEGER NOT NULL,
                 original_filename VARCHAR(255) NOT NULL,
                 revised_filename VARCHAR(255),
+                proofread_feedback TEXT,
+                headlines JSONB,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT valid_period_type CHECK (period_type IN ('month', 'quarter', 'year')),
