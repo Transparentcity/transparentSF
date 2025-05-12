@@ -165,6 +165,7 @@ def init_database():
                 original_filename VARCHAR(255) NOT NULL,
                 revised_filename VARCHAR(255),
                 proofread_feedback TEXT,
+                published_url TEXT,
                 headlines JSONB,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

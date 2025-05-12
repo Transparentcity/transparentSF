@@ -1340,13 +1340,16 @@
                         // Display the periods
                         periodsDisplay.style.display = 'flex';
                         
-                        if (data.top_results.length > 0) {
+                        if (data.top_results.length > 0 || data.bottom_results.length > 0) {
                             // Display metric data
                             displayMetricResults(data.top_results, data.bottom_results);
                             
                             // Update period display if we have data
-                            if (data.top_results.length > 0) {
-                                const firstResult = data.top_results[0];
+                            // If top_results is empty but bottom_results has values, use the first bottom result
+                            const firstResult = data.top_results.length > 0 ? 
+                                data.top_results[0] : (data.bottom_results.length > 0 ? data.bottom_results[0] : null);
+                            
+                            if (firstResult) {
                                 previousPeriodValue.textContent = firstResult.previous_period || '-';
                                 currentPeriodValue.textContent = firstResult.recent_period || '-';
                             }
