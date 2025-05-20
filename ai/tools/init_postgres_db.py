@@ -190,6 +190,7 @@ def init_database():
                 difference FLOAT,
                 std_dev FLOAT,
                 percent_change FLOAT,
+                rationale TEXT,
                 explanation TEXT,
                 priority INTEGER,
                 report_text TEXT,

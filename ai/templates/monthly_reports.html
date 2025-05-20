@@ -84,7 +84,7 @@
         }
         
         button {
-            background-color: #007BFF;
+            background-color: #ad35fa;
             color: white;
             border: none;
             padding: 8px 12px;
@@ -268,6 +268,9 @@
             border-top-color: #fff;
             animation: spin 1s ease-in-out infinite;
             margin-right: 10px;
+            vertical-align: middle;
+            position: relative;
+            top: -1px;
         }
         
         @keyframes spin {
@@ -315,7 +318,7 @@
         }
 
         .report-details-container h2 {
-            color: #007BFF;
+            color: #ad35fa;
             margin-top: 20px;
             margin-bottom: 15px;
             font-size: 1.5em;
@@ -347,7 +350,7 @@
             padding: 15px;
             border-radius: 5px;
             margin-bottom: 15px;
-            border-left: 4px solid #007BFF;
+            border-left: 4px solid #ad35fa;
         }
 
         .report-details-container .chart-container {
@@ -538,7 +541,7 @@
         }
 
         .citation-link {
-            color: #007bff;
+            color: #ad35fa;
             text-decoration: none;
             font-weight: 500;
         }
@@ -550,19 +553,19 @@
         .citation-item {
             margin-bottom: 8px;
             padding: 5px;
-            border-left: 3px solid #007bff;
+            border-left: 3px solid #ad35fa;
             padding-left: 10px;
             background-color: #f8f9fa;
         }
 
         .citation-number {
             font-weight: bold;
-            color: #007bff;
+            color: #ad35fa;
             margin-right: 5px;
         }
 
         .citation-url {
-            color: #007bff;
+            color: #ad35fa;
             text-decoration: none;
         }
 
@@ -635,7 +638,7 @@
 
         /* Style to indicate the header is clickable */
         .metric-header:hover {
-            color: #007bff;
+            color: #ad35fa;
         }
 
         .metrics-actions {
@@ -781,7 +784,7 @@
         }
 
         .template-placeholder {
-            color: #007bff;
+            color: #ad35fa;
             background-color: #e7f1ff;
             padding: 2px 4px;
             border-radius: 2px;
@@ -853,6 +856,7 @@
                         Re-write newsletter
                     </button>
                     <button id="rerun-proofreading" class="action-btn">Re-run Proofreading</button>
+                    <button id="rerun-postproofing" class="action-btn">Re-run Email</button>
                     <button id="publish-to-ghost" class="action-btn" >Publish</button>
                     <button id="delete-report" class="action-btn delete-btn">Delete Newsletter</button>
                 </div>
@@ -1033,19 +1037,27 @@
             // Function to display prompt buttons
             function displayPromptButtons() {
                 promptButtonsEl.innerHTML = '';
-                
                 // Only show monthly_report prompts for now
                 const monthlyReportPrompts = promptsData.monthly_report || {};
-                
-                for (const [key, value] of Object.entries(monthlyReportPrompts)) {
-                    const button = document.createElement('button');
-                    button.className = 'prompt-button';
-                    button.textContent = key.replace(/_/g, ' ');
-                    button.dataset.category = 'monthly_report';
-                    button.dataset.key = key;
-                    button.onclick = () => openPromptEditor('monthly_report', key);
-                    promptButtonsEl.appendChild(button);
-                }
+                // Desired order of prompt keys
+                const orderedKeys = [
+                    'prioritize_deltas',
+                    'context_enrichment',
+                    'generate_report_text',
+                    'generate_report',
+                    'proofread'
+                ];
+                orderedKeys.forEach(key => {
+                    if (monthlyReportPrompts[key]) {
+                        const button = document.createElement('button');
+                        button.className = 'prompt-button';
+                        button.textContent = key.replace(/_/g, ' ');
+                        button.dataset.category = 'monthly_report';
+                        button.dataset.key = key;
+                        button.onclick = () => openPromptEditor('monthly_report', key);
+                        promptButtonsEl.appendChild(button);
+                    }
+                });
             }
             
             // Function to open the prompt editor
@@ -1308,7 +1320,7 @@
                 
                 // Disable button and show loading state
                 generateBtn.disabled = true;
-                generateBtn.innerHTML = '<span class="loading"></span> Generating...';
+                generateBtn.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Generating...</div>';
                 generateStatus.style.display = 'none';
                 
                 try {
@@ -1482,10 +1494,22 @@
             async function rerunReportGeneration(filename) {
                 const button = document.getElementById('rerunReportBtn');
                 const originalText = button.textContent;
-                button.textContent = 'Re-writing...';
                 button.disabled = true;
+                button.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Re-writing...</div>';
                 
                 try {
+                    // Find the selected report in the reportsData to get the correct district
+                    const report = reportsData?.reports?.find(r => r.original_filename === filename);
+                    if (!report) {
+                        throw new Error("Could not find report data");
+                    }
+                    
+                    // Get the actual district number, defaulting to 0 if not found
+                    const districtNumber = report.district !== undefined ? report.district : '0';
+                    
+                    // Construct the report path
+                    const report_path = `output/reports/${filename}`;
+                    
                     const response = await fetch('/backend/rerun_monthly_report_generation', {
                         method: 'POST',
                         headers: {
@@ -1493,10 +1517,11 @@
                         },
                         body: JSON.stringify({
                             filename,
-                            district: '0',
+                            district: districtNumber.toString(),
                             period_type: 'month',
                             max_report_items: 10,
-                            only_generate: true
+                            only_generate: true,
+                            report_path
                         })
                     });
                     
@@ -1522,7 +1547,10 @@
                     // Show loading state
                     const rerunProofreadingBtn = document.getElementById('rerun-proofreading');
                     rerunProofreadingBtn.disabled = true;
-                    rerunProofreadingBtn.innerHTML = '<span class="loading"></span> Re-running...';
+                    rerunProofreadingBtn.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Re-running...</div>';
+                    
+                    // Use the output/reports directory path
+                    const report_path = `output/reports/${filename}`;
                     
                     // Call the API to re-run proofreading
                     const response = await fetch('/backend/rerun_monthly_report_proofreading', {
@@ -1531,7 +1559,8 @@
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
-                            filename
+                            filename,
+                            report_path
                         })
                     });
                     
@@ -1570,7 +1599,7 @@
                     // Show loading state
                     const publishBtn = document.getElementById('publish-to-ghost');
                     publishBtn.disabled = true;
-                    publishBtn.innerHTML = '<span class="loading"></span> Publishing...';
+                    publishBtn.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Publishing...</div>';
                     
                     // Confirm with the user 
                     if (!confirm(`Are you sure you want to publish "${reportTitle}" to the blog?`)) {
@@ -1657,7 +1686,7 @@
                 try {
                     const deleteBtn = document.getElementById('delete-report');
                     deleteBtn.disabled = true;
-                    deleteBtn.innerHTML = '<span class="loading"></span> Deleting...';
+                    deleteBtn.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Deleting...</div>';
 
                     // Get the reports list to find the report ID
                     const reportsResponse = await fetch('/backend/get_monthly_reports');
@@ -1743,13 +1772,38 @@
                             ${report.published_url ? `<div class="metadata-item"><strong>Published URL:</strong> <a href="${report.published_url}" target="_blank">${report.published_url}</a></div>` : ''}
                         </div>
                         <div class="report-links" style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 15px;">
-                            <a href="#" id="view-original-report" target="_blank" style="text-decoration: none; color: #007BFF;">View Original</a>
-                            <a href="#" id="view-revised-report" target="_blank" style="text-decoration: none; color: #007BFF;">View Revised</a>
-                            <a href="#" id="view-email-report" target="_blank" style="text-decoration: none; color: #007BFF;">View Email Version</a>
-                            <a href="#" id="view-published-report" target="_blank" style="text-decoration: none; color: #007BFF;">View Published Post</a>
+                            <a href="#" id="view-original-report" target="_blank" style="text-decoration: none; color: #ad35fa;">View Original</a>
+                            <a href="#" id="view-revised-report" target="_blank" style="text-decoration: none; color: #ad35fa;">View Revised</a>
+                            <a href="#" id="view-email-report" target="_blank" style="text-decoration: none; color: #ad35fa;">View Email Version</a>
+                            <a href="#" id="view-published-report" target="_blank" style="text-decoration: none; color: #ad35fa;">View Published Post</a>
                         </div>
                     </div>
                 `;
+                
+                // Display headlines if available
+                if (report.headlines && Array.isArray(report.headlines)) {
+                    metricsHtml += `
+                        <div class="headlines-container" style="margin-top: 20px; margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
+                            <h2>Headlines</h2>
+                            <div class="headlines-list">
+                                ${report.headlines.map(headline => `<h3 style="margin: 10px 0; color: #333;">${headline}</h3>`).join('')}
+                            </div>
+                        </div>
+                    `;
+                } else if (report.headlines && typeof report.headlines === 'object') {
+                    // If headlines is a non-array object with values
+                    const headlineValues = Object.values(report.headlines);
+                    if (headlineValues.length > 0) {
+                        metricsHtml += `
+                            <div class="headlines-container" style="margin-top: 20px; margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
+                                <h2>Headlines</h2>
+                                <div class="headlines-list">
+                                    ${headlineValues.map(headline => `<h3 style="margin: 10px 0; color: #333;">${headline}</h3>`).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
                 
                 // Check if metrics exist in the report
                 if (report.metrics && Array.isArray(report.metrics) && report.metrics.length > 0) {
@@ -1777,6 +1831,8 @@
                                 let perplexityContext = '';
                                 let citations = '';
                                 let citationLinks = [];
+                                let chartsHtml = '';
+                                let trendAnalysis = '';
 
                                 if (metric.metadata) {
                                     try {
@@ -1786,6 +1842,54 @@
                                             : metric.metadata;
                                         
                                         perplexityContext = metadata.perplexity_context || '';
+                                        trendAnalysis = metadata.trend_analysis || '';
+                                        
+                                        // Get charts from metadata
+                                        if (metadata.charts) {
+                                            let charts = [];
+                                            
+                                            // Handle different chart formats
+                                            if (typeof metadata.charts === 'string') {
+                                                try {
+                                                    charts = JSON.parse(metadata.charts);
+                                                } catch (e) {
+                                                    // If it's not valid JSON, it might be a single chart reference
+                                                    charts = [metadata.charts];
+                                                }
+                                            } else if (Array.isArray(metadata.charts)) {
+                                                charts = metadata.charts;
+                                            } else if (typeof metadata.charts === 'object') {
+                                                // In case it's an object with chart info
+                                                charts = [metadata.charts];
+                                            }
+                                            
+                                            // Generate HTML for each chart
+                                            if (charts.length > 0) {
+                                                chartsHtml = '<div class="charts-container"><h4>Charts</h4>';
+                                                
+                                                charts.forEach(chart => {
+                                                    if (typeof chart === 'string') {
+                                                        // For simple chart references like [CHART:time_series:1:0:year]
+                                                        chartsHtml += `
+                                                            <div class="chart-placeholder">
+                                                                ${chart}
+                                                            </div>
+                                                        `;
+                                                    } else if (typeof chart === 'object') {
+                                                        // For chart objects with more data
+                                                        const chartTitle = chart.title || 'Chart';
+                                                        chartsHtml += `
+                                                            <div class="chart-container">
+                                                                <h5>${chartTitle}</h5>
+                                                                ${chart.html || chart.url || JSON.stringify(chart)}
+                                                            </div>
+                                                        `;
+                                                    }
+                                                });
+                                                
+                                                chartsHtml += '</div>';
+                                            }
+                                        }
                                         
                                         // Get citations from perplexity_response if available
                                         if (metadata.perplexity_response && metadata.perplexity_response.citations) {
@@ -1911,19 +2015,24 @@
                                             </div>
                                         </h4>
                                         <div class="metric-details">
-                                            <p><strong>Rationale for including:</strong></p>
-                                            <p>${metric.explanation || 'No rationale available'}</p>
-                                            
-                                            ${metric.report_text ? `
-                                                <p><strong>Explanation:</strong></p>
-                                                <p>${metric.report_text}</p>
+                                            <p><strong>Rationale:</strong></p>
+                                            <p>${metric.rationale || 'No rationale available'}</p>
+
+                                            <p><strong>Explanation:</strong></p>
+                                            <p>${metric.explanation || 'No explanation available'}</p>
+
+                                            <p><strong>Newsletter Narrative:</strong></p>
+                                            <p>${metric.report_text || 'No newsletter narrative available'}</p>
+
+                                            ${trendAnalysis ? `
+                                                <p><strong>Trend Analysis:</strong></p>
+                                                <p>${trendAnalysis}</p>
                                             ` : ''}
-                                            
+                                            ${chartsHtml ? chartsHtml : ''}
                                             ${perplexityContext ? `
                                                 <p><strong>Perplexity Context:</strong></p>
                                                 <div class="perplexity-context">${perplexityContext}</div>
                                             ` : ''}
-                                            
                                             ${citations ? `
                                                 <p><strong>Citations:</strong></p>
                                                 <div class="citations-container">${citations}</div>
@@ -1953,6 +2062,75 @@
                                 parent.classList.toggle('collapsed');
                                 parent.classList.toggle('expanded');
                             });
+                        });
+                        
+                        // Process any chart placeholders to expand them
+                        document.querySelectorAll('.chart-placeholder').forEach(placeholder => {
+                            const chartRef = placeholder.textContent.trim();
+                            if (chartRef.startsWith('[CHART:')) {
+                                console.log('Found chart reference:', chartRef);
+                                
+                                // Expand chart references when clicked
+                                placeholder.style.cursor = 'pointer';
+                                placeholder.style.backgroundColor = '#f0f0f0';
+                                placeholder.style.padding = '10px';
+                                placeholder.style.borderRadius = '5px';
+                                placeholder.style.marginBottom = '10px';
+                                placeholder.style.display = 'block';
+                                placeholder.style.textAlign = 'center';
+                                
+                                placeholder.innerHTML = `
+                                    <div>
+                                        <div>${chartRef}</div>
+                                        <button class="action-btn expand-chart-btn" style="margin-top: 10px;">Expand Chart</button>
+                                    </div>
+                                `;
+                                
+                                const expandBtn = placeholder.querySelector('.expand-chart-btn');
+                                if (expandBtn) {
+                                    expandBtn.addEventListener('click', (e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        
+                                        // Extract chart type and params
+                                        const chartMatch = chartRef.match(/\[CHART:([^:]+):([^:]+)(?::([^:]+))?(?::([^:]+))?(?::([^:]+))?\]/);
+                                        if (chartMatch) {
+                                            const chartType = chartMatch[1];
+                                            const param1 = chartMatch[2];
+                                            const param2 = chartMatch[3];
+                                            const param3 = chartMatch[4];
+                                            
+                                            if (chartType === 'time_series') {
+                                                // For time series: [CHART:time_series:metric_id:district:period]
+                                                const metricId = param1;
+                                                const district = param2 || '0';
+                                                const period = param3 || 'month';
+                                                
+                                                // Create iframe for time series chart
+                                                placeholder.innerHTML = `
+                                                    <div>
+                                                        <iframe src="/backend/time-series-chart?metric_id=${metricId}&district=${district}&period_type=${period}" 
+                                                                style="width: 100%; height: 400px; border: none;" frameborder="0">
+                                                        </iframe>
+                                                    </div>
+                                                `;
+                                            } else if (chartType === 'anomaly') {
+                                                // For anomaly: [CHART:anomaly:anomaly_id]
+                                                const anomalyId = param1;
+                                                
+                                                // Create iframe for anomaly chart
+                                                placeholder.innerHTML = `
+                                                    <div>
+                                                        <iframe src="/anomaly-analyzer/anomaly-chart?id=${anomalyId}" 
+                                                                style="width: 100%; height: 400px; border: none;" frameborder="0">
+                                                        </iframe>
+                                                    </div>
+                                                `;
+                                            }
+                                        }
+                                    });
+                                }
+                            }
                         });
                         
                         if (expandAllBtn) {
@@ -2046,6 +2224,43 @@
                     // Set height based on scrollHeight, add some padding
                     this.style.height = (this.scrollHeight + 10) + 'px';
                 });
+            }
+
+            // Add click handler for re-running post-proofing steps
+            const rerunPostProofingBtn = document.getElementById('rerun-postproofing');
+            if (rerunPostProofingBtn) {
+                rerunPostProofingBtn.onclick = async (e) => {
+                    e.preventDefault();
+                    const selectedOption = reportSelect.options[reportSelect.selectedIndex];
+                    if (!selectedOption || !selectedOption.value) {
+                        alert('Please select a newsletter to re-run email version.');
+                        return;
+                    }
+                    const filename = selectedOption.value;
+                    rerunPostProofingBtn.disabled = true;
+                    const originalText = rerunPostProofingBtn.textContent;
+                    rerunPostProofingBtn.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Re-running...</div>';
+                    try {
+                        // Call backend endpoint to re-run chart expansion and email version
+                        const response = await fetch('/backend/rerun_email_version', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename })
+                        });
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            alert('Email-compatible version re-generated successfully!');
+                            loadReports();
+                        } else {
+                            throw new Error(data.message || 'Failed to re-run email version');
+                        }
+                    } catch (error) {
+                        alert('Error: ' + error.message);
+                    } finally {
+                        rerunPostProofingBtn.disabled = false;
+                        rerunPostProofingBtn.textContent = originalText;
+                    }
+                };
             }
         });
     </script>

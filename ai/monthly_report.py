@@ -19,6 +19,7 @@ from dateutil.relativedelta import relativedelta
 import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
+from tools.generate_report_text import generate_report_text
 
 # Set up paths to look for .env file
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -119,13 +120,19 @@ try:
     # First try to import from the ai package
     from ai.tools.db_utils import get_postgres_connection, execute_with_connection, CustomJSONEncoder
     logger.warning("Successfully imported from ai.tools.db_utils")
+    from ai.tools.genChartdw import create_datawrapper_chart # New import
+    logger.warning("Successfully imported from ai.tools.genChartdw")
+    from ai.tools.gen_anomaly_chart_dw import generate_anomaly_chart_dw # Import for anomaly charts
 except ImportError:
     try:
         # If that fails, try to import from the local directory
         from tools.db_utils import get_postgres_connection, execute_with_connection, CustomJSONEncoder
         logger.warning("Successfully imported from tools.db_utils")
+        from tools.genChartdw import create_datawrapper_chart # New import - local fallback
+        logger.warning("Successfully imported from tools.genChartdw")
+        from tools.gen_anomaly_chart_dw import generate_anomaly_chart_dw # Import for anomaly charts - local fallback
     except ImportError:
-        logger.error("Failed to import from db_utils", exc_info=True)
+        logger.error("Failed to import from db_utils or genChartdw", exc_info=True)
         raise
 
 # Import necessary functions from other modules
@@ -751,7 +758,7 @@ def prioritize_deltas(deltas, max_items=10):
                             "comparison_mean": original_change.get("comparison_mean", 0),
                             "difference": original_change.get("difference_value", 0),
                             "district": original_change.get("district", "0"),
-                            "explanation": item.get("explanation", ""),
+                            "rationale": item.get("explanation", ""),
                             "trend_analysis": item.get("trend_analysis", ""),
                             "follow_up": item.get("follow_up", "")
                         })
@@ -781,7 +788,7 @@ def prioritize_deltas(deltas, max_items=10):
                             "comparison_mean": original_change.get("comparison_mean", 0),
                             "difference": original_change.get("difference_value", 0),
                             "district": original_change.get("district", "0"),
-                            "explanation": item.get("explanation", ""),
+                            "rationale": item.get("explanation", ""),
                             "trend_analysis": item.get("trend_analysis", ""),
                             "follow_up": item.get("follow_up", "")
                         })
@@ -794,7 +801,7 @@ def prioritize_deltas(deltas, max_items=10):
             # Log prioritized items
             for item in prioritized_items:
                 logger.info(f"Prioritized item: {item.get('metric')} - {item.get('group')} (Priority: {item.get('priority')})")
-                logger.info(f"  Explanation length: {len(item.get('explanation', ''))}")
+                logger.info(f"  Explanation length: {len(item.get('rationale', ''))}")
                 logger.info(f"  Trend analysis: {item.get('trend_analysis', '')[:50]}...")
             
             logger.info(f"Prioritized {len(prioritized_items)} items for the report")
@@ -868,7 +875,7 @@ def store_prioritized_items(prioritized_items, period_type='month', district="0"
                 
             # Log the data before insertion
             logger.info(f"Storing item: {item.get('metric')} - Priority: {item.get('priority')}")
-            logger.info(f"  Explanation: '{item.get('explanation', '')[:50]}...' (length: {len(item.get('explanation', ''))})")
+            logger.info(f"  Explanation: '{item.get('rationale', '')[:50]}...' (length: {len(item.get('rationale', ''))})")
             logger.info(f"  Trend analysis: '{item.get('trend_analysis', '')[:50]}...'")
             
             # Create metadata JSON to store additional fields
@@ -888,9 +895,9 @@ def store_prioritized_items(prioritized_items, period_type='month', district="0"
                 INSERT INTO monthly_reporting (
                     report_id, report_date, item_title, metric_name, metric_id, group_value, group_field_name, 
                     period_type, comparison_mean, recent_mean, difference, 
-                    percent_change, explanation, priority, district, metadata
+                    percent_change, rationale, explanation, priority, district, metadata
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 ) RETURNING id
             """, (
                 report_id,
@@ -905,7 +912,8 @@ def store_prioritized_items(prioritized_items, period_type='month', district="0"
                 item.get("recent_mean", 0),
                 item.get("difference", 0),
                 percent_change,
-                item.get("explanation", ""),
+                item.get("rationale", ""),  # rationale: now correctly from item['rationale']
+                "",  # explanation: will be filled in by generate_explanations
                 item.get("priority", 999),
                 item.get("district", district),
                 json.dumps(metadata)
@@ -915,7 +923,7 @@ def store_prioritized_items(prioritized_items, period_type='month', district="0"
             inserted_ids.append(inserted_id)
             
             # Check if the insertion worked
-            cursor.execute("SELECT LENGTH(explanation) FROM monthly_reporting WHERE id = %s", (inserted_id,))
+            cursor.execute("SELECT LENGTH(rationale) FROM monthly_reporting WHERE id = %s", (inserted_id,))
             expl_length = cursor.fetchone()[0]
             logger.info(f"Stored item with ID {inserted_id}, explanation length in DB: {expl_length}")
         
@@ -1026,14 +1034,14 @@ def generate_explanations(report_ids):
 
 Use the available tools to research this change and provide a comprehensive explanation that can be included in a monthly newsletter for city residents.
 You should first look to supervisor district and see if there are localized trends in a particular neighborhood.  If so, you should include that in your explanation. 
-Other than thay, prefer to share anomalies or datapoints that explain a large portion of the difference in the metric.  
-If the anomaly relates to business location openings or closing, user set_dataset to get the dba_name of the businesses and share some of those.
+Other than that, prefer to share anomalies or data-points that explain a large portion of the difference in the metric.  
 
-Your response MUST follow this structured format:
+Your response MUST be returned as a properly formatted JSON object with the following fields:
+- "explanation": A clear and thorough explanation of what happened (at least 3 paragraphs)
+- "trend_analysis": A discussion of how this change fits into longer-term trends
+- "charts": A list of chart references to include (if any)
 
-EXPLANATION: [Your clear explanation of what happened]
-
-DO NOT include any additional content, headers, or formatting outside of this structure. The explanation will be extracted directly for use in a report."""
+DO NOT include any additional content, headers, or formatting outside of this JSON structure. The data will be extracted directly for use in a report."""
             
             logger.info(f"Prompt for explainer agent: {prompt[:200]}...")
             
@@ -1062,23 +1070,32 @@ DO NOT include any additional content, headers, or formatting outside of this st
                 # Log the raw response for debugging
                 try:
                     if hasattr(response, 'model_dump'):
-                        logger.info(f"Response model_dump: {json.dumps(response.model_dump())[:500]}...")
+                        logger.info(f"Response model_dump: {safe_json_serialize(response.model_dump())[:500]}...")
                     elif isinstance(response, dict):
-                        logger.info(f"Response dict: {json.dumps(response)[:500]}...")
+                        logger.info(f"Response dict: {safe_json_serialize(response)[:500]}...")
                     elif hasattr(response, '__dict__'):
-                        logger.info(f"Response __dict__: {json.dumps(response.__dict__)[:500]}...")
+                        logger.info(f"Response __dict__: {safe_json_serialize(response.__dict__)[:500]}...")
                     else:
                         logger.info(f"Response string: {str(response)[:500]}...")
                 except Exception as dump_error:
                     logger.error(f"Error dumping response for logging: {str(dump_error)}")
+                    logger.error(f"Response type: {type(response)}")
+                    if callable(response):
+                        logger.error("Response is a callable function, cannot serialize")
+                    else:
+                        logger.error(f"Response repr: {repr(response)[:200]}...")
                 
                 explanation = ""
                 chart_data = None
+                explainer_metadata = {}
                 
                 # Check if response contains content
                 if response:
-                    # Try to extract explanation from the response messages
+                    # Try to extract JSON data from the response messages
                     try:
+                        # Extract the response content
+                        response_content = None
+                        
                         # Check if response has a 'messages' attribute
                         if hasattr(response, 'messages') and response.messages:
                             logger.info(f"Response has messages attribute with {len(response.messages)} messages")
@@ -1088,141 +1105,85 @@ DO NOT include any additional content, headers, or formatting outside of this st
                             
                             # Check if the message has content
                             if hasattr(last_message, 'content') and last_message.content:
-                                explanation = str(last_message.content)
-                                logger.info(f"Found explanation in last message content: {explanation[:100]}...")
+                                response_content = str(last_message.content)
+                                logger.info(f"Found response content in last message content: {response_content[:100]}...")
                             # Check if the message has text
                             elif hasattr(last_message, 'text') and last_message.text:
-                                explanation = str(last_message.text)
-                                logger.info(f"Found explanation in last message text: {explanation[:100]}...")
+                                response_content = str(last_message.text)
+                                logger.info(f"Found response content in last message text: {response_content[:100]}...")
                             # Check if the message is a dict with content
                             elif isinstance(last_message, dict) and 'content' in last_message:
-                                explanation = str(last_message['content'])
-                                logger.info(f"Found explanation in last message dict content: {explanation[:100]}...")
+                                response_content = str(last_message['content'])
+                                logger.info(f"Found response content in last message dict content: {response_content[:100]}...")
                             # Check if the message is a dict with text
                             elif isinstance(last_message, dict) and 'text' in last_message:
-                                explanation = str(last_message['text'])
-                                logger.info(f"Found explanation in last message dict text: {explanation[:100]}...")
+                                response_content = str(last_message['text'])
+                                logger.info(f"Found response content in last message dict text: {response_content[:100]}...")
                         
-                        # If no explanation found in messages, try to extract from the response itself
-                        if not explanation:
-                            # If response is a string, try to parse it as JSON
+                        # If no response_content found in messages, try to extract from the response itself
+                        if not response_content:
+                            # Handle other response types as previously implemented
+                            # ... existing code for parsing response ...
                             if isinstance(response, str):
-                                logger.info("Response is a string, attempting to parse as JSON")
-                                try:
-                                    response_json = json.loads(response)
-                                    logger.info(f"Successfully parsed response as JSON: {json.dumps(response_json)[:200]}...")
+                                response_content = response
+                            # Add other extraction methods as needed
+                        
+                        # Now try to parse the JSON from the response_content
+                        if response_content:
+                            try:
+                                # Extract JSON content from the response_content
+                                # First look for JSON content between ```json and ``` markers
+                                json_pattern = r'```json\s*([\s\S]*?)\s*```'
+                                json_match = re.search(json_pattern, response_content)
+                                
+                                if json_match:
+                                    json_str = json_match.group(1)
+                                    logger.info(f"Found JSON content in code block: {json_str[:200]}...")
+                                    explainer_data = json.loads(json_str)
+                                else:
+                                    # Try to parse the entire response as JSON
+                                    logger.info("Attempting to parse entire response as JSON")
+                                    explainer_data = json.loads(response_content)
+                                
+                                logger.info(f"Successfully parsed JSON data: {json.dumps(explainer_data)[:200]}...")
+                                
+                                # Extract the specific fields we're looking for
+                                if "explanation" in explainer_data:
+                                    explanation = explainer_data["explanation"]
+                                    logger.info(f"Extracted explanation from JSON: {explanation[:100]}...")
                                     
-                                    # Check if the JSON has a 'messages' field
-                                    if 'messages' in response_json and response_json['messages']:
-                                        messages = response_json['messages']
-                                        if isinstance(messages, list) and len(messages) > 0:
-                                            # Look at the last message
-                                            last_message = messages[-1]
-                                            if isinstance(last_message, dict) and 'content' in last_message:
-                                                explanation = str(last_message['content'])
-                                                logger.info(f"Found explanation in JSON messages[].content: {explanation[:100]}...")
-                                            elif isinstance(last_message, dict) and 'text' in last_message:
-                                                explanation = str(last_message['text'])
-                                                logger.info(f"Found explanation in JSON messages[].text: {explanation[:100]}...")
-                                except json.JSONDecodeError:
-                                    logger.warning("Failed to parse response string as JSON")
-                            
-                            # If response has a model_dump method (Pydantic model)
-                            elif hasattr(response, 'model_dump'):
-                                logger.info("Response has model_dump method, using it")
-                                response_json = response.model_dump()
-                                logger.info(f"Response model_dump: {json.dumps(response_json)[:200]}...")
+                                # Store all fields in metadata
+                                explainer_metadata = explainer_data
                                 
-                                # Check if the model_dump has a 'messages' field
-                                if 'messages' in response_json and response_json['messages']:
-                                    messages = response_json['messages']
-                                    if isinstance(messages, list) and len(messages) > 0:
-                                        # Look at the last message
-                                        last_message = messages[-1]
-                                        if isinstance(last_message, dict) and 'content' in last_message:
-                                            explanation = str(last_message['content'])
-                                            logger.info(f"Found explanation in model_dump messages[].content: {explanation[:100]}...")
-                                        elif isinstance(last_message, dict) and 'text' in last_message:
-                                            explanation = str(last_message['text'])
-                                            logger.info(f"Found explanation in model_dump messages[].text: {explanation[:100]}...")
+                                # Keep chart data separate
+                                if "chart_data" in explainer_data:
+                                    chart_data = explainer_data["chart_data"]
+                                elif "charts" in explainer_data:
+                                    chart_data = explainer_data["charts"]
+                                    
+                            except json.JSONDecodeError as json_err:
+                                logger.warning(f"Failed to parse JSON from response: {json_err}")
+                                logger.warning(f"Response content: {response_content[:500]}...")
+                                # If JSON parsing fails, attempt to extract explanation using existing methods
+                                explanation_pattern = r'EXPLANATION:\s*([\s\S]*?)(?:\Z|(?:TREND_ANALYSIS:|CHARTS:))'
+                                explanation_match = re.search(explanation_pattern, response_content)
+                                if explanation_match:
+                                    explanation = explanation_match.group(1).strip()
+                                    logger.info(f"Extracted explanation using regex: {explanation[:100]}...")
+                                    
+                                # Also try to extract trend analysis
+                                trend_pattern = r'TREND_ANALYSIS:\s*([\s\S]*?)(?:\Z|CHARTS:)'
+                                trend_match = re.search(trend_pattern, response_content)
+                                if trend_match:
+                                    explainer_metadata["trend_analysis"] = trend_match.group(1).strip()
+                                    logger.info(f"Extracted trend analysis using regex: {explainer_metadata['trend_analysis'][:100]}...")
+                                    
+                        else:
+                            logger.warning("Could not extract response content")
                             
-                            # If response has a __dict__ attribute
-                            elif hasattr(response, '__dict__'):
-                                logger.info("Response has __dict__ attribute, using it")
-                                response_dict = response.__dict__
-                                logger.info(f"Response __dict__ keys: {list(response_dict.keys())}")
-                                
-                                # Check if the __dict__ has a 'messages' field
-                                if 'messages' in response_dict and response_dict['messages']:
-                                    messages = response_dict['messages']
-                                    if isinstance(messages, list) and len(messages) > 0:
-                                        # Look at the last message
-                                        last_message = messages[-1]
-                                        if hasattr(last_message, 'content') and last_message.content:
-                                            explanation = str(last_message.content)
-                                            logger.info(f"Found explanation in __dict__ messages[].content: {explanation[:100]}...")
-                                        elif hasattr(last_message, 'text') and last_message.text:
-                                            explanation = str(last_message.text)
-                                            logger.info(f"Found explanation in __dict__ messages[].text: {explanation[:100]}...")
-                                        elif isinstance(last_message, dict) and 'content' in last_message:
-                                            explanation = str(last_message['content'])
-                                            logger.info(f"Found explanation in __dict__ messages[] dict content: {explanation[:100]}...")
-                                        elif isinstance(last_message, dict) and 'text' in last_message:
-                                            explanation = str(last_message['text'])
-                                            logger.info(f"Found explanation in __dict__ messages[] dict text: {explanation[:100]}...")
-                            
-                            # If response is already a dict
-                            elif isinstance(response, dict):
-                                logger.info("Response is already a dict")
-                                
-                                # Check if the dict has a 'messages' field
-                                if 'messages' in response and response['messages']:
-                                    messages = response['messages']
-                                    if isinstance(messages, list) and len(messages) > 0:
-                                        # Look at the last message
-                                        last_message = messages[-1]
-                                        if isinstance(last_message, dict) and 'content' in last_message:
-                                            explanation = str(last_message['content'])
-                                            logger.info(f"Found explanation in dict messages[].content: {explanation[:100]}...")
-                                        elif isinstance(last_message, dict) and 'text' in last_message:
-                                            explanation = str(last_message['text'])
-                                            logger.info(f"Found explanation in dict messages[].text: {explanation[:100]}...")
                     except Exception as e:
-                        logger.error(f"Error extracting explanation from response messages: {e}")
-                        logger.error(f"Problematic response: {str(response)[:200]}...")
+                        logger.error(f"Error extracting data from response: {e}")
                         logger.error(traceback.format_exc())
-                    
-                    # If we still don't have an explanation, try to find chart data
-                    if not explanation:
-                        # Look for chart data in the response
-                        try:
-                            # Check if response has a 'chart_data' attribute
-                            if hasattr(response, 'chart_data') and response.chart_data:
-                                chart_data = response.chart_data
-                                logger.info(f"Found chart_data in response attribute: {json.dumps(chart_data)[:100]}...")
-                            
-                            # Check if response has a 'chart_html' attribute
-                            elif hasattr(response, 'chart_html') and response.chart_html:
-                                chart_html = response.chart_html
-                                logger.info(f"Found chart_html in response attribute: {str(chart_html)[:100]}...")
-                                chart_data = {"html": str(chart_html)}
-                            
-                            # Check if response has tool_calls with chart data
-                            elif hasattr(response, 'tool_calls') and response.tool_calls:
-                                for tool_call in response.tool_calls:
-                                    if isinstance(tool_call, dict):
-                                        if 'chart' in str(tool_call).lower():
-                                            logger.info(f"Found chart data in tool_calls dict")
-                                            chart_data = tool_call
-                                            break
-                                    else:
-                                        if hasattr(tool_call, 'function') and 'chart' in str(tool_call.function).lower():
-                                            logger.info(f"Found chart data in tool_calls object")
-                                            chart_data = tool_call
-                                            break
-                        except Exception as e:
-                            logger.error(f"Error extracting chart data: {e}")
-                            logger.error(f"Chart data extraction error traceback: {traceback.format_exc()}")
                 
                 # Validate the explanation
                 if explanation:
@@ -1270,24 +1231,40 @@ DO NOT include any additional content, headers, or formatting outside of this st
                 except Exception as e:
                     logger.error(f"Error extracting chart HTML: {e}")
             
-            # Update the database with the detailed explanation and chart data
+            # Get existing metadata from the database and update it
+            existing_metadata = item.get("metadata", {}) or {}
+            if isinstance(existing_metadata, str):
+                try:
+                    existing_metadata = json.loads(existing_metadata)
+                except:
+                    existing_metadata = {}
+                    
+            # Merge the explainer_metadata into existing_metadata
+            if explainer_metadata:
+                for key, value in explainer_metadata.items():
+                    existing_metadata[key] = value
+                logger.info(f"Updated metadata with explainer data: {json.dumps(list(explainer_metadata.keys()))}")
+            
+            # Update the database with the detailed explanation, chart data, and updated metadata
             if explanation:  # Only update if we have a valid explanation
                 try:
                     if chart_html:
                         cursor.execute("""
                             UPDATE monthly_reporting
-                            SET report_text = %s, chart_data = %s
+                            SET explanation = %s,
+                                chart_data = %s,
+                                metadata = %s
                             WHERE id = %s
-                        """, (explanation, json.dumps({"html": str(chart_html)}), report_id))
-                        logger.info(f"Updated explanation and chart data for report ID {report_id}")
+                        """, (explanation, json.dumps({"html": str(chart_html)}), json.dumps(existing_metadata), report_id))
+                        logger.info(f"Updated explanation, chart data, and metadata for report ID {report_id}")
                     else:
                         cursor.execute("""
                             UPDATE monthly_reporting
-                            SET report_text = %s
+                            SET explanation = %s,
+                                metadata = %s
                             WHERE id = %s
-                        """, (explanation, report_id))
-                        logger.info(f"Updated explanation for report ID {report_id}")
-                    
+                        """, (explanation, json.dumps(existing_metadata), report_id))
+                        logger.info(f"Updated explanation, and metadata for report ID {report_id}")
                     successful_explanations += 1
                 except Exception as db_error:
                     logger.error(f"Database error while updating explanation: {str(db_error)}")
@@ -1345,6 +1322,9 @@ def generate_monthly_report(report_date=None, district="0"):
                    metadata->>'perplexity_context' as perplexity_context,
                    metadata->'perplexity_response' as perplexity_response_json,
                    metadata->'perplexity_response'->'citations' as perplexity_citations,
+                   metadata->>'trend_analysis' as trend_analysis, -- Extract trend_analysis from metadata
+                   metadata->>'charts' as charts, -- Extract charts from metadata
+                   metadata->>'follow_up' as follow_up, -- Extract follow_up from metadata
                    metric_id -- Placeholder for metric_id, needs proper retrieval logic
             FROM monthly_reporting 
             WHERE report_date = %s AND district = %s
@@ -1379,27 +1359,81 @@ def generate_monthly_report(report_date=None, district="0"):
             metric_id = item.get("metric_id") # Placeholder value for now
             anomaly_id = item.get("anomaly_id") # Might be None if not an anomaly item
             
-            # Decide which chart placeholder format to use
-            chart_placeholder = ""
+            # Initialize chart placeholders as a list instead of a single string
+            chart_placeholders = []
+            
+            # Add anomaly chart if available
             if anomaly_id:
                 try:
                     # Validate anomaly_id is an integer
-                    int(anomaly_id) 
-                    chart_placeholder = f"[CHART:anomaly:{anomaly_id}]"
+                    int(anomaly_id)
+                    anomaly_placeholder = f"[CHART:anomaly:{anomaly_id}]"
+                    
+                    # Try to get the caption from anomaly details
+                    try:
+                        # Import the get_anomaly_details function from anomalyAnalyzer
+                        from ai.anomalyAnalyzer import get_anomaly_details
+                        
+                        # Get anomaly details
+                        context_variables = {}
+                        anomaly_details = get_anomaly_details(context_variables, int(anomaly_id))
+                        
+                        # Check if successful and extract caption from metadata
+                        if anomaly_details.get("status") == "success" and anomaly_details.get("anomaly"):
+                            metadata = anomaly_details.get("anomaly", {}).get("metadata", {})
+                            caption = metadata.get("caption", "")
+                            
+                            # Append caption to the chart placeholder if available
+                            if caption:
+                                anomaly_placeholder = f"{anomaly_placeholder}\n{caption}"
+                                logger.info(f"Added caption to anomaly chart {anomaly_id}: {caption}")
+                    except Exception as e:
+                        logger.error(f"Error getting anomaly details for caption: {e}")
+                    
+                    chart_placeholders.append(anomaly_placeholder)
                 except (ValueError, TypeError):
                     anomaly_id = None # Invalid anomaly_id
             
-            # Fallback to time series if no valid anomaly_id or if metric_id is preferred
+            # Add time series chart if available
             if not anomaly_id and metric_id is not None:
                 try:
                     # Validate metric_id, district, period_type
                     int(metric_id)
                     str(item["district"])
                     str(item["period_type"])
-                    chart_placeholder = f"[CHART:time_series:{metric_id}:{item['district']}:{item['period_type']}]"
+                    chart_placeholders.append(f"[CHART:time_series:{metric_id}:{item['district']}:{item['period_type']}]")
                 except (ValueError, TypeError, KeyError):
                     metric_id = None # Invalid data
                     
+            # Add charts from explainer response
+            charts_from_metadata = item.get("charts")
+            if charts_from_metadata:
+                try:
+                    # Check if it's a JSON string
+                    if isinstance(charts_from_metadata, str):
+                        try:
+                            charts_parsed = json.loads(charts_from_metadata)
+                            if isinstance(charts_parsed, list):
+                                # Add all chart references
+                                for chart_ref in charts_parsed:
+                                    if isinstance(chart_ref, str):
+                                        chart_placeholders.append(chart_ref)
+                        except json.JSONDecodeError:
+                            # If it's not valid JSON but a single chart reference
+                            if charts_from_metadata.startswith("[CHART:"):
+                                chart_placeholders.append(charts_from_metadata)
+                    # If it's already parsed as JSON list
+                    elif isinstance(charts_from_metadata, list):
+                        for chart_ref in charts_from_metadata:
+                            if isinstance(chart_ref, str):
+                                chart_placeholders.append(chart_ref)
+                except Exception as e:
+                    logger.warning(f"Error parsing charts from metadata: {e}")
+                    
+            # Remove any duplicates from chart_placeholders
+            chart_placeholders = list(dict.fromkeys(chart_placeholders))
+            logger.info(f"Collected {len(chart_placeholders)} chart placeholders for {item['metric_name']}")
+            
             # Format Perplexity citations if available
             perplexity_citations_text = ""
             citation_map = {}  # Map to store citation numbers for reference matching
@@ -1513,6 +1547,16 @@ def generate_monthly_report(report_date=None, district="0"):
                     logger.error(f"Error processing citation references: {e}")
                     # Keep the original context if there's an error
 
+            # Get the trend analysis from metadata
+            trend_analysis = item.get("trend_analysis") or ""
+            if not trend_analysis and item["metadata"] and isinstance(item["metadata"], dict):
+                trend_analysis = item["metadata"].get("trend_analysis", "")
+                
+            # Get the follow-up questions from metadata
+            follow_up = item.get("follow_up") or ""
+            if not follow_up and item["metadata"] and isinstance(item["metadata"], dict):
+                follow_up = item["metadata"].get("follow_up", "")
+
             report_data.append({
                 "metric": item["metric_name"],
                 "metric_id": item["metric_id"],
@@ -1521,13 +1565,14 @@ def generate_monthly_report(report_date=None, district="0"):
                 "comparison_mean": item["comparison_mean"],
                 "difference": item["difference"],
                 "percent_change": item["percent_change"],
+                "rationale": item["rationale"],
                 "explanation": item["explanation"],
                 "report_text": item["report_text"],
                 "priority": item["priority"],
                 "chart_html": chart_html, # Keep original chart_html if already generated
-                "chart_placeholder": chart_placeholder, # Add the placeholder string
-                "trend_analysis": item["metadata"].get("trend_analysis", "") if item["metadata"] else "",
-                "follow_up": item["metadata"].get("follow_up", "") if item["metadata"] else "",
+                "chart_placeholders": chart_placeholders, # Add all chart placeholders as a list
+                "trend_analysis": trend_analysis,
+                "follow_up": follow_up,
                 "perplexity_context": processed_context,  # Use the processed context with linked citations
                 "perplexity_citations_text": perplexity_citations_text,
                 "citation_map": citation_map,  # Include the citation map for reference
@@ -1563,29 +1608,8 @@ def generate_monthly_report(report_date=None, district="0"):
         # Create a prompt for generating the report
         report_items_text = ""
         for i, item in enumerate(report_data, 1):
-            report_items_text += f"""
-ITEM {i}: {item['metric']} - {item['group']}
-Change: {item['recent_mean']:.2f} vs {item['comparison_mean']:.2f} ({item['percent_change']:+.2f}%)
-Summary: {item['explanation']}
-Trend Analysis: {item['trend_analysis']}
-Follow-up Questions: {item['follow_up']}
-Potential Chart: {item['chart_placeholder'] if item['chart_placeholder'] else 'No'}
+            report_items_text += f"\nITEM {i}: {item['metric']} - {item['group']}\n{item['report_text']}\n\n"
 
-Detailed Analysis:
-{item['report_text']}
-
-"""
-            # Add Perplexity context if available
-            if item['perplexity_context']:
-                report_items_text += f"Additional Context from Perplexity:\n{item['perplexity_context']}\n\n"
-
-            # Add Perplexity citations if available
-            if item['perplexity_citations_text']:
-                report_items_text += f"{item['perplexity_citations_text']}\n"
-                
-            if item['chart_html']:
-                report_items_text += f"Chart Available: Yes\n"
-        
         # Calculate the month for the report title (the more recent month in the comparison)
         if report_date.month == 1:  # January case
             report_month_date = report_date.replace(month=12, year=report_date.year-1)
@@ -1609,6 +1633,29 @@ Detailed Analysis:
                 official_role=official_role,
                 report_items_text=report_items_text
             )
+            
+            # Create logs directory if it doesn't exist
+            logs_dir = os.path.join(script_dir, 'logs')
+            os.makedirs(logs_dir, exist_ok=True)
+            
+            # Save the complete prompt to a log file (overwrite for each run)
+            prompt_log_path = os.path.join(logs_dir, 'monthly_report_prompt.txt')
+            try:
+                with open(prompt_log_path, 'w', encoding='utf-8') as f:
+                    f.write(f"System Message:\n{system_message}\n\n")
+                    f.write(f"User Prompt:\n{prompt}")
+                logger.info(f"Saved complete monthly report prompt to {prompt_log_path}")
+            except Exception as log_error:
+                logger.error(f"Error saving monthly report prompt to log file: {log_error}")
+            
+            # Log the generated report response (append)
+            try:
+                with open(prompt_log_path, 'a', encoding='utf-8') as f:
+                    f.write('\n\n=== GENERATED REPORT RESPONSE ===\n')
+                    f.write(report_text)
+                    f.write('\n=== END GENERATED REPORT RESPONSE ===\n')
+            except Exception as log_error:
+                logger.error(f"Error logging generated report response: {log_error}")
         except Exception as e:
             logger.error(f"Error loading prompts from JSON: {e}")
             raise
@@ -1627,7 +1674,76 @@ Detailed Analysis:
         
         # Once we have the report text, insert any charts if they exist
         for i, item in enumerate(report_data, 1):
-            if item.get('chart_html'):
+            # Try to insert all charts for this item
+            if item.get('chart_placeholders') and len(item['chart_placeholders']) > 0:
+                metric_mentions = [
+                    item['metric'],
+                    # Add variations if needed (e.g., removing emojis)
+                    item['metric'].replace("🏠", "Housing").replace("💊", "Drug").replace("🚫", "Business") 
+                ]
+                
+                # Find all instances where the metric is mentioned
+                mention_positions = []
+                for mention in metric_mentions:
+                    pos = 0
+                    while True:
+                        pos = report_text.find(mention, pos)
+                        if pos == -1:
+                            break
+                        mention_positions.append({'pos': pos, 'len': len(mention)})
+                        pos += len(mention)
+                # Sort positions in ascending order
+                mention_positions.sort(key=lambda x: x['pos'])
+                # For each chart placeholder, find a suitable insertion point
+                for idx, chart_placeholder in enumerate(item['chart_placeholders']):
+                    # If we have multiple charts, space them out across mentions
+                    if mention_positions:
+                        # If we have more charts than mentions, cycle through mentions
+                        mention_index = idx % len(mention_positions)
+                        mention_pos = mention_positions[mention_index]['pos']
+                        mention_len = mention_positions[mention_index]['len']
+                        # Find the end of the paragraph containing the mention
+                        paragraph_end = report_text.find("\n\n", mention_pos)
+                        if paragraph_end != -1:
+                            insertion_point = paragraph_end + 2 # Insert after the double newline
+                        else:
+                            # If no double newline found, try finding the end of the line
+                            line_end = report_text.find("\n", mention_pos)
+                            if line_end != -1:
+                                insertion_point = line_end + 1 # Insert after the newline
+                            else:
+                                # If no newline found, just insert after the mention (less ideal)
+                                insertion_point = mention_pos + mention_len # Use length of the specific mention
+                        # Insert the chart placeholder
+                        report_text = report_text[:insertion_point] + f"\n{chart_placeholder}\n\n" + report_text[insertion_point:]
+                        logger.info(f"Inserted chart placeholder '{chart_placeholder}' after mention of '{item['metric']}' at position {insertion_point}")
+                        # Update all subsequent mention positions to account for the insertion
+                        # This needs to be robust: find new positions for remaining original mentions
+                        temp_report_text = report_text[insertion_point + len(f"\n{chart_placeholder}\n\n"):]
+                        original_mention_positions = sorted(list(set([mp['pos'] for mp in mention_positions]))) # unique sorted positions
+                        new_mention_positions = []
+                        current_scan_offset = 0
+                        for orig_pos in original_mention_positions:
+                            if orig_pos <= mention_pos: # Mentions at or before the current one are unaffected relative to start
+                                new_mention_positions.append({'pos': orig_pos, 'len': mention_len})
+                            else: # Mentions after the insertion point need recalculation
+                                new_mention_positions.append({'pos': orig_pos + len(f"\n{chart_placeholder}\n\n"), 'len': mention_len})
+                        # Deduplicate by 'pos' (keep the first occurrence for each position)
+                        seen = set()
+                        deduped = []
+                        for mp in new_mention_positions:
+                            if mp['pos'] not in seen:
+                                deduped.append(mp)
+                                seen.add(mp['pos'])
+                        mention_positions = sorted(deduped, key=lambda x: x['pos'])
+                    else:
+                        # If no mentions found, append the chart at the end of the report
+                        report_text += f"\n\n{chart_placeholder}\n"
+                        logger.info(f"Appended chart placeholder '{chart_placeholder}' at the end of the report for '{item['metric']}'")
+            
+            # Also insert chart_html if it exists and wasn't already part of the placeholders
+            # This maintains backward compatibility with existing reports
+            elif item.get('chart_html'):
                 # Create the chart HTML content we want to insert
                 chart_content_to_insert = item['chart_html']
                 
@@ -1639,33 +1755,44 @@ Detailed Analysis:
                 ]
                 
                 insertion_point = -1
+                best_mention_len = 0
+
+                current_search_offset = 0
+                temp_mention_positions = []
                 for mention in metric_mentions:
-                    mention_pos = report_text.find(mention)
-                    if mention_pos != -1:
-                        # Find the end of the paragraph containing the mention
-                        paragraph_end = report_text.find("\\n\\n", mention_pos)
-                        if paragraph_end != -1:
-                            insertion_point = paragraph_end + 2 # Insert after the double newline
+                    pos = 0
+                    while True:
+                        pos = report_text.find(mention, current_search_offset)
+                        if pos == -1:
                             break
+                        temp_mention_positions.append({'pos': pos, 'len': len(mention)})
+                        pos += len(mention) # Continue searching after this mention
+                
+                if temp_mention_positions:
+                    # Prefer inserting after the first found mention
+                    first_mention = min(temp_mention_positions, key=lambda x: x['pos'])
+                    mention_pos = first_mention['pos']
+                    mention_len = first_mention['len']
+
+                    paragraph_end = report_text.find("\n\n", mention_pos)
+                    if paragraph_end != -1:
+                        insertion_point = paragraph_end + 2 
+                    else:
+                        line_end = report_text.find("\n", mention_pos)
+                        if line_end != -1:
+                            insertion_point = line_end + 1
                         else:
-                            # If no double newline found, try finding the end of the line
-                            line_end = report_text.find("\\n", mention_pos)
-                            if line_end != -1:
-                                insertion_point = line_end + 1 # Insert after the newline
-                                break
-                            else:
-                                # If no newline found, just insert after the mention (less ideal)
-                                insertion_point = mention_pos + len(mention)
-                                break
+                            insertion_point = mention_pos + mention_len
+                
 
                 if insertion_point != -1:
                     # Insert the chart HTML at the determined point
-                    report_text = report_text[:insertion_point] + f"\\n{chart_content_to_insert}\\n\\n" + report_text[insertion_point:]
-                    logger.info(f"Inserted chart for '{item['metric']}' after its mention.")
+                    report_text = report_text[:insertion_point] + f"\n{chart_content_to_insert}\n\n" + report_text[insertion_point:]
+                    logger.info(f"Inserted chart HTML for '{item['metric']}' after its mention.")
                 else:
                     # If we couldn't find a suitable mention, append the chart at the end
-                    report_text += f"\\n\\n{chart_content_to_insert}\\n"
-                    logger.info(f"Appended chart for '{item['metric']}' at the end of the report.")
+                    report_text += f"\n\n{chart_content_to_insert}\n"
+                    logger.info(f"Appended chart HTML for '{item['metric']}' at the end of the report.")
         
         # Create directory for reports if it doesn't exist
         reports_dir = Path(__file__).parent / 'output' / 'reports'
@@ -1675,152 +1802,9 @@ Detailed Analysis:
         report_filename = f"monthly_report_{district}_{report_date.strftime('%Y_%m')}.html"
         report_path = reports_dir / report_filename
         
-        # Add proper HTML structure with modern styling
-        html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{district_name} Monthly Newsletter - {current_month}</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
-    <style>
-        :root {{
-            --ink-black: #000000;
-            --dark-gray: #333333;
-            --medium-gray: #666666;
-            --light-gray: #E8E9EB;
-            --white: #ffffff;
-            --text-color: #222222;
-            --border-color: #CCCCCC;
-            --accent-color: #444444;
-        }}
-        
-        body {{
-            font-family: 'IBM Plex Sans', Arial, Helvetica Neue, sans-serif;
-            line-height: 1.6;
-            color: var(--text-color);
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: var(--white);
-        }}
-        
-       
-        
-        /* Typography */
-        h1 {{
-            font-family: 'Inter', Arial, Helvetica Neue, sans-serif;
-            font-weight: 700;
-            font-size: 36px;
-            line-height: 42px;
-            color: var(--ink-black);
-            margin-top: 0;
-            margin-bottom: 20px;
-        }}
-        
-        h2 {{
-            font-family: 'Inter', Arial, Helvetica Neue, sans-serif;
-            font-weight: 500;
-            font-size: 24px;
-            line-height: 32px;
-            color: var(--ink-black);
-            margin-top: 30px;
-            margin-bottom: 15px;
-        }}
-        
-        h3 {{
-            font-family: 'Inter', Arial, Helvetica Neue, sans-serif;
-            font-weight: 400;
-            font-size: 18px;
-            line-height: 28px;
-            color: var(--ink-black);
-            margin-top: 25px;
-            margin-bottom: 10px;
-        }}
-        
-        p {{
-            font-family: 'IBM Plex Sans', Arial, Helvetica Neue, sans-serif;
-            font-size: 14px;
-            line-height: 22px;
-            margin-bottom: 15px;
-        }}
-        
-        .caption {{
-            font-family: 'IBM Plex Sans', Arial, Helvetica Neue, sans-serif;
-            font-size: 12px;
-            line-height: 18px;
-            color: var(--medium-gray);
-            margin-top: 5px;
-            margin-bottom: 20px;
-        }}
-        
-        /* Content sections */
-        .section {{
-            margin-bottom: 30px;
-            padding: 20px;
-            background-color: var(--light-gray);
-            border-radius: 8px;
-        }}
-        
-        .highlight {{
-            background-color: var(--light-gray);
-            padding: 15px;
-            border-radius: 6px;
-            margin: 20px 0;
-            border-left: 4px solid var(--ink-black);
-        }}
-        
-        .key-takeaways {{
-            background-color: var(--white);
-            padding: 15px;
-            border-radius: 6px;
-            margin: 20px 0;
-            border-left: 4px solid #007bff;
-        }}
-        
-        .data-point {{
-            color: var(--ink-black);
-            font-weight: 500;
-        }}
-        
-        .call-to-action {{
-            background-color: var(--ink-black);
-            color: var(--white);
-            padding: 10px 15px;
-            border-radius: 4px;
-            display: inline-block;
-            margin: 10px 0;
-            text-decoration: none;
-        }}
-        
-        .chart-container {{
-            margin: 20px auto;
-            padding: 15px;
-            border-radius: 6px;
-            max-width: 600px;
-            background-color: var(--white); /* ADDED for consistency */
-        }}
-        
-        .footer {{
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border-color);
-            font-size: 12px;
-            color: var(--medium-gray);
-        }}
-    </style>
-</head>
-<body>
-    {report_text}
-    <div class="footer">
-        <p>Generated on {datetime.now().strftime('%B %d, %Y')} by TransparentSF</p>
-    </div>
-</body>
-</html>
-"""
-        
+        # Write the report directly without adding HTML structure
         with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
+            f.write(report_text)
         
         logger.info(f"Monthly newsletter saved to {report_path}")
         return str(report_path)
@@ -1871,13 +1855,21 @@ def proofread_and_revise_report(report_path):
             newsletter_text=newsletter_text
         )
 
-        # Use the AGENT_MODEL directly
-        logger.info("Using AGENT_MODEL for proofreading")
+        # Add explicit instruction to return detailed JSON
+        json_instruction = "\n\nPlease format your response as a detailed JSON object with the following structure:\n```json\n{\n  \"newsletter\": \"[full HTML content of the revised newsletter]\",\n  \"proofread_feedback\": \"[comprehensive, detailed summary of changes made and suggestions - please be thorough here]\",\n  \"headlines\": [\"headline 1\", \"headline 2\", \"headline 3\", \"headline 4\", \"headline 5\"]\n}\n```\nPlease provide extensive, detailed feedback in the proofread_feedback section, including specific examples of what you changed and why. I'd like at least 500 words of feedback."
+
+        prompt += json_instruction
+
+        # Use the AGENT_MODEL directly with higher max_tokens
+        logger.info("Using AGENT_MODEL for proofreading with increased token limit")
         response = client.chat.completions.create(
             model=AGENT_MODEL,
-            messages=[{"role": "system", "content": system_message},
-                     {"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ],
             temperature=0.1,
+            max_tokens=4000,  # Request more tokens in the response
             response_format={"type": "json_object"}  # Expect JSON response
         )
         response_content = response.choices[0].message.content
@@ -1896,7 +1888,28 @@ def proofread_and_revise_report(report_path):
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse proofread response as JSON: {e}")
             logger.error(f"Raw response: {response_content[:500]}...")
-            return {"status": "error", "message": f"Failed to parse proofread JSON response: {e}"}
+            # Attempt to recover newsletter, headlines, and feedback using regex
+            newsletter_match = re.search(r'"newsletter"\s*:\s*"(.*?)"\s*,', response_content, re.DOTALL)
+            feedback_match = re.search(r'"proofread_feedback"\s*:\s*"(.*?)"\s*,', response_content, re.DOTALL)
+            headlines_match = re.search(r'"headlines"\s*:\s*(\[.*?\])', response_content, re.DOTALL)
+            revised_newsletter_content = newsletter_match.group(1) if newsletter_match else None
+            proofread_feedback = feedback_match.group(1) if feedback_match else None
+            try:
+                headlines = json.loads(headlines_match.group(1)) if headlines_match else None
+            except Exception:
+                headlines = None
+            logger.warning("Recovered fields from malformed JSON: newsletter=%s, feedback=%s, headlines=%s", bool(revised_newsletter_content), bool(proofread_feedback), bool(headlines))
+            if revised_newsletter_content:
+                # Save the revised newsletter content
+                report_path_obj = Path(report_path)
+                revised_filename = f"{report_path_obj.stem}_revised{report_path_obj.suffix}"
+                revised_path = report_path_obj.parent / revised_filename
+                with open(revised_path, 'w', encoding='utf-8') as f:
+                    f.write(revised_newsletter_content)
+                logger.info(f"Revised newsletter saved to {revised_path} (recovered from malformed JSON)")
+                return {"status": "partial", "revised_report_path": str(revised_path), "proofread_feedback": proofread_feedback, "headlines": headlines, "message": "Recovered from malformed JSON."}
+            else:
+                return {"status": "error", "message": f"Failed to parse proofread JSON response: {e}"}
         
         # Save the revised newsletter content
         report_path_obj = Path(report_path)
@@ -2179,6 +2192,7 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
             report_data = []
             for item in items:
                 report_data.append({
+                    "id": item["id"],
                     "metric": item["metric_name"],
                     "metric_id": item["metric_id"],
                     "group": item["group_value"],
@@ -2186,6 +2200,7 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
                     "comparison_mean": item["comparison_mean"],
                     "difference": item["difference"],
                     "percent_change": item["percent_change"],
+                    "rationale": item["rationale"],
                     "explanation": item["explanation"],
                     "report_text": item["report_text"],
                     "priority": item["priority"],
@@ -2375,19 +2390,28 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
                 logger.warning(f"Failed to get additional context: {context_result.get('message')}")
                 # Don't fail the process if context retrieval fails
             
-        # Step 6: Generate the monthly newsletter (with enriched context already in the database)
-        logger.info("Step 6: Generating monthly newsletter")
+        # Step 6: Generate final report_text for each item
+        logger.info("Step 6: Generating final report_text for each item")
+        report_item_ids = [item['id'] for item in report_items if 'id' in item]
+        if report_item_ids:
+            report_text_result = generate_report_text(
+                report_item_ids,
+                execute_with_connection,
+                load_prompts,
+                AGENT_MODEL,
+                client,
+                logger
+            )
+            if report_text_result.get("status") != "success":
+                logger.warning(f"Failed to generate report_text: {report_text_result.get('message')}")
+
+        # Step 7: Generate the monthly newsletter (with enriched context already in the database)
+        logger.info("Step 7: Generating monthly newsletter")
         newsletter_result = generate_monthly_report(district=district)
         if newsletter_result.get("status") != "success":
             return newsletter_result
             
-        # Step 7: Expand chart references in the newsletter
-        logger.info("Step 7: Expanding chart references in the newsletter")
-        expand_result = expand_chart_references(newsletter_result.get("report_path"))
-        if not expand_result:
-            logger.warning("Failed to expand chart references in the newsletter")
-
-        # Step 8: Proofread and revise the newsletter
+        # Step 8: Proofreading and revising the newsletter
         logger.info("Step 8: Proofreading and revising newsletter")
         revised_result = proofread_and_revise_report(newsletter_result.get("report_path"))
         if revised_result.get("status") != "success":
@@ -2395,9 +2419,14 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
         
         # Use the revised newsletter path
         revised_newsletter_path = revised_result.get("revised_report_path")
+        # Step 9: Expand chart references in the revised newsletter
+        logger.info("Step 9: Expanding chart references in the revised newsletter")
+        expand_result = expand_chart_references(revised_newsletter_path)
+        if not expand_result:
+            logger.warning("Failed to expand chart references in the revised newsletter")
         
-        # Step 9: Generate an email-compatible version of the newsletter
-        logger.info("Step 9: Generating email-compatible version of newsletter")
+        # Step 10: Generate an email-compatible version of the newsletter
+        logger.info("Step 10: Generating email-compatible version of newsletter")
         email_result = None
         if revised_newsletter_path:
             email_result = generate_email_compatible_report(revised_newsletter_path)
@@ -2495,6 +2524,13 @@ def get_monthly_reports_list():
             
             item_count = cursor.fetchone()[0]
             
+            # Fetch the rationale of the highest-priority item (lowest priority value)
+            cursor.execute("""
+                SELECT rationale FROM monthly_reporting WHERE report_id = %s ORDER BY priority ASC LIMIT 1
+            """, (report['id'],))
+            rationale_row = cursor.fetchone()
+            rationale = rationale_row[0] if rationale_row else None
+
             # Create a report object
             formatted_reports.append({
                 "id": report['id'],
@@ -2504,6 +2540,7 @@ def get_monthly_reports_list():
                 "period_type": report['period_type'],
                 "max_items": report['max_items'],
                 "item_count": item_count,
+                "rationale": rationale,
                 "original_filename": report['original_filename'],
                 "revised_filename": report['revised_filename'],
                 "published_url": report['published_url'],
@@ -2685,212 +2722,40 @@ def generate_chart_image(chart_type, params, output_dir=None):
 
 def generate_email_compatible_report(report_path, output_path=None):
     """
-    Generate an email-compatible version of the report by replacing iframes with static images.
-    
+    Generate an email-compatible version of the report by replacing iframes with URLs.
     Args:
         report_path: Path to the original report HTML file
         output_path: Path to save the email-compatible report (defaults to report_path with _email suffix)
-        
     Returns:
         Path to the email-compatible report
     """
     logger.info(f"Generating email-compatible version of report: {report_path}")
-    
     try:
         # Set default output path if not provided
         if not output_path:
             report_path_obj = Path(report_path)
             output_path = report_path_obj.parent / f"{report_path_obj.stem}_email{report_path_obj.suffix}"
-        
         # Read the original report
         with open(report_path, 'r', encoding='utf-8') as f:
             report_html = f.read()
-        
-        # Expand chart references FIRST if they exist (e.g., [CHART:...])
-        # This ensures we are working with iframe tags
-        logger.info(f"Expanding chart references in report for email compatibility: {report_path}")
-        expand_result = expand_chart_references(report_path) # This modifies the file in place
-        if not expand_result:
-            logger.warning("Failed to expand chart references in the report for email compatibility")
-            
-        # Read the potentially modified report again
-        with open(report_path, 'r', encoding='utf-8') as f:
-            report_html = f.read()
-        
-        # Create directory for charts if it doesn't exist within the reports directory
-        reports_dir = Path(report_path).parent
-        charts_dir = reports_dir / 'charts'
-        charts_dir.mkdir(exist_ok=True)
-        
-        # Find all iframe elements using a more robust regex
-        # This regex looks for <iframe> tags and captures the src attribute value
-        iframe_pattern = r'<iframe.*?src=["\']([^"\']+)["\'].*?>.*?</iframe>'
-        
-        # Also search for entire chart containers with iframes inside
-        chart_container_pattern = r'<div class="chart-container".*?>.*?<iframe.*?src=["\']([^"\']+)["\'].*?>.*?</iframe>.*?</div>'
-        
-        # Combine found iframes from both patterns
-        iframe_matches = re.findall(iframe_pattern, report_html, re.IGNORECASE | re.DOTALL)
-        chart_container_matches = re.findall(chart_container_pattern, report_html, re.IGNORECASE | re.DOTALL)
-        
-        # Combine unique iframe URLs
-        iframe_urls = list(set(iframe_matches + chart_container_matches))
-        
-        logger.info(f"Found {len(iframe_urls)} potential iframe URLs to process.")
-        
-        processed_html = report_html
         replacements_made = 0
-        
-        # Replace each iframe with a static image
-        for iframe_url_encoded in iframe_urls:
-            # Decode HTML entities like &amp;
-            import html
-            iframe_url = html.unescape(iframe_url_encoded)
-
-            # Use a stripped version for regex matching to avoid issues with leading/trailing whitespace
-            iframe_url_to_match = iframe_url_encoded.strip()
-
-            logger.info(f"Processing iframe URL (original captured): '{iframe_url_encoded}'")
-            logger.info(f"Processing iframe URL (stripped for matching): '{iframe_url_to_match}'")
-            logger.info(f"Processing iframe URL (unescaped for params): '{iframe_url}'")
-            
-            # Extract chart type and parameters from the URL
-            if 'time-series-chart' in iframe_url:
-                chart_type = 'time_series'
-                # Extract parameters from URL
-                params = {}
-                if '?' in iframe_url:
-                    # Handle potential fragments before splitting params
-                    url_parts = iframe_url.split('?')[1]
-                    query_string = url_parts.split('#')[0]
-                    for param in query_string.split('&'):
-                        if '=' in param:
-                            key, value = param.split('=')
-                            params[key] = value
-                        else: # Handle cases where a param might not have a value
-                            params[param] = ''
-                
-                metric_id = params.get('metric_id', 'unknown')
-                district = params.get('district', 'unknown')
-                period_type = params.get('period_type', 'unknown')
-                
-                # Generate a unique filename
-                timestamp = int(time.time())
-                img_filename = f"time_series_{metric_id}_{district}_{period_type}_{timestamp}.png"
-                img_path = charts_dir / img_filename
-                
-                logger.info(f"Requesting time-series image for metric={metric_id}, district={district}, period={period_type}")
-                # Request the chart image
-                success = request_chart_image('time_series', params, img_path)
-                
-                if success:
-                    # Create an img tag with a relative path using fixed chart container structure
-                    img_tag = f'<div class="chart-container" style="margin-bottom: 30px; background-color: transparent; padding: 0;"><div style="position: relative; width: 100%; height: 0; padding-bottom: 100%;"><div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"><img src="charts/{img_filename}" alt="Time Series Chart for Metric {metric_id}" style="max-width: 100%; height: 100%; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" /></div></div></div>'
-                    
-                    # More specific regex for replacement to avoid unintended changes
-                    # First, try to match and replace the entire chart container if it exists
-                    chart_container_pattern = r'<div class="chart-container".*?>.*?<iframe.*?src=["\']' + re.escape(iframe_url_to_match) + r'["\'].*?>.*?</iframe>.*?</div>'
-                    new_html, container_count = re.subn(chart_container_pattern, img_tag, processed_html, flags=re.IGNORECASE | re.DOTALL)
-                    
-                    if container_count > 0:
-                        processed_html = new_html
-                        replacements_made += container_count
-                        logger.info(f"Replaced entire chart container with iframe (src: {iframe_url_to_match}) with image container: {img_filename} ({container_count} occurrence(s))")
-                    else:
-                        # If no chart container was found, try matching just the iframe
-                        specific_iframe_pattern = r'<iframe.*?src=["\']' + re.escape(iframe_url_to_match) + r'["\'].*?>.*?</iframe>'
-                        new_html, iframe_count = re.subn(specific_iframe_pattern, img_tag, processed_html, flags=re.IGNORECASE | re.DOTALL)
-                        
-                        if iframe_count > 0:
-                            processed_html = new_html
-                            replacements_made += iframe_count
-                            logger.info(f"Replaced time series chart iframe (src: {iframe_url_to_match}) with image: {img_filename} ({iframe_count} occurrence(s))")
-                        else:
-                            logger.warning(f"Could not find exact iframe tag to replace for src: {iframe_url_to_match}")
-                else:
-                    logger.warning(f"Failed to generate image for time series chart ({iframe_url}), skipping replacement.")
-                
-            elif 'anomaly-chart' in iframe_url:
-                chart_type = 'anomaly'
-                # Extract parameters from URL
-                params = {}
-                if '?' in iframe_url:
-                    url_parts = iframe_url.split('?')[1]
-                    query_string = url_parts.split('#')[0]
-                    for param in query_string.split('&'):
-                        if '=' in param:
-                            key, value = param.split('=')
-                            params[key] = value
-                        else:
-                             params[param] = ''
-                
-                anomaly_id = params.get('id', 'unknown')
-                
-                # Generate a unique filename
-                timestamp = int(time.time())
-                img_filename = f"anomaly_{anomaly_id}_{timestamp}.png"
-                img_path = charts_dir / img_filename
-                
-                logger.info(f"Requesting anomaly image for id={anomaly_id}")
-                # Request the chart image
-                success = request_chart_image('anomaly', params, img_path)
-                
-                if success:
-                    # Create an img tag with a relative path using fixed chart container structure
-                    img_tag = f'<div class="chart-container" style="margin-bottom: 30px; background-color: transparent; padding: 0;"><div style="position: relative; width: 100%; height: 0; padding-bottom: 100%;"><div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"><img src="charts/{img_filename}" alt="Anomaly Chart for ID {anomaly_id}" style="max-width: 100%; height: 100%; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" /></div></div></div>'
-                    
-                    # More specific regex for replacement
-                    specific_iframe_pattern = r'<iframe.*?src=["\']' + re.escape(iframe_url_to_match) + r'["\'].*?>.*?</iframe>'
-                    new_html, count = re.subn(specific_iframe_pattern, img_tag, processed_html, flags=re.IGNORECASE | re.DOTALL)
-                    if count > 0:
-                        processed_html = new_html
-                        replacements_made += count
-                        logger.info(f"Replaced anomaly chart iframe (src: {iframe_url_to_match}) with image: {img_filename} ({count} occurrence(s))")
-                    else:
-                         logger.warning(f"Could not find exact iframe tag to replace for src: {iframe_url_to_match}")
-                else:
-                     logger.warning(f"Failed to generate image for anomaly chart ({iframe_url}), skipping replacement.")
-            else:
-                logger.warning(f"Skipping unsupported iframe URL: {iframe_url}")
-                
+        # 1. Replace all <iframe ...src="...">...</iframe> with the URL
+        iframe_pattern = r'<iframe[^>]+src=["\']([^"\']+)["\'][^>]*>.*?</iframe>'
+        def iframe_replacer(match):
+            nonlocal replacements_made
+            url = match.group(1)
+            replacements_made += 1
+            return f'\n{url}\n'
+        processed_html = re.sub(iframe_pattern, iframe_replacer, report_html, flags=re.IGNORECASE | re.DOTALL)
+        # 2. Remove any <div class="chart-container">...</div> blocks that no longer contain an iframe
+        empty_container_pattern = r'<div[^>]*class=["\']chart-container["\'][^>]*>\s*</div>'
+        processed_html = re.sub(empty_container_pattern, '', processed_html, flags=re.IGNORECASE | re.DOTALL)
         logger.info(f"Total iframe replacements made: {replacements_made}")
-        
-        # # Add a note at the top of the email about interactive charts (only if replacements were made)
-        # if replacements_made > 0:
-        #     note_html = '<div style="padding: 15px; margin-top: 20px; margin-bottom: 20px; background-color: #f8f9fa; border-left: 4px solid #007BFF; border-radius: 4px;"><p style="margin: 0; font-size: 14px;">Some interactive charts have been replaced with static images in this email version. <a href="https://transparentsf.com" style="color: #007BFF; text-decoration: underline;">View the full interactive version online</a>.</p></div>'
-            
-        #     # Find a good place to insert the note - after the logo container if it exists
-        #     if '<div class="logo-container">' in processed_html:
-        #         # Try to insert after the closing div of the logo container
-        #         insert_point = processed_html.find('<div class="logo-container">')
-        #         if insert_point != -1:
-        #             end_logo_div = processed_html.find('</div>', insert_point)
-        #             if end_logo_div != -1:
-        #                  processed_html = processed_html[:end_logo_div+6] + '\n    ' + note_html + processed_html[end_logo_div+6:]
-        #             else: # Fallback if closing div not found immediately
-        #                  processed_html = processed_html.replace('<body>', '<body>\n    ' + note_html)
-        #         else:
-        #             processed_html = processed_html.replace('<body>', '<body>\n    ' + note_html)
-        #     else:
-        #         # Insert at the beginning of the body as fallback
-        #         processed_html = processed_html.replace('<body>', '<body>\n    ' + note_html)
-
-        #     # Add a footer note with link to full version
-        #     footer_note = '<div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; font-size: 13px; color: #666;">This is an email version with some interactive elements replaced by static images. <a href="https://transparentsf.com" style="color: #007BFF;">View the full interactive version online</a>.</div>'
-            
-            # # Add the footer note before the closing body tag
-            # if '</body>' in processed_html:
-            #     processed_html = processed_html.replace('</body>', footer_note + '\n</body>')
-            # else:
-            #     processed_html += footer_note # Append if no body tag found
-        
         # Write the processed HTML to the output file
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(processed_html)
-        
         logger.info(f"Generated email-compatible report at {output_path}")
         return str(output_path)
-        
     except Exception as e:
         logger.error(f"Error generating email-compatible report: {str(e)}", exc_info=True)
         return None
@@ -2909,6 +2774,39 @@ def generate_chart_data_url(chart_type, params):
     logger.info(f"Generating data URL for {chart_type} chart with params: {params}")
     
     try:
+        # For anomaly charts, try to use Datawrapper
+        if chart_type == 'anomaly':
+            anomaly_id = params.get('id', '27338')
+            try:
+                # Make a request to get the anomaly data
+                anomaly_data_url = f"{API_BASE_URL}/anomaly-analyzer/api/anomaly/{anomaly_id}"
+                logger.info(f"Requesting anomaly data for data URL: {anomaly_data_url}")
+                
+                response = requests.get(anomaly_data_url)
+                if response.status_code == 200:
+                    anomaly_response = response.json()
+                    
+                    # Extract the needed data for the chart
+                    anomaly_data = anomaly_response.get("data", {})
+                    if anomaly_data and "dates" in anomaly_data and "counts" in anomaly_data:
+                        logger.info(f"Successfully retrieved data for anomaly data URL ID: {anomaly_id}")
+                        
+                        # Create a Datawrapper chart
+                        chart_title = f"Anomaly {anomaly_id}: {anomaly_data.get('group_value', 'Trend Analysis')}"
+                        metadata = anomaly_response.get("metadata", {})
+                        
+                        # Generate a Datawrapper chart
+                        from tools.gen_anomaly_chart_dw import generate_anomaly_chart_from_id
+                        chart_url = generate_anomaly_chart_from_id(anomaly_id)
+                        
+                        if chart_url:
+                            logger.info(f"Successfully generated Datawrapper chart for anomaly data URL: {chart_url}")
+                            # Return the chart URL directly instead of using Playwright to take a screenshot
+                            return chart_url
+            except Exception as e:
+                logger.error(f"Error using Datawrapper for anomaly data URL: {str(e)}", exc_info=True)
+                logger.info("Falling back to traditional chart approach for data URL")
+                
         # Construct the URL for the chart
         if chart_type == 'time_series':
             url = f"/backend/time-series-chart?metric_id={params.get('metric_id', 1)}&district={params.get('district', 0)}&period_type={params.get('period_type', 'year')}#chart-section"
@@ -2917,32 +2815,10 @@ def generate_chart_data_url(chart_type, params):
         else:
             raise ValueError(f"Unsupported chart type: {chart_type}")
         
-        # Use a headless browser service to capture the chart as an image
-        # This could be implemented using Selenium, Playwright, or a service like Browserless
-        # For this example, we'll use a simple approach with requests and PIL
-        
-        # Make a request to the chart URL
-        full_url = f"{API_BASE_URL}{url}"  # Only use API_BASE_URL for server-side requests
-        response = requests.get(full_url)
-        if response.status_code != 200:
-            logger.error(f"Failed to fetch chart from {full_url}: {response.status_code}")
-            return None
-        
-        # For a real implementation, you would use a headless browser to render the page
-        # and capture the chart element as an image
-        # For this example, we'll create a placeholder image
-        
-        # Create a placeholder image (in a real implementation, this would be the actual chart)
-        img = Image.new('RGB', (800, 450), color=(255, 255, 255))
-        
-        # Convert the image to a data URL
-        buffered = BytesIO()
-        img.save(buffered, format="PNG")
-        img_str = base64.b64encode(buffered.getvalue()).decode()
-        data_url = f"data:image/png;base64,{img_str}"
-        
-        logger.info(f"Generated data URL for {chart_type} chart")
-        return data_url
+        # Generate a full URL to the chart
+        full_url = f"{API_BASE_URL}{url}"
+        logger.info(f"Using direct URL for chart: {full_url}")
+        return full_url
         
     except Exception as e:
         logger.error(f"Error generating chart data URL: {str(e)}", exc_info=True)
@@ -3195,21 +3071,70 @@ def expand_chart_references(report_path):
             district = match.group(2)
             period_type = match.group(3)
             
-            return f"""
-<div class="chart-container">
-    <div style="position: relative; width: 100%; padding-bottom: 100%;">
-        <iframe src="/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section" 
-                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" 
-                frameborder="0" 
-                scrolling="no">
-        </iframe>
-    </div>
-</div>"""
+            logger.info(f"Attempting to generate Datawrapper chart for metric_id: {metric_id}, district: {district}, period: {period_type}")
+            
+            dw_chart_url = create_datawrapper_chart(
+                metric_id=metric_id,
+                district=district,
+                period_type=period_type
+            )
+            
+            if dw_chart_url:
+                logger.info(f"Successfully generated Datawrapper chart: {dw_chart_url}")
+                # Use Datawrapper's responsive iframe embedding approach
+                iframe_html = (
+                    f'<div class="chart-container">\n'
+                    f'    <div class="datawrapper-chart-embed">\n'
+                    f'        <iframe src="{dw_chart_url}"\n'
+                    f'                style="width: 100%; border: none;" \n'
+                    f'                height="400"\n'
+                    f'                frameborder="0" \n'
+                    f'                scrolling="no"\n'
+                    f'                allowfullscreen="true">\n'
+                    f'        </iframe>\n'
+                    f'    </div>\n'
+                    f'</div>'
+                )
+                return iframe_html
+            else:
+                logger.warning(f"Failed to generate Datawrapper chart for metric_id: {metric_id}. Using placeholder.")
+                return f"<!-- Datawrapper chart generation failed for metric_id: {metric_id}, district: {district}, period: {period_type} -->"
         
         # Replace anomaly chart references
         def replace_anomaly(match):
             anomaly_id = match.group(1)
             
+            try:
+                # Use the new helper function to generate a chart directly from the anomaly ID
+                from tools.gen_anomaly_chart_dw import generate_anomaly_chart_from_id
+                logger.info(f"Generating chart for anomaly ID: {anomaly_id} using direct ID function")
+                
+                chart_url = generate_anomaly_chart_from_id(anomaly_id)
+                
+                if chart_url:
+                    logger.info(f"Successfully generated Datawrapper chart for anomaly {anomaly_id}: {chart_url}")
+                    # Use Datawrapper's responsive iframe embedding approach
+                    iframe_html = (
+                        f'<div class="chart-container">\n'
+                        f'    <div class="datawrapper-chart-embed">\n'
+                        f'        <iframe src="{chart_url}"\n'
+                        f'                title="Anomaly {anomaly_id}: Trend Analysis"\n'
+                        f'                style="width: 100%; border: none;" \n'
+                        f'                height="400"\n'
+                        f'                frameborder="0" \n'
+                        f'                scrolling="no"\n'
+                        f'                aria-label="Anomaly {anomaly_id}: Trend Analysis"\n'
+                        f'                allowfullscreen="true">\n'
+                        f'        </iframe>\n'
+                        f'    </div>\n'
+                        f'</div>'
+                    )
+                    return iframe_html
+            except Exception as e:
+                logger.error(f"Error generating Datawrapper chart for anomaly {anomaly_id}: {str(e)}")
+            
+            # Fallback to the original iframe method if Datawrapper generation fails
+            logger.info(f"Using fallback iframe for anomaly ID: {anomaly_id}")
             return f"""
 <div class="chart-container">
     <div style="position: relative; width: 100%; padding-bottom: 100%;">
@@ -3234,6 +3159,38 @@ def expand_chart_references(report_path):
                 if len(parts) >= 2:
                     anomaly_id = parts[1].split(".")[0]  # Remove file extension
                     
+                    # Try to use Datawrapper for this anomaly image
+                    try:
+                        # Use the new helper function to generate a chart directly from the anomaly ID
+                        from tools.gen_anomaly_chart_dw import generate_anomaly_chart_from_id
+                        logger.info(f"Generating chart for anomaly image ID: {anomaly_id} using direct ID function")
+                        
+                        chart_url = generate_anomaly_chart_from_id(anomaly_id)
+                        
+                        if chart_url:
+                            logger.info(f"Successfully generated Datawrapper chart for anomaly image {anomaly_id}: {chart_url}")
+                            # Use Datawrapper's responsive iframe embedding approach
+                            iframe_html = (
+                                f'<div class="chart-container">\n'
+                                f'    <div class="datawrapper-chart-embed">\n'
+                                f'        <iframe src="{chart_url}"\n'
+                                f'                title="Anomaly {anomaly_id}: {img_alt}"\n'
+                                f'                style="width: 100%; border: none;" \n'
+                                f'                height="400"\n'
+                                f'                frameborder="0" \n'
+                                f'                scrolling="no"\n'
+                                f'                aria-label="Anomaly {anomaly_id}: {img_alt}"\n'
+                                f'                allowfullscreen="true">\n'
+                                f'        </iframe>\n'
+                                f'    </div>\n'
+                                f'</div>'
+                            )
+                            return iframe_html
+                    except Exception as e:
+                        logger.error(f"Error generating Datawrapper chart for anomaly image {anomaly_id}: {str(e)}")
+                    
+                    # Fallback to the original iframe method
+                    logger.info(f"Using fallback iframe for anomaly image ID: {anomaly_id}")
                     return f"""
 <div class="chart-container">
     <div style="position: relative; width: 100%; padding-bottom: 100%;">
@@ -3259,6 +3216,38 @@ def expand_chart_references(report_path):
                 if len(parts) >= 2:
                     anomaly_id = parts[1].split(".")[0]  # Remove file extension
                     
+                    # Try to use Datawrapper for this anomaly image
+                    try:
+                        # Use the new helper function to generate a chart directly from the anomaly ID
+                        from tools.gen_anomaly_chart_dw import generate_anomaly_chart_from_id
+                        logger.info(f"Generating chart for anomaly image ID (no alt): {anomaly_id} using direct ID function")
+                        
+                        chart_url = generate_anomaly_chart_from_id(anomaly_id)
+                        
+                        if chart_url:
+                            logger.info(f"Successfully generated Datawrapper chart for anomaly image {anomaly_id}: {chart_url}")
+                            # Use Datawrapper's responsive iframe embedding approach
+                            iframe_html = (
+                                f'<div class="chart-container">\n'
+                                f'    <div class="datawrapper-chart-embed">\n'
+                                f'        <iframe src="{chart_url}"\n'
+                                f'                title="Anomaly {anomaly_id}: Trend Analysis"\n'
+                                f'                style="width: 100%; border: none;" \n'
+                                f'                height="400"\n'
+                                f'                frameborder="0" \n'
+                                f'                scrolling="no"\n'
+                                f'                aria-label="Anomaly {anomaly_id}: Trend Analysis"\n'
+                                f'                allowfullscreen="true">\n'
+                                f'        </iframe>\n'
+                                f'    </div>\n'
+                                f'</div>'
+                            )
+                            return iframe_html
+                    except Exception as e:
+                        logger.error(f"Error generating Datawrapper chart for anomaly image (no alt) {anomaly_id}: {str(e)}")
+                    
+                    # Fallback to the original iframe method
+                    logger.info(f"Using fallback iframe for anomaly image ID (no alt): {anomaly_id}")
                     return f"""
 <div class="chart-container">
     <div style="position: relative; width: 100%; padding-bottom: 100%;">
@@ -3291,290 +3280,137 @@ def expand_chart_references(report_path):
         logger.error(error_msg, exc_info=True)
         return report_path
 
-def request_chart_image(chart_type, params, output_path):
+def request_chart_image(chart_type, params, output_path=None):
     """
-    Request a rendered chart image from the chart endpoint using Playwright to capture the exact
-    rendered chart with the original styling from the chart.html files.
+    Request a chart URL instead of rendering an image.
     
     Args:
         chart_type: Type of chart ('time_series' or 'anomaly')
         params: Parameters for the chart (metric_id, district, etc.)
-        output_path: Path to save the image
+        output_path: Ignored parameter (kept for backwards compatibility)
         
     Returns:
-        Boolean indicating success
+        URL string for the chart if successful, None otherwise
     """
-    logger.info(f"Requesting {chart_type} chart image with params: {params}")
+    logger.info(f"Getting URL for {chart_type} chart with params: {params}")
     
     try:
-        from playwright.sync_api import sync_playwright
-        
-        # Construct the URL for the chart based on chart type
-        if chart_type == 'time_series':
+        # For anomaly charts, use Datawrapper if possible
+        if chart_type == 'anomaly':
+            anomaly_id = params.get('id', '27338')
+            try:
+                # Make a request to get the anomaly data
+                anomaly_data_url = f"{API_BASE_URL}/anomaly-analyzer/api/anomaly/{anomaly_id}"
+                logger.info(f"Requesting anomaly data for URL: {anomaly_data_url}")
+                
+                response = requests.get(anomaly_data_url)
+                if response.status_code == 200:
+                    anomaly_response = response.json()
+                    
+                    # Extract the needed data for the chart
+                    anomaly_data = anomaly_response.get("data", {})
+                    if anomaly_data and "dates" in anomaly_data and "counts" in anomaly_data:
+                        logger.info(f"Successfully retrieved data for anomaly URL ID: {anomaly_id}")
+                        
+                        # Create a Datawrapper chart
+                        chart_title = f"Anomaly {anomaly_id}: {anomaly_data.get('group_value', 'Trend Analysis')}"
+                        metadata = anomaly_response.get("metadata", {})
+                        
+                        # Generate a Datawrapper chart and get the public URL
+                        chart_url = generate_anomaly_chart_dw(anomaly_data, chart_title, metadata)
+                        
+                        if chart_url:
+                            logger.info(f"Successfully generated Datawrapper chart for anomaly: {chart_url}")
+                            return chart_url
+            except Exception as e:
+                logger.error(f"Error using Datawrapper for anomaly chart: {str(e)}", exc_info=True)
+                
+            # Fallback to direct anomaly page URL if Datawrapper fails
+            landing_page_url = f"{API_BASE_URL}/anomaly-analyzer/anomaly/{anomaly_id}"
+            logger.info(f"Using anomaly page URL: {landing_page_url}")
+            return landing_page_url
+            
+        elif chart_type == 'time_series':
             metric_id = params.get('metric_id', '1')
             district = params.get('district', '0')
             period_type = params.get('period_type', 'year')
             
-            # Clean period_type: Remove any fragments like #chart-section
-            if '#' in period_type:
-                period_type = period_type.split('#')[0]
-                logger.debug(f"Cleaned period_type to: {period_type}")
+            # Try to generate a Datawrapper chart first
+            try:
+                logger.info(f"Attempting to create Datawrapper chart for metric_id: {metric_id}, district: {district}, period: {period_type}")
+                dw_chart_url = create_datawrapper_chart(
+                    metric_id=metric_id,
+                    district=district,
+                    period_type=period_type
+                )
+                
+                if dw_chart_url:
+                    logger.info(f"Successfully generated Datawrapper chart: {dw_chart_url}")
+                    return dw_chart_url
+            except Exception as e:
+                logger.error(f"Error creating Datawrapper chart: {str(e)}", exc_info=True)
             
-            url = f"{API_BASE_URL}/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}#chart-section"
+            # Fallback to metric page URL
             landing_page_url = f"{API_BASE_URL}/backend/metric/{metric_id}?district={district}"
-        elif chart_type == 'anomaly':
-            anomaly_id = params.get('id', '27338')
-            url = f"{API_BASE_URL}/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section"
-            landing_page_url = f"{API_BASE_URL}/anomaly-analyzer/anomaly/{anomaly_id}"
+            logger.info(f"Using metric page URL: {landing_page_url}")
+            return landing_page_url
         else:
             logger.error(f"Unsupported chart type: {chart_type}")
-            return False
-        
-        logger.info(f"Capturing chart from URL: {url}")
-        
-        with sync_playwright() as p:
-            # Launch browser with larger viewport to ensure chart is fully visible
-            browser = p.chromium.launch()
-            context = browser.new_context(
-                viewport={'width': 1200, 'height': 800},
-                device_scale_factor=2.0  # Higher resolution for sharper images
-            )
-            page = context.new_page()
-            
-            # Navigate to the chart URL and wait for load
-            page.goto(url, wait_until="networkidle")
-            
-            # Wait for the chart to be fully rendered
-            try:
-                if chart_type == 'time_series':
-                    # Wait for the chart container to be visible
-                    page.wait_for_selector('#chart-section', state='visible', timeout=10000)
-                    
-                    # Then wait for plotly to be fully loaded
-                    page.wait_for_function('''
-                        () => {
-                            const plotDiv = document.querySelector('.js-plotly-plot');
-                            return plotDiv && 
-                                  plotDiv.querySelector('.main-svg') && 
-                                  !document.querySelector('.plot-container .loader');
-                        }
-                    ''', timeout=15000)
-                    
-                    # Get the chart container element
-                    element_selector = '#chart-section'
-                else:  # anomaly
-                    # Wait for the container to be visible
-                    page.wait_for_selector('#anomaly-chart', state='visible', timeout=10000)
-                    
-                    # Then wait for plotly to be fully loaded
-                    page.wait_for_function('''
-                        () => {
-                            const plotDiv = document.querySelector('.js-plotly-plot');
-                            return plotDiv && 
-                                  plotDiv.querySelector('.main-svg') && 
-                                  !document.querySelector('.plot-container .loader');
-                        }
-                    ''', timeout=15000)
-                    
-                    # Get the chart container element
-                    element_selector = '#anomaly-chart'
-            except Exception as wait_error:
-                # If specific selectors fail, try a more general approach
-                logger.warning(f"Specific selectors failed, trying general approach: {wait_error}")
-                # Just wait for any plotly chart to appear
-                page.wait_for_selector('.js-plotly-plot', state='visible', timeout=15000)
-                
-                # Use a more general selector
-                if chart_type == 'time_series':
-                    element_selector = '.chart-container'
-                else:  # anomaly
-                    element_selector = '.chart-container'
-            
-            # Give a little extra time for animations to complete
-            page.wait_for_timeout(1000)
-            
-            # Make sure the chart container is properly styled with the corner decorations
-            # AND remove the Full View and Share buttons
-            page.evaluate(f'''() => {{
-                // Make sure the chart container has the proper styling
-                const chartContainer = document.querySelector('.chart-container');
-                if (chartContainer) {{
-                    // Ensure the container is visible and properly sized
-                    chartContainer.style.display = 'block';
-                    chartContainer.style.position = 'relative';
-                    chartContainer.style.width = '600px';
-                    chartContainer.style.height = '600px';
-                    chartContainer.style.maxWidth = '600px';
-                    chartContainer.style.backgroundColor = 'white';
-                    chartContainer.style.borderRadius = '8px';
-                    chartContainer.style.padding = '10px';
-                    chartContainer.style.margin = '0 auto';
-                    chartContainer.style.boxShadow = 'none';
-                    chartContainer.style.overflow = 'visible';
-                    
-                    // Make sure the ::before and ::after pseudo-elements are visible
-                    // We can't directly manipulate pseudo-elements, but we can add actual elements to mimic them
-                    
-                    // Remove any existing corner elements
-                    const existingCorners = document.querySelectorAll('.chart-corner');
-                    existingCorners.forEach(el => el.remove());
-                    
-                    // Create top-right corner
-                    const topRightCorner = document.createElement('div');
-                    topRightCorner.className = 'chart-corner top-right';
-                    topRightCorner.style.position = 'absolute';
-                    topRightCorner.style.top = '0';
-                    topRightCorner.style.right = '0';
-                    topRightCorner.style.width = '61.8%';
-                    topRightCorner.style.height = '61.8%';
-                    topRightCorner.style.borderTop = '2px solid rgba(0, 0, 0, 0.2)';
-                    topRightCorner.style.borderRight = '2px solid rgba(0, 0, 0, 0.2)';
-                    topRightCorner.style.borderTopRightRadius = '8px';
-                    topRightCorner.style.pointerEvents = 'none';
-                    chartContainer.appendChild(topRightCorner);
-                    
-                    // Create bottom-left corner
-                    const bottomLeftCorner = document.createElement('div');
-                    bottomLeftCorner.className = 'chart-corner bottom-left';
-                    bottomLeftCorner.style.position = 'absolute';
-                    bottomLeftCorner.style.bottom = '0';
-                    bottomLeftCorner.style.left = '0';
-                    bottomLeftCorner.style.width = '61.8%';
-                    bottomLeftCorner.style.height = '61.8%';
-                    bottomLeftCorner.style.borderBottom = '2px solid rgba(0, 0, 0, 0.2)';
-                    bottomLeftCorner.style.borderLeft = '2px solid rgba(0, 0, 0, 0.2)';
-                    bottomLeftCorner.style.borderBottomLeftRadius = '8px';
-                    bottomLeftCorner.style.pointerEvents = 'none';
-                    chartContainer.appendChild(bottomLeftCorner);
-                    
-                    // Remove "Full View" and "Share" buttons
-                    const buttons = document.querySelectorAll('#full-view-btn, #share-btn, .btn-share, .btn-full-view');
-                    buttons.forEach(btn => {{
-                        btn.remove();
-                    }});
-                    
-                    // Add a "View Interactive Chart" link with an arrow icon
-                    const linkContainer = document.createElement('div');
-                    linkContainer.style.position = 'absolute';
-                    linkContainer.style.bottom = '8px';
-                    linkContainer.style.right = '8px';
-                    linkContainer.style.zIndex = '10';
-                    
-                    const interactiveLink = document.createElement('a');
-                    interactiveLink.href = "{landing_page_url}";
-                    interactiveLink.target = "_blank";
-                    interactiveLink.style.padding = '8px 12px';
-                    interactiveLink.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-                    interactiveLink.style.color = 'white';
-                    interactiveLink.style.borderRadius = '4px';
-                    interactiveLink.style.textDecoration = 'none';
-                    interactiveLink.style.fontSize = '12px';
-                    interactiveLink.style.fontWeight = 'bold';
-                    interactiveLink.style.display = 'flex';
-                    interactiveLink.style.alignItems = 'center';
-                    interactiveLink.style.gap = '4px';
-                    interactiveLink.innerHTML = 'View Interactive Chart <span>→</span>';
-                    
-                    linkContainer.appendChild(interactiveLink);
-                    chartContainer.appendChild(linkContainer);
-                    
-                    // Make sure the chart is visible
-                    const chartElement = document.querySelector('#time-series-chart, #anomaly-chart');
-                    if (chartElement) {{
-                        chartElement.style.display = 'block';
-                        chartElement.style.width = '100%';
-                        chartElement.style.height = '100%';
-                    }}
-                    
-                    // Make sure the plot is visible
-                    const plotElement = document.querySelector('#time-series-plot, #anomaly-plot');
-                    if (plotElement) {{
-                        plotElement.style.display = 'block';
-                        plotElement.style.width = '100%';
-                        plotElement.style.height = '100%';
-                    }}
-                }}
-            }}''')
-            
-            # Wait a moment for the styling to be applied
-            page.wait_for_timeout(500)
-            
-            # Take the screenshot of the chart container
-            chart_container = page.locator('.chart-container')
-            if chart_container.count() > 0:
-                chart_container.screenshot(path=output_path)
-                logger.info(f"Successfully captured chart image to {output_path}")
-            else:
-                # Fallback to the specific element selector if chart container not found
-                element = page.locator(element_selector)
-                element.screenshot(path=output_path)
-                logger.info(f"Captured chart image using fallback selector: {element_selector}")
-            
-            # Close browser
-            browser.close()
-            
-            return True
+            return None
             
     except Exception as e:
-        logger.error(f"Error capturing chart image: {e}", exc_info=True)
-        # If Playwright fails, try to create a fallback image
-        logger.warning(f"Falling back to basic chart image for {chart_type}.")
-        create_fallback_chart_image(chart_type, params, output_path)
-        return True
+        logger.error(f"Error getting chart URL: {e}", exc_info=True)
+        return None
 
-def create_fallback_chart_image(chart_type, params, output_path):
+def safe_json_serialize(obj, default_msg="<not serializable>"):
     """
-    Create a fallback chart image with placeholder text.
+    Safely serialize an object to JSON, handling non-serializable objects.
     
     Args:
-        chart_type: Type of chart ('time_series' or 'anomaly')
-        params: Parameters for the chart (metric_id, district, etc.)
-        output_path: Path to save the image
+        obj: Object to serialize
+        default_msg: Default message to return if serialization fails
+        
+    Returns:
+        JSON string or default message
     """
     try:
-        # Create a simple plot with Plotly
-        fig = go.Figure()
-        
-        # Add text explaining this is a placeholder
-        if chart_type == 'time_series':
-            metric_id = params.get('metric_id', '1')
-            district = params.get('district', '0')
-            district_name = "Citywide" if district == '0' else f"District {district}"
-            title = f"Time Series Chart - Metric {metric_id} - {district_name}"
-        else:  # anomaly
-            anomaly_id = params.get('id', '27338')
-            title = f"Anomaly Chart - ID {anomaly_id}"
-        
-        fig.add_annotation(
-            text="This chart is only available in the web version<br>Please view online for interactive charts",
-            xref="paper", yref="paper",
-            x=0.5, y=0.5,
-            showarrow=False,
-            font=dict(size=20)
-        )
-        
-        # Set layout
-        fig.update_layout(
-            title=title,
-            width=800,
-            height=500,
-            plot_bgcolor='#f8f9fa',
-            paper_bgcolor='#f8f9fa',
-            margin=dict(t=80, b=80, l=80, r=80)
-        )
-        
-        # Save the figure
-        fig.write_image(output_path)
-        logger.info(f"Created fallback chart image at {output_path}")
-    except Exception as e:
-        logger.error(f"Error creating fallback chart image: {e}", exc_info=True)
-        # Last resort - create a blank image
-        try:
-            img = Image.new('RGB', (800, 500), color=(248, 249, 250))
-            img.save(output_path)
-            logger.info(f"Created blank fallback image at {output_path}")
-        except Exception as e2:
-            logger.error(f"Error creating blank image: {e2}")
+        # Use our custom encoder that handles Path objects
+        return json.dumps(obj, cls=PathEncoder)
+    except (TypeError, OverflowError, ValueError) as e:
+        # For non-serializable objects, return a string representation
+        if isinstance(obj, dict):
+            # Try to serialize each key/value pair individually
+            safe_dict = {}
+            for k, v in obj.items():
+                try:
+                    # Try to serialize the value
+                    json.dumps(v)
+                    safe_dict[k] = v
+                except (TypeError, OverflowError, ValueError):
+                    # If it fails, use string representation
+                    safe_dict[k] = str(v)[:100] + "..." if len(str(v)) > 100 else str(v)
+            try:
+                return json.dumps(safe_dict)
+            except:
+                return default_msg
+        elif isinstance(obj, list):
+            # Try to serialize each item individually
+            safe_list = []
+            for item in obj:
+                try:
+                    # Try to serialize the item
+                    json.dumps(item)
+                    safe_list.append(item)
+                except (TypeError, OverflowError, ValueError):
+                    # If it fails, use string representation
+                    safe_list.append(str(item)[:100] + "..." if len(str(item)) > 100 else str(item))
+            try:
+                return json.dumps(safe_list)
+            except:
+                return default_msg
+        else:
+            # For other types, just return string representation
+            return f'"{str(obj)[:100] + "..." if len(str(obj)) > 100 else str(obj)}"'
 
 if __name__ == "__main__":
     # Run the monthly report process

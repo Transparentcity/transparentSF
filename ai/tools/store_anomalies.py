@@ -26,48 +26,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def store_anomalies_in_db(anomalies, connection=None):
-    """
-    Store anomaly detection results in PostgreSQL database.
-    
-    Args:
-        anomalies (dict): Dictionary containing anomaly detection results
-        connection: Optional database connection. If None, a new connection will be created.
-    """
-    if connection is None:
-        logger.error("No database connection available")
-        return False
-        
-    try:
-        # Create anomalies table if it doesn't exist
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS anomalies (
-                    id SERIAL PRIMARY KEY,
-                    timestamp TIMESTAMP,
-                    data JSONB,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            connection.commit()
-            
-        # Insert anomaly data
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO anomalies (timestamp, data) VALUES (%s, %s)",
-                (datetime.datetime.now(), Json(anomalies))
-            )
-            connection.commit()
-            
-        logger.info("Successfully stored anomaly detection results in database")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error storing anomaly detection results: {str(e)}")
-        if connection:
-            connection.rollback()
-        return False
-
 def create_anomalies_table(connection):
     """
     Check if the anomalies table exists.
@@ -199,6 +157,23 @@ def store_anomalies_in_db(connection, results, metadata):
         group_field_name = metadata.get('group_field', 'unknown')
         period_type = metadata.get('period_type', 'month')
         
+        # Ensure title is set in metadata
+        if 'title' not in serializable_metadata:
+            if object_name != 'unknown':
+                serializable_metadata['title'] = object_name
+            else:
+                # Generate a title based on available information
+                title_parts = []
+                if field_name != 'unknown':
+                    title_parts.append(field_name)
+                if group_field_name != 'unknown':
+                    title_parts.append(f"by {group_field_name}")
+                serializable_metadata['title'] = " - ".join(title_parts) if title_parts else "Anomaly Analysis"
+        
+        # Ensure object_name is set if not present
+        if 'object_name' not in serializable_metadata and 'title' in serializable_metadata:
+            serializable_metadata['object_name'] = serializable_metadata['title']
+        
         # Get district from filter conditions if it exists
         district = None
         if 'filter_conditions' in metadata:
@@ -236,11 +211,11 @@ def store_anomalies_in_db(connection, results, metadata):
                 WHERE object_type = %s 
                 AND object_id = %s
                 AND object_name = %s
-                AND field_name = %s
+                AND group_field_name = %s
                 AND period_type = %s
                 AND district::TEXT = %s
                 AND is_active = TRUE
-            """, (object_type, object_id, object_name, field_name, period_type, str(district)))
+            """, (object_type, object_id, object_name, group_field_name, period_type, str(district)))
             
         inserted_count = 0
         
@@ -319,6 +294,24 @@ def store_anomalies_in_db(connection, results, metadata):
                 for i, date_str in enumerate(recent_dates):
                     recent_data[date_str] = recent_counts[i]
                 
+                # Generate caption for the anomaly
+                percent_difference = abs((result['difference'] / result['comparison_mean']) * 100) if result['comparison_mean'] else 0
+                action = 'increase' if result['difference'] > 0 else 'drop' if result['difference'] < 0 else 'no change'
+                y_axis_label = metadata.get('y_axis_label', 'Value').lower()
+                
+                comparison_period_label = f"{comp_start.strftime('%B %Y')} to {comp_end.strftime('%B %Y')}"
+                recent_period_label = f"{recent_start.strftime('%B %Y')}"
+                
+                caption = (
+                    f"In {recent_period_label}, there were {result['recent_mean']:,.0f} {result['group_value']} {y_axis_label} per month, "
+                    f"compared to an average of {result['comparison_mean']:,.0f} per month over {comparison_period_label}, "
+                    f"a {percent_difference:.1f}% {action}."
+                )
+                
+                # Add caption to metadata
+                if isinstance(serializable_metadata, dict):
+                    serializable_metadata['caption'] = caption
+                
                 cursor.execute("""
                     INSERT INTO anomalies 
                     (group_value, group_field_name, period_type, comparison_mean, recent_mean, 
@@ -352,6 +345,7 @@ def store_anomalies_in_db(connection, results, metadata):
                 inserted_count += 1
         
         connection.commit()
+        logger.info("Successfully stored anomaly detection results in database")
         return inserted_count
     except Exception as e:
         logging.error(f"Error storing anomalies in database: {e}")
@@ -494,15 +488,15 @@ def get_anomalies(
             params.append(f"%{metric_name}%")
         
         if district_filter:
-            # Filter by district
+            # Filter by district - ensure both sides are treated as text
             query += "AND district::TEXT = %s "
             params.append(str(district_filter))
             
         if metric_id:
             # Filter by object_id
-            query += "AND object_id = %s "
-            params.append(metric_id)
-            
+            query += "AND object_id::TEXT = %s "
+            params.append(str(metric_id))
+        
         if period_type:
             # Filter by period_type
             query += "AND period_type = %s "

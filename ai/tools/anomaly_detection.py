@@ -875,14 +875,14 @@ def anomaly_detection(
         'group_field': group_field,
         'date_field': date_field,
         'y_axis_label': y_axis_label,
-        'title': title,
+        'title': title or f"{numeric_field} by {group_field}",
         'filter_conditions': filter_conditions,
         'numeric_field': numeric_field,
         'period_type': period_type,
         'agg_function': agg_function,
         'object_type': object_type,   # Add object_type to metadata
         'object_id': object_id,       # Add object_id to metadata
-        'object_name': object_name    # Add object_name to metadata
+        'object_name': object_name or title or f"{numeric_field} by {group_field}"    # Add object_name to metadata
     }
 
     # Add executed_query_url to metadata if it exists in context_variables

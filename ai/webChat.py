@@ -129,7 +129,7 @@ qdrant = qdrant_client.QdrantClient(host="localhost", port=6333)
 EMBEDDING_MODEL = "text-embedding-3-large"
 # AGENT_MODEL = "gpt-3.5-turbo-16k"
 # AGENT_MODEL = "gpt-3.5-turbo-16k"
-AGENT_MODEL = "gpt-4o"
+AGENT_MODEL = "gpt-4.1"
 
 # Set Qdrant collection
 collection_name = "SFPublicData"
@@ -1083,14 +1083,16 @@ analyst_agent = Agent(
 ANOMALY_EXPLAINER_INSTRUCTIONS = """You are an anomaly explanation agent that specializes in providing deep insights into detected anomalies.
 
 IMPORTANT: You MUST use tools to gather data BEFORE responding. Direct explanations without tool usage are NOT acceptable.
-also IMPORTANT: If you are asked about business registrations or closures, and the absolure number id <20, then its always good to get the dba_names, and addresses of the new business locations and share them in the explanation. 
 
 Your task is to:
 1. Take an change that has already been identified in dashboard metrics
 2. Research that change to explain what changed and where or what variables explain the change
 3. Analyze anomalies in the dataset to see if they are related to the change
-4. Provide clear, comprehensive explanations with supporting evidence.  You don't need to be breif, more is more, we can remove extra text later.
-
+4. Provide clear, comprehensive explanations with supporting evidence.  You don't need to be breif, more is more, so be as complete and thorough as possible.
+5. Return your findings in the form of a JSON object with the following keys:
+    - "explanation": A string with your explanation
+    - "charts": a list of charts placeholders, formatted ONLY as either [CHART:anomaly:anomaly_id] or [CHART:time_series:metric_id:district_id:period_type]
+    - "trend_analysis" - Your discussion of the trend in the metric short, medium, and long term. 
 
 MANDATORY WORKFLOW (follow this exact sequence):
 1. FIRST, check your notes!

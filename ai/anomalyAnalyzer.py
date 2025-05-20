@@ -2170,8 +2170,8 @@ async def anomaly_chart_page(request: Request):
                     y=comparison_values,
                     mode='lines+markers',
                     name='Time Series',
-                    line=dict(color='#007BFF', width=2),  # Bright Blue
-                    marker=dict(color='#007BFF', size=6)
+                    line=dict(color='#ad35fa', width=2),  # Bright Blue
+                    marker=dict(color='#ad35fa', size=6)
                 ))
             
             # Add recent period trace
@@ -2181,8 +2181,8 @@ async def anomaly_chart_page(request: Request):
                     y=recent_values,
                     mode='lines+markers',
                     name='Time Series',
-                    line=dict(color='#007BFF', width=2),  # Bright Blue
-                    marker=dict(color='#007BFF', size=6),
+                    line=dict(color='#ad35fa', width=2),  # Bright Blue
+                    marker=dict(color='#ad35fa', size=6),
                     showlegend=False  # Hide duplicate legend entry
                 ))
             
@@ -2192,7 +2192,7 @@ async def anomaly_chart_page(request: Request):
                     x=[comparison_dates[-1], recent_dates[0]],
                     y=[comparison_values[-1], recent_values[0]],
                     mode='lines',
-                    line=dict(color='#007BFF', width=2),  # Bright Blue
+                    line=dict(color='#ad35fa', width=2),  # Bright Blue
                     showlegend=False
                 ))
             
@@ -2266,7 +2266,7 @@ async def anomaly_chart_page(request: Request):
                     ax=-50,
                     ay=30,
                     bgcolor='rgba(0, 123, 255, 0.7)',
-                    bordercolor='#007BFF',
+                    bordercolor='#ad35fa',
                     borderwidth=1
                 )
             

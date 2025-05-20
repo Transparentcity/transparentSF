@@ -32,6 +32,7 @@ import psycopg2.extras
 import asyncio
 # Import the new function
 from tools.genGhostPost import publish_newsletter_to_ghost
+from monthly_report import expand_chart_references, generate_email_compatible_report
 
 # Use the root logger configured elsewhere (e.g., in monthly_report.py)
 logger = logging.getLogger(__name__)
@@ -3717,7 +3718,7 @@ async def get_monthly_report_by_id(report_id: int):
         # Get the report details
         cur.execute("""
             SELECT id, district, period_type, max_items, created_at, updated_at, 
-                   original_filename, revised_filename
+                   original_filename, revised_filename, published_url, headlines
             FROM reports
             WHERE id = %s
         """, (report_id,))
@@ -3752,6 +3753,8 @@ async def get_monthly_report_by_id(report_id: int):
             "updated_at": report["updated_at"].isoformat() if report["updated_at"] else None,
             "original_filename": report["original_filename"],
             "revised_filename": report["revised_filename"],
+            "published_url": report["published_url"],
+            "headlines": report["headlines"],
             "metrics": []
         }
         
@@ -3770,6 +3773,7 @@ async def get_monthly_report_by_id(report_id: int):
                 "difference": metric["difference"],
                 "std_dev": metric["std_dev"],
                 "percent_change": metric["percent_change"],
+                "rationale": metric["rationale"],
                 "explanation": metric["explanation"],
                 "priority": metric["priority"],
                 "report_text": metric["report_text"],
@@ -3887,7 +3891,7 @@ async def time_series_chart_page(request: Request):
             
             # Define colors for groups
             colors = [
-                '#007BFF', '#FF6B5A', '#4A7463', '#71B2CA', '#FFC107', 
+                '#ad35fa', '#FF6B5A', '#4A7463', '#71B2CA', '#FFC107', 
                 '#9C27B0', '#2196F3', '#E91E63', '#4CAF50', '#FF5722'
             ]
             
@@ -4773,3 +4777,40 @@ async def add_subscriber(request: Request):
             "status": "error",
             "message": error_message
         }, status_code=500)
+
+@router.post("/rerun_email_version")
+async def rerun_email_version(request: Request):
+    """
+    Re-run email-compatible report generation for a selected report (no chart expansion).
+    Expects JSON body: { "filename": "monthly_report_0_2024_06.html" }
+    """
+    try:
+        data = await request.json()
+        filename = data.get("filename")
+        if not filename:
+            return JSONResponse({"status": "error", "message": "Missing filename"}, status_code=400)
+
+        # Construct the report path
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        reports_dir = os.path.join(script_dir, "output", "reports")
+        base, ext = os.path.splitext(filename)
+        revised_filename = f"{base}_revised{ext}"
+        revised_path = os.path.join(reports_dir, revised_filename)
+        if os.path.exists(revised_path):
+            report_path = revised_path
+            logger.info(f"Using revised report for email version: {revised_path}")
+        else:
+            report_path = os.path.join(reports_dir, filename)
+            logger.info(f"Using original report for email version: {report_path}")
+        if not os.path.exists(report_path):
+            return JSONResponse({"status": "error", "message": f"Report file not found: {report_path}"}, status_code=404)
+
+        # Only generate the email-compatible version (do NOT expand chart references)
+        email_path = generate_email_compatible_report(report_path)
+        if not email_path:
+            return JSONResponse({"status": "error", "message": "Failed to generate email-compatible report"}, status_code=500)
+
+        return JSONResponse({"status": "success", "email_path": str(email_path)})
+    except Exception as e:
+        import traceback
+        return JSONResponse({"status": "error", "message": str(e), "trace": traceback.format_exc()}, status_code=500)
