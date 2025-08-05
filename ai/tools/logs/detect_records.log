@@ -45143,3 +45143,97 @@ NameError: name 'generate_time_series_chart' is not defined
 2025-07-14 20:13:02,984 - __main__ - ERROR - Error querying historical data: No data returned from the API
 2025-07-14 20:13:07,555 - data_fetcher - WARNING - API returned empty data
 2025-07-14 20:13:07,557 - __main__ - ERROR - Error querying historical data: No data returned from the API
+2025-07-18 16:41:37,227 - tools.detect_records - INFO - Logging configured for detect_records.py with level: INFO
+2025-07-18 16:41:37,227 - root - INFO - Root logger configured for detect_records.py with level: INFO
+2025-07-18 16:41:37,255 - root - INFO - Successfully connected to PostgreSQL database
+2025-07-18 16:41:37,257 - root - INFO - Original query: SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= last_year_start AND month <= current_date GROUP BY date order by date
+2025-07-18 16:41:37,258 - root - INFO - Query uses AVG() aggregation: False
+2025-07-18 16:41:37,258 - root - INFO - No category fields defined for this metric. Not using any default fields.
+2025-07-18 16:41:37,258 - root - INFO - Found date field in query: date
+2025-07-18 16:41:37,258 - root - INFO - Using date field: date
+2025-07-18 16:41:37,258 - root - INFO - Standard filter conditions: [{'field': 'month', 'operator': '<=', 'value': datetime.date(2025, 6, 30)}, {'field': 'month', 'operator': '>=', 'value': datetime.date(2023, 6, 1)}]
+2025-07-18 16:41:37,259 - root - INFO - Query already has date_trunc_ym, using original query with replaced placeholders
+2025-07-18 16:41:37,259 - root - INFO - Transformed query: SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= '2023-06-01' AND month <= '2025-06-30' GROUP BY date order by date
+2025-07-18 16:41:37,259 - root - INFO - Calling set_dataset with endpoint: uzmr-g2uc
+2025-07-18 16:41:37,259 - root - INFO - Query being used: SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= '2023-06-01' AND month <= '2025-06-30' GROUP BY date order by date
+2025-07-18 16:41:37,259 - root - INFO - Base output file name: 34_month_analysis
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - === Starting set_dataset ===
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Args received: ()
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Kwargs received: {
+  "endpoint": "uzmr-g2uc",
+  "query": "SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= '2023-06-01' AND month <= '2025-06-30' GROUP BY date order by date"
+}
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Context variables keys: []
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Added .json to endpoint: uzmr-g2uc.json
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Final parameters - Endpoint: uzmr-g2uc.json, Query: SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= '2023-06-01' AND month <= '2025-06-30' GROUP BY date order by date
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Starting fetch_data_from_api with query_object: {
+  "endpoint": "uzmr-g2uc.json",
+  "query": "SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= '2023-06-01' AND month <= '2025-06-30' GROUP BY date order by date"
+}
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Processing endpoint: uzmr-g2uc.json
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Initial query string: SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= '2023-06-01' AND month <= '2025-06-30' GROUP BY date order by date
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - After clean_query_string: SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= '2023-06-01' AND month <= '2025-06-30' GROUP BY date order by date
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Final cleaned query: SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= '2023-06-01' AND month <= '2025-06-30' GROUP BY date order by date
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Full API URL: https://data.sfgov.org/resource/uzmr-g2uc.json
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Request parameters: {
+  "$query": "SELECT date_trunc_ym(month) AS date, SUM(count) AS value WHERE month >= '2023-06-01' AND month <= '2025-06-30' GROUP BY date order by date"
+}
+2025-07-18 16:41:37,259 - tools.data_fetcher - INFO - Request headers: {
+  "Accept": "application/json"
+}
+2025-07-18 16:41:41,310 - tools.data_fetcher - INFO - Fetched 18 records in current batch.
+2025-07-18 16:41:41,310 - tools.data_fetcher - INFO - url: https://data.sfgov.org/resource/uzmr-g2uc.json
+2025-07-18 16:41:41,310 - tools.data_fetcher - INFO - API result status: success
+2025-07-18 16:41:41,311 - tools.data_fetcher - INFO - Stored executed_query_url in context: https://data.sfgov.org/resource/uzmr-g2uc.json?%24query=SELECT+date_trunc_ym%28month%29+AS+date%2C+SUM%28count%29+AS+value+WHERE+month+%3E%3D+%272023-06-01%27+AND+month+%3C%3D+%272025-06-30%27+GROUP+BY+date+order+by+date+LIMIT+5000+OFFSET+0
+2025-07-18 16:41:41,311 - tools.data_fetcher - INFO - Dataset successfully created with shape: (18, 2)
+2025-07-18 16:41:41,311 - root - INFO - Stored executed_query_url in context: https://data.sfgov.org/resource/uzmr-g2uc.json?%24query=SELECT+date_trunc_ym%28month%29+AS+date%2C+SUM%28count%29+AS+value+WHERE+month+%3E%3D+%272023-06-01%27+AND+month+%3C%3D+%272025-06-30%27+GROUP+BY+date+order+by+date+LIMIT+5000+OFFSET+0
+2025-07-18 16:41:41,311 - root - INFO - Available columns in dataset: ['date', 'value']
+2025-07-18 16:41:41,312 - root - INFO - Using default 'sum' aggregation for field value
+2025-07-18 16:41:41,312 - root - INFO - No valid category fields for this dataset. Proceeding with time-series analysis only.
+2025-07-18 16:41:41,315 - root - INFO - Created month_period from date column
+2025-07-18 16:41:41,315 - root - INFO - Updated filter conditions: [{'field': 'month_period', 'operator': '<=', 'value': '2025-06', 'is_date': False}, {'field': 'month_period', 'operator': '>=', 'value': '2023-06', 'is_date': False}]
+2025-07-18 16:41:41,316 - root - INFO - Created 'year' field from month_period
+2025-07-18 16:41:41,316 - root - INFO - Generating main time series chart for 📸 Monthly Camera Citations - Citywide
+2025-07-18 16:41:41,316 - root - INFO - Full context_variables: {'dataset':          date value month_period  year
+0  2024-01-01  1041      2024-01  2024
+1  2024-02-01   985      2024-02  2024
+2  2024-03-01  1165      2024-03  2024
+3  2024-04-01  1065      2024-04  2024
+4  2024-05-01  1078      2024-05  2024
+5  2024-06-01  1127      2024-06  2024
+6  2024-07-01   967      2024-07  2024
+7  2024-08-01   913      2024-08  2024
+8  2024-09-01  1145      2024-09  2024
+9  2024-10-01  1007      2024-10  2024
+10 2024-11-01   431      2024-11  2024
+11 2024-12-01   654      2024-12  2024
+12 2025-01-01   971      2025-01  2025
+13 2025-02-01   869      2025-02  2025
+14 2025-03-01   912      2025-03  2025
+15 2025-04-01   933      2025-04  2025
+16 2025-05-01   959      2025-05  2025
+17 2025-06-01   NaN      2025-06  2025, 'executed_query_url': 'https://data.sfgov.org/resource/uzmr-g2uc.json?%24query=SELECT+date_trunc_ym%28month%29+AS+date%2C+SUM%28count%29+AS+value+WHERE+month+%3E%3D+%272023-06-01%27+AND+month+%3C%3D+%272025-06-30%27+GROUP+BY+date+order+by+date+LIMIT+5000+OFFSET+0', 'y_axis_label': 'Monthly Camera Citations - Citywide', 'chart_title': '📸 Monthly Camera Citations - Citywide <br> Monthly - Citywide Trend', 'noun': '📸 Monthly Camera Citations - Citywide'}
+2025-07-18 16:41:41,323 - root - INFO - Using provided y_axis_label from context_variables: Monthly Camera Citations - Citywide
+2025-07-18 16:41:41,325 - root - INFO - Date filtering parameters:
+2025-07-18 16:41:41,325 - root - INFO -   start_date: None (<class 'NoneType'>)
+2025-07-18 16:41:41,325 - root - INFO -   end_date: None (<class 'NoneType'>)
+2025-07-18 16:41:41,325 - root - INFO -   date_field: month_period
+2025-07-18 16:41:41,325 - root - INFO -   period_type: month
+2025-07-18 16:41:41,325 - root - INFO -   filter_conditions: [{'field': 'month_period', 'operator': '<=', 'value': datetime.date(2025, 6, 1), 'is_date': True}, {'field': 'month_period', 'operator': '>=', 'value': datetime.date(2023, 6, 1), 'is_date': True}]
+2025-07-18 16:41:41,325 - root - INFO - Total records processed: 18
+2025-07-18 16:41:41,325 - root - INFO - Total records after filtering: 18
+2025-07-18 16:41:41,325 - root - INFO - Total invalid records: 0
+2025-07-18 16:41:41,325 - root - INFO - Filtered data size: 18 records after applying filters.
+2025-07-18 16:41:41,327 - root - INFO - Dropped NA values from DataFrame.
+2025-07-18 16:41:41,327 - root - INFO - Aggregation functions: {'value': 'sum'}
+2025-07-18 16:41:41,332 - root - INFO - Caption for total: In May 2025, monthly camera citations - citywide was 959, which is 1% above the 16 month average of 954.
+2025-07-18 16:41:41,337 - root - INFO - Successfully connected to PostgreSQL database
+2025-07-18 16:41:41,337 - root - INFO - Setting null district to default value 0
+2025-07-18 16:41:41,339 - root - INFO - Found 1 active charts before deactivation for object_id=34, period_type=month, district=0, group_field=None
+2025-07-18 16:41:41,339 - root - INFO - Deactivated 1 charts. Active charts before: 1, after: 0
+2025-07-18 16:41:41,345 - root - INFO - Database storage result: Successfully stored 17 data points in the database
+2025-07-18 16:41:41,624 - root - INFO - Not saving chart as image, only generating chart ID
+2025-07-18 16:41:41,652 - root - INFO - Markdown content created with chart ID: 329b33
+2025-07-18 16:41:41,652 - root - INFO - Successfully generated main time series chart for 📸 Monthly Camera Citations - Citywide
+2025-07-18 16:41:41,655 - root - INFO - Saving analysis to: /Users/simongoldman/Documents/TransparentSF_from_git/transparentSF/ai/output/monthly/0/34.md
+2025-07-18 16:41:41,655 - root - INFO - Saved month analysis for 34 for Citywide to /Users/simongoldman/Documents/TransparentSF_from_git/transparentSF/ai/output/monthly/0/34.md

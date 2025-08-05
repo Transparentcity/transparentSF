@@ -46,19 +46,19 @@ WORKFLOW_INSTRUCTIONS = """MANDATORY WORKFLOW (follow this exact sequence):
 CATEGORY_BEST_PRACTICES = """Best Practices for explaining certain categories: 
 1. Housing - If the you are being asked to explain is in housing, then you should query for the actual properties that have new units, and include the address, and the units certified in your explanation.
 set_dataset
-Arguments: { "endpoint": "j67f-aayr", "query": "SELECT building_address as address, number_of_units_certified as value,   building_address || ': ' || document_type || ' (' || number_of_units_certified || ' units)' as description, document_type as description, document_type as series WHERE date_issued >= '2025-04-27' ORDER BY date_issued DESC" }
+Arguments: {{ "endpoint": "j67f-aayr", "query": "SELECT building_address as address, number_of_units_certified as value,   building_address || ': ' || document_type || ' (' || number_of_units_certified || ' units)' as description, document_type as description, document_type as series WHERE date_issued >= '2025-04-27' ORDER BY date_issued DESC" }}
 
 2. If you are being asked to explain a change in business registrations or closures, then you should query for the actual businesses that have opened or closed, and include the DBA name, and the date of opening or closure in your explanation.
 set_dataset
-Arguments: { "endpoint": "g8m3-pdis", "query": "SELECT dba_name, location, dba_start_date, naic_code_description, supervisor_district ORDER BY dba_start_date DESC LIMIT 10" }
+Arguments: {{ "endpoint": "g8m3-pdis", "query": "SELECT dba_name, location, dba_start_date, naic_code_description, supervisor_district ORDER BY dba_start_date DESC LIMIT 10" }}
 
 3. I fyou are being asked about crime data, then you should query for the actual crimes that have occurred, and include the crime type, the date of the crime, and the location of the crime in your explanation.
 set_dataset
 Arguments:
-{
+{{
     "endpoint": "wg3w-h783",
     "query": "SELECT report_datetime, incident_category, supervisor_district, latitude, longitude WHERE supervisor_district='2' AND (incident_category='Homicide') ORDER BY report_datetime DESC LIMIT 5"
-}"""
+}}"""
 
 # Chart generation rules
 CHART_INSTRUCTIONS = """IMPORTANT CHART GENERATION RULES:
@@ -86,77 +86,7 @@ For Maps:
 [CHART:map:map_id]
 For example: [CHART:map:123]"""
 
-# Set dataset tool instructions
-SET_DATASET_INSTRUCTIONS = """Set Dataset Instructions
-Use `set_dataset(context_variables, endpoint="endpoint-id", query="your-soql-query")` to set the dataset. Both parameters are required.
-Parameters
 
-Endpoint - The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx'). Get it from `get_dashboard_metric()` if not known.
-`ubvf-ztfx`
-Query - The complete SoQL query string using standard SQL syntax. Use `get_dataset_columns()` to get column information if field names are unknown.
-`select dba_name where ... limit 5`
-
-
-Do NOT pass JSON strings as arguments. Pass the actual values directly.
-SOQL Query Guidelines
-These is no FROM clause, this is what the endpoint is for, so don't EVER include a from clause in your SOQL. 
-Use `fieldName` values (not names) in queries.  If you don't know them, use 
-Do not include `FROM` clauses (unlike standard SQL).
-Use single quotes for string values: `where field_name = 'value'`
-Do not use type casting with `::` syntax.
-Use proper date functions: `date_trunc_y()`, `date_trunc_ym()`, `date_trunc_ymd()`
-Use standard aggregation functions: `sum()`, `avg()`, `min()`, `max()`, `count()`
-Correct Function Call Format
-set_dataset(
-
-    context_variables,
-
-    endpoint="g8m3-pdis",
-
-    query="select dba_name where supervisor_district = '2' AND naic_code_description = 'Retail Trade' order by business_start_date desc limit 5"
-
-)
-Incorrect Formats (DO NOT USE)
-`set_dataset(context_variables, args={}, kwargs={...})` # WRONG - don't use args/kwargs
-`set_dataset(context_variables, "{...}")` # WRONG - don't pass JSON strings
-`set_dataset(context_variables, '{"endpoint": "x", "query": "y"}')` # WRONG - don't pass JSON strings
-`set_dataset(context_variables, endpoint="file.json")` # WRONG - don't include .json extension
-`set_dataset(context_variables, endpoint="business-registrations-district2.json")` # WRONG - don't include .json extension
-Correct Format Summary
-`set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")`- Use `set_dataset(context_variables, endpoint="endpoint-id", query="your-soql-query")` to set the dataset. Both parameters are required:
-    - endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx').  If you dont't have that, get it from get_dashboard_metric()
-    - query: The complete SoQL query string using standard SQL syntax.  If you don't know the field names and types, use get_dataset_columns() to get the column information.
-    - Always pass context_variables as the first argument
-    - DO NOT pass JSON strings as arguments - pass the actual values directly
-    
-    SOQL Query Guidelines:
-    - Use fieldName values (not column name) in your queries
-    - Don't include FROM clauses (unlike standard SQL)
-    - Use single quotes for string values: where field_name = 'value'
-    - Don't use type casting with :: syntax
-    - Use proper date functions: date_trunc_y(), date_trunc_ym(), date_trunc_ymd()
-    - Use standard aggregation functions: sum(), avg(), min(), max(), count()
-    
-    IMPORTANT: You MUST use the EXACT function call format shown below. Do NOT modify the format or try to encode parameters as JSON strings:
-    
-    ```
-    set_dataset(
-        context_variables, 
-        endpoint="g8m3-pdis", 
-        query="select dba_name where supervisor_district = '2' AND naic_code_description = 'Retail Trade' order by business_start_date desc limit 5"
-    )
-    ```
-    
-    CRITICAL: The following formats are INCORRECT and will NOT work:
-    - set_dataset(context_variables, "{...}")  # WRONG - don't pass JSON strings
-    - set_dataset(context_variables, '{"endpoint": "x", "query": "y"}')  # WRONG - don't pass JSON strings
-    - set_dataset(context_variables, endpoint="file.json")  # WRONG - don't include .json extension
-    - set_dataset(context_variables, endpoint="business-registrations-district2.json")  # WRONG - don't include .json extension
-    
-    The ONLY correct format is:
-    set_dataset(context_variables, endpoint="dataset-id", query="your-soql-query")
-
-"""
 
 # Map generation instructions
 GENERATE_MAP_INSTRUCTIONS = """- generate_map: Create a map visualization for geographic data with support for different colored series
@@ -248,9 +178,7 @@ GENERATE_MAP_INSTRUCTIONS = """- generate_map: Create a map visualization for ge
   6. For symbol maps, ensure all points have numeric values for sizing
   7. Remember to use proper SOQL syntax:
      - No FROM clause needed
-     - Use single quotes for string values
-     - Use proper date functions: date_trunc_y(), date_trunc_ym(), date_trunc_ymd()
-     - Use standard aggregation functions: sum(), avg(), min(), max(), count()"""
+"""
 
 # DataSF map examples
 DATASF_MAP_EXAMPLES = """SERIES MAPS WITH DATASF DATA - PRACTICAL EXAMPLES:
@@ -397,8 +325,8 @@ CORE_TOOLS_INSTRUCTIONS = """TOOLS YOU SHOULD USE:
   Use this to query DataSF datasets for analysis. Both parameters are required.
   
   Parameter guidelines:
-  - endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'wg3w-h783')
-  - query: The complete SoQL (Socrata query language) query string using standard SQL syntax (remember NO FROM clause!)
+  - endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx')
+  - query: The complete SoQL query string using standard SQL syntax
   
   IMPORTANT: You MUST use the EXACT function call format shown below with named arguments:
   
@@ -408,90 +336,28 @@ CORE_TOOLS_INSTRUCTIONS = """TOOLS YOU SHOULD USE:
       query="select dba_name where supervisor_district = '2' AND naic_code_description = 'Retail Trade' order by business_start_date desc limit 5"
   )
   ```
-  SOQL Query Guidelines:
-  - Use fieldName values (not column name) in your queries
-  - NO FROM clause!, thats why we pass endpoint. (This is unlike standard SQL)
-  - Use single quotes for string values: where field_name = 'value'
-  - Don't use type casting with :: syntax
-  - Use proper date functions: date_trunc_y(), date_trunc_ym(), date_trunc_ymd()
-  - Use standard aggregation functions: sum(), avg(), min(), max(), count() 
 
-- get_dashboard_metric: Retrieve dashboard metric data containing anomalies
-  USAGE: get_dashboard_metric(context_variables, district_number=0, metric_id=id_number)
-  Use this to get the dashboard metric that contains the anomaly the user wants explained.  If you are not provided with a metric number, check your notes, and see if the request maps to a metric there.
-  
-- query_anomalies_db: Query anomalies directly from the PostgreSQL database
-  USAGE: query_anomalies_db(context_variables, query_type='by_metric_id', metric_id=metric_id, district_filter=district, period_type=period_type, group_filter=group, limit=30, date_start=None, date_end=None, only_anomalies=True)
-  
-  Parameter guidelines:
-  - query_type: Prefer 'by_metric_id' when you have a metric_id, 'recent' for most recent anomalies
-  - metric_id: REQUIRED when examining a specific metric - always pass this when available
-  - district_filter: 
-     * 0 for citywide data only
-     * 1-11 for specific district data
-     * None to include all districts (citywide + district-specific)
-  - period_type: Filter by time period ('month', 'year', etc.)
-  - group_filter: Filter by specific group value (e.g., specific call type, category, etc.)
-     * Specific value to see anomalies for only that group
-     * None to see anomalies across all groups
-  - only_anomalies: Almost always keep as True to see significant outliers only
-  - date_start/date_end: Use for specific time ranges (default is all available dates)
-  
-  Best practices:
-  - Be as specific as possible with your queries - include all relevant parameters
-  - Always start with metric_id when you know which metric to analyze
-  - When analyzing a district-specific issue, include both district_filter and metric_id
-
-- get_anomaly_details: Get detailed information about a specific anomaly by ID
-  USAGE: get_anomaly_details(context_variables, anomaly_id=123)
-  IMPORTANT: Always pass the anomaly ID as a NAMED parameter (anomaly_id=123). Do NOT pass it positionally or within generic "args"/"kwargs" objects.
-  Use this to get complete information about a specific anomaly, including its time series data and metadata.
-
-- get_charts_for_review: Get available charts for newsletter inclusion review
-  USAGE: get_charts_for_review(context_variables, limit=20, days_back=30, district_filter=None, include_time_series=True, include_anomalies=True, include_maps=True)
-  
-  Parameter guidelines:
-  - limit: Maximum number of charts to return per type (default: 20)
-  - days_back: Number of days back to look for charts (default: 30)
-  - district_filter: Filter by specific district ('0' for citywide, '1'-'11' for districts)
-  - include_time_series: Whether to include time series charts (default: True)
-  - include_anomalies: Whether to include anomaly charts (default: True)
-  - include_maps: Whether to include maps (default: True)
-  - metric_id: Filter by specific metric ID/object_id (optional)
-  
-  Returns charts organized by type with chart_id, title, caption, and chart_reference for easy inclusion.
-  Use this when you need to review available charts for newsletter or report inclusion.
-  
-  Best practices:
-  - Use this to find relevant charts and maps that support your explanations.  Maps are great for geographic changes, charts are great for temporal changes, and visual data is great for changes related to a specific variable.
-  - Filter by district when working on district-specific content
-  - Check the chart_reference field for the exact format to include charts in reports
-  - Review the caption and metadata to understand what each chart shows
-
-- get_dataset: Get information about any dataset that's been loaded
-  USAGE: get_dataset(context_variables)
+- get_dataset: Get information about the last dataset that was loaded
+  USAGE: get_dataset()
   Use this to see what data is available for further analysis.
 
-- get_dashboard_metric(context_variables, district_number, metric_id) to retrieve dashboard metric data:
-  USAGE: get_dashboard_metric(context_variables, district_number, metric_id)
-        - district_number: Integer from 0 (citywide) to 11 (specific district)
-        - metric_id: Optional. The specific metric ID to retrieve (e.g., '2'). If not provided, returns the top-level district summary.
-        
-- get_dataset_columns: Get column information for a dataset endpoint
-  USAGE: get_dataset_columns(context_variables, endpoint="dataset-id")
-  Use this to explore what columns are available in a specific dataset.
-
 - query_docs: Search for additional context in documentation
-  USAGE: query_docs(context_variables, collection_name="SFPublicData", query="information related to [specific anomaly]")
-  Use this to find domain-specific information that might explain the anomaly.
-
-- get_map_by_id: Retrieve a previously created map by ID
-  USAGE: get_map_by_id(context_variables, map_id=123)
-  Use this to retrieve the details of a map that was previously created.
-
-- get_recent_maps: Get a list of recently created maps
-  USAGE: get_recent_maps(context_variables, limit=10, map_type="supervisor_district")
-  Use this to see what maps have been created recently, optionally filtering by map type."""
+  USAGE: query_docs(collection_name="collection-name", query="search-query")
+  Use this to find domain-specific information that might explain anomalies or provide context.
+  
+  Parameter guidelines:
+  - collection_name: The name of the document collection to search (e.g., "SFPublicData")
+  - query: The search query string describing what information you're looking for
+  
+  IMPORTANT: Use named arguments:
+  
+  ```
+  query_docs(
+      collection_name="SFPublicData", 
+      query="information about police misconduct"
+  )
+  ```
+"""
 
 # Metrics management tools
 METRICS_TOOLS_INSTRUCTIONS = """METRICS MANAGEMENT TOOLS:
@@ -502,7 +368,7 @@ When you are asked about metrics, you should follow this workflow:
 2. use get_metric_details() to get detailed information about a specific metric. If there are no metrics that are currently similar to the one that the user is asking about, you can create a new metric using create_new_metric(). If there are metrics that are similar, you can edit them using edit_metric().
 3. When creating or editing a metric, first ensure that the query you are going to use works.  You can do this by using the set_dataset to query the data using a narrow date range.  
 4. use get_dataset to show the resutls to the user and ask the if they was to reate or edut the metric before you do it. 
-5. When editing a metric use the metrics's numeric identifier, not the key.
+5. When editing a metric use the metric's numeric identifier, not the key.
 
 - query_metrics: Search and filter metrics in the database
   USAGE: query_metrics(context_variables, category="crime", search_term="police", active_only=True, dashboard_only=False)
@@ -512,58 +378,45 @@ When you are asked about metrics, you should follow this workflow:
 - get_metric_details: Get detailed information about a specific metric
   USAGE: get_metric_details(context_variables, metric_identifier=1) or get_metric_details(context_variables, metric_identifier="metric_key")
   Use this to get complete information about a metric by ID or key.
+  
 
+  
 - get_metrics_overview: Get summary statistics about the metrics system
   USAGE: get_metrics_overview(context_variables)
   Use this to get high-level information about total metrics, active metrics, etc.
   
 - create_new_metric: Add a new metric to the database
   USAGE: create_new_metric(
-    
-    name="🚨 Violent Crime Incidents",
-    key="violent_violent_crime_incidents_2",
+    context_variables,
+    name="🚗 Vehicle Thefts",
+    key="vehicle_thefts",
     category="crime",
     endpoint="wg3w-h783",
-    summary="Count of reported violent crime incidents, including assaults, homicides, rapes, robberies, human trafficking, weapons offenses, and offenses against family/children.",
-    definition="Count of reported violent crime incidents. Violent crimes are defined as incidents categorized as: Assault, Homicide, Rape, Robbery, Human Trafficking (Commercial Sex Acts and Involuntary Servitude), Offences Against The Family And Children, and Weapons Offenses.",
+    summary="Count of reported vehicle theft incidents",
+    definition="Vehicle thefts include all reported incidents of motor vehicle theft, including cars, trucks, motorcycles, and other motorized vehicles.",
     data_sf_url="https://data.sfgov.org/Public-Safety/Police-Department-Incident-Reports-2018-to-Present/wg3w-h783",
-    ytd_query="SELECT date_trunc_ymd(Report_Datetime) as date, COUNT(*) as value WHERE Report_Datetime >= last_year_start AND Report_Datetime <= current_date AND Incident_Category IN (''Assault'', ''Homicide'', ''Rape'', ''Robbery'', ''Human Trafficking (A), Commercial Sex Acts'', ''Human Trafficking, Commercial Sex Acts'', ''Human Trafficking (B), Involuntary Servitude'', ''Offences Against The Family And Children'', ''Weapons Carrying Etc'', ''Weapons Offense'', ''Weapons Offence'') GROUP BY date ORDER BY date",
-    metric_query="SELECT ''Violent Crime'' as label, max(Report_Datetime) as max_date, COUNT(CASE WHEN Report_Datetime >= this_year_start AND Report_Datetime <= this_year_end AND Incident_Category IN (''Assault'', ''Homicide'', ''Rape'', ''Robbery'', ''Human Trafficking (A), Commercial Sex Acts'', ''Human Trafficking, Commercial Sex Acts'', ''Human Trafficking (B), Involuntary Servitude'', ''Offences Against The Family And Children'', ''Weapons Carrying Etc'', ''Weapons Offense'', ''Weapons Offence'') THEN 1 END) as this_year, COUNT(CASE WHEN Report_Datetime >= last_year_start AND Report_Datetime <= last_year_end AND Incident_Category IN (''Assault'', ''Homicide'', ''Rape'', ''Robbery'', ''Human Trafficking (A), Commercial Sex Acts'', ''Human Trafficking, Commercial Sex Acts'', ''Human Trafficking (B), Involuntary Servitude'', ''Offences Against The Family And Children'', ''Weapons Carrying Etc'', ''Weapons Offense'', ''Weapons Offence'') THEN 1 END) as last_year, (COUNT(CASE WHEN Report_Datetime >= this_year_start AND Report_Datetime <= this_year_end AND Incident_Category IN (''Assault'', ''Homicide'', ''Rape'', ''Robbery'', ''Human Trafficking (A), Commercial Sex Acts'', ''Human Trafficking, Commercial Sex Acts'', ''Human Trafficking (B), Involuntary Servitude'', ''Offences Against The Family And Children'', ''Weapons Carrying Etc'', ''Weapons Offense'', ''Weapons Offence'') THEN 1 END) - COUNT(CASE WHEN Report_Datetime >= last_year_start AND Report_Datetime <= last_year_end AND Incident_Category IN (''Assault'', ''Homicide'', ''Rape'', ''Robbery'', ''Human Trafficking (A), Commercial Sex Acts'', ''Human Trafficking, Commercial Sex Acts'', ''Human Trafficking (B), Involuntary Servitude'', ''Offences Against The Family And Children'', ''Weapons Carrying Etc'', ''Weapons Offense'', ''Weapons Offence'') THEN 1 END)) as delta, ((COUNT(CASE WHEN Report_Datetime >= this_year_start AND Report_Datetime <= this_year_end AND Incident_Category IN (''Assault'', ''Homicide'', ''Rape'', ''Robbery'', ''Human Trafficking (A), Commercial Sex Acts'', ''Human Trafficking, Commercial Sex Acts'', ''Human Trafficking (B), Involuntary Servitude'', ''Offences Against The Family And Children'', ''Weapons Carrying Etc'', ''Weapons Offense'', ''Weapons Offence'') THEN 1 END) - COUNT(CASE WHEN Report_Datetime >= last_year_start AND Report_Datetime <= last_year_end AND Incident_Category IN (''Assault'', ''Homicide'', ''Rape'', ''Robbery'', ''Human Trafficking (A), Commercial Sex Acts'', ''Human Trafficking, Commercial Sex Acts'', ''Human Trafficking (B), Involuntary Servitude'', ''Offences Against The Family And Children'', ''Weapons Carrying Etc'', ''Weapons Offense'', ''Weapons Offence'') THEN 1 END)) * 100.0 / NULLIF(COUNT(CASE WHEN Report_Datetime >= last_year_start AND Report_Datetime <= last_year_end AND Incident_Category IN (''Assault'', ''Homicide'', ''Rape'', ''Robbery'', ''Human Trafficking (A), Commercial Sex Acts'', ''Human Trafficking, Commercial Sex Acts'', ''Human Trafficking (B), Involuntary Servitude'', ''Offences Against The Family And Children'', ''Weapons Carrying Etc'', ''Weapons Offense'', ''Weapons Offence'') THEN 1 END), 0)) as perc_diff, supervisor_district group by supervisor_district",
+    ytd_query="SELECT COUNT(*) as count FROM incidents WHERE incident_category = 'Motor Vehicle Theft' AND incident_date >= DATE_TRUNC('year', CURRENT_DATE) AND incident_date < CURRENT_DATE",
+    metric_query="SELECT COUNT(*) as count FROM incidents WHERE incident_category = 'Motor Vehicle Theft' AND incident_date >= DATE_TRUNC('month', CURRENT_DATE) AND incident_date < CURRENT_DATE",
     dataset_title="Police Department Incident Reports",
     dataset_category="Public Safety",
     show_on_dash=True,
     item_noun="Incidents",
     greendirection="down",
     location_fields=[
-        {"name": "supervisor_district", "fieldName": "supervisor_district", "description": "Supervisor district where the incident occurred"},
-        {"name": "police_district", "fieldName": "police_district", "description": "Police district where the incident occurred"}
+        {{"name": "supervisor_district", "fieldName": "supervisor_district", "description": "Supervisor district where the incident occurred"}},
+        {{"name": "police_district", "fieldName": "police_district", "description": "Police district where the incident occurred"}}
     ],
     category_fields=[
-        {"name": "incident_category", "fieldName": "incident_category", "description": "Category of the incident"},
-        {"name": "incident_subcategory", "fieldName": "incident_subcategory", "description": "Subcategory of the incident"}
+        {{"name": "incident_category", "fieldName": "incident_category", "description": "Category of the incident"}},
+        {{"name": "incident_subcategory", "fieldName": "incident_subcategory", "description": "Subcategory of the incident"}}
     ]
-    )
+  )
   Use this to add new metrics to the system. Required fields: name, key, category, endpoint.
- 
   The ytd_query should calculate year-to-date totals, while metric_query should calculate current period totals.
   Location fields and category fields are optional but recommended for better data analysis.
   
-  DATE SUBSTITUTION VARIABLES:
-  The system automatically substitutes date variables in queries at runtime. Use these variables in your queries:
-  - last_year_start: Start of the previous year (e.g., '2024-01-01')
-  - last_year_end: End of the previous year (e.g., '2024-12-31')
-  - this_year_start: Start of the current year (e.g., '2025-01-01')
-  - this_year_end: End of the current year (e.g., '2025-12-31')
-  - current_date: Current date when the query is executed
-  - last_month_start: Start of the previous month
-  - last_month_end: End of the previous month
-  - this_month_start: Start of the current month
-  - this_month_end: End of the current month
-  
-  These variables are automatically replaced with actual date values when queries are executed, allowing for dynamic date ranges without hardcoding dates.
-  
 - edit_metric: Update an existing metric
-  USAGE: edit_metric(context_variables, metric_identifier=1, updates={"summary": "Updated summary", "show_on_dash": False})
+  USAGE: edit_metric(context_variables, metric_identifier=1, updates={{"summary": "Updated summary", "show_on_dash": False}})
   Use this to modify existing metrics. Can update any field except the unique key.
   
 - disable_metric: Deactivate a metric (soft delete)
@@ -580,26 +433,37 @@ When you are asked about metrics, you should follow this workflow:
   
 """
 
-# Function to combine all sections into the complete instructions
-def get_complete_instructions():
-    """Combine all prompt sections into the complete instructions."""
-    sections = [
+def get_system_prompt(name: str, description: str, summary: str, map_type: str) -> str:
+    """
+    Generates the complete system prompt for the explainer agent,
+    dynamically inserting metric-specific details.
+    """
+    # This is a placeholder for the full context
+    METRIC_CONTEXT = f"""You are being asked to explain a change in the following metric:
+- Name: {name}
+- Description: {description}
+- Summary: {summary}
+- Map Type: {map_type}
+"""
+
+    # Combine all prompt sections into the final system message
+    prompt_parts = [
         PERSONA_INSTRUCTIONS,
+        METRIC_CONTEXT,
         TASK_INSTRUCTIONS,
         WORKFLOW_INSTRUCTIONS,
         CATEGORY_BEST_PRACTICES,
-        DATASF_MAP_EXAMPLES,
         CHART_INSTRUCTIONS,
-        CORE_TOOLS_INSTRUCTIONS,
-        SET_DATASET_INSTRUCTIONS,
         GENERATE_MAP_INSTRUCTIONS,
-        METRICS_TOOLS_INSTRUCTIONS
     ]
     
-    return "\n\n".join(sections)
+    return "\n\n".join(prompt_parts)
 
-# For backward compatibility
-EXPLAINER_INSTRUCTIONS = get_complete_instructions()
+def get_complete_instructions():
+    """
+    This function is deprecated. Use get_system_prompt instead.
+    """
+    raise DeprecationWarning("get_complete_instructions is deprecated. Use get_system_prompt instead.")
 
 # Dictionary of all sections for settings interface
 PROMPT_SECTIONS = {
@@ -633,11 +497,7 @@ PROMPT_SECTIONS = {
         'description': 'Primary tools for data analysis and anomaly investigation',
         'content': CORE_TOOLS_INSTRUCTIONS
     },
-    'set_dataset': {
-        'name': 'Set Dataset Tool',
-        'description': 'Instructions for querying DataSF datasets',
-        'content': SET_DATASET_INSTRUCTIONS
-    },
+
     'generate_map': {
         'name': 'Map Generation Tool',
         'description': 'Comprehensive instructions for creating maps and visualizations',
@@ -700,19 +560,19 @@ def write_prompts_to_file():
 CATEGORIES_INSTRUCTIONS = """Best Practices for explaining certain categories: 
 1. Housing - If the you are being asked to explain is in housing, then you should query for the actual properties that have new units, and include the address, and the units certified in your explanation.
 set_dataset
-Arguments: { "endpoint": "j67f-aayr", "query": "SELECT building_address as address, number_of_units_certified as value,   building_address || ': ' || document_type || ' (' || number_of_units_certified || ' units)' as description, document_type as description, document_type as series WHERE date_issued >= '2025-04-27' ORDER BY date_issued DESC" }
+Arguments: {{ "endpoint": "j67f-aayr", "query": "SELECT building_address as address, number_of_units_certified as value,   building_address || ': ' || document_type || ' (' || number_of_units_certified || ' units)' as description, document_type as description, document_type as series WHERE date_issued >= '2025-04-27' ORDER BY date_issued DESC" }}
 
 2. If you are being asked to explain a change in business registrations or closures, then you should query for the actual businesses that have opened or closed, and include the DBA name, and the date of opening or closure in your explanation.
 set_dataset
-Arguments: { "endpoint": "g8m3-pdis", "query": "SELECT dba_name, location, dba_start_date, naic_code_description, supervisor_district ORDER BY dba_start_date DESC LIMIT 10" }
+Arguments: {{ "endpoint": "g8m3-pdis", "query": "SELECT dba_name, location, dba_start_date, naic_code_description, supervisor_district ORDER BY dba_start_date DESC LIMIT 10" }}
 
 3. I fyou are being asked about crime data, then you should query for the actual crimes that have occurred, and include the crime type, the date of the crime, and the location of the crime in your explanation.
 set_dataset
 Arguments:
-{
+{{
     "endpoint": "wg3w-h783",
     "query": "SELECT report_datetime, incident_category, supervisor_district, latitude, longitude WHERE supervisor_district='2' AND (incident_category='Homicide') ORDER BY report_datetime DESC LIMIT 5"
-}"""
+}}"""
 
 CHARTS_INSTRUCTIONS = """IMPORTANT CHART GENERATION RULES:
 
