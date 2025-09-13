@@ -25,6 +25,13 @@ from tools.data_fetcher import set_dataset, fetch_data_from_api
 from tools.db_utils import get_postgres_connection
 from tools.genChart import generate_ytd_trend_chart
 
+# Import the new output manager for GCS storage
+try:
+    from tools.output_manager import get_output_manager
+    OUTPUT_MANAGER_AVAILABLE = True
+except ImportError:
+    OUTPUT_MANAGER_AVAILABLE = False
+
 def clean_nan_values(obj):
     """
     Recursively clean NaN and infinity values from data structures to make them JSON-serializable.
@@ -2369,6 +2376,18 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                         clean_data = clean_nan_values(metric_data)
                         json.dump(clean_data, f, indent=2)
                     logger.info(f"Metric {file_id} (original id: {metric['id']}) saved to {metric_file}")
+                    
+                    # Also save to GCS if available
+                    if OUTPUT_MANAGER_AVAILABLE:
+                        try:
+                            output_manager = get_output_manager()
+                            success = output_manager.store_dashboard_metric(clean_data, district_str, file_id)
+                            if success:
+                                logger.info(f"Metric {file_id} also saved to GCS")
+                            else:
+                                logger.warning(f"Failed to save metric {file_id} to GCS")
+                        except Exception as e:
+                            logger.warning(f"Error saving metric {file_id} to GCS: {e}")
                 
                 district_data['categories'].append(category_copy)
             
@@ -2380,12 +2399,37 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                 json.dump(clean_data, f, indent=2)
             logger.info(f"District {district_str} top_level metrics saved to {top_level_file}")
             
+            # Also save to GCS if available
+            if OUTPUT_MANAGER_AVAILABLE:
+                try:
+                    output_manager = get_output_manager()
+                    success = output_manager.store_dashboard_metric(clean_data, district_str, 'top_level')
+                    if success:
+                        logger.info(f"District {district_str} top_level also saved to GCS")
+                    else:
+                        logger.warning(f"Failed to save district {district_str} top_level to GCS")
+                except Exception as e:
+                    logger.warning(f"Error saving district {district_str} top_level to GCS: {e}")
+            
             # Save to history directory with timestamp
             history_file = os.path.join(history_dir, f'district_{district_str}_{datetime.now().strftime("%Y%m%d")}.json')
             with open(history_file, 'w', encoding='utf-8') as f:
                 clean_data = clean_nan_values(district_data)
                 json.dump(clean_data, f, indent=2)
             logger.info(f"District {district_str} metrics history saved to {history_file}")
+            
+            # Also save history to GCS if available
+            if OUTPUT_MANAGER_AVAILABLE:
+                try:
+                    output_manager = get_output_manager()
+                    history_filename = f'district_{district_str}_{datetime.now().strftime("%Y%m%d")}.json'
+                    success = output_manager.store_report(json.dumps(clean_data, indent=2), history_filename, "json")
+                    if success:
+                        logger.info(f"District {district_str} metrics history also saved to GCS")
+                    else:
+                        logger.warning(f"Failed to save district {district_str} metrics history to GCS")
+                except Exception as e:
+                    logger.warning(f"Error saving district {district_str} metrics history to GCS: {e}")
     
     return metrics
 
@@ -2802,6 +2846,18 @@ def process_single_metric(metric_id, period_type='ytd'):
             clean_data = clean_nan_values(district_data)
             json.dump(clean_data, f, indent=2)
         logging.info(f"Created new top_level.json for district {district_str}")
+        
+        # Also save to GCS if available
+        if OUTPUT_MANAGER_AVAILABLE:
+            try:
+                output_manager = get_output_manager()
+                success = output_manager.store_dashboard_metric(clean_data, district_str, 'top_level')
+                if success:
+                    logging.info(f"District {district_str} top_level also saved to GCS")
+                else:
+                    logging.warning(f"Failed to save district {district_str} top_level to GCS")
+            except Exception as e:
+                logging.warning(f"Error saving district {district_str} top_level to GCS: {e}")
         
         # Save to history directory with timestamp
         history_dir = os.path.join(output_dir, 'history')

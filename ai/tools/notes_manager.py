@@ -3,13 +3,35 @@ import json
 import logging
 from pathlib import Path
 
+# Import the new output manager for cloud storage support
+try:
+    from .output_manager import get_output_manager
+    OUTPUT_MANAGER_AVAILABLE = True
+except ImportError:
+    OUTPUT_MANAGER_AVAILABLE = False
+
 
 def save_notes_to_file(notes_text, filename="combined_notes.txt"):
     """
     Saves the combined notes to a file in the output/notes directory.
+    Uses cloud storage if available, falls back to local storage.
     """
     logger = logging.getLogger(__name__)
     
+    # Try to use the new output manager first (supports GCS)
+    if OUTPUT_MANAGER_AVAILABLE:
+        try:
+            output_manager = get_output_manager()
+            success = output_manager.store_notes(notes_text, filename)
+            if success:
+                logger.info(f"Successfully saved notes using output manager: {filename}")
+                return True
+            else:
+                logger.warning("Output manager failed, falling back to local storage")
+        except Exception as e:
+            logger.warning(f"Output manager error, falling back to local storage: {e}")
+    
+    # Fallback to local storage
     script_dir = Path(__file__).parent.parent  # Go up from tools/ to ai/
     notes_dir = script_dir / 'output' / 'notes'
     
@@ -21,7 +43,7 @@ def save_notes_to_file(notes_text, filename="combined_notes.txt"):
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(notes_text)
-        logger.info(f"Successfully saved notes to {file_path}")
+        logger.info(f"Successfully saved notes to local file: {file_path}")
         return True
     except Exception as e:
         logger.error(f"Error saving notes to file: {e}")

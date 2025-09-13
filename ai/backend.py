@@ -1553,13 +1553,25 @@ async def execute_postgres_query(request: Request):
         data = await request.json()
         query = data.get('query', '').strip()
         parameters = data.get('parameters', {})
-        
+
         if not query:
             return JSONResponse({
                 'status': 'error',
                 'message': 'Query is required'
             })
-        
+
+        # Determine database connection source
+        database_url = os.getenv("DATABASE_URL")
+        if database_url:
+            db_source = database_url  # Show the actual DATABASE_URL
+        else:
+            # Build connection string from individual parameters for display
+            host = os.getenv("POSTGRES_HOST", "localhost")
+            port = os.getenv("POSTGRES_PORT", "5432")
+            dbname = os.getenv("POSTGRES_DB", "transparentsf")
+            user = os.getenv("POSTGRES_USER", "postgres")
+            db_source = f"from params to {host}:{port}/{dbname}"
+
         # Connect to PostgreSQL
         conn = get_db_connection()
         if not conn:
@@ -1581,7 +1593,8 @@ async def execute_postgres_query(request: Request):
                 return JSONResponse({
                     'status': 'success',
                     'message': 'Query executed successfully',
-                    'rowCount': cursor.rowcount
+                    'rowCount': cursor.rowcount,
+                    'db_source': db_source
                 })
             
             # For SELECT queries, fetch and return results
@@ -1601,7 +1614,8 @@ async def execute_postgres_query(request: Request):
                 'status': 'success',
                 'rowCount': len(results_list),
                 'query': query,
-                'results': results_list
+                'results': results_list,
+                'db_source': db_source
             })
             
         finally:

@@ -409,53 +409,76 @@ def _extract_any_valid_json(text):
     logger.debug(f"_extract_any_valid_json: Processing text of length {len(text)}")
     logger.debug(f"_extract_any_valid_json: Text preview: {repr(text[:200])}")
     
-    # First, try to find JSON in code blocks (most reliable)
-    json_pattern = r'```json\s*([\s\S]*?)\s*```'
-    json_match = re.search(json_pattern, text)
-    if json_match:
-        json_str = json_match.group(1).strip()
-        logger.debug(f"_extract_any_valid_json: Found code block content: {repr(json_str[:100])}")
-        if json_str and json_str.strip() != "":
-            try:
-                json.loads(json_str)
-                logger.info(f"Found valid JSON in code block: {json_str[:100]}...")
-                return json_str
-            except json.JSONDecodeError as e:
-                logger.debug(f"Code block JSON parsing failed: {e}, attempting to fix control characters")
-                # Try to fix control characters and retry
+    # Strategy 1: Try to find JSON in code blocks (most reliable)
+    json_patterns = [
+        r'```json\s*([\s\S]*?)\s*```',  # ```json ... ```
+        r'```\s*([\s\S]*?)\s*```',      # ``` ... ``` (generic code block)
+        r'`([^`]*\{[^`]*\}[^`]*)`',     # `...` (inline code with braces)
+    ]
+    
+    for pattern in json_patterns:
+        json_match = re.search(pattern, text)
+        if json_match:
+            json_str = json_match.group(1).strip()
+            logger.debug(f"_extract_any_valid_json: Found code block content: {repr(json_str[:100])}")
+            if json_str and json_str.strip() != "":
                 try:
-                    fixed_json = _fix_common_json_issues(json_str)
-                    json.loads(fixed_json)  # Test if it's now valid
-                    logger.info(f"Successfully fixed control characters in code block JSON")
-                    return fixed_json
-                except json.JSONDecodeError as fix_error:
-                    logger.debug(f"Control character fixing also failed: {fix_error}")
-                    pass
+                    json.loads(json_str)
+                    logger.info(f"Found valid JSON in code block: {json_str[:100]}...")
+                    return json_str
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Code block JSON parsing failed: {e}, attempting to fix control characters")
+                    # Try to fix control characters and retry
+                    try:
+                        fixed_json = _fix_common_json_issues(json_str)
+                        json.loads(fixed_json)  # Test if it's now valid
+                        logger.info(f"Successfully fixed control characters in code block JSON")
+                        return fixed_json
+                    except json.JSONDecodeError as fix_error:
+                        logger.debug(f"Control character fixing also failed: {fix_error}")
+                        continue
     
-    # Find all potential JSON objects (content between { and })
-    brace_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
-    matches = re.findall(brace_pattern, text, re.DOTALL)
+    # Strategy 2: Look for JSON objects that start and end with braces
+    # More comprehensive pattern that handles nested objects better
+    brace_patterns = [
+        r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Basic nested braces
+        r'\{.*?"newsletter".*?\}',           # Look for newsletter field specifically
+        r'\{.*?"proofread_feedback".*?\}',   # Look for feedback field specifically
+        r'\{[^{}]*"headlines"[^{}]*\}',      # Look for headlines field
+    ]
     
-    # Sort matches by length (longest first) to prioritize complete JSON objects
-    matches.sort(key=len, reverse=True)
+    all_matches = []
+    for pattern in brace_patterns:
+        matches = re.findall(pattern, text, re.DOTALL)
+        all_matches.extend(matches)
+    
+    # Remove duplicates and sort by length (longest first)
+    unique_matches = list(set(all_matches))
+    unique_matches.sort(key=len, reverse=True)
     
     # Try each match to see if it's valid JSON
-    for match in matches:
+    for match in unique_matches:
         try:
             # Try to parse it
-            json.loads(match)
-            logger.info(f"Found valid JSON: {match[:100]}...")
-            return match
+            test_data = json.loads(match)
+            # Additional validation: check if it has expected fields
+            if isinstance(test_data, dict) and ('newsletter' in test_data or 'proofread_feedback' in test_data):
+                logger.info(f"Found valid JSON with expected fields: {match[:100]}...")
+                return match
+            elif isinstance(test_data, dict):
+                logger.info(f"Found valid JSON: {match[:100]}...")
+                return match
         except json.JSONDecodeError:
             continue
     
-    # If no valid JSON found, try to fix common issues and retry
-    for match in matches:
+    # Strategy 3: Try to fix common issues and retry
+    for match in unique_matches:
         try:
             fixed_json = _fix_common_json_issues(match)
-            json.loads(fixed_json)
-            logger.info(f"Found valid JSON after fixing: {fixed_json[:100]}...")
-            return fixed_json
+            test_data = json.loads(fixed_json)
+            if isinstance(test_data, dict) and ('newsletter' in test_data or 'proofread_feedback' in test_data):
+                logger.info(f"Found valid JSON after fixing: {fixed_json[:100]}...")
+                return fixed_json
         except json.JSONDecodeError:
             continue
     
@@ -2814,30 +2837,82 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
         
         # Parse the JSON response
         try:
-            # Clean the response first in case it's wrapped in markdown code blocks
-            cleaned_response = clean_html_response(response_content)
-            logger.info(f"Cleaned response length: {len(cleaned_response)}")
-            logger.info(f"Cleaned response preview: {repr(cleaned_response[:200])}")
+            logger.info(f"Raw response length: {len(response_content)}")
+            logger.info(f"Raw response preview: {repr(response_content[:300])}")
             
-            # Try to use the enhanced JSON extraction function first
-            json_str = _extract_any_valid_json(cleaned_response)
+            # Try multiple extraction strategies
+            proofread_data = None
+            
+            # Strategy 1: Try enhanced JSON extraction on raw response
+            json_str = _extract_any_valid_json(response_content)
             if json_str:
-                logger.info(f"Enhanced extraction found JSON of length: {len(json_str)}")
-                logger.info(f"Enhanced extraction preview: {repr(json_str[:200])}")
-                proofread_data = json.loads(json_str)
-                logger.info("Successfully parsed JSON using enhanced extraction")
-            else:
-                logger.info("Enhanced extraction found no valid JSON, trying direct parsing")
-                logger.info(f"Direct parsing attempt on: {repr(cleaned_response[:200])}")
+                logger.info(f"Strategy 1 (raw extraction) found JSON of length: {len(json_str)}")
+                try:
+                    proofread_data = json.loads(json_str)
+                    logger.info("✅ Successfully parsed JSON using raw extraction")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Raw extraction found JSON but parsing failed: {e}")
+                    json_str = None
+            
+            # Strategy 2: If raw extraction failed, try cleaning first
+            if not proofread_data:
+                cleaned_response = clean_html_response(response_content)
+                logger.info(f"Strategy 2 (cleaned extraction) - cleaned response length: {len(cleaned_response)}")
+                logger.info(f"Cleaned response preview: {repr(cleaned_response[:200])}")
                 
-                # Check if the cleaned response looks like it might be JSON
+                json_str = _extract_any_valid_json(cleaned_response)
+                if json_str:
+                    logger.info(f"Strategy 2 found JSON of length: {len(json_str)}")
+                    try:
+                        proofread_data = json.loads(json_str)
+                        logger.info("✅ Successfully parsed JSON using cleaned extraction")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Cleaned extraction found JSON but parsing failed: {e}")
+                        json_str = None
+            
+            # Strategy 3: Try direct parsing if response looks like pure JSON
+            if not proofread_data:
+                cleaned_response = clean_html_response(response_content)
                 if cleaned_response.strip().startswith('{') and cleaned_response.strip().endswith('}'):
-                    logger.info("Cleaned response appears to be JSON, attempting direct parsing")
-                    proofread_data = json.loads(cleaned_response)
-                    logger.info("Successfully parsed JSON using direct parsing")
-                else:
-                    logger.error("Cleaned response does not appear to be valid JSON format")
-                    raise json.JSONDecodeError("Response does not appear to be JSON", cleaned_response, 0)
+                    logger.info("Strategy 3 (direct parsing) - response appears to be pure JSON")
+                    try:
+                        proofread_data = json.loads(cleaned_response)
+                        logger.info("✅ Successfully parsed JSON using direct parsing")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Direct parsing failed: {e}")
+            
+            # Strategy 4: Try to find and extract JSON from any text
+            if not proofread_data:
+                logger.info("Strategy 4 (comprehensive search) - searching for any JSON pattern")
+                # Look for JSON objects that might be embedded in text
+                import re
+                # Find all potential JSON objects (more aggressive pattern)
+                json_patterns = [
+                    r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Basic nested braces
+                    r'\{.*?"newsletter".*?\}',  # Look for newsletter field
+                    r'\{.*?"proofread_feedback".*?\}',  # Look for feedback field
+                ]
+                
+                for pattern in json_patterns:
+                    matches = re.findall(pattern, response_content, re.DOTALL)
+                    for match in matches:
+                        try:
+                            # Try to parse this potential JSON
+                            test_data = json.loads(match)
+                            if 'newsletter' in test_data:  # Validate it has expected structure
+                                proofread_data = test_data
+                                logger.info("✅ Successfully parsed JSON using comprehensive search")
+                                break
+                        except json.JSONDecodeError:
+                            continue
+                    if proofread_data:
+                        break
+            
+            # If all strategies failed, raise an error
+            if not proofread_data:
+                logger.error("All JSON extraction strategies failed")
+                logger.error(f"Final response content: {response_content[:1000]}...")
+                raise json.JSONDecodeError("Could not extract valid JSON from response", response_content, 0)
             
             revised_newsletter_content = proofread_data.get("newsletter")
             proofread_feedback = proofread_data.get("proofread_feedback")

@@ -613,23 +613,43 @@ def get_anomalies(
         cursor.close()
         return result_list
     
-    result = execute_with_connection(
-        operation=query_operation,
-        db_host=db_host,
-        db_port=db_port,
-        db_name=db_name,
-        db_user=db_user,
-        db_password=db_password
-    )
-    
-    if result["status"] == "success":
-        return {
-            "status": "success",
-            "count": len(result["result"]),
-            "results": result["result"]
-        }
+    # Use centralized connection method if no individual parameters provided
+    if db_host is None and db_port is None and db_name is None and db_user is None and db_password is None:
+        # Use the centralized connection pool method (prioritizes DATABASE_URL)
+        from tools.db_utils import get_pooled_connection
+        
+        try:
+            with get_pooled_connection() as connection:
+                result_list = query_operation(connection)
+                return {
+                    "status": "success",
+                    "count": len(result_list),
+                    "results": result_list
+                }
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": str(e)
+            }
     else:
-        return result
+        # Use the legacy connection method with individual parameters
+        result = execute_with_connection(
+            operation=query_operation,
+            db_host=db_host,
+            db_port=db_port,
+            db_name=db_name,
+            db_user=db_user,
+            db_password=db_password
+        )
+        
+        if result["status"] == "success":
+            return {
+                "status": "success",
+                "count": len(result["result"]),
+                "results": result["result"]
+            }
+        else:
+            return result
 
 def _original_get_anomaly_details(
     anomaly_id,
@@ -664,27 +684,51 @@ def _original_get_anomaly_details(
         cursor.close()
         return item
 
-    result = execute_with_connection(
-        operation=get_details_operation,
-        db_host=db_host,
-        db_port=db_port,
-        db_name=db_name,
-        db_user=db_user,
-        db_password=db_password
-    )
-
-    if result["status"] == "success":
-        if result["result"] is None:
+    # Use centralized connection method if no individual parameters provided
+    if db_host is None and db_port is None and db_name is None and db_user is None and db_password is None:
+        # Use the centralized connection pool method (prioritizes DATABASE_URL)
+        from tools.db_utils import get_pooled_connection
+        
+        try:
+            with get_pooled_connection() as connection:
+                result_item = get_details_operation(connection)
+                if result_item is None:
+                    return {
+                        "status": "error",
+                        "message": f"No anomaly found with ID {anomaly_id}"
+                    }
+                return {
+                    "status": "success",
+                    "anomaly": result_item
+                }
+        except Exception as e:
             return {
                 "status": "error",
-                "message": f"No anomaly found with ID {anomaly_id}"
+                "message": str(e)
             }
-        return {
-            "status": "success",
-            "anomaly": result["result"]
-        }
     else:
-        return result
+        # Use the legacy connection method with individual parameters
+        result = execute_with_connection(
+            operation=get_details_operation,
+            db_host=db_host,
+            db_port=db_port,
+            db_name=db_name,
+            db_user=db_user,
+            db_password=db_password
+        )
+
+        if result["status"] == "success":
+            if result["result"] is None:
+                return {
+                    "status": "error",
+                    "message": f"No anomaly found with ID {anomaly_id}"
+                }
+            return {
+                "status": "success",
+                "anomaly": result["result"]
+            }
+        else:
+            return result
 
 def get_anomaly_details(*args, **kwargs):
     """

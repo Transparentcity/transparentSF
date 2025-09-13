@@ -272,14 +272,11 @@ Parameters:
 """)
     
     try:
-        # Get database connection parameters from environment variables
-        db_host = os.getenv("POSTGRES_HOST", "localhost")
-        db_port = os.getenv("POSTGRES_PORT", "5432")
-        db_user = os.getenv("POSTGRES_USER", "postgres")
-        db_password = os.getenv("POSTGRES_PASSWORD", "postgres")
-        db_name = os.getenv("POSTGRES_DB", "transparentsf")
+        # Use the centralized database connection method that prioritizes DATABASE_URL
+        # and uses connection pooling (same as backend)
+        from tools.db_utils import get_pooled_connection
         
-        logger.info(f"Using database connection: {db_host}:{db_port}/{db_name} (user: {db_user})")
+        logger.info("Using centralized database connection with connection pooling")
         
         # Use the get_anomalies function from store_anomalies.py
         # First, we need to convert query_type from our naming convention to store_anomalies' naming
@@ -303,6 +300,9 @@ Parameters:
         logger.info(f"Additional filters: group_filter={group_filter}, date_start={date_start}, date_end={date_end}, only_anomalies={only_anomalies}, metric_name={metric_name}, district_filter={district_filter}, metric_id={metric_id}, period_type={period_type}")
         
         start_time = time.time()
+        
+        # Use the centralized connection method - don't pass individual connection parameters
+        # This will use DATABASE_URL if available, falling back to individual env vars
         result = get_anomalies(
             query_type=sa_query_type,
             limit=limit,
@@ -313,12 +313,8 @@ Parameters:
             metric_name=metric_name,
             district_filter=district_filter,
             metric_id=metric_id,
-            period_type=period_type,
-            db_host=db_host,
-            db_port=int(db_port),
-            db_name=db_name,
-            db_user=db_user,
-            db_password=db_password
+            period_type=period_type
+            # Removed individual db connection parameters to use centralized connection
         )
         query_time = time.time() - start_time
         logger.info(f"get_anomalies query completed in {query_time:.2f} seconds")

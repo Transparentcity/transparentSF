@@ -62,7 +62,10 @@ def set_dataset_tool(endpoint: str, query: str) -> Dict[str, Any]:
             logger.info(f"Added .json to endpoint: {endpoint}")
 
         # Import the original function and call it
-        from ai.tools.data_fetcher import fetch_data_from_api
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+        from tools.data_fetcher import fetch_data_from_api
         
         query_object = {'endpoint': endpoint, 'query': query}
         result = fetch_data_from_api(query_object)
@@ -133,7 +136,10 @@ def query_docs_tool(collection_name: str, query: str) -> Dict[str, Any]:
     
     try:
         # Import the original function and call it
-        from ai.tools.vector_query import query_docs
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+        from tools.vector_query import query_docs
         
         # Call the original function with the correct parameters
         # The original function expects (context_variables, collection_name, query)
@@ -158,7 +164,10 @@ def get_notes_tool() -> Dict[str, Any]:
     
     try:
         # Import the original function and call it
-        from ai.tools.notes_manager import get_notes
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+        from tools.notes_manager import get_notes
         
         # Call the original function with empty context
         result = get_notes({})
@@ -187,7 +196,10 @@ def get_dashboard_metric_tool(district_number: int = 0, metric_id: int = None) -
     
     try:
         # Import the original function and call it
-        from ai.tools.dashboard_metric_tool import get_dashboard_metric
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+        from tools.dashboard_metric_tool import get_dashboard_metric
         
         # Call the original function with empty context
         result = get_dashboard_metric({}, district_number=district_number, metric_id=metric_id)
@@ -327,7 +339,10 @@ def get_charts_for_review_tool(
     
     try:
         # Import the original function and call it
-        from ai.tools.get_charts_for_review import get_charts_for_review
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+        from tools.get_charts_for_review import get_charts_for_review
         
         # Call the original function with new parameters
         result = get_charts_for_review(

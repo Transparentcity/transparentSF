@@ -239,17 +239,6 @@ class ToolConfig:
         # Data analysis tools
         self.tool_groups[ToolGroup.DATA_ANALYSIS] = [
             ToolDefinition(
-                name="set_dataset",
-                function=None,
-                description="Set dataset for analysis by querying DataSF",
-                group=ToolGroup.DATA_ANALYSIS,
-                required_prompt_sections=["set_dataset"],
-                examples=[
-                    "set_dataset(context_variables, endpoint='wg3w-h783', query='SELECT incident_category, COUNT(*) as count WHERE date_trunc_ym(report_datetime) = date_trunc_ym(CURRENT_DATE) GROUP BY incident_category')",
-                    "Use this to query DataSF datasets for analysis"
-                ]
-            ),
-            ToolDefinition(
                 name="get_map_by_id",
                 function=None,
                 description="Retrieve a previously created map by ID",

@@ -213,6 +213,7 @@ from routes.conversation import router as conversation_router, set_templates as 
 from routes.explainer_chat import router as explainer_chat_router, set_templates as set_explainer_chat_templates
 from routes.monthly_reports import router as monthly_reports_router
 from routes.charts import router as charts_router, set_templates as set_charts_templates
+from routes.writeups import router as writeups_router, set_templates as set_writeups_templates
 
 app = FastAPI()
 
@@ -776,6 +777,11 @@ set_charts_templates(templates)
 app.include_router(charts_router, tags=["charts"])
 logger.debug("Included charts router")
 
+# Mount write-ups router
+set_writeups_templates(templates)
+app.include_router(writeups_router, tags=["writeups"])
+logger.debug("Included write-ups router")
+
 # Add redirect for anomaly analyzer without trailing slash
 @app.get("/anomaly-analyzer")
 async def redirect_to_anomaly_analyzer():
@@ -1080,6 +1086,11 @@ async def startup_event():
     # Start the log cleanup scheduler
     asyncio.create_task(cleanup_logs())
     logger.info("Started log cleanup scheduler")
+    
+    # Start the write-ups scheduler
+    from tools.writeups_scheduler import start_writeups_scheduler
+    asyncio.create_task(start_writeups_scheduler())
+    logger.info("Started write-ups scheduler")
 
 if __name__ == "__main__":
     # Use the temporary logger for this final startup message

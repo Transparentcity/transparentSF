@@ -982,9 +982,18 @@
             if (data.status === 'error') {
                 return `<div class="error">${data.message}</div>`;
             }
-            
+
             let html = `<div class="success">Query executed successfully. Found ${data.rowCount} rows.</div>`;
-            
+
+            if (data.db_source) {
+                html += `
+                    <div class="query-info">
+                        <strong>Database Connection:</strong><br>
+                        ${data.db_source}
+                    </div>
+                `;
+            }
+
             if (data.query) {
                 html += `
                     <div class="query-info">

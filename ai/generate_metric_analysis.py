@@ -15,6 +15,13 @@ from tools.anomaly_detection import anomaly_detection
 from tools.generate_map import generate_map
 from tools.genAggregate import aggregate_data  # Import aggregate_data function
 
+# Import the new output manager for GCS storage
+try:
+    from tools.output_manager import get_output_manager
+    OUTPUT_MANAGER_AVAILABLE = True
+except ImportError:
+    OUTPUT_MANAGER_AVAILABLE = False
+
 # Configure logging AFTER all imports to avoid being overridden by imported modules
 script_dir = os.path.dirname(os.path.abspath(__file__))
 logs_dir = os.path.join(script_dir, 'logs')
@@ -2020,6 +2027,26 @@ def save_analysis_files(result, metric_id, period_type, output_dir=None, distric
     # Write markdown file
     with open(md_path, 'w') as f:
         f.write(markdown_content)
+    
+    # Also save to GCS if available
+    if OUTPUT_MANAGER_AVAILABLE:
+        try:
+            output_manager = get_output_manager()
+            # Determine the period folder for GCS
+            period_folder_map = {
+                'month': 'monthly',
+                'year': 'annual'
+            }
+            gcs_period_folder = period_folder_map.get(period_type, 'other')
+            
+            # Store the analysis file in GCS
+            success = output_manager.store_analysis_file(markdown_content, "md", str(district), file_metric_id)
+            if success:
+                logging.info(f"Analysis file also saved to GCS: {gcs_period_folder}/{district}/{file_metric_id}.md")
+            else:
+                logging.warning(f"Failed to save analysis file to GCS: {gcs_period_folder}/{district}/{file_metric_id}.md")
+        except Exception as e:
+            logging.warning(f"Error saving analysis file to GCS: {e}")
     
     # Get district description based on district value
     if district == 0 or district is None:

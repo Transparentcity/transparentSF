@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Write-ups - WHAT'S HAPPENING IN SF?</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="manifest" href="/static/site.webmanifest">
+    <!-- Markdown processing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Dark Mode CSS -->
+    <link rel="stylesheet" href="/static/css/darkmode.css">
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+            color: #333;
+            background-color: #ffffff;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+        
+        h1 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #222;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+            font-size: 24px;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .section h2 {
+            margin-top: 0;
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 10px;
+            display: inline-block;
+            margin-right: 15px;
+            vertical-align: top;
+        }
+        
+        .form-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        
+        .form-row .form-group {
+            margin-bottom: 0;
+            margin-right: 0;
+        }
+        
+        .form-row button {
+            margin-top: 0;
+            height: 32px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 3px;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        
+        select, input, textarea {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: #fff;
+        }
+        
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        button {
+            background-color: #ad35fa;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        button:hover {
+            background-color: #9d2ee8;
+        }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .secondary-button {
+            background-color: #6c757d;
+        }
+        
+        .secondary-button:hover {
+            background-color: #5a6268;
+        }
+        
+        .danger-button {
+            background-color: #dc3545;
+        }
+        
+        .danger-button:hover {
+            background-color: #c82333;
+        }
+        
+        .success-button {
+            background-color: #28a745;
+        }
+        
+        .success-button:hover {
+            background-color: #218838;
+        }
+        
+        /* Chart container styling for rich content */
+        .chart-container {
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .chart-container iframe {
+            display: block;
+            width: 100%;
+            border: none;
+        }
+        
+        /* Write-up answers and plan styling */
+        .writeup-answers {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #28a745;
+            border-radius: 4px;
+        }
+        
+        .writeup-answers h4 {
+            margin: 0 0 10px 0;
+            color: #28a745;
+            font-size: 14px;
+        }
+        
+        .answers-list {
+            margin-top: 10px;
+        }
+        
+        .answer-item {
+            margin: 8px 0;
+            padding: 8px;
+            background-color: white;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+        
+        .writeup-plan {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            border-radius: 4px;
+        }
+        
+        .writeup-plan h4 {
+            margin: 0 0 10px 0;
+            color: #2196f3;
+            font-size: 14px;
+        }
+        
+        .plan-overview {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: white;
+            border-radius: 3px;
+            font-size: 13px;
+            font-style: italic;
+        }
+        
+        .plan-steps {
+            margin-top: 10px;
+        }
+        
+        .plan-step {
+            margin: 6px 0;
+            padding: 6px;
+            background-color: white;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        
+        .writeup-item {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .writeup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        
+        .writeup-title {
+            font-weight: 600;
+            font-size: 16px;
+            color: #333;
+            margin: 0;
+        }
+        
+        .writeup-status {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .status-pending { background-color: #fff3cd; color: #856404; }
+        .status-clarification_needed { background-color: #d1ecf1; color: #0c5460; }
+        .status-planned { background-color: #d4edda; color: #155724; }
+        .status-executing { background-color: #f8d7da; color: #721c24; }
+        .status-completed { background-color: #d1ecf1; color: #0c5460; }
+        .status-failed { background-color: #f8d7da; color: #721c24; }
+        
+        .writeup-meta {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .writeup-prompt {
+            font-style: italic;
+            color: #555;
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        
+        .writeup-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .writeup-actions button {
+            font-size: 12px;
+            padding: 4px 8px;
+            margin-top: 0;
+        }
+        
+        .clarification-section {
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        
+        .clarification-question {
+            margin-bottom: 15px;
+        }
+        
+        .clarification-question label {
+            font-weight: 600;
+            color: #0066cc;
+        }
+        
+        .clarification-question textarea {
+            min-height: 60px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .success-message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .success-message.show {
+            display: block;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal.show {
+            display: block;
+        }
+        
+        /* Ensure modals can be shown via inline styles */
+        .modal[style*="display: block"] {
+            display: block !important;
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: #000;
+        }
+        
+        .step-item {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .step-number {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .step-type {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background-color: #e9ecef;
+            color: #495057;
+        }
+        
+        .step-description {
+            font-size: 14px;
+            color: #6c757d;
+        }
+        
+        .step-status {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+        
+        .step-pending { background-color: #fff3cd; color: #856404; }
+        .step-running { background-color: #d1ecf1; color: #0c5460; }
+        .step-completed { background-color: #d4edda; color: #155724; }
+        .step-failed { background-color: #f8d7da; color: #721c24; }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 5px;
+            }
+            
+            .form-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .writeup-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .writeup-actions {
+                margin-top: 10px;
+            }
+            
+            .modal-content {
+                width: 95%;
+                margin: 2% auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Write-ups</h1>
+        
+        <!-- Create New Write-up Section -->
+        <div class="section">
+            <h2>Create New Write-up</h2>
+            <form id="createWriteupForm">
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="title">Title</label>
+                        <input type="text" id="title" name="title" required placeholder="Enter a descriptive title">
+                    </div>
+                    <div class="form-group" style="width: 150px;">
+                        <label for="output_format">Output Format</label>
+                        <select id="output_format" name="output_format">
+                            <option value="html">HTML</option>
+                            <option value="markdown">Markdown</option>
+                            <option value="email">Email</option>
+                            <option value="json">JSON</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group" style="width: 100%;">
+                    <label for="prompt">Write-up Prompt</label>
+                    <textarea id="prompt" name="prompt" required placeholder="Describe what you want the write-up to cover. Be as specific as possible about the topic, scope, and any particular aspects you want to focus on."></textarea>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="output_destination">Output Destination (Optional)</label>
+                        <input type="text" id="output_destination" name="output_destination" placeholder="Email address, file path, etc.">
+                    </div>
+                    <div class="form-group" style="width: 150px;">
+                        <label for="frequency">Frequency</label>
+                        <select id="frequency" name="frequency">
+                            <option value="one_time">One Time</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="scheduled_for">Schedule For (Optional)</label>
+                        <input type="datetime-local" id="scheduled_for" name="scheduled_for">
+                    </div>
+                    <div class="form-group" style="width: 150px;">
+                        <label for="model_key">AI Model (Optional)</label>
+                        <select id="model_key" name="model_key">
+                            <option value="">Default</option>
+                            <option value="gpt-4">GPT-4</option>
+                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            <option value="claude-3">Claude 3</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button type="submit">Create Write-up</button>
+            </form>
+        </div>
+        
+        <!-- Messages -->
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div>
+        
+        <!-- Loading Indicator -->
+        <div id="loading" class="loading">
+            <p>Processing your request...</p>
+        </div>
+        
+        <!-- Write-ups List Section -->
+        <div class="section">
+            <h2>Existing Write-ups</h2>
+            <div id="writeupsList">
+                <p>Loading write-ups...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Clarification Modal -->
+    <div id="clarificationModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Clarification Questions</h3>
+                <span class="close" onclick="closeClarificationModal()">&times;</span>
+            </div>
+            <div id="clarificationContent">
+                <!-- Clarification questions will be loaded here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Write-up Details Modal -->
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Write-up Details</h3>
+                <span class="close" onclick="closeDetailsModal()">&times;</span>
+            </div>
+            <div id="detailsContent">
+                <!-- Write-up details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Modal -->
+    <div id="contentModal" class="modal">
+        <div class="modal-content" style="width: 90%; max-width: 1000px;">
+            <div class="modal-header">
+                <h3 id="contentModalTitle" class="modal-title">Write-up Content</h3>
+                <span class="close" onclick="closeModal('contentModal')">&times;</span>
+            </div>
+            <div id="contentModalContent" class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px;">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentWriteupId = null;
+        
+        // Process chart placeholders in content (reused from explainer agent)
+        function processChartPlaceholders(content) {
+            if (!content) return content;
+            
+            // Regular expression to match chart placeholders: [CHART:type:param1:param2:param3]
+            const chartRegex = /\[CHART:([^:]+):([^\]]+)\]/g;
+            
+            return content.replace(chartRegex, (match, chartType, params) => {
+                const paramParts = params.split(':');
+                
+                if (chartType === 'anomaly') {
+                    // For anomaly charts: [CHART:anomaly:anomaly_id]
+                    const anomalyId = paramParts[0];
+                    return `<div class="chart-container" style="margin: 4px 0;">
+                        <iframe src="/anomaly-analyzer/anomaly-chart?id=${anomalyId}" 
+                                style="width: 100%; height: 400px; border: none;" 
+                                frameborder="0" scrolling="no">
+                        </iframe>
+                    </div>`;
+                    
+                } else if (chartType === 'time_series' || chartType === 'time_series_id') {
+                    // For time series charts: [CHART:time_series:metric_id:district:period] or [CHART:time_series_id:chart_id]
+                    if (paramParts.length === 1) {
+                        // Chart ID format: [CHART:time_series_id:chart_id]
+                        const chartId = paramParts[0];
+                        return `<div class="chart-container" style="margin: 4px 0;">
+                            <iframe src="/backend/time-series-chart?chart_id=${chartId}" 
+                                    style="width: 100%; height: 400px; border: none;" 
+                                    frameborder="0" scrolling="no">
+                            </iframe>
+                        </div>`;
+                    } else {
+                        // Metric format: [CHART:time_series:metric_id:district:period]
+                        const metricId = paramParts[0];
+                        const district = paramParts[1] || '0';
+                        const period = paramParts[2] || 'month';
+                        return `<div class="chart-container" style="margin: 4px 0;">
+                            <iframe src="/backend/time-series-chart?metric_id=${metricId}&district=${district}&period_type=${period}" 
+                                    style="width: 100%; height: 400px; border: none;" 
+                                    frameborder="0" scrolling="no">
+                            </iframe>
+                        </div>`;
+                    }
+                    
+                } else if (chartType === 'map') {
+                    // For map charts: [CHART:map:map_id]
+                    const mapId = paramParts[0];
+                    return `<div class="chart-container" style="margin: 4px 0;">
+                        <iframe src="/backend/map-chart?id=${mapId}" 
+                                style="width: 100%; height: 400px; border: none;" 
+                                frameborder="0" scrolling="no">
+                        </iframe>
+                    </div>`;
+                }
+                
+                // If unknown chart type, return the original placeholder
+                return match;
+            });
+        }
+        
+        // Load write-ups on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadWriteups();
+        });
+        
+        // Create write-up form submission
+        document.getElementById('createWriteupForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            showLoading(true);
+            hideMessages();
+            
+            try {
+                const response = await fetch('/api/writeups/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    showSuccess('Write-up created successfully!');
+                    e.target.reset();
+                    loadWriteups();
+                    
+                    // If there are clarification questions, show them
+                    if (result.clarification_questions && result.clarification_questions.length > 0) {
+                        showClarificationModal(result.writeup_id, result.clarification_questions);
+                    }
+                } else {
+                    showError(result.message || 'Failed to create write-up');
+                }
+            } catch (error) {
+                showError('Error creating write-up: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        });
+        
+        async function loadWriteups() {
+            try {
+                const response = await fetch('/api/writeups/list');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    displayWriteups(result.writeups);
+                } else {
+                    document.getElementById('writeupsList').innerHTML = '<p>Error loading write-ups: ' + result.message + '</p>';
+                }
+            } catch (error) {
+                document.getElementById('writeupsList').innerHTML = '<p>Error loading write-ups: ' + error.message + '</p>';
+            }
+        }
+        
+        // Store writeups data globally for access by modal functions
+        let globalWriteupsData = [];
+        
+        function displayWriteups(writeups) {
+            const container = document.getElementById('writeupsList');
+            
+            // Store writeups data globally
+            globalWriteupsData = writeups;
+            
+            if (writeups.length === 0) {
+                container.innerHTML = '<p>No write-ups found. Create your first write-up above!</p>';
+                return;
+            }
+            
+            const html = writeups.map(writeup => `
+                <div class="writeup-item">
+                    <div class="writeup-header">
+                        <h3 class="writeup-title">${escapeHtml(writeup.title)}</h3>
+                        <span class="writeup-status status-${writeup.status}">${writeup.status.replace('_', ' ')}</span>
+                    </div>
+                    <div class="writeup-meta">
+                        Created: ${new Date(writeup.created_at).toLocaleString()} | 
+                        Format: ${writeup.output_format} | 
+                        Frequency: ${writeup.frequency}
+                        ${writeup.scheduled_for ? ' | Scheduled: ' + new Date(writeup.scheduled_for).toLocaleString() : ''}
+                    </div>
+                    <div class="writeup-prompt">${escapeHtml(writeup.original_prompt)}</div>
+                    
+                    ${writeup.clarification_answers && Object.keys(writeup.clarification_answers).length > 0 ? `
+                        <div class="writeup-answers">
+                            <h4>Clarification Answers:</h4>
+                            <div class="answers-list">
+                                ${Object.entries(writeup.clarification_answers).map(([key, value]) => `
+                                    <div class="answer-item">
+                                        <strong>Q${parseInt(key) + 1}:</strong> ${escapeHtml(value)}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${writeup.execution_plan && writeup.execution_plan.overview ? `
+                        <div class="writeup-plan">
+                            <h4>Execution Plan:</h4>
+                            <div class="plan-overview">${escapeHtml(writeup.execution_plan.overview)}</div>
+                            <div class="plan-steps">
+                                <strong>Steps (${writeup.execution_plan.steps ? writeup.execution_plan.steps.length : 0}):</strong>
+                                ${writeup.execution_plan.steps ? writeup.execution_plan.steps.map(step => `
+                                    <div class="plan-step">
+                                        <strong>Step ${step.step_number}:</strong> ${escapeHtml(step.description)}
+                                    </div>
+                                `).join('') : ''}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="writeup-actions">
+                        <button onclick="viewWriteupDetails(${writeup.id})" class="secondary-button">View Details</button>
+                        ${writeup.status === 'clarification_needed' ? 
+                            `<button onclick="showClarificationModal(${writeup.id})" class="success-button">Answer Questions</button>` : 
+                            ''
+                        }
+                        ${writeup.status === 'ready_to_execute' ? 
+                            `<button onclick="executeWriteup(${writeup.id})" class="success-button">Execute</button>` : 
+                            ''
+                        }
+                        ${writeup.status === 'completed' ? 
+                            `<button onclick="viewWriteupContent(${writeup.id})" class="secondary-button">View Content</button>` : 
+                            ''
+                        }
+                        <button onclick="regenerateWriteup(${writeup.id})" class="secondary-button">Regenerate</button>
+                        <button onclick="deleteWriteup(${writeup.id})" class="danger-button">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+            
+            container.innerHTML = html;
+        }
+        
+        function showClarificationModal(writeupId) {
+            currentWriteupId = writeupId;
+            
+            // Get the questions from the global writeups data
+            const writeup = globalWriteupsData.find(w => w.id === writeupId);
+            if (!writeup) {
+                showError('Write-up not found');
+                return;
+            }
+            
+            const questions = writeup.clarification_questions || [];
+            
+            if (!questions || questions.length === 0) {
+                showError('No clarification questions found');
+                return;
+            }
+            
+            const content = document.getElementById('clarificationContent');
+            content.innerHTML = `
+                <div class="clarification-section">
+                    <p>Please answer these questions to help create a better write-up:</p>
+                    <form id="clarificationForm">
+                        ${questions.map((question, index) => `
+                            <div class="clarification-question">
+                                <label for="answer_${index}">${escapeHtml(question)}</label>
+                                <textarea id="answer_${index}" name="answer_${index}" required></textarea>
+                            </div>
+                        `).join('')}
+                        <button type="submit">Submit Answers</button>
+                    </form>
+                </div>
+            `;
+            
+            // Handle form submission
+            document.getElementById('clarificationForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(e.target);
+                const answers = {};
+                
+                for (let [key, value] of formData.entries()) {
+                    const questionIndex = key.replace('answer_', '');
+                    answers[questionIndex] = value;
+                }
+                
+                showLoading(true);
+                
+                try {
+                    const response = await fetch(`/api/writeups/${writeupId}/clarify`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ answers })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        showSuccess('Clarification submitted successfully!');
+                        closeClarificationModal();
+                        loadWriteups();
+                    } else {
+                        showError(result.message || 'Failed to submit clarification');
+                    }
+                } catch (error) {
+                    showError('Error submitting clarification: ' + error.message);
+                } finally {
+                    showLoading(false);
+                }
+            });
+            
+            document.getElementById('clarificationModal').style.display = 'block';
+        }
+        
+        function closeClarificationModal() {
+            document.getElementById('clarificationModal').style.display = 'none';
+            currentWriteupId = null;
+        }
+        
+        async function viewWriteupDetails(writeupId) {
+            try {
+                const response = await fetch(`/api/writeups/${writeupId}`);
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    const writeup = result.writeup;
+                    const content = document.getElementById('detailsContent');
+                    
+                    content.innerHTML = `
+                        <div class="writeup-item">
+                            <h3>${escapeHtml(writeup.title)}</h3>
+                            <p><strong>Status:</strong> <span class="writeup-status status-${writeup.status}">${writeup.status.replace('_', ' ')}</span></p>
+                            <p><strong>Created:</strong> ${new Date(writeup.created_at).toLocaleString()}</p>
+                            <p><strong>Updated:</strong> ${new Date(writeup.updated_at).toLocaleString()}</p>
+                            <p><strong>Format:</strong> ${writeup.output_format}</p>
+                            <p><strong>Frequency:</strong> ${writeup.frequency}</p>
+                            ${writeup.scheduled_for ? `<p><strong>Scheduled:</strong> ${new Date(writeup.scheduled_for).toLocaleString()}</p>` : ''}
+                            <p><strong>Prompt:</strong></p>
+                            <div class="writeup-prompt">${escapeHtml(writeup.original_prompt)}</div>
+                            
+                            ${writeup.plan ? `
+                                <h4>Execution Plan</h4>
+                                <div class="plan-section">
+                                    <p><strong>Overview:</strong> ${escapeHtml(writeup.plan.overview || '')}</p>
+                                    <p><strong>Estimated Time:</strong> ${writeup.plan.total_estimated_time || 'Unknown'}</p>
+                                    <h5>Steps:</h5>
+                                    ${(writeup.plan.steps || []).map(step => `
+                                        <div class="step-item">
+                                            <div class="step-header">
+                                                <span class="step-number">Step ${step.step_number}</span>
+                                                <span class="step-type">${step.step_type}</span>
+                                            </div>
+                                            <div class="step-description">${escapeHtml(step.description)}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                            
+                            ${writeup.final_content ? `
+                                <h4>Final Content</h4>
+                                <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background-color: #f8f9fa;">
+                                    ${writeup.final_content}
+                                </div>
+                            ` : ''}
+                            
+                            ${writeup.error_message ? `
+                                <h4>Error</h4>
+                                <div class="error-message show">${escapeHtml(writeup.error_message)}</div>
+                            ` : ''}
+                        </div>
+                    `;
+                    
+                    document.getElementById('detailsModal').style.display = 'block';
+                } else {
+                    showError(result.message || 'Failed to load write-up details');
+                }
+            } catch (error) {
+                showError('Error loading write-up details: ' + error.message);
+            }
+        }
+        
+        function closeDetailsModal() {
+            document.getElementById('detailsModal').style.display = 'none';
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+        
+        async function executeWriteup(writeupId) {
+            if (!confirm('Are you sure you want to execute this write-up? This may take several minutes.')) {
+                return;
+            }
+            
+            showLoading(true);
+            
+            try {
+                const response = await fetch(`/api/writeups/${writeupId}/execute`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    showSuccess('Write-up execution started! Check back in a few minutes.');
+                    loadWriteups();
+                } else {
+                    showError(result.message || 'Failed to execute write-up');
+                }
+            } catch (error) {
+                showError('Error executing write-up: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        async function regenerateWriteup(writeupId) {
+            if (!confirm('Are you sure you want to regenerate this write-up?')) {
+                return;
+            }
+            
+            showLoading(true);
+            
+            try {
+                const response = await fetch(`/api/writeups/${writeupId}/regenerate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    showSuccess('Write-up regeneration started!');
+                    loadWriteups();
+                } else {
+                    showError(result.message || 'Failed to regenerate write-up');
+                }
+            } catch (error) {
+                showError('Error regenerating write-up: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        async function deleteWriteup(writeupId) {
+            if (!confirm('Are you sure you want to delete this write-up? This action cannot be undone.')) {
+                return;
+            }
+            
+            showLoading(true);
+            
+            try {
+                const response = await fetch(`/api/writeups/${writeupId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    showSuccess('Write-up deleted successfully!');
+                    loadWriteups();
+                } else {
+                    showError(result.message || 'Failed to delete write-up');
+                }
+            } catch (error) {
+                showError('Error deleting write-up: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        function viewWriteupContent(writeupId) {
+            // Fetch the content and display it in a modal
+            fetch(`/api/writeups/${writeupId}/content`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status === 'success') {
+                        showContentModal(data.title, data.content, data.output_format);
+                    } else {
+                        showError(data.message || 'Failed to load content');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching content:', error);
+                    showError('Failed to load write-up content');
+                });
+        }
+        
+        function showContentModal(title, content, outputFormat) {
+            const modal = document.getElementById('contentModal');
+            const titleElement = document.getElementById('contentModalTitle');
+            const contentElement = document.getElementById('contentModalContent');
+            
+            titleElement.textContent = title;
+            
+            // Process chart placeholders first
+            let processedContent = processChartPlaceholders(content);
+            
+            if (outputFormat === 'html') {
+                // For HTML format, assume it might contain markdown and process it
+                if (typeof marked !== 'undefined') {
+                    contentElement.innerHTML = marked.parse(processedContent);
+                } else {
+                    contentElement.innerHTML = processedContent;
+                }
+            } else {
+                // For other formats, treat as markdown if marked.js is available
+                if (typeof marked !== 'undefined') {
+                    contentElement.innerHTML = marked.parse(processedContent);
+                } else {
+                    // Convert newlines to <br> tags for plain text
+                    processedContent = processedContent.replace(/\n/g, '<br>');
+                    contentElement.innerHTML = processedContent;
+                }
+            }
+            
+            modal.style.display = 'block';
+        }
+        
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('show', show);
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+            setTimeout(() => errorDiv.classList.remove('show'), 5000);
+        }
+        
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.textContent = message;
+            successDiv.classList.add('show');
+            setTimeout(() => successDiv.classList.remove('show'), 5000);
+        }
+        
+        function hideMessages() {
+            document.getElementById('errorMessage').classList.remove('show');
+            document.getElementById('successMessage').classList.remove('show');
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Close modals when clicking outside or pressing escape
+        window.onclick = function(event) {
+            const clarificationModal = document.getElementById('clarificationModal');
+            const detailsModal = document.getElementById('detailsModal');
+            const contentModal = document.getElementById('contentModal');
+            
+            if (event.target === clarificationModal) {
+                closeClarificationModal();
+            }
+            if (event.target === detailsModal) {
+                closeDetailsModal();
+            }
+            if (event.target === contentModal) {
+                closeModal('contentModal');
+            }
+        }
+        
+        // Close modals when pressing escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                const clarificationModal = document.getElementById('clarificationModal');
+                const detailsModal = document.getElementById('detailsModal');
+                const contentModal = document.getElementById('contentModal');
+                
+                if (clarificationModal.style.display === 'block') {
+                    closeClarificationModal();
+                } else if (detailsModal.style.display === 'block') {
+                    closeDetailsModal();
+                } else if (contentModal.style.display === 'block') {
+                    closeModal('contentModal');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
