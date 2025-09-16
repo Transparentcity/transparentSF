@@ -126,48 +126,44 @@ def get_embedding(text, retries=3, delay=5):
 def recreate_collection(collection_name, vector_size):
     """Delete if exists and recreate the collection."""
     try:
-        # Check if collection exists
-        if qdrant.collection_exists(collection_name):
-            logger.info(f"Collection '{collection_name}' exists, deleting...")
-            try:
-                qdrant.delete_collection(collection_name)
-                # Wait longer for deletion to complete
-                time.sleep(5)  # Increased from 2 to 5 seconds
-                
-                # Verify collection is actually deleted
-                max_retries = 3
-                for attempt in range(max_retries):
-                    if not qdrant.collection_exists(collection_name):
-                        logger.info(f"Collection '{collection_name}' successfully deleted.")
-                        break
-                    if attempt < max_retries - 1:
-                        logger.warning(f"Collection still exists, waiting longer... (attempt {attempt + 1}/{max_retries})")
-                        time.sleep(5)  # Wait another 5 seconds
-                    else:
-                        raise Exception(f"Collection '{collection_name}' still exists after deletion attempts")
-            except Exception as e:
-                logger.error(f"Error during collection deletion: {e}")
-                raise
+        # Use Qdrant's built-in recreate_collection method which is more reliable
+        logger.info(f"Recreating collection '{collection_name}' with vector size {vector_size}")
+        qdrant.recreate_collection(
+            collection_name=collection_name,
+            vectors_config=rest.VectorParams(
+                distance=rest.Distance.COSINE,
+                size=vector_size,
+            ),
+            timeout=120
+        )
+        logger.info(f"Collection '{collection_name}' recreated successfully.")
         
-        # Create new collection
-        logger.info(f"Creating collection '{collection_name}' with vector size {vector_size}")
+    except Exception as e:
+        logger.error(f"Failed to recreate collection '{collection_name}': {e}")
+        # Fallback to manual delete/create approach
+        logger.info("Attempting fallback approach...")
         try:
+            # Check if collection exists and delete it
+            if qdrant.collection_exists(collection_name):
+                logger.info(f"Collection '{collection_name}' exists, deleting...")
+                qdrant.delete_collection(collection_name)
+                time.sleep(3)  # Wait for deletion to complete
+            
+            # Create new collection
+            logger.info(f"Creating collection '{collection_name}' with vector size {vector_size}")
             qdrant.create_collection(
                 collection_name=collection_name,
                 vectors_config=rest.VectorParams(
                     distance=rest.Distance.COSINE,
                     size=vector_size,
                 ),
-                timeout=120  # Increased timeout to 120 seconds
+                timeout=120
             )
             logger.info(f"Collection '{collection_name}' created successfully.")
-        except Exception as e:
-            logger.error(f"Error creating collection: {e}")
+            
+        except Exception as fallback_error:
+            logger.error(f"Fallback approach also failed: {fallback_error}")
             raise
-        
-    except Exception as e:
-        logger.error(f"Failed to recreate collection '{collection_name}': {e}")
-        raise
 
 def load_datasets_from_db():
     """Load all active datasets from the PostgreSQL database."""
