@@ -1,10 +1,13 @@
 from .embedding import get_embedding
+import os
 import qdrant_client
 import re
 from typing import List, Dict
 import tiktoken
 
-qdrant = qdrant_client.QdrantClient(host="localhost", port=6333)
+qdrant_host = os.getenv("QDRANT_URL", "localhost")
+qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+qdrant = qdrant_client.QdrantClient(host=qdrant_host, port=qdrant_port)
 
 def estimate_tokens(text: str) -> int:
     """Estimate the number of tokens in a text string using tiktoken."""

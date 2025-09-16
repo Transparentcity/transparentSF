@@ -2692,43 +2692,62 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
         #             # If we couldn't find a suitable mention, DO NOT append the chart at the end
         #             logger.warning(f"No suitable mention found for '{item['metric']}' to insert chart HTML. Chart HTML NOT inserted.")
         
-        # Create directory for reports if it doesn't exist
-        reports_dir = Path(__file__).parent / 'output' / 'reports'
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save the report to a file as HTML
+        # Save the report using GCS output manager with local fallback
         if original_filename:
             # Use the provided original filename
             report_filename = original_filename
         else:
             # Generate a new filename based on current date
             report_filename = f"monthly_report_{district}_{report_date.strftime('%Y_%m')}.html"
-        report_path = reports_dir / report_filename
         
-        # Write the report directly without adding HTML structure
         try:
-            logger.info(f"Attempting to write report to {report_path}")
+            logger.info(f"Attempting to save report: {report_filename}")
             logger.info(f"Report text length: {len(report_text)} characters")
             logger.info(f"Report text preview (first 200 chars): {report_text[:200] if report_text else 'EMPTY OR NONE'}")
             
             if not report_text or report_text.strip() == "":
                 logger.error("Report text is empty! Cannot write empty content to file.")
                 return None
-                
-            with open(report_path, 'w', encoding='utf-8') as f:
-                f.write(report_text)
             
-            # Verify the file was written successfully
-            if report_path.exists() and report_path.stat().st_size > 0:
-                logger.info(f"Monthly newsletter saved successfully to {report_path} (size: {report_path.stat().st_size} bytes)")
-            else:
-                logger.error(f"File write failed! File exists: {report_path.exists()}, Size: {report_path.stat().st_size if report_path.exists() else 'N/A'}")
-                return None
+            # Use GCS output manager for storage
+            try:
+                from tools.output_manager import get_output_manager
+                output_manager = get_output_manager()
                 
-            return str(report_path)
+                success = output_manager.store_report(
+                    content=report_text,
+                    filename=report_filename,
+                    report_type="html"
+                )
+                
+                if success:
+                    logger.info(f"Monthly newsletter saved successfully using output manager: {report_filename}")
+                    # Return the filename for consistency with existing code
+                    return report_filename
+                else:
+                    logger.error("Failed to save report using output manager")
+                    return None
+                    
+            except ImportError:
+                logger.warning("Output manager not available, falling back to local file storage")
+                # Fallback to local storage
+                reports_dir = Path(__file__).parent / 'output' / 'reports'
+                reports_dir.mkdir(parents=True, exist_ok=True)
+                report_path = reports_dir / report_filename
+                
+                with open(report_path, 'w', encoding='utf-8') as f:
+                    f.write(report_text)
+                
+                # Verify the file was written successfully
+                if report_path.exists() and report_path.stat().st_size > 0:
+                    logger.info(f"Monthly newsletter saved successfully to local storage: {report_path} (size: {report_path.stat().st_size} bytes)")
+                    return str(report_path)
+                else:
+                    logger.error(f"Local file write failed! File exists: {report_path.exists()}, Size: {report_path.stat().st_size if report_path.exists() else 'N/A'}")
+                    return None
             
         except Exception as write_error:
-            logger.error(f"Error writing newsletter to file: {write_error}", exc_info=True)
+            logger.error(f"Error saving newsletter: {write_error}", exc_info=True)
             return None
     
     # Execute the operation with proper connection handling
@@ -2791,9 +2810,32 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
     logger.info(f"Proofreading and revising newsletter at {report_path}")
     
     try:
-        # Read the newsletter
-        with open(report_path, 'r', encoding='utf-8') as f:
-            newsletter_text = f.read()
+        # Read the newsletter from GCS or local storage
+        newsletter_text = None
+        
+        # Try to get the file using the output manager (GCS with local fallback)
+        try:
+            from tools.output_manager import get_output_manager
+            output_manager = get_output_manager()
+            
+            # Extract filename from the report_path
+            from pathlib import Path
+            filename = Path(report_path).name
+            newsletter_text = output_manager.retrieve_report(filename)
+            
+            if newsletter_text:
+                logger.info(f"Retrieved newsletter for proofreading from storage: {filename}")
+            else:
+                logger.warning(f"Newsletter not found in storage: {filename}, falling back to local filesystem")
+                
+        except ImportError:
+            logger.warning("Output manager not available, falling back to local filesystem")
+        
+        # Fallback to local filesystem if GCS didn't work
+        if not newsletter_text:
+            with open(report_path, 'r', encoding='utf-8') as f:
+                newsletter_text = f.read()
+            logger.info(f"Retrieved newsletter for proofreading from local filesystem: {report_path}")
         
         # Load prompt from JSON file
         prompts = load_prompts()
@@ -2830,10 +2872,29 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
         revised_content = response_content
         
         # Save the raw response for debugging
-        debug_path = Path(report_path).parent / f"{Path(report_path).stem}_raw_response.txt"
-        with open(debug_path, 'w', encoding='utf-8') as f:
-            f.write(response_content)
-        logger.info(f"Saved raw proofread response to {debug_path}")
+        debug_filename = f"{Path(report_path).stem}_raw_response.txt"
+        
+        # Try to save using output manager first
+        try:
+            from tools.output_manager import get_output_manager
+            output_manager = get_output_manager()
+            success = output_manager.store_report(response_content, debug_filename, "txt")
+            if success:
+                logger.info(f"Saved raw proofread response to storage: {debug_filename}")
+            else:
+                logger.warning(f"Failed to save raw response to storage, falling back to local filesystem")
+                # Fallback to local filesystem
+                debug_path = Path(report_path).parent / debug_filename
+                with open(debug_path, 'w', encoding='utf-8') as f:
+                    f.write(response_content)
+                logger.info(f"Saved raw proofread response to local filesystem: {debug_path}")
+        except ImportError:
+            logger.warning("Output manager not available, saving to local filesystem")
+            # Fallback to local filesystem
+            debug_path = Path(report_path).parent / debug_filename
+            with open(debug_path, 'w', encoding='utf-8') as f:
+                f.write(response_content)
+            logger.info(f"Saved raw proofread response to local filesystem: {debug_path}")
         
         # Parse the JSON response
         try:
@@ -3928,28 +3989,52 @@ def delete_monthly_report(report_id):
     if not result["result"]:
         return {"status": "error", "message": f"Report with ID {report_id} not found in database"}
     
-    # Now delete the files
+    # Now delete the files using output manager
     try:
         report = result["result"]
-        reports_dir = Path(__file__).parent / 'output' / 'reports'
         
-        # Check if the directory exists
-        if not reports_dir.exists():
-            logger.warning(f"Reports directory does not exist: {reports_dir}")
-            return {"status": "error", "message": "Reports directory not found"}
-        
-        # Delete original file
-        original_path = reports_dir / report['original_filename']
-        if original_path.exists():
-            original_path.unlink()
-            logger.info(f"Deleted original newsletter file: {original_path}")
-        
-        # Delete revised file if it exists
-        if report['revised_filename']:
-            revised_path = reports_dir / report['revised_filename']
-            if revised_path.exists():
-                revised_path.unlink()
-                logger.info(f"Deleted revised newsletter file: {revised_path}")
+        # Try to use output manager for file deletion
+        try:
+            from tools.output_manager import get_output_manager
+            output_manager = get_output_manager()
+            
+            # Delete original file
+            success = output_manager.delete_file("reports", filename=report['original_filename'])
+            if success:
+                logger.info(f"Deleted original newsletter file using output manager: {report['original_filename']}")
+            else:
+                logger.warning(f"Failed to delete original file using output manager: {report['original_filename']}")
+            
+            # Delete revised file if it exists
+            if report['revised_filename']:
+                success = output_manager.delete_file("reports", filename=report['revised_filename'])
+                if success:
+                    logger.info(f"Deleted revised newsletter file using output manager: {report['revised_filename']}")
+                else:
+                    logger.warning(f"Failed to delete revised file using output manager: {report['revised_filename']}")
+            
+        except ImportError:
+            logger.warning("Output manager not available, falling back to local file deletion")
+            # Fallback to local file deletion
+            reports_dir = Path(__file__).parent / 'output' / 'reports'
+            
+            # Check if the directory exists
+            if not reports_dir.exists():
+                logger.warning(f"Reports directory does not exist: {reports_dir}")
+                return {"status": "error", "message": "Reports directory not found"}
+            
+            # Delete original file
+            original_path = reports_dir / report['original_filename']
+            if original_path.exists():
+                original_path.unlink()
+                logger.info(f"Deleted original newsletter file: {original_path}")
+            
+            # Delete revised file if it exists
+            if report['revised_filename']:
+                revised_path = reports_dir / report['revised_filename']
+                if revised_path.exists():
+                    revised_path.unlink()
+                    logger.info(f"Deleted revised newsletter file: {revised_path}")
         
         return {"status": "success", "message": f"Newsletter {report['original_filename']} and its database records deleted successfully"}
     except Exception as e:
@@ -5074,16 +5159,39 @@ def generate_narrated_report(report_path, output_path=None, model_key=None):
             narration_dir.mkdir(parents=True, exist_ok=True)
             output_path = narration_dir / f"{report_path_obj.stem}.mp3"
         
-        # Create reports directory if it doesn't exist
-        reports_dir = Path(__file__).parent / 'output' / 'reports'
-        reports_dir.mkdir(parents=True, exist_ok=True)
+        # Read the email-compatible report using output manager
+        try:
+            from tools.output_manager import get_output_manager
+            output_manager = get_output_manager()
+            
+            # Try to read from output manager first
+            report_html = output_manager.retrieve_report(report_path)
+            if not report_html:
+                logger.warning(f"Could not retrieve report from output manager: {report_path}")
+                # Fallback to local file reading
+                reports_dir = Path(__file__).parent / 'output' / 'reports'
+                local_report_path = reports_dir / report_path
+                if local_report_path.exists():
+                    with open(local_report_path, 'r', encoding='utf-8') as f:
+                        report_html = f.read()
+                else:
+                    logger.error(f"Report file not found: {report_path}")
+                    return {"status": "error", "message": f"Report file not found: {report_path}"}
+            
+        except ImportError:
+            logger.warning("Output manager not available, falling back to local file reading")
+            # Fallback to local file reading
+            reports_dir = Path(__file__).parent / 'output' / 'reports'
+            local_report_path = reports_dir / report_path
+            if local_report_path.exists():
+                with open(local_report_path, 'r', encoding='utf-8') as f:
+                    report_html = f.read()
+            else:
+                logger.error(f"Report file not found: {local_report_path}")
+                return {"status": "error", "message": f"Report file not found: {local_report_path}"}
         
         # Set up audio script HTML file path
-        script_html_path = reports_dir / f"{Path(report_path).stem}_audio_script.html"
-        
-        # Read the email-compatible report
-        with open(report_path, 'r', encoding='utf-8') as f:
-            report_html = f.read()
+        script_html_filename = f"{Path(report_path).stem}_audio_script.html"
         
         # Load prompt from JSON file
         prompts = load_prompts()

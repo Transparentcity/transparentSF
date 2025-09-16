@@ -554,18 +554,6 @@
         </div>
     </div>
     
-    <!-- Clarification Modal -->
-    <div id="clarificationModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Clarification Questions</h3>
-                <span class="close" onclick="closeClarificationModal()">&times;</span>
-            </div>
-            <div id="clarificationContent">
-                <!-- Clarification questions will be loaded here -->
-            </div>
-        </div>
-    </div>
     
     <!-- Write-up Details Modal -->
     <div id="detailsModal" class="modal">
@@ -683,13 +671,13 @@
                 const result = await response.json();
                 
                 if (result.status === 'success') {
-                    showSuccess('Write-up created successfully!');
+                    showSuccess(result.message || 'Write-up created and executed successfully!');
                     e.target.reset();
                     loadWriteups();
                     
-                    // If there are clarification questions, show them
-                    if (result.clarification_questions && result.clarification_questions.length > 0) {
-                        showClarificationModal(result.writeup_id, result.clarification_questions);
+                    // If there's content, show it immediately
+                    if (result.content) {
+                        showContentModal('Write-up Content', result.content, 'html');
                     }
                 } else {
                     showError(result.message || 'Failed to create write-up');
@@ -744,46 +732,14 @@
                     </div>
                     <div class="writeup-prompt">${escapeHtml(writeup.original_prompt)}</div>
                     
-                    ${writeup.clarification_answers && Object.keys(writeup.clarification_answers).length > 0 ? `
-                        <div class="writeup-answers">
-                            <h4>Clarification Answers:</h4>
-                            <div class="answers-list">
-                                ${Object.entries(writeup.clarification_answers).map(([key, value]) => `
-                                    <div class="answer-item">
-                                        <strong>Q${parseInt(key) + 1}:</strong> ${escapeHtml(value)}
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-                    
-                    ${writeup.execution_plan && writeup.execution_plan.overview ? `
-                        <div class="writeup-plan">
-                            <h4>Execution Plan:</h4>
-                            <div class="plan-overview">${escapeHtml(writeup.execution_plan.overview)}</div>
-                            <div class="plan-steps">
-                                <strong>Steps (${writeup.execution_plan.steps ? writeup.execution_plan.steps.length : 0}):</strong>
-                                ${writeup.execution_plan.steps ? writeup.execution_plan.steps.map(step => `
-                                    <div class="plan-step">
-                                        <strong>Step ${step.step_number}:</strong> ${escapeHtml(step.description)}
-                                    </div>
-                                `).join('') : ''}
-                            </div>
-                        </div>
-                    ` : ''}
-                    
                     <div class="writeup-actions">
                         <button onclick="viewWriteupDetails(${writeup.id})" class="secondary-button">View Details</button>
-                        ${writeup.status === 'clarification_needed' ? 
-                            `<button onclick="showClarificationModal(${writeup.id})" class="success-button">Answer Questions</button>` : 
-                            ''
-                        }
-                        ${writeup.status === 'ready_to_execute' ? 
-                            `<button onclick="executeWriteup(${writeup.id})" class="success-button">Execute</button>` : 
-                            ''
-                        }
                         ${writeup.status === 'completed' ? 
                             `<button onclick="viewWriteupContent(${writeup.id})" class="secondary-button">View Content</button>` : 
+                            ''
+                        }
+                        ${writeup.status === 'in_progress' ? 
+                            `<button onclick="executeWriteup(${writeup.id})" class="success-button">Execute</button>` : 
                             ''
                         }
                         <button onclick="regenerateWriteup(${writeup.id})" class="secondary-button">Regenerate</button>
@@ -795,85 +751,6 @@
             container.innerHTML = html;
         }
         
-        function showClarificationModal(writeupId) {
-            currentWriteupId = writeupId;
-            
-            // Get the questions from the global writeups data
-            const writeup = globalWriteupsData.find(w => w.id === writeupId);
-            if (!writeup) {
-                showError('Write-up not found');
-                return;
-            }
-            
-            const questions = writeup.clarification_questions || [];
-            
-            if (!questions || questions.length === 0) {
-                showError('No clarification questions found');
-                return;
-            }
-            
-            const content = document.getElementById('clarificationContent');
-            content.innerHTML = `
-                <div class="clarification-section">
-                    <p>Please answer these questions to help create a better write-up:</p>
-                    <form id="clarificationForm">
-                        ${questions.map((question, index) => `
-                            <div class="clarification-question">
-                                <label for="answer_${index}">${escapeHtml(question)}</label>
-                                <textarea id="answer_${index}" name="answer_${index}" required></textarea>
-                            </div>
-                        `).join('')}
-                        <button type="submit">Submit Answers</button>
-                    </form>
-                </div>
-            `;
-            
-            // Handle form submission
-            document.getElementById('clarificationForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                const formData = new FormData(e.target);
-                const answers = {};
-                
-                for (let [key, value] of formData.entries()) {
-                    const questionIndex = key.replace('answer_', '');
-                    answers[questionIndex] = value;
-                }
-                
-                showLoading(true);
-                
-                try {
-                    const response = await fetch(`/api/writeups/${writeupId}/clarify`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ answers })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.status === 'success') {
-                        showSuccess('Clarification submitted successfully!');
-                        closeClarificationModal();
-                        loadWriteups();
-                    } else {
-                        showError(result.message || 'Failed to submit clarification');
-                    }
-                } catch (error) {
-                    showError('Error submitting clarification: ' + error.message);
-                } finally {
-                    showLoading(false);
-                }
-            });
-            
-            document.getElementById('clarificationModal').style.display = 'block';
-        }
-        
-        function closeClarificationModal() {
-            document.getElementById('clarificationModal').style.display = 'none';
-            currentWriteupId = null;
-        }
         
         async function viewWriteupDetails(writeupId) {
             try {
@@ -946,7 +823,7 @@
         }
         
         async function executeWriteup(writeupId) {
-            if (!confirm('Are you sure you want to execute this write-up? This may take several minutes.')) {
+            if (!confirm('Are you sure you want to execute this write-up?')) {
                 return;
             }
             
@@ -960,8 +837,13 @@
                 const result = await response.json();
                 
                 if (result.status === 'success') {
-                    showSuccess('Write-up execution started! Check back in a few minutes.');
+                    showSuccess(result.message || 'Write-up executed successfully!');
                     loadWriteups();
+                    
+                    // If there's content, show it immediately
+                    if (result.content) {
+                        showContentModal('Write-up Content', result.content, 'html');
+                    }
                 } else {
                     showError(result.message || 'Failed to execute write-up');
                 }
@@ -973,6 +855,9 @@
         }
         
         async function regenerateWriteup(writeupId) {
+            // Get the current model from the create form
+            const modelKey = document.getElementById('model_key').value;
+            
             if (!confirm('Are you sure you want to regenerate this write-up?')) {
                 return;
             }
@@ -985,14 +870,19 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({})
+                    body: JSON.stringify({ model_key: modelKey })
                 });
                 
                 const result = await response.json();
                 
                 if (result.status === 'success') {
-                    showSuccess('Write-up regeneration started!');
+                    showSuccess(result.message || 'Write-up regenerated successfully!');
                     loadWriteups();
+                    
+                    // If there's content, show it immediately
+                    if (result.content) {
+                        showContentModal('Write-up Content', result.content, 'html');
+                    }
                 } else {
                     showError(result.message || 'Failed to regenerate write-up');
                 }
@@ -1063,12 +953,8 @@
             let processedContent = processChartPlaceholders(content);
             
             if (outputFormat === 'html') {
-                // For HTML format, assume it might contain markdown and process it
-                if (typeof marked !== 'undefined') {
-                    contentElement.innerHTML = marked.parse(processedContent);
-                } else {
-                    contentElement.innerHTML = processedContent;
-                }
+                // For HTML format, render directly as HTML
+                contentElement.innerHTML = processedContent;
             } else {
                 // For other formats, treat as markdown if marked.js is available
                 if (typeof marked !== 'undefined') {
@@ -1114,13 +1000,9 @@
         
         // Close modals when clicking outside or pressing escape
         window.onclick = function(event) {
-            const clarificationModal = document.getElementById('clarificationModal');
             const detailsModal = document.getElementById('detailsModal');
             const contentModal = document.getElementById('contentModal');
             
-            if (event.target === clarificationModal) {
-                closeClarificationModal();
-            }
             if (event.target === detailsModal) {
                 closeDetailsModal();
             }
@@ -1132,13 +1014,10 @@
         // Close modals when pressing escape key
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
-                const clarificationModal = document.getElementById('clarificationModal');
                 const detailsModal = document.getElementById('detailsModal');
                 const contentModal = document.getElementById('contentModal');
                 
-                if (clarificationModal.style.display === 'block') {
-                    closeClarificationModal();
-                } else if (detailsModal.style.display === 'block') {
+                if (detailsModal.style.display === 'block') {
                     closeDetailsModal();
                 } else if (contentModal.style.display === 'block') {
                     closeModal('contentModal');

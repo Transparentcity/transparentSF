@@ -166,35 +166,51 @@ def run_single_eval_langchain(query: str, model_key: str = None) -> dict:
     log_filename = f"{log_folder}/eval_langchain_{timestamp}.log"
     
     # Create eval-compatible log from session data
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "type": "eval_run",
+        "query": query,
+        "model": model_key or agent.model_key,
+        "success": result.get("success", False),
+        "explanation": result.get("explanation", ""),
+        "session_id": result.get("session_id"),
+        "tool_calls": [],
+        "execution_trace": result.get("execution_trace", [])
+    }
+    
+    # Extract tool calls from execution trace
+    if hasattr(agent, 'session_logger') and agent.session_logger:
+        # Try to get the last session logged
+        sessions_dir = agent.session_logger.logs_dir
+        if sessions_dir.exists():
+            session_files = sorted(sessions_dir.glob("session_*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+            if session_files:
+                try:
+                    with open(session_files[0], 'r') as session_file:
+                        session_data = json.load(session_file)
+                        log_data["tool_calls"] = session_data.get("tool_calls", [])
+                        log_data["total_execution_time_ms"] = session_data.get("total_execution_time_ms", 0)
+                except Exception as e:
+                    print(f"Warning: Could not read session file: {e}")
+    
+    # Log to local file
     with open(log_filename, 'w') as log_file:
-        log_data = {
-            "timestamp": datetime.now().isoformat(),
-            "type": "eval_run",
-            "query": query,
-            "model": model_key or agent.model_key,
-            "success": result.get("success", False),
-            "explanation": result.get("explanation", ""),
-            "session_id": result.get("session_id"),
-            "tool_calls": [],
-            "execution_trace": result.get("execution_trace", [])
-        }
-        
-        # Extract tool calls from execution trace
-        if hasattr(agent, 'session_logger') and agent.session_logger:
-            # Try to get the last session logged
-            sessions_dir = agent.session_logger.logs_dir
-            if sessions_dir.exists():
-                session_files = sorted(sessions_dir.glob("session_*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
-                if session_files:
-                    try:
-                        with open(session_files[0], 'r') as session_file:
-                            session_data = json.load(session_file)
-                            log_data["tool_calls"] = session_data.get("tool_calls", [])
-                            log_data["total_execution_time_ms"] = session_data.get("total_execution_time_ms", 0)
-                    except Exception as e:
-                        print(f"Warning: Could not read session file: {e}")
-        
         json.dump(log_data, log_file, indent=2)
+    
+    # Log to GCS if available
+    try:
+        from ai.tools.gcs_logger import get_gcs_logger
+        gcs_logger = get_gcs_logger()
+        eval_id = f"eval_langchain_{timestamp}"
+        success = gcs_logger.log_evaluation(log_data, eval_id)
+        if success:
+            print(f"Evaluation logged to GCS: {eval_id}")
+        else:
+            print(f"Warning: Failed to log evaluation to GCS: {eval_id}")
+    except ImportError:
+        print("GCS logging not available - evaluation will only be stored locally")
+    except Exception as e:
+        print(f"Error logging evaluation to GCS: {e}")
     
     return {
         "status": "success",

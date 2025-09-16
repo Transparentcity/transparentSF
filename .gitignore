@@ -1,32 +1,102 @@
+# IDE and Editor files
 TransparentAnalysis.code-workspace
-Archive
-swarm-main
-credentials
-ai/backups
-ai/climate
-ai/data/climate
-ai/data/datasets/old
-ai/data/policeHistory
-ai/data/anomaly_charts
-ai/generated_posts
-ai/output
-ai/logs
-ai/tools/__pycache__
-__pycache__
-
-.env
-*.pyc
-.pytest_cache
 .DS_Store
-app_debug.log
-node_modules
-ai/tools/__pycache__/anomaly_detection.cpython-313.pyc
-ai/tools/__pycache__/generateAnomalyCharts.cpython-313.pyc
-qdrant_storage/raft_state.json
-qdrant_storage/aliases/data.json
-qdrant_storage/
-.venv/
+.vscode/
+.idea/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+credentials/
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 venv/
 .venv/
-/ai/backup_history
-/backup_history
+env/
+.env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Logs
+*.log
+logs/
+ai/logs/
+ai/tools/logs/
+
+# Database and storage
+*.db
+*.sqlite
+*.sqlite3
+qdrant_storage/
+ai/backups/
+backup_history/
+ai/backup_history/
+
+# Output and generated files
+ai/output/
+ai/generated_posts/
+ai/data/anomaly_charts/
+
+# Temporary and cache files
+*.tmp
+*.temp
+.cache/
+.tmp/
+
+# Node.js (if any frontend components)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Archive files
+Archive/
+*.zip
+*.tar.gz
+*.rar
+
+# Legacy directories
+swarm-main/
+ai/climate/
+ai/data/climate/
+ai/data/datasets/old/
+ai/data/policeHistory/
+
+# Application specific
+app_debug.log

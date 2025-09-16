@@ -80,11 +80,13 @@ EMBEDDING_MODEL = "text-embedding-3-large"
 # ------------------------------
 # Qdrant Setup
 # ------------------------------
+qdrant_host = os.getenv("QDRANT_URL", "localhost")
+qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
 try:
-    qdrant = qdrant_client.QdrantClient(host='localhost', port=6333)
-    logger.info("Connected to Qdrant at localhost:6333")
+    qdrant = qdrant_client.QdrantClient(host=qdrant_host, port=qdrant_port)
+    logger.info(f"Connected to Qdrant at {qdrant_host}:{qdrant_port}")
 except Exception as e:
-    logger.error(f"Failed to connect to Qdrant: {e}")
+    logger.error(f"Failed to connect to Qdrant at {qdrant_host}:{qdrant_port}: {e}")
     raise
 
 # ------------------------------

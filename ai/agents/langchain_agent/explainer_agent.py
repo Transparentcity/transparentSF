@@ -122,6 +122,15 @@ class SessionLogger:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger(__name__)
         
+        # Initialize GCS logger for cloud storage
+        try:
+            from ai.tools.gcs_logger import get_gcs_logger
+            self.gcs_logger = get_gcs_logger()
+            self.logger.info("GCS logging enabled for sessions")
+        except ImportError:
+            self.gcs_logger = None
+            self.logger.warning("GCS logging not available - sessions will only be stored locally")
+        
         self.logger.info(f"SessionLogger initialized with logs directory: {self.logs_dir}")
     
     def create_session(self, 
@@ -149,20 +158,30 @@ class SessionLogger:
         return session
     
     def log_session(self, session: AgentSession):
-        """Log the complete session to a JSON file."""
+        """Log the complete session to local storage and GCS."""
         try:
-            # Use session ID directly as filename for simple lookup
-            filename = f"{session.session_id}.json"
-            filepath = self.logs_dir / filename
-            
             # Convert session to dict and handle non-serializable objects
             session_dict = self._prepare_session_for_json(session)
             
-            # Write to file
+            # Log to GCS if available
+            if self.gcs_logger:
+                try:
+                    success = self.gcs_logger.log_session(session_dict, session.session_id)
+                    if success:
+                        self.logger.info(f"Session logged to GCS: {session.session_id}")
+                    else:
+                        self.logger.warning(f"Failed to log session to GCS: {session.session_id}")
+                except Exception as e:
+                    self.logger.error(f"Error logging session to GCS: {e}")
+            
+            # Always log locally as well
+            filename = f"{session.session_id}.json"
+            filepath = self.logs_dir / filename
+            
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(session_dict, f, indent=2, ensure_ascii=False, default=str)
             
-            self.logger.info(f"Session logged to: {filepath}")
+            self.logger.info(f"Session logged locally to: {filepath}")
             
             # Also log a summary to the main log
             self._log_session_summary(session)
@@ -870,6 +889,24 @@ class LangChainExplainerAgent:
             self.messages.append(HumanMessage(content=content))
         elif role == "assistant":
             self.messages.append(AIMessage(content=content))
+
+    def get_conversation_history(self):
+        """Get the conversation history as a list of message dictionaries."""
+        history = []
+        for message in self.messages:
+            if isinstance(message, HumanMessage):
+                history.append({
+                    "role": "user",
+                    "content": message.content,
+                    "timestamp": getattr(message, 'timestamp', None)
+                })
+            elif isinstance(message, AIMessage):
+                history.append({
+                    "role": "assistant",
+                    "content": message.content,
+                    "timestamp": getattr(message, 'timestamp', None)
+                })
+        return history
 
     def explain_change_sync(self, prompt: str, metric_details: Dict[str, Any], session_id: Optional[str] = None) -> Dict[str, Any]:
         """Synchronously explain a change using the LangChain agent."""

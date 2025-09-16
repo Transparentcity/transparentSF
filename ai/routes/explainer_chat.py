@@ -88,14 +88,15 @@ async def get_agent_config(session_id: str):
 @router.post("/api/explain-change")
 async def explain_change_api(request: Request):
     """
-    API endpoint to explain data changes using the explainer agent.
-    
+    API endpoint to explain data changes using the explainer agent with session management.
+
     Expected JSON payload:
     {
         "prompt": "Explain the change in metric X for district Y",
         "metric_id": 123,
         "district_id": 0,
         "period_type": "month",
+        "session_id": "optional_session_id",  // Optional - will create new if not provided
         "return_json": true
     }
     """
@@ -105,8 +106,9 @@ async def explain_change_api(request: Request):
         metric_id = data.get("metric_id")
         district_id = data.get("district_id", 0)
         period_type = data.get("period_type", "month")
+        session_id = data.get("session_id")
         return_json = data.get("return_json", True)
-        
+
         if not prompt:
             return JSONResponse(
                 status_code=400,
@@ -115,12 +117,21 @@ async def explain_change_api(request: Request):
                     "message": "No prompt provided"
                 }
             )
-        
+
         logger.info(f"Explaining change with prompt: {prompt}")
-        
-        # Create explainer agent
-        agent = create_explainer_agent()
-        
+
+        # Get or create explainer agent for this session
+        if session_id and session_id in explainer_sessions:
+            agent = explainer_sessions[session_id]
+            logger.info(f"Using existing explainer agent for session: {session_id}")
+        else:
+            # Create new agent and session
+            agent = create_explainer_agent()
+            if not session_id:
+                session_id = str(uuid.uuid4())
+            explainer_sessions[session_id] = agent
+            logger.info(f"Created new explainer agent for session: {session_id}")
+
         # Prepare metric details for the agent
         metric_details = {}
         if metric_id is not None:
@@ -131,22 +142,27 @@ async def explain_change_api(request: Request):
             }
             enhanced_prompt = f"""
             {prompt}
-            
+
             Please analyze metric {metric_id} for district {district_id} over the {period_type} period.
             """
         else:
             enhanced_prompt = prompt
-        
-        # Get explanation using the LangChain agent interface
-        result = agent.explain_change_sync(enhanced_prompt, metric_details)
-        
+
+        # Get explanation using the LangChain agent interface with session_id
+        result = agent.explain_change_sync(enhanced_prompt, metric_details, session_id=session_id)
+
+        # Add session_id to the result
+        if isinstance(result, dict):
+            result["session_id"] = session_id
+
         return JSONResponse(
             content={
                 "status": "success" if result.get("success", True) else "error",
-                "result": result
+                "result": result,
+                "session_id": session_id
             }
         )
-        
+
     except Exception as e:
         logger.error(f"Error in explain_change_api: {str(e)}", exc_info=True)
         return JSONResponse(

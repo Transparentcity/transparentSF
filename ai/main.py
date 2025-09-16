@@ -257,18 +257,73 @@ if not os.path.exists(output_dir):
 @app.get("/output/monthly/{district}/{metric_id}.md", response_class=HTMLResponse)
 async def get_monthly_file(district: str, metric_id: str):
     """
-    Serve monthly analysis files only. No fallback to annual files.
+    Serve monthly analysis files from GCS or local storage.
     """
-    # Try to get the monthly file only
-    monthly_path = os.path.join(output_dir, "monthly", district, f"{metric_id}.md")
-    if os.path.exists(monthly_path):
-        logger.debug(f"Serving monthly file from {monthly_path}")
-        with open(monthly_path, 'r') as f:
-            return f.read()
+    try:
+        # Try GCS first if available
+        try:
+            from tools.gcs_storage import get_storage_manager
+            storage_manager = get_storage_manager()
+            if storage_manager.gcs_enabled:
+                content = storage_manager.retrieve_file("monthly", district, metric_id)
+                if content:
+                    logger.debug(f"Serving monthly file from GCS for district {district}, metric {metric_id}")
+                    return content
+        except Exception as e:
+            logger.warning(f"Error retrieving from GCS: {e}")
+        
+        # Fallback to local filesystem
+        monthly_path = os.path.join(output_dir, "monthly", district, f"{metric_id}.md")
+        if os.path.exists(monthly_path):
+            logger.debug(f"Serving monthly file from local filesystem: {monthly_path}")
+            with open(monthly_path, 'r') as f:
+                return f.read()
 
-    # If monthly doesn't exist, return a 404 error
-    logger.error(f"Monthly file not found for district {district}, metric {metric_id}")
-    raise HTTPException(status_code=404, detail=f"Monthly analysis file not found for metric {metric_id}")
+        # If neither exists, return a 404 error
+        logger.error(f"Monthly file not found for district {district}, metric {metric_id}")
+        raise HTTPException(status_code=404, detail=f"Monthly analysis file not found for metric {metric_id}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving monthly file: {e}")
+        raise HTTPException(status_code=500, detail=f"Error serving monthly file: {str(e)}")
+
+# Define a custom route for weekly files
+@app.get("/output/weekly/{district}/{metric_id}.md", response_class=HTMLResponse)
+async def get_weekly_file(district: str, metric_id: str):
+    """
+    Serve weekly analysis files from GCS or local storage.
+    """
+    try:
+        # Try GCS first if available
+        try:
+            from tools.gcs_storage import get_storage_manager
+            storage_manager = get_storage_manager()
+            if storage_manager.gcs_enabled:
+                content = storage_manager.retrieve_file("weekly", district, metric_id)
+                if content:
+                    logger.debug(f"Serving weekly file from GCS for district {district}, metric {metric_id}")
+                    return content
+        except Exception as e:
+            logger.warning(f"Error retrieving from GCS: {e}")
+        
+        # Fallback to local filesystem
+        weekly_path = os.path.join(output_dir, "weekly", district, f"{metric_id}.md")
+        if os.path.exists(weekly_path):
+            logger.debug(f"Serving weekly file from local filesystem: {weekly_path}")
+            with open(weekly_path, 'r') as f:
+                return f.read()
+
+        # If neither exists, return a 404 error
+        logger.error(f"Weekly file not found for district {district}, metric {metric_id}")
+        raise HTTPException(status_code=404, detail=f"Weekly analysis file not found for metric {metric_id}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving weekly file: {e}")
+        raise HTTPException(status_code=500, detail=f"Error serving weekly file: {str(e)}")
 
 # Now mount the static directory after defining our custom route
 app.mount("/output", StaticFiles(directory=output_dir), name="output")

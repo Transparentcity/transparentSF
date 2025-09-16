@@ -11,101 +11,112 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="manifest" href="/static/site.webmanifest">
     <!-- Dark Mode CSS -->
-    <link rel="stylesheet" href="/static/css/darkmode.css">
+    <link rel="stylesheet" href="/static/darkmode.css">
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
+            margin: 10px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 10px;
+            background-color: var(--bg-secondary);
+            border-radius: 6px;
+            box-shadow: var(--shadow-light);
+            border: 1px solid var(--border-primary);
         }
         .query-section {
-            margin-bottom: 30px;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            margin-bottom: 15px;
+            padding: 12px;
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            background-color: var(--bg-tertiary);
         }
         h1 {
-            color: #333;
-            margin-bottom: 30px;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+            font-size: 24px;
         }
         h2 {
-            color: #444;
-            margin-bottom: 20px;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            font-size: 18px;
         }
         label {
             display: block;
             margin-bottom: 8px;
-            color: #555;
+            color: var(--text-secondary);
         }
         input[type="text"], select {
             width: 100%;
-            padding: 8px;
-            margin-bottom: 15px;
-            border: 1px solid #ddd;
+            padding: 6px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-primary);
             border-radius: 4px;
             box-sizing: border-box;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
         }
         button {
-            background-color: #ad35fa;
+            background-color: var(--bright-purple);
             color: white;
-            padding: 10px 20px;
+            padding: 6px 12px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
         }
         button:hover {
-            background-color: #0056b3;
+            background-color: var(--warm-coral);
         }
         .results {
-            margin-top: 20px;
-            padding: 15px;
-            border: 1px solid #ddd;
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid var(--border-primary);
             border-radius: 4px;
-            background-color: #f9f9f9;
+            background-color: var(--bg-secondary);
         }
         .error {
-            color: #dc3545;
+            color: #dc3545; /* Keep red for errors */
             margin-top: 10px;
         }
         .success {
-            color: #28a745;
+            color: #28a745; /* Keep green for success */
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
+            margin-top: 10px;
         }
         th, td {
-            padding: 12px;
+            padding: 8px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--border-primary);
+            color: var(--text-primary);
         }
         th {
-            background-color: #f8f9fa;
+            background-color: var(--bg-tertiary);
             font-weight: bold;
         }
         .qdrant-result {
             margin-bottom: 20px;
             padding: 15px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-primary);
             border-radius: 4px;
-            background-color: white;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
         }
         .score {
             font-weight: bold;
-            color: #ad35fa;
+            color: var(--bright-purple);
         }
         .filename {
-            color: #6c757d;
+            color: var(--text-muted);
             font-style: italic;
         }
         .content {
@@ -114,11 +125,12 @@
             font-family: monospace;
             font-size: 14px;
             line-height: 1.4;
-            background-color: #f8f9fa;
+            background-color: var(--bg-tertiary);
             padding: 10px;
             border-radius: 4px;
             overflow-x: auto;
             max-width: 100%;
+            color: var(--text-primary);
         }
         .content-preview {
             max-height: 200px;
@@ -130,39 +142,41 @@
             overflow-y: auto;
         }
         .see-more-btn {
-            background-color: #6c757d;
-            color: white;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
             padding: 5px 10px;
-            border: none;
+            border: 1px solid var(--border-primary);
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
             margin-top: 5px;
         }
         .see-more-btn:hover {
-            background-color: #5a6268;
+            background-color: var(--bg-secondary);
         }
         .query-info {
-            background-color: #e9ecef;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
             padding: 15px;
             border-radius: 4px;
             margin-bottom: 15px;
             font-family: monospace;
             font-size: 14px;
             line-height: 1.5;
+            color: var(--text-primary);
         }
         .results-count {
             margin: 15px 0;
             font-weight: bold;
-            color: #28a745;
+            color: var(--text-primary);
         }
         .score {
             font-weight: bold;
-            color: #ad35fa;
+            color: var(--bright-purple);
             margin-bottom: 5px;
         }
         .filename {
-            color: #6c757d;
+            color: var(--text-muted);
             font-style: italic;
             margin-bottom: 10px;
         }
@@ -217,31 +231,32 @@
         /* PostgreSQL Query Styles */
         .sql-editor {
             width: 100%;
-            min-height: 150px;
-            padding: 10px;
+            min-height: 100px;
+            padding: 8px;
             font-family: monospace;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-primary);
             border-radius: 4px;
             resize: vertical;
-            margin-bottom: 15px;
-            font-size: 14px;
-            line-height: 1.5;
+            margin-bottom: 10px;
+            font-size: 13px;
+            line-height: 1.4;
             tab-size: 4;
             white-space: pre;
-            background-color: #f8f9fa;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
         }
         .sql-editor:focus {
             outline: none;
-            border-color: #ad35fa;
-            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+            border-color: var(--bright-purple);
+            box-shadow: 0 0 0 0.2rem rgba(173, 53, 250, 0.25);
         }
         .query-params {
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
         .param-row {
             display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 8px;
+            margin-bottom: 8px;
         }
         .param-row input {
             flex: 1;
@@ -263,23 +278,26 @@
         .query-history {
             margin-top: 20px;
             padding: 10px;
-            background-color: #f8f9fa;
+            background-color: var(--bg-secondary);
             border-radius: 4px;
+            border: 1px solid var(--border-primary);
         }
         .history-item {
             padding: 5px;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--border-primary);
             cursor: pointer;
+            color: var(--text-primary);
         }
         .history-item:hover {
-            background-color: #e9ecef;
+            background-color: var(--bg-tertiary);
         }
         /* Database Tables Section Styles */
         .db-tables-section {
             margin-bottom: 20px;
             padding: 15px;
-            background-color: #f8f9fa;
+            background-color: var(--bg-secondary);
             border-radius: 4px;
+            border: 1px solid var(--border-primary);
         }
         .tables-container {
             display: flex;
@@ -288,15 +306,16 @@
             margin-top: 10px;
         }
         .table-item {
-            background-color: #fff;
-            border: 1px solid #ddd;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
             border-radius: 4px;
             padding: 8px 12px;
             cursor: pointer;
             transition: background-color 0.2s, transform 0.1s;
+            color: var(--text-primary);
         }
         .table-item:hover {
-            background-color: #e9ecef;
+            background-color: var(--bg-tertiary);
             transform: translateY(-2px);
         }
         .table-item:active {
@@ -305,36 +324,37 @@
 
         /* Typeahead/Suggestions Box Styles */
         .suggestions-container {
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-primary);
             border-top: none;
             max-height: 200px;
             overflow-y: auto;
-            background-color: white;
+            background-color: var(--bg-secondary);
             position: absolute;
             z-index: 1000;
             width: 100%;
             box-sizing: border-box;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-medium);
         }
         .suggestion-item {
             padding: 10px;
             cursor: pointer;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border-primary);
             transition: background-color 0.2s;
+            color: var(--text-primary);
         }
         .suggestion-item:last-child {
             border-bottom: none;
         }
         .suggestion-item:hover, .suggestion-item.active {
-            background-color: #f0f0f0;
+            background-color: var(--bg-tertiary);
         }
         .suggestion-title {
             font-weight: bold;
-            color: #333;
+            color: var(--text-primary);
         }
         .suggestion-description {
             font-size: 0.9em;
-            color: #666;
+            color: var(--text-secondary);
             margin-top: 3px;
             max-height: 3.6em;
             overflow: hidden;
@@ -392,9 +412,9 @@
             gap: 10px;
             max-height: 300px;
             overflow-y: auto;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-primary);
             padding: 15px;
-            background-color: white;
+            background-color: var(--bg-secondary);
             border-radius: 4px;
         }
         .column-item {
@@ -402,13 +422,14 @@
             align-items: center;
             gap: 8px;
             padding: 8px;
-            border: 1px solid #e9ecef;
+            border: 1px solid var(--border-primary);
             border-radius: 4px;
-            background-color: #f8f9fa;
+            background-color: var(--bg-tertiary);
             transition: background-color 0.2s;
+            color: var(--text-primary);
         }
         .column-item:hover {
-            background-color: #e9ecef;
+            background-color: var(--bg-secondary);
         }
         .column-item input[type="checkbox"] {
             margin: 0;
@@ -419,6 +440,33 @@
             cursor: pointer;
             flex: 1;
         }
+
+        /* Database Connection Info Styles */
+        .db-connection-info {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .connection-label {
+            font-weight: bold;
+            color: var(--text-secondary);
+        }
+        .connection-value {
+            color: var(--text-primary);
+            font-family: monospace;
+            background-color: var(--bg-secondary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid var(--border-primary);
+        }
     </style>
 </head>
 <body>
@@ -428,7 +476,15 @@
         <!-- PostgreSQL Query Section -->
         <div class="query-section">
             <h2>PostgreSQL Query</h2>
-            
+
+            <!-- Database Connection Info -->
+            <div class="db-connection-info" id="dbConnectionInfo">
+                <div class="connection-status">
+                    <span class="connection-label">Database:</span>
+                    <span class="connection-value" id="dbConnectionString">Loading...</span>
+                </div>
+            </div>
+
             <!-- Database Tables Section -->
             <div class="db-tables-section" id="dbTablesSection">
                 <h3>Database Tables</h3>
@@ -442,11 +498,6 @@
                 <div class="form-group">
                     <label for="sqlQuery">SQL Query:</label>
                     <textarea id="sqlQuery" name="sqlQuery" class="sql-editor" placeholder="Enter your SQL query here..." required></textarea>
-                </div>
-                <div class="query-params" id="queryParams">
-                    <h3>Query Parameters</h3>
-                    <button type="button" class="add-param-btn" onclick="addParameterRow()">Add Parameter</button>
-                    <div id="paramRows"></div>
                 </div>
                 <button type="submit">Execute PostgreSQL Query</button>
             </form>
@@ -965,18 +1016,6 @@
             }
         });
 
-        // PostgreSQL Query Functions
-        function addParameterRow() {
-            const paramRows = document.getElementById('paramRows');
-            const rowDiv = document.createElement('div');
-            rowDiv.className = 'param-row';
-            rowDiv.innerHTML = `
-                <input type="text" placeholder="Parameter name" required>
-                <input type="text" placeholder="Parameter value" required>
-                <button type="button" class="remove-param-btn" onclick="this.parentElement.remove()">Remove</button>
-            `;
-            paramRows.appendChild(rowDiv);
-        }
 
         function formatPostgresResults(data) {
             if (data.status === 'error') {
@@ -1034,19 +1073,10 @@
             const resultsDiv = document.getElementById('postgresResults');
             resultsDiv.innerHTML = 'Loading...';
             resultsDiv.style.display = 'block';
-            
+
             try {
                 const sqlQuery = document.getElementById('sqlQuery').value;
-                const params = {};
-                
-                // Gather parameters
-                document.querySelectorAll('.param-row').forEach(row => {
-                    const inputs = row.querySelectorAll('input');
-                    if (inputs[0].value && inputs[1].value) {
-                        params[inputs[0].value] = inputs[1].value;
-                    }
-                });
-                
+
                 const response = await fetch('/backend/execute-postgres-query', {
                     method: 'POST',
                     headers: {
@@ -1054,13 +1084,13 @@
                     },
                     body: JSON.stringify({
                         query: sqlQuery,
-                        parameters: params
+                        parameters: {}
                     })
                 });
-                
+
                 const data = await response.json();
                 resultsDiv.innerHTML = formatPostgresResults(data);
-                
+
                 // Add to query history
                 addToQueryHistory(sqlQuery);
             } catch (error) {
@@ -1130,6 +1160,48 @@
         
         // Load tables when page loads
         loadPostgresTables();
+
+        // Load database connection info
+        async function loadDatabaseConnectionInfo() {
+            const connectionValue = document.getElementById('dbConnectionString');
+            try {
+                // Make a test query to get connection info
+                const response = await fetch('/backend/execute-postgres-query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: 'SELECT current_database() as db_name, current_user as db_user',
+                        parameters: {}
+                    })
+                });
+
+                const data = await response.json();
+                if (data.db_source) {
+                    // Extract just the key parts of the connection string for display
+                    const dbSource = data.db_source;
+                    // Show a simplified version of the connection info
+                    const simplifiedInfo = dbSource.replace(/password=[^&\s]+/, 'password=***')
+                                                   .replace(/user=[^&\s]+/, 'user=***')
+                                                   .replace(/host=[^&\s]+/, 'host=***');
+                    connectionValue.textContent = simplifiedInfo;
+                    connectionValue.title = dbSource; // Full info on hover
+                } else if (data.status === 'error') {
+                    connectionValue.textContent = 'Connection failed';
+                    connectionValue.style.color = '#dc3545';
+                } else {
+                    connectionValue.textContent = 'Unknown';
+                }
+            } catch (error) {
+                console.error('Error loading database connection info:', error);
+                connectionValue.textContent = 'Error loading';
+                connectionValue.style.color = '#dc3545';
+            }
+        }
+
+        // Load database connection info when page loads
+        loadDatabaseConnectionInfo();
         
         // Column loading functionality for API queries
         async function loadColumnsForEndpoint(endpoint) {

@@ -233,7 +233,7 @@ sudo -u transparentsf bash << 'EOF'
 cd /opt/transparentsf
 
 # Clone the repository (you'll need to update this with your actual repo)
-git clone https://github.com/robjective/transparentSF.git .
+git clone https://github.com/Transparentcity/transparentSF.git .
 
 # Create virtual environment
 python3.11 -m venv venv
@@ -277,12 +277,32 @@ server {
     listen 80;
     server_name _;
 
+    # Increase client body size for file uploads
+    client_max_body_size 50M;
+
+    # Timeout settings
+    proxy_connect_timeout 300s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+    send_timeout 300s;
+
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Additional timeout settings for this location
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+        
+        # Buffer settings for better performance
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
     }
 
     # Static files
@@ -290,6 +310,46 @@ server {
         alias /opt/transparentsf/ai/static/;
         expires 1y;
         add_header Cache-Control "public, immutable";
+    }
+
+    # API routes with extended timeouts
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Extended timeouts for API calls that might take longer
+        proxy_connect_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_read_timeout 600s;
+        
+        # Buffer settings
+        proxy_buffering on;
+        proxy_buffer_size 8k;
+        proxy_buffers 16 8k;
+        proxy_busy_buffers_size 16k;
+    }
+
+    # Backend routes with extended timeouts
+    location /backend/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Extended timeouts for backend operations
+        proxy_connect_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_read_timeout 600s;
+        
+        # Buffer settings
+        proxy_buffering on;
+        proxy_buffer_size 8k;
+        proxy_buffers 16 8k;
+        proxy_busy_buffers_size 16k;
     }
 }
 NGINX_EOF

@@ -33,14 +33,26 @@ def scrape_dataset_metadata(dataset_url):
     metadata_url = f'https://data.sfgov.org/api/views/{dataset_id}.json'
 
     try:
-        response = requests.get(metadata_url)
+        response = requests.get(metadata_url, timeout=30)
         response.raise_for_status()
     except requests.RequestException as e:
         logger.error(f"Failed to retrieve metadata from {metadata_url}: {e}")
         return None
 
     if response.status_code == 200:
-        data = response.json()
+        # Check if response is actually JSON
+        content_type = response.headers.get('content-type', '').lower()
+        if 'application/json' not in content_type:
+            logger.error(f"Expected JSON response but got content-type: {content_type} for {metadata_url}")
+            logger.error(f"Response content preview: {response.text[:200]}...")
+            return None
+        
+        try:
+            data = response.json()
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response from {metadata_url}: {e}")
+            logger.error(f"Response content preview: {response.text[:200]}...")
+            return None
         # Get the title and description
         title = data.get('name', 'Untitled')
         category = data.get('category', '')
@@ -174,9 +186,9 @@ def main():
     failed_count = 0
 
     # Process each URL
-    for dataset_url in dataset_urls:
+    for i, dataset_url in enumerate(dataset_urls):
         try:
-            logger.info(f"Processing URL: {dataset_url}")
+            logger.info(f"Processing URL {i+1}/{len(dataset_urls)}: {dataset_url}")
             dataset_info = scrape_dataset_metadata(dataset_url)
             if dataset_info:
                 if store_dataset_in_db(connection, dataset_info):
@@ -189,6 +201,8 @@ def main():
         except Exception as e:
             logger.error(f"Error processing {dataset_url}: {e}")
             failed_count += 1
+            # Continue processing other URLs even if one fails
+            continue
 
     # Close database connection
     connection.close()

@@ -631,26 +631,47 @@ async def get_disk_space():
 
 @router.post("/clear-html-files")
 async def clear_html_files():
-    """Delete all HTML files from the output directory and its subdirectories."""
+    """Delete all HTML files from both GCS and local storage."""
     logger.debug("Clear HTML files called")
     try:
+        from tools.gcs_storage import get_storage_manager
+        
+        storage_manager = get_storage_manager()
+        deleted_count = 0
+        
+        # Delete from GCS if available
+        if storage_manager.gcs_enabled:
+            try:
+                blobs = storage_manager.bucket.list_blobs(prefix='transparentsf/')
+                
+                for blob in blobs:
+                    if blob.name.endswith('.html'):
+                        try:
+                            blob.delete()
+                            deleted_count += 1
+                            logger.debug(f"Deleted GCS HTML file: {blob.name}")
+                        except Exception as e:
+                            logger.error(f"Error deleting GCS HTML file {blob.name}: {str(e)}")
+                            
+            except Exception as e:
+                logger.error(f"Error listing GCS files: {str(e)}")
+        
+        # Delete from local storage
         script_dir = os.path.dirname(os.path.abspath(__file__))
         output_dir = os.path.join(script_dir, 'output')
         
-        # Count of deleted files
-        deleted_count = 0
-        
-        # Walk through all subdirectories
-        for root, _, files in os.walk(output_dir):
-            for file in files:
-                if file.endswith('.html'):
-                    file_path = os.path.join(root, file)
-                    try:
-                        os.remove(file_path)
-                        deleted_count += 1
-                        logger.debug(f"Deleted file: {file_path}")
-                    except Exception as e:
-                        logger.error(f"Error deleting file {file_path}: {str(e)}")
+        if os.path.exists(output_dir):
+            # Walk through all subdirectories
+            for root, _, files in os.walk(output_dir):
+                for file in files:
+                    if file.endswith('.html'):
+                        file_path = os.path.join(root, file)
+                        try:
+                            os.remove(file_path)
+                            deleted_count += 1
+                            logger.debug(f"Deleted local HTML file: {file_path}")
+                        except Exception as e:
+                            logger.error(f"Error deleting local HTML file {file_path}: {str(e)}")
         
         logger.info(f"Successfully deleted {deleted_count} HTML files")
         return JSONResponse({
@@ -667,14 +688,14 @@ async def clear_html_files():
 
 @router.post("/clear-period-files/{period_type}")
 async def clear_period_files(period_type: str):
-    """Delete all files from a specific period folder (monthly or annual)."""
+    """Delete all files from a specific period folder (monthly or annual) from both GCS and local storage."""
     logger.debug(f"Clear {period_type} files called")
     
     # Validate period_type
     period_folder_map = {
         'year': 'annual',
         'month': 'monthly',
-        'day': 'daily',
+        'day': 'weekly',  # Changed from 'daily' to 'weekly' to match actual structure
         'ytd': 'ytd'
     }
     
@@ -686,42 +707,57 @@ async def clear_period_files(period_type: str):
         }, status_code=400)
         
     try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        from tools.gcs_storage import get_storage_manager
+        
+        storage_manager = get_storage_manager()
         period_folder = period_folder_map[period_type]
-        output_dir = os.path.join(script_dir, 'output', period_folder)
-        
-        # Check if directory exists
-        if not os.path.exists(output_dir):
-            logger.debug(f"Directory does not exist: {output_dir}")
-            return JSONResponse({
-                "status": "success",
-                "message": f"No {period_folder} files to delete"
-            })
-        
-        # Count of deleted files
         deleted_count = 0
         
-        # Delete all files and subdirectories
-        for root, dirs, files in os.walk(output_dir, topdown=False):
-            for file in files:
-                file_path = os.path.join(root, file)
-                try:
-                    os.remove(file_path)
-                    deleted_count += 1
-                    logger.debug(f"Deleted file: {file_path}")
-                except Exception as e:
-                    logger.error(f"Error deleting file {file_path}: {str(e)}")
-            
-            # Delete empty directories
-            for dir in dirs:
-                dir_path = os.path.join(root, dir)
-                try:
-                    # Only remove if empty
-                    if not os.listdir(dir_path):
-                        os.rmdir(dir_path)
-                        logger.debug(f"Deleted directory: {dir_path}")
-                except Exception as e:
-                    logger.error(f"Error deleting directory {dir_path}: {str(e)}")
+        # Delete from GCS if available
+        if storage_manager.gcs_enabled:
+            try:
+                gcs_prefix = f"transparentsf/{period_folder}/"
+                blobs = storage_manager.bucket.list_blobs(prefix=gcs_prefix)
+                
+                for blob in blobs:
+                    try:
+                        blob.delete()
+                        deleted_count += 1
+                        logger.debug(f"Deleted GCS file: {blob.name}")
+                    except Exception as e:
+                        logger.error(f"Error deleting GCS file {blob.name}: {str(e)}")
+                        
+            except Exception as e:
+                logger.error(f"Error listing GCS files for {period_folder}: {str(e)}")
+        
+        # Delete from local storage
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        output_dir = os.path.join(script_dir, 'output', period_folder)
+        
+        if os.path.exists(output_dir):
+            # Delete all files and subdirectories
+            for root, dirs, files in os.walk(output_dir, topdown=False):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        os.remove(file_path)
+                        deleted_count += 1
+                        logger.debug(f"Deleted local file: {file_path}")
+                    except Exception as e:
+                        logger.error(f"Error deleting local file {file_path}: {str(e)}")
+                
+                # Delete empty directories
+                for dir in dirs:
+                    dir_path = os.path.join(root, dir)
+                    try:
+                        # Only remove if empty
+                        if not os.listdir(dir_path):
+                            os.rmdir(dir_path)
+                            logger.debug(f"Deleted directory: {dir_path}")
+                    except Exception as e:
+                        logger.error(f"Error deleting directory {dir_path}: {str(e)}")
+        else:
+            logger.debug(f"Local directory does not exist: {output_dir}")
         
         logger.info(f"Successfully deleted {deleted_count} files from {period_folder} folder")
         return JSONResponse({
@@ -1143,7 +1179,9 @@ async def execute_qdrant_query(request: Request):
         query = form_data.get('query', '').strip()
         
         # Connect to Qdrant
-        qdrant = QdrantClient(host='localhost', port=6333)
+        qdrant_host = os.getenv("QDRANT_URL", "localhost")
+        qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+        qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
         
         # If no parameters provided, just return collections list
         if not collection_name and not query:
@@ -1318,7 +1356,9 @@ async def delete_collection(collection_name: str):
     logger.debug(f"Delete collection called for: {collection_name}")
     try:
         # Connect to Qdrant
-        qdrant = QdrantClient(host='localhost', port=6333)
+        qdrant_host = os.getenv("QDRANT_URL", "localhost")
+        qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+        qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
         
         # Check if collection exists
         if not qdrant.collection_exists(collection_name):
@@ -1845,36 +1885,56 @@ async def clear_inactive_timeseries():
 
 @router.post("/clear-all-output")
 async def clear_all_output():
-    """Delete all files from the output directory."""
+    """Delete all files from both GCS and local output directories."""
     logger.debug("Clear all output files called")
     try:
+        from tools.gcs_storage import get_storage_manager
+        
+        storage_manager = get_storage_manager()
+        deleted_count = 0
+        
+        # Delete from GCS if available
+        if storage_manager.gcs_enabled:
+            try:
+                blobs = storage_manager.bucket.list_blobs(prefix='transparentsf/')
+                
+                for blob in blobs:
+                    try:
+                        blob.delete()
+                        deleted_count += 1
+                        logger.debug(f"Deleted GCS file: {blob.name}")
+                    except Exception as e:
+                        logger.error(f"Error deleting GCS file {blob.name}: {str(e)}")
+                        
+            except Exception as e:
+                logger.error(f"Error listing GCS files: {str(e)}")
+        
+        # Delete from local storage
         script_dir = os.path.dirname(os.path.abspath(__file__))
         output_dir = os.path.join(script_dir, 'output')
         
-        # Count of deleted files
-        deleted_count = 0
-        
-        # Delete all files and subdirectories
-        for root, dirs, files in os.walk(output_dir, topdown=False):
-            for file in files:
-                file_path = os.path.join(root, file)
-                try:
-                    os.remove(file_path)
-                    deleted_count += 1
-                    logger.debug(f"Deleted file: {file_path}")
-                except Exception as e:
-                    logger.error(f"Error deleting file {file_path}: {str(e)}")
-            
-            # Delete empty directories
-            for dir in dirs:
-                dir_path = os.path.join(root, dir)
-                try:
-                    # Only remove if empty
-                    if not os.listdir(dir_path):
-                        os.rmdir(dir_path)
-                        logger.debug(f"Deleted directory: {dir_path}")
-                except Exception as e:
-                    logger.error(f"Error deleting directory {dir_path}: {str(e)}")
+        if os.path.exists(output_dir):
+            # Delete all files and subdirectories
+            for root, dirs, files in os.walk(output_dir, topdown=False):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        os.remove(file_path)
+                        deleted_count += 1
+                        logger.debug(f"Deleted local file: {file_path}")
+                    except Exception as e:
+                        logger.error(f"Error deleting local file {file_path}: {str(e)}")
+                
+                # Delete empty directories
+                for dir in dirs:
+                    dir_path = os.path.join(root, dir)
+                    try:
+                        # Only remove if empty
+                        if not os.listdir(dir_path):
+                            os.rmdir(dir_path)
+                            logger.debug(f"Deleted directory: {dir_path}")
+                    except Exception as e:
+                        logger.error(f"Error deleting directory {dir_path}: {str(e)}")
         
         # Recreate output directory structure
         os.makedirs(os.path.join(output_dir, 'annual'), exist_ok=True)
@@ -1883,10 +1943,10 @@ async def clear_all_output():
         os.makedirs(os.path.join(output_dir, 'weekly'), exist_ok=True)
         os.makedirs(os.path.join(output_dir, 'dashboard'), exist_ok=True)
         
-        logger.info(f"Successfully deleted {deleted_count} files from output directory")
+        logger.info(f"Successfully deleted {deleted_count} files from output directories")
         return JSONResponse({
             "status": "success", 
-            "message": f"Successfully deleted {deleted_count} files from output directory"
+            "message": f"Successfully deleted {deleted_count} files from output directories"
         })
         
     except Exception as e:
@@ -1896,13 +1956,133 @@ async def clear_all_output():
             "message": str(e)
         })
 
+@router.get("/get-storage-info")
+async def get_storage_info():
+    """Get storage usage information for different data types."""
+    logger.debug("Get storage info called")
+    try:
+        from tools.gcs_storage import get_storage_manager
+        from tools.db_utils import get_postgres_connection
+        import os
+        from pathlib import Path
+        
+        storage_manager = get_storage_manager()
+        results = {}
+        
+        # Calculate output files size
+        try:
+            output_size = 0
+            output_dir = Path(__file__).parent / 'output'
+            if output_dir.exists():
+                for file_path in output_dir.rglob('*'):
+                    if file_path.is_file():
+                        output_size += file_path.stat().st_size
+            
+            # Also check GCS if available
+            if storage_manager.gcs_enabled:
+                try:
+                    blobs = storage_manager.bucket.list_blobs(prefix='transparentsf/')
+                    for blob in blobs:
+                        output_size += blob.size or 0
+                except Exception as e:
+                    logger.warning(f"Error calculating GCS size: {e}")
+            
+            results['output_files_size'] = format_bytes(output_size)
+        except Exception as e:
+            logger.error(f"Error calculating output files size: {e}")
+            results['output_files_size'] = 'Error'
+        
+        # Calculate vector database size
+        try:
+            from qdrant_client import QdrantClient
+            qdrant_host = os.getenv("QDRANT_URL", "localhost")
+            qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+            qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
+            collections = qdrant.get_collections().collections
+            
+            vector_size = 0
+            for collection in collections:
+                try:
+                    info = qdrant.get_collection(collection.name)
+                    # Estimate size based on points count and vector size
+                    if hasattr(info, 'points_count') and hasattr(info, 'config'):
+                        points_count = info.points_count
+                        vector_size_estimate = points_count * 1536 * 4  # Assuming 1536 dimensions, 4 bytes per float
+                        vector_size += vector_size_estimate
+                except Exception as e:
+                    logger.warning(f"Error getting collection info for {collection.name}: {e}")
+            
+            results['vector_db_size'] = format_bytes(vector_size)
+        except Exception as e:
+            logger.error(f"Error calculating vector database size: {e}")
+            results['vector_db_size'] = 'Error'
+        
+        # Calculate PostgreSQL database size
+        try:
+            conn = get_postgres_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT pg_size_pretty(pg_database_size(current_database()))
+                """)
+                db_size = cursor.fetchone()[0]
+                cursor.close()
+                conn.close()
+                results['postgres_size'] = db_size
+            else:
+                results['postgres_size'] = 'Error'
+        except Exception as e:
+            logger.error(f"Error calculating PostgreSQL size: {e}")
+            results['postgres_size'] = 'Error'
+        
+        # Calculate logs size
+        try:
+            logs_size = 0
+            logs_dir = Path(__file__).parent / 'logs'
+            if logs_dir.exists():
+                for file_path in logs_dir.rglob('*'):
+                    if file_path.is_file():
+                        logs_size += file_path.stat().st_size
+            
+            results['logs_size'] = format_bytes(logs_size)
+        except Exception as e:
+            logger.error(f"Error calculating logs size: {e}")
+            results['logs_size'] = 'Error'
+        
+        return JSONResponse({
+            "status": "success",
+            **results
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error getting storage info: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
+
+def format_bytes(bytes_value):
+    """Format bytes into human readable format."""
+    if bytes_value == 0:
+        return "0 B"
+    
+    size_names = ["B", "KB", "MB", "GB", "TB"]
+    i = 0
+    while bytes_value >= 1024 and i < len(size_names) - 1:
+        bytes_value /= 1024.0
+        i += 1
+    
+    return f"{bytes_value:.1f} {size_names[i]}"
+
 @router.post("/clear-vector-db")
 async def clear_vector_db():
     """Clear all collections from the vector database except SFPublicData."""
     logger.debug("Clear vector database called")
     try:
         # Connect to Qdrant
-        qdrant = QdrantClient(host='localhost', port=6333)
+        qdrant_host = os.getenv("QDRANT_URL", "localhost")
+        qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+        qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
         
         # Get all collections
         collections = qdrant.get_collections().collections
@@ -3048,44 +3228,75 @@ async def time_series_chart_page(request: Request):
 @router.head("/monthly-report/file/{filename}")
 async def get_monthly_report_file(filename: str, request: Request):
     """
-    Serve a monthly report file directly by filename from the output/reports directory.
+    Serve a monthly report file directly by filename from GCS or local storage.
     """
     try:
         logger.info(f"Requesting monthly report file: {filename} (method: {request.method})")
         
-        # Construct the path to the reports directory
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        logger.info(f"get_monthly_report_file - script_dir: {script_dir}") # ADDED LOGGING
-        reports_dir = os.path.join(script_dir, "output", "reports")
-        logger.info(f"get_monthly_report_file - reports_dir: {reports_dir}") # ADDED LOGGING
-        file_path = os.path.join(reports_dir, filename)
-        logger.info(f"get_monthly_report_file - constructed file_path: {file_path}") # ADDED LOGGING
-        
-        # Security check to prevent accessing files outside the reports directory
-        if not os.path.abspath(file_path).startswith(os.path.abspath(reports_dir)):
-            logger.error(f"Security check failed: Attempt to access file outside reports directory: {filename}")
+        # Security check to prevent directory traversal
+        if ".." in filename or "/" in filename or "\\" in filename:
+            logger.error(f"Security check failed: Invalid filename: {filename}")
             raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Try to get the file using the output manager (GCS with local fallback)
+        try:
+            from tools.output_manager import get_output_manager
+            output_manager = get_output_manager()
+            file_content = output_manager.retrieve_report(filename)
             
-        # Check if the file exists
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            logger.info(f"Serving file: {file_path}")
-            # Determine media type based on extension
-            media_type = "text/html" if filename.lower().endswith(".html") else "application/octet-stream"
-            
-            # For HEAD requests, return just headers without content
-            if request.method == "HEAD":
-                from fastapi import Response
-                response = Response()
-                response.headers["Content-Type"] = media_type
-                response.headers["Content-Length"] = str(os.path.getsize(file_path))
-                return response
+            if file_content:
+                logger.info(f"Retrieved monthly report file from storage: {filename}")
+                
+                # Determine media type based on extension
+                media_type = "text/html" if filename.lower().endswith(".html") else "application/octet-stream"
+                
+                # For HEAD requests, return just headers without content
+                if request.method == "HEAD":
+                    from fastapi import Response
+                    response = Response()
+                    response.headers["Content-Type"] = media_type
+                    response.headers["Content-Length"] = str(len(file_content.encode('utf-8')))
+                    return response
+                else:
+                    from fastapi.responses import HTMLResponse, PlainTextResponse
+                    if media_type == "text/html":
+                        return HTMLResponse(content=file_content)
+                    else:
+                        return PlainTextResponse(content=file_content)
             else:
-                return FileResponse(file_path, media_type=media_type)
-        else:
-            logger.error(f"Monthly report file not found at: {file_path}")
-            logger.error(f"File exists check: {os.path.exists(file_path)}") # ADDED LOGGING
-            logger.error(f"Is file check: {os.path.isfile(file_path)}") # ADDED LOGGING
-            raise HTTPException(status_code=404, detail=f"Monthly report file not found: {filename}")
+                logger.error(f"Monthly report file not found in storage: {filename}")
+                raise HTTPException(status_code=404, detail=f"Monthly report file not found: {filename}")
+                
+        except ImportError:
+            logger.warning("Output manager not available, falling back to local filesystem")
+            # Fallback to local filesystem if output manager is not available
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            reports_dir = os.path.join(script_dir, "output", "reports")
+            file_path = os.path.join(reports_dir, filename)
+            
+            # Security check to prevent accessing files outside the reports directory
+            if not os.path.abspath(file_path).startswith(os.path.abspath(reports_dir)):
+                logger.error(f"Security check failed: Attempt to access file outside reports directory: {filename}")
+                raise HTTPException(status_code=403, detail="Access denied")
+                
+            # Check if the file exists
+            if os.path.exists(file_path) and os.path.isfile(file_path):
+                logger.info(f"Serving file from local filesystem: {file_path}")
+                # Determine media type based on extension
+                media_type = "text/html" if filename.lower().endswith(".html") else "application/octet-stream"
+                
+                # For HEAD requests, return just headers without content
+                if request.method == "HEAD":
+                    from fastapi import Response
+                    response = Response()
+                    response.headers["Content-Type"] = media_type
+                    response.headers["Content-Length"] = str(os.path.getsize(file_path))
+                    return response
+                else:
+                    return FileResponse(file_path, media_type=media_type)
+            else:
+                logger.error(f"Monthly report file not found at: {file_path}")
+                raise HTTPException(status_code=404, detail=f"Monthly report file not found: {filename}")
             
     except HTTPException as http_exc:
         # Re-raise HTTPException to ensure correct status code is sent
@@ -3728,26 +3939,48 @@ async def get_postgres_tables():
 
 @router.post("/clear-chart-files")
 async def clear_chart_files():
-    """Delete all chart image files (chart*.png) from the output directory and its subdirectories."""
+    """Delete all chart image files (chart*.png) from both GCS and local storage."""
     logger.debug("Clear chart files called")
     try:
+        from tools.gcs_storage import get_storage_manager
+        
+        storage_manager = get_storage_manager()
+        deleted_count = 0
+        
+        # Delete from GCS if available
+        if storage_manager.gcs_enabled:
+            try:
+                blobs = storage_manager.bucket.list_blobs(prefix='transparentsf/')
+                
+                for blob in blobs:
+                    filename = blob.name.split('/')[-1]  # Get just the filename
+                    if filename.startswith('chart') and filename.endswith('.png'):
+                        try:
+                            blob.delete()
+                            deleted_count += 1
+                            logger.debug(f"Deleted GCS chart file: {blob.name}")
+                        except Exception as e:
+                            logger.error(f"Error deleting GCS chart file {blob.name}: {str(e)}")
+                            
+            except Exception as e:
+                logger.error(f"Error listing GCS files: {str(e)}")
+        
+        # Delete from local storage
         script_dir = os.path.dirname(os.path.abspath(__file__))
         output_dir = os.path.join(script_dir, 'output')
         
-        # Count of deleted files
-        deleted_count = 0
-        
-        # Walk through all subdirectories
-        for root, _, files in os.walk(output_dir):
-            for file in files:
-                if file.startswith('chart') and file.endswith('.png'):
-                    file_path = os.path.join(root, file)
-                    try:
-                        os.remove(file_path)
-                        deleted_count += 1
-                        logger.debug(f"Deleted chart file: {file_path}")
-                    except Exception as e:
-                        logger.error(f"Error deleting chart file {file_path}: {str(e)}")
+        if os.path.exists(output_dir):
+            # Walk through all subdirectories
+            for root, _, files in os.walk(output_dir):
+                for file in files:
+                    if file.startswith('chart') and file.endswith('.png'):
+                        file_path = os.path.join(root, file)
+                        try:
+                            os.remove(file_path)
+                            deleted_count += 1
+                            logger.debug(f"Deleted local chart file: {file_path}")
+                        except Exception as e:
+                            logger.error(f"Error deleting local chart file {file_path}: {str(e)}")
         
         logger.info(f"Successfully deleted {deleted_count} chart image files")
         return JSONResponse({
@@ -4807,38 +5040,98 @@ async def convert_charts_and_finalize(request: Request):
         
         logger.info(f"Converting charts and finalizing report at {report_path}")
         
-        # Ensure the report path exists
-        if not Path(report_path).exists():
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "status": "error",
-                    "message": f"Report file not found: {report_path}"
-                }
-            )
+        # Extract filename from the report path
+        report_path_obj = Path(report_path)
+        filename = report_path_obj.name
+        
+        # Try to get the file content using the output manager (GCS with local fallback)
+        report_content = None
+        try:
+            from tools.output_manager import get_output_manager
+            output_manager = get_output_manager()
+            report_content = output_manager.retrieve_report(filename)
+            
+            if report_content:
+                logger.info(f"Retrieved report for chart conversion from storage: {filename}")
+            else:
+                logger.warning(f"Report not found in storage: {filename}, falling back to local filesystem")
+                
+        except ImportError:
+            logger.warning("Output manager not available, falling back to local filesystem")
+        
+        # Fallback to local filesystem if GCS didn't work
+        if not report_content:
+            if not Path(report_path).exists():
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "status": "error",
+                        "message": f"Report file not found: {report_path}"
+                    }
+                )
+            # Read from local filesystem
+            with open(report_path, 'r', encoding='utf-8') as f:
+                report_content = f.read()
+            logger.info(f"Retrieved report for chart conversion from local filesystem: {report_path}")
         
         # Create web version (with tabs)
         web_path = None
+        web_filename = None
         try:
-            # Create a copy for the web version
-            report_path_obj = Path(report_path)
-            if '_revised' in report_path_obj.name:
-                web_name = report_path_obj.name.replace('_revised', '_final')
+            # Create filename for the web version
+            if '_revised' in filename:
+                web_filename = filename.replace('_revised', '_final')
             else:
-                web_name = f"{report_path_obj.stem}_final{report_path_obj.suffix}"
-            web_path = report_path_obj.parent / web_name
+                web_filename = f"{report_path_obj.stem}_final{report_path_obj.suffix}"
             
-            # Copy the report to create the web version
-            shutil.copy2(report_path, web_path)
+            # Create web content by expanding charts with tabs
+            # We need to create a temporary file since the function expects a file path
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as temp_file:
+                temp_file.write(report_content)
+                temp_file_path = temp_file.name
             
-            # Expand charts with tabs for web version
-            loop = asyncio.get_event_loop()
-            web_result = await loop.run_in_executor(
-                None,
-                lambda: expand_charts_with_tabs_final(web_path)
-            )
+            try:
+                loop = asyncio.get_event_loop()
+                web_result = await loop.run_in_executor(
+                    None,
+                    lambda: expand_charts_with_tabs_final(temp_file_path)
+                )
+                
+                if web_result:
+                    # Read the processed content
+                    with open(temp_file_path, 'r', encoding='utf-8') as f:
+                        web_content = f.read()
+                else:
+                    web_content = None
+            finally:
+                # Clean up temporary file
+                import os
+                try:
+                    os.unlink(temp_file_path)
+                except:
+                    pass
             
-            if not web_result:
+            if web_content:
+                # Save web version using output manager
+                try:
+                    from tools.output_manager import get_output_manager
+                    output_manager = get_output_manager()
+                    success = output_manager.store_report(web_content, web_filename, "html")
+                    if success:
+                        web_path = f"output/reports/{web_filename}"  # Return path for compatibility
+                        logger.info(f"Saved web version to storage: {web_filename}")
+                    else:
+                        logger.warning("Failed to save web version to storage")
+                except ImportError:
+                    logger.warning("Output manager not available, saving web version locally")
+                    # Fallback to local filesystem
+                    web_path_obj = Path(report_path).parent / web_filename
+                    with open(web_path_obj, 'w', encoding='utf-8') as f:
+                        f.write(web_content)
+                    web_path = str(web_path_obj)
+                    logger.info(f"Saved web version to local filesystem: {web_path}")
+            else:
                 logger.warning("Failed to expand charts with tabs for web version")
                 
         except Exception as e:
@@ -4847,26 +5140,62 @@ async def convert_charts_and_finalize(request: Request):
         
         # Create email version
         email_path = None
+        email_filename = None
         try:
-            # Create a copy for the email version
-            report_path_obj = Path(report_path)
-            if '_revised' in report_path_obj.name:
-                email_name = report_path_obj.name.replace('_revised', '_email')
+            # Create filename for the email version
+            if '_revised' in filename:
+                email_filename = filename.replace('_revised', '_email')
             else:
-                email_name = f"{report_path_obj.stem}_email{report_path_obj.suffix}"
-            email_path = report_path_obj.parent / email_name
+                email_filename = f"{report_path_obj.stem}_email{report_path_obj.suffix}"
             
-            # Copy the report to create the email version
-            shutil.copy2(report_path, email_path)
+            # Create email content by expanding charts for email
+            # We need to create a temporary file since the function expects a file path
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as temp_file:
+                temp_file.write(report_content)
+                temp_file_path = temp_file.name
             
-            # Expand charts for email version
-            loop = asyncio.get_event_loop()
-            email_result = await loop.run_in_executor(
-                None,
-                lambda: expand_chart_references_for_email(email_path)
-            )
+            try:
+                loop = asyncio.get_event_loop()
+                email_result = await loop.run_in_executor(
+                    None,
+                    lambda: expand_chart_references_for_email(temp_file_path)
+                )
+                
+                if email_result:
+                    # Read the processed content
+                    with open(temp_file_path, 'r', encoding='utf-8') as f:
+                        email_content = f.read()
+                else:
+                    email_content = None
+            finally:
+                # Clean up temporary file
+                import os
+                try:
+                    os.unlink(temp_file_path)
+                except:
+                    pass
             
-            if not email_result:
+            if email_content:
+                # Save email version using output manager
+                try:
+                    from tools.output_manager import get_output_manager
+                    output_manager = get_output_manager()
+                    success = output_manager.store_report(email_content, email_filename, "html")
+                    if success:
+                        email_path = f"output/reports/{email_filename}"  # Return path for compatibility
+                        logger.info(f"Saved email version to storage: {email_filename}")
+                    else:
+                        logger.warning("Failed to save email version to storage")
+                except ImportError:
+                    logger.warning("Output manager not available, saving email version locally")
+                    # Fallback to local filesystem
+                    email_path_obj = Path(report_path).parent / email_filename
+                    with open(email_path_obj, 'w', encoding='utf-8') as f:
+                        f.write(email_content)
+                    email_path = str(email_path_obj)
+                    logger.info(f"Saved email version to local filesystem: {email_path}")
+            else:
                 logger.warning("Failed to expand charts for email version")
                 
         except Exception as e:
@@ -4877,12 +5206,10 @@ async def convert_charts_and_finalize(request: Request):
         charts_processed = 0
         charts_converted = 0
         try:
-            with open(report_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                # Count chart placeholders
-                charts_processed = content.count('[CHART:')
-                # Estimate converted charts (this is a rough estimate)
-                charts_converted = charts_processed
+            # Count chart placeholders in the report content
+            charts_processed = report_content.count('[CHART:')
+            # Estimate converted charts (this is a rough estimate)
+            charts_converted = charts_processed
         except Exception as e:
             logger.warning(f"Error counting charts: {str(e)}")
         

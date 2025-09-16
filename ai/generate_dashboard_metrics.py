@@ -2450,7 +2450,9 @@ def create_ytd_vector_collection(metrics):
         MAX_RETRIES = 3
 
         # Initialize Qdrant client
-        qdrant = QdrantClient(host='localhost', port=6333)
+        qdrant_host = os.getenv("QDRANT_URL", "localhost")
+        qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+        qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
         
         # Get sample embedding to determine vector size
         sample_response = client.embeddings.create(

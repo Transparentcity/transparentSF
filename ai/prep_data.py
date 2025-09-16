@@ -28,7 +28,9 @@ GPT_MODEL = 'gpt-4'
 EMBEDDING_MODEL = "text-embedding-3-large"  # Keeping your original embedding model
 
 # Initialize Qdrant client
-qdrant = qdrant_client.QdrantClient(host='localhost', port=6333)  # Adjust port if necessary
+qdrant_host = os.getenv("QDRANT_URL", "localhost")
+qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+qdrant = qdrant_client.QdrantClient(host=qdrant_host, port=qdrant_port)
 
 # Collection configuration
 collection_name = 'SFPublicData'

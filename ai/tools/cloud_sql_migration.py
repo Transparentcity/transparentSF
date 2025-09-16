@@ -63,29 +63,75 @@ class CloudSQLMigrator:
             logger.error("gcloud CLI not found. Please install Google Cloud SDK.")
             return False
 
-        # Check if local backup file exists
-        backup_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'temp', 'database_backup_20250912_022232.sql')
-        if not os.path.exists(backup_path):
-            logger.error(f"Local backup file not found: {backup_path}")
+        # Check if we can connect to the current database
+        try:
+            connection = get_postgres_connection()
+            if connection:
+                connection.close()
+                logger.info("✓ Current database connection successful")
+            else:
+                logger.error("Failed to connect to current database")
+                return False
+        except Exception as e:
+            logger.error(f"Database connection error: {str(e)}")
             return False
-        logger.info("✓ Local backup file found")
 
         return True
     
     def export_database(self) -> bool:
-        """Use local backup file instead of exporting from database."""
-        # Look for local backup file
-        backup_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'temp', 'database_backup_20250912_022232.sql')
+        """Export database from current Neon instance."""
+        try:
+            logger.info("Exporting database from current Neon instance...")
 
-        if os.path.exists(backup_path):
-            logger.info(f"Using local backup file: {backup_path}")
-            # Copy the backup file to our working directory
-            import shutil
-            shutil.copy2(backup_path, self.backup_file)
-            logger.info(f"✓ Local backup copied to {self.backup_file}")
+            # Use the current database connection to export
+            connection = get_postgres_connection()
+            if not connection:
+                logger.error("Failed to connect to current database")
+                return False
+
+            cursor = connection.cursor()
+
+            # Create dump file
+            with open(self.backup_file, 'w') as f:
+                f.write("-- Database dump from Neon PostgreSQL\n")
+                f.write(f"-- Generated on {datetime.now()}\n\n")
+
+                # Get all tables
+                cursor.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+                tables = cursor.fetchall()
+
+                logger.info(f"Found {len(tables)} tables to export")
+
+                for table in tables:
+                    table_name = table[0]
+                    logger.info(f"Exporting table: {table_name}")
+
+                    # Get table structure
+                    cursor.execute(f"SELECT * FROM {table_name} LIMIT 0")
+                    columns = [desc[0] for desc in cursor.description]
+
+                    # Write table data
+                    cursor.execute(f"SELECT * FROM {table_name}")
+                    rows = cursor.fetchall()
+
+                    if rows:
+                        f.write(f"-- Dumping table: {table_name}\n")
+                        f.write(f"TRUNCATE TABLE {table_name} CASCADE;\n")
+
+                        for row in rows:
+                            values = ",".join(["'" + str(val).replace("'", "''") + "'" if val is not None else "NULL" for val in row])
+                            f.write(f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({values});\n")
+
+                        f.write("\n")
+
+            cursor.close()
+            connection.close()
+
+            logger.info(f"✓ Database exported to {self.backup_file}")
             return True
-        else:
-            logger.error(f"Local backup file not found: {backup_path}")
+
+        except Exception as e:
+            logger.error(f"Error exporting database: {str(e)}")
             return False
     
     def create_cloud_sql_instance(self, region: str = "us-central1", 

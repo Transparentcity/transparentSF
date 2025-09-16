@@ -72,8 +72,9 @@ async def create_writeup(request: Request):
         if result.get("status") == "success":
             return JSONResponse({
                 "status": "success",
-                "message": "Write-up created successfully",
-                "writeup_id": result.get("writeup_id")
+                "message": result.get("message", "Write-up created and executed successfully"),
+                "writeup_id": result.get("writeup_id"),
+                "content": result.get("content", "")
             })
         else:
             return JSONResponse({
@@ -139,68 +140,28 @@ async def get_writeup(writeup_id: int):
             "message": error_message
         }, status_code=500)
 
-@router.post("/{writeup_id}/clarify")
-async def submit_clarification(writeup_id: int, request: Request):
-    """Submit clarification answers for a write-up."""
-    logger.debug(f"Submit clarification for write-up {writeup_id} called")
+
+@router.post("/{writeup_id}/execute")
+async def execute_writeup(writeup_id: int):
+    """Execute a write-up directly."""
+    logger.debug(f"Execute write-up {writeup_id} called")
     try:
-        body = await request.json()
-        clarification_answers = body.get("answers", {})
-        
         from tools.writeups_manager import WriteupsManager
         
         writeup_manager = WriteupsManager()
-        result = writeup_manager.submit_clarification(writeup_id, clarification_answers)
+        result = writeup_manager.execute_writeup(writeup_id)
         
         if result.get("status") == "success":
             return JSONResponse({
                 "status": "success",
-                "message": "Clarification submitted successfully"
+                "message": "Write-up executed successfully",
+                "content": result.get("content", "")
             })
         else:
             return JSONResponse({
                 "status": "error",
-                "message": result.get("message", "Failed to submit clarification")
+                "message": result.get("message", "Failed to execute write-up")
             }, status_code=500)
-            
-    except Exception as e:
-        error_message = f"Error submitting clarification: {str(e)}"
-        logger.error(error_message)
-        return JSONResponse({
-            "status": "error",
-            "message": error_message
-        }, status_code=500)
-
-@router.post("/{writeup_id}/execute")
-async def execute_writeup(writeup_id: int):
-    """Execute a write-up (generate plan and run it)."""
-    logger.debug(f"Execute write-up {writeup_id} called")
-    try:
-        from tools.writeups_manager import WriteupsManager
-        from background_jobs import job_manager
-        
-        writeup_manager = WriteupsManager()
-        
-        # Create a background job for execution
-        job_id = job_manager.create_job(
-            job_type="writeup_execution",
-            description=f"Executing write-up {writeup_id}"
-        )
-        
-        # Start the execution in the background
-        asyncio.create_task(
-            job_manager.run_job(
-                job_id,
-                writeup_manager.execute_writeup,
-                writeup_id
-            )
-        )
-        
-        return JSONResponse({
-            "status": "success",
-            "message": "Write-up execution started",
-            "job_id": job_id
-        })
         
     except Exception as e:
         error_message = f"Error executing write-up: {str(e)}"
@@ -219,31 +180,21 @@ async def regenerate_writeup(writeup_id: int, request: Request):
         model_key = body.get("model_key")
         
         from tools.writeups_manager import WriteupsManager
-        from background_jobs import job_manager
         
         writeup_manager = WriteupsManager()
+        result = writeup_manager.regenerate_writeup(writeup_id, model_key)
         
-        # Create a background job for regeneration
-        job_id = job_manager.create_job(
-            job_type="writeup_regeneration",
-            description=f"Regenerating write-up {writeup_id}"
-        )
-        
-        # Start the regeneration in the background
-        asyncio.create_task(
-            job_manager.run_job(
-                job_id,
-                writeup_manager.regenerate_writeup,
-                writeup_id,
-                model_key
-            )
-        )
-        
-        return JSONResponse({
-            "status": "success",
-            "message": "Write-up regeneration started",
-            "job_id": job_id
-        })
+        if result.get("status") == "success":
+            return JSONResponse({
+                "status": "success",
+                "message": result.get("message", "Write-up regenerated successfully"),
+                "content": result.get("content", "")
+            })
+        else:
+            return JSONResponse({
+                "status": "error",
+                "message": result.get("message", "Failed to regenerate write-up")
+            }, status_code=500)
         
     except Exception as e:
         error_message = f"Error regenerating write-up: {str(e)}"

@@ -35,7 +35,7 @@ The migration will move your application to:
 
 1. **Activate your virtual environment:**
    ```bash
-   cd /Users/simongoldman/Documents/TransparentSF_from_git/transparentSF
+   cd /path/to/your/transparentSF/repository
    source venv/bin/activate
    ```
 

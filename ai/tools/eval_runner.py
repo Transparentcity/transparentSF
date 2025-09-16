@@ -99,6 +99,37 @@ class EvalRunner:
             if save_result["status"] != "success":
                 logger.error(f"Failed to save eval result: {save_result['message']}")
             
+            # Log evaluation to GCS if available
+            try:
+                from .gcs_logger import get_gcs_logger
+                gcs_logger = get_gcs_logger()
+                
+                # Create comprehensive evaluation log data
+                eval_log_data = {
+                    "timestamp": datetime.now().isoformat(),
+                    "type": "eval_run",
+                    "eval_id": eval_id,
+                    "eval_name": eval_data["name"],
+                    "model_name": model_name,
+                    "prompt": prompt,
+                    "execution_result": execution_result,
+                    "execution_time_seconds": execution_time,
+                    "result_id": save_result.get("result_id"),
+                    "database_save_status": save_result["status"]
+                }
+                
+                eval_log_id = f"eval_runner_{eval_id}_{int(time.time())}"
+                success = gcs_logger.log_evaluation(eval_log_data, eval_log_id)
+                if success:
+                    logger.info(f"Evaluation logged to GCS: {eval_log_id}")
+                else:
+                    logger.warning(f"Failed to log evaluation to GCS: {eval_log_id}")
+                    
+            except ImportError:
+                logger.debug("GCS logging not available - evaluation will only be stored in database")
+            except Exception as e:
+                logger.error(f"Error logging evaluation to GCS: {e}")
+            
             # Enhance the session log with detailed information from the database
             if execution_result.get("success_details", {}).get("session_id"):
                 session_id = execution_result["success_details"]["session_id"]

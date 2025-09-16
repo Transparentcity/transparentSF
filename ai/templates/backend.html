@@ -1100,6 +1100,48 @@
             flex-basis: 100%;
         }
         
+        .space-summary {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .space-summary h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #495057;
+            font-size: 1.1em;
+        }
+        
+        .space-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .space-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background-color: white;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .space-label {
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .space-value {
+            font-weight: 600;
+            color: #007bff;
+            font-family: 'Courier New', monospace;
+        }
+        
         .sub-option {
             margin-left: 25px;
         }
@@ -1679,6 +1721,28 @@
                 <span class="close">&times;</span>
             </div>
             <div class="modal-body">
+                <div class="space-summary" id="space-summary">
+                    <h3>Storage Usage Summary</h3>
+                    <div class="space-info">
+                        <div class="space-item">
+                            <span class="space-label">Output Files:</span>
+                            <span class="space-value" id="output-files-size">Loading...</span>
+                        </div>
+                        <div class="space-item">
+                            <span class="space-label">Vector Database:</span>
+                            <span class="space-value" id="vector-db-size">Loading...</span>
+                        </div>
+                        <div class="space-item">
+                            <span class="space-label">PostgreSQL Data:</span>
+                            <span class="space-value" id="postgres-size">Loading...</span>
+                        </div>
+                        <div class="space-item">
+                            <span class="space-label">Log Files:</span>
+                            <span class="space-value" id="logs-size">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="delete-options">
                     <h3>Output Files</h3>
                     
@@ -1722,11 +1786,6 @@
                     <div class="delete-option">
                         <input type="checkbox" id="delete-vectordb" name="delete-option">
                         <label for="delete-vectordb">Vector Database</label>
-                    </div>
-                    
-                    <div class="delete-option">
-                        <input type="checkbox" id="delete-postgres" name="delete-option">
-                        <label for="delete-postgres">PostgreSQL Data</label>
                     </div>
                     
                     <div class="delete-option">
@@ -3578,6 +3637,7 @@ Can you help me understand:
             // Show modal when delete button is clicked
             deleteDataBtn.addEventListener('click', () => {
                 deleteDataModal.style.display = 'block';
+                loadSpaceSummary();
             });
             
             // Close modal when X is clicked
@@ -3665,9 +3725,6 @@ Can you help me understand:
                                 break;
                             case 'delete-vectordb':
                                 endpoint = '/backend/clear-vector-db';
-                                break;
-                            case 'delete-postgres':
-                                endpoint = '/backend/clear-postgres-data';
                                 break;
                             case 'delete-inactive-timeseries':
                                 endpoint = '/backend/clear-inactive-timeseries';
@@ -3771,6 +3828,33 @@ Can you help me understand:
                     deleteDataModal.style.display = 'none';
                 }
             });
+            
+            // Function to load space summary
+            async function loadSpaceSummary() {
+                try {
+                    const response = await fetch('/backend/get-storage-info');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        document.getElementById('output-files-size').textContent = data.output_files_size || '0 MB';
+                        document.getElementById('vector-db-size').textContent = data.vector_db_size || '0 MB';
+                        document.getElementById('postgres-size').textContent = data.postgres_size || '0 MB';
+                        document.getElementById('logs-size').textContent = data.logs_size || '0 MB';
+                    } else {
+                        // Set error state
+                        document.getElementById('output-files-size').textContent = 'Error';
+                        document.getElementById('vector-db-size').textContent = 'Error';
+                        document.getElementById('postgres-size').textContent = 'Error';
+                        document.getElementById('logs-size').textContent = 'Error';
+                    }
+                } catch (error) {
+                    console.error('Error loading space summary:', error);
+                    document.getElementById('output-files-size').textContent = 'Error';
+                    document.getElementById('vector-db-size').textContent = 'Error';
+                    document.getElementById('postgres-size').textContent = 'Error';
+                    document.getElementById('logs-size').textContent = 'Error';
+                }
+            }
         });
 
         // Settings functionality
