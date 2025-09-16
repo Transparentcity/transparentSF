@@ -99,4 +99,6 @@ ai/data/datasets/old/
 ai/data/policeHistory/
 
 # Application specific
-app_debug.log
+app_debug.logai/gcp_env_example.env
+database_access_summary.md
+database_endpoints_analysis.csv
