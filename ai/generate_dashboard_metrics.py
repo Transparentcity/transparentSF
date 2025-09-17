@@ -1805,9 +1805,14 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                     
                     # First, process YTD trend query to get the actual last data date
                     if ytd_query:
-                        # Extract category_fields to determine if supervisor_district should be included
+                        # Extract category_fields and location_fields to determine if supervisor_district should be included
                         category_fields = query_data.get("category_fields", []) if isinstance(query_data, dict) else []
-                        trend_data = process_ytd_trend_query_optimized(ytd_query, query_endpoint, date_ranges=date_ranges, query_name=query_name, category_fields=category_fields)
+                        location_fields = query_data.get("location_fields", []) if isinstance(query_data, dict) else []
+                        
+                        # Combine category_fields and location_fields to check for supervisor_district
+                        all_fields = category_fields + location_fields
+                        
+                        trend_data = process_ytd_trend_query_optimized(ytd_query, query_endpoint, date_ranges=date_ranges, query_name=query_name, category_fields=all_fields)
                         if trend_data and 'last_updated' in trend_data:
                             max_date = trend_data['last_updated']
                             logger.info(f"Found max date from YTD trend query: {max_date}")

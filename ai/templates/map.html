@@ -110,7 +110,6 @@
 
         .header {
             background-color: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-primary);
             padding: 15px 20px;
         }
 
@@ -342,6 +341,216 @@
             height: 100%;
         }
 
+        /* Animation Controls */
+        .animation-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            min-width: 300px;
+        }
+
+        .animation-controls.hidden {
+            display: none;
+        }
+
+        .animation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .animation-title {
+            font-weight: bold;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .animation-toggle {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+        }
+
+        .animation-toggle:hover {
+            color: var(--accent-color);
+        }
+
+        .timeline-container {
+            margin-bottom: 10px;
+        }
+
+        .timeline-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--border-primary);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .timeline-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .timeline-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .timeline-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .current-date-display {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin: 10px 0;
+            text-align: center;
+        }
+
+        .date-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 2px;
+        }
+
+        .animation-date {
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--accent-color);
+            font-family: 'IBM Plex Sans', monospace;
+            transition: all 0.3s ease;
+        }
+
+        .animation-date.updating {
+            transform: scale(1.05);
+            color: var(--accent-hover);
+        }
+
+        .playback-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .playback-btn {
+            background-color: var(--accent-color);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s ease;
+        }
+
+        .playback-btn:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .playback-btn:disabled {
+            background-color: var(--border-primary);
+            cursor: not-allowed;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .speed-select {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+
+        .animation-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        /* Animation point effects */
+        .point-appear {
+            animation: pointAppear 0.5s ease-out;
+        }
+
+        .point-disappear {
+            animation: pointDisappear 0.3s ease-in;
+        }
+
+        @keyframes pointAppear {
+            0% {
+                opacity: 0;
+                transform: scale(0);
+            }
+            50% {
+                opacity: 0.8;
+                transform: scale(1.2);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes pointDisappear {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(0);
+            }
+        }
+
+        /* Trail effect styling */
+        .trail-point {
+            filter: drop-shadow(0 0 3px rgba(173, 53, 250, 0.3));
+            transition: opacity 0.1s ease-out;
+        }
+
         .map-overlay {
             position: absolute;
             top: 20px;
@@ -515,6 +724,9 @@
                 </div>
             </div>
             <div class="header-right">
+                <button class="header-btn" onclick="toggleAnimationMode()" id="animation-mode-btn">
+                    <i class="fas fa-play-circle"></i> Animate
+                </button>
                 <button class="header-btn" onclick="shareMap()">
                     <i class="fas fa-share"></i> Share
                 </button>
@@ -532,6 +744,67 @@
     <!-- Map Container -->
     <div class="map-container">
         <div id="map"></div>
+        
+        <!-- Animation Controls -->
+        <div id="animation-controls" class="animation-controls hidden">
+            <div class="animation-header">
+                <div class="animation-title">
+                    <i class="fas fa-play-circle"></i> Trail Animation
+                </div>
+                <button class="animation-toggle" onclick="toggleAnimationControls()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="timeline-container">
+                <input type="range" id="timeline-slider" class="timeline-slider" min="0" max="100" value="0">
+                <div class="timeline-labels">
+                    <span id="start-date">Start</span>
+                    <span id="current-date">Current</span>
+                    <span id="end-date">End</span>
+                </div>
+            </div>
+            
+            <!-- Current Animation Date Display -->
+            <div class="current-date-display">
+                <div class="date-label">Animating:</div>
+                <div id="animation-current-date" class="animation-date">Loading...</div>
+            </div>
+            
+            <div class="playback-controls">
+                <button id="play-pause-btn" class="playback-btn" onclick="togglePlayback()">
+                    <i class="fas fa-play"></i> Play
+                </button>
+                <button id="reset-btn" class="playback-btn" onclick="resetAnimation()">
+                    <i class="fas fa-undo"></i> Reset
+                </button>
+                <div class="speed-control">
+                    <label>Speed:</label>
+                    <select id="speed-select" class="speed-select" onchange="changeAnimationSpeed()">
+                        <option value="0.5">0.5x</option>
+                        <option value="1">1x</option>
+                        <option value="2">2x</option>
+                        <option value="4">4x</option>
+                        <option value="10" selected>10x</option>
+                    </select>
+                </div>
+                <div class="speed-control">
+                    <label>Trail:</label>
+                    <select id="trail-select" class="speed-select" onchange="changeTrailDuration()">
+                        <option value="0.1">Short</option>
+                        <option value="0.2" selected>Medium</option>
+                        <option value="0.3">Long</option>
+                        <option value="0.5">Very Long</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="animation-stats">
+                <span id="visible-points">Visible: 0</span>
+                <span id="total-points">Total: 0</span>
+                <span id="animation-progress">0%</span>
+            </div>
+        </div>
         
         <!-- Map Overlay -->
         <div class="map-overlay">
@@ -625,15 +898,20 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     
+    <!-- Map data from server -->
+    <script type="application/json" id="map-data">
+        {
+            "id": "{{ map_data.id }}",
+            "title": "{{ map_data.title or "Untitled Map" }}",
+            "type": "{{ map_data.type }}",
+            "locationData": {{ (location_data | tojson) if location_data else '[]' }},
+            "metadata": {{ (metadata | tojson) if metadata else '{}' }}
+        }
+    </script>
+    
     <script>
-        // Map data from server
-        const mapData = {
-            id: '{{ map_data.id }}',
-            title: '{{ map_data.title or "Untitled Map" }}',
-            type: '{{ map_data.type }}',
-            locationData: {{ location_data | tojson if location_data else '[]' }},
-            metadata: {{ metadata | tojson if metadata else '{}' }}
-        };
+        // Parse map data from JSON script tag
+        const mapData = JSON.parse(document.getElementById('map-data').textContent);
 
         // Function to calculate and display date range
         function updateDateRangeSubtitle() {
@@ -875,79 +1153,212 @@
                 return;
             }
 
-            // Add GeoJSON source for districts
-            map.addSource('districts', {
-                type: 'geojson',
-                data: {
-                    type: 'FeatureCollection',
-                    features: mapData.locationData.map(item => ({
-                        type: 'Feature',
-                        properties: {
-                            district: item.district,
-                            value: item.value,
-                            title: item.title,
-                            color: item.color || getColorForValue(item.value)
-                        },
-                        geometry: {
-                            type: 'Polygon',
-                            coordinates: item.coordinates || []
+            // Create a lookup table for district values
+            const districtValues = {};
+            mapData.locationData.forEach(item => {
+                districtValues[item.district] = {
+                    value: item.value,
+                    title: item.title || `District ${item.district}`,
+                    color: item.color,
+                    current_value: item.current_value,
+                    previous_value: item.previous_value,
+                    delta: item.delta,
+                    percent_change: item.percent_change
+                };
+            });
+
+            // Determine if this is a delta map - check for specific delta indicators
+            const isDeltaMap = mapData.locationData.some(item => 
+                item.current_value !== undefined || 
+                item.previous_value !== undefined || 
+                item.delta !== undefined || 
+                item.percent_change !== undefined
+            );
+            
+            // Calculate min/max values for proper color scaling
+            const values = mapData.locationData.map(item => item.value);
+            const minValue = Math.min(...values);
+            const maxValue = Math.max(...values);
+            
+            console.log('Map data:', mapData.locationData);
+            console.log('Is delta map:', isDeltaMap);
+            console.log('Min value:', minValue, 'Max value:', maxValue);
+
+            // Load district boundaries from GeoJSON file
+            fetch('/static/data/sf_supervisorial_districts.geojson')
+                .then(response => response.json())
+                .then(geojsonData => {
+                    // Merge district data with boundaries
+                    const features = geojsonData.features.map(feature => {
+                        const districtId = feature.properties.district;
+                        const districtData = districtValues[districtId];
+                        
+                        if (districtData) {
+                            // Calculate the exact color for this district
+                            const ratio = (districtData.value - minValue) / (maxValue - minValue);
+                            let calculatedColor;
+                            
+                            if (isDeltaMap) {
+                                // Delta map: color based on actual percent change value
+                                // 0% = white, negative = green, positive = red
+                                const percentChange = districtData.percent_change || 0;
+                                
+                                if (percentChange === 0) {
+                                    // Exactly 0% change = white
+                                    calculatedColor = '#ffffff';
+                                } else if (percentChange < 0) {
+                                    // Negative change = green (darker green for larger decreases)
+                                    const intensity = Math.min(Math.abs(percentChange), 1); // Cap at 100%
+                                    const green = [26, 150, 65]; // #1a9641
+                                    const lightGreen = [255, 255, 255]; // Start from white
+                                    
+                                    const r = Math.round(lightGreen[0] + (green[0] - lightGreen[0]) * intensity);
+                                    const g = Math.round(lightGreen[1] + (green[1] - lightGreen[1]) * intensity);
+                                    const b = Math.round(lightGreen[2] + (green[2] - lightGreen[2]) * intensity);
+                                    
+                                    calculatedColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                                } else {
+                                    // Positive change = red (darker red for larger increases)
+                                    const intensity = Math.min(percentChange, 1); // Cap at 100%
+                                    const red = [215, 48, 39]; // #d73027
+                                    const lightRed = [255, 255, 255]; // Start from white
+                                    
+                                    const r = Math.round(lightRed[0] + (red[0] - lightRed[0]) * intensity);
+                                    const g = Math.round(lightRed[1] + (red[1] - lightRed[1]) * intensity);
+                                    const b = Math.round(lightRed[2] + (red[2] - lightRed[2]) * intensity);
+                                    
+                                    calculatedColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                                }
+                            } else {
+                                // Density map: purple + white mixing
+                                const purple = [173, 53, 250]; // RGB for #ad35fa
+                                const white = [255, 255, 255]; // RGB for #ffffff
+                                
+                                const r = Math.round(purple[0] + (white[0] - purple[0]) * (1 - ratio));
+                                const g = Math.round(purple[1] + (white[1] - purple[1]) * (1 - ratio));
+                                const b = Math.round(purple[2] + (white[2] - purple[2]) * (1 - ratio));
+                                
+                                calculatedColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                            }
+                            
+                            console.log(`District ${districtId}: applying color ${calculatedColor} for value ${districtData.value}`);
+                            
+                            return {
+                                ...feature,
+                                properties: {
+                                    ...feature.properties,
+                                    value: districtData.value,
+                                    title: districtData.title,
+                                    color: calculatedColor,
+                                    current_value: districtData.current_value,
+                                    previous_value: districtData.previous_value,
+                                    delta: districtData.delta,
+                                    percent_change: districtData.percent_change
+                                }
+                            };
+                        } else {
+                            // District with no data - show with default styling
+                            return {
+                                ...feature,
+                                properties: {
+                                    ...feature.properties,
+                                    value: 0,
+                                    title: `District ${districtId}`,
+                                    color: '#f0f0f0',
+                                    current_value: 0,
+                                    previous_value: 0,
+                                    delta: 0,
+                                    percent_change: 0
+                                }
+                            };
                         }
-                    }))
-                }
-            });
+                    });
 
-            // Add fill layer for districts
-            map.addLayer({
-                id: 'districts-fill',
-                type: 'fill',
-                source: 'districts',
-                paint: {
-                    'fill-color': [
-                        'case',
-                        ['has', 'color'], ['get', 'color'],
-                        ['interpolate', ['linear'], ['get', 'value'],
-                            0, '#f0f0f0',
-                            100, '#ad35fa'
-                        ]
-                    ],
-                    'fill-opacity': 0.7
-                }
-            });
+                    // Add GeoJSON source for districts
+                    map.addSource('districts', {
+                        type: 'geojson',
+                        data: {
+                            type: 'FeatureCollection',
+                            features: features
+                        }
+                    });
 
-            // Add outline layer
-            map.addLayer({
-                id: 'districts-outline',
-                type: 'line',
-                source: 'districts',
-                paint: {
-                    'line-color': document.documentElement.getAttribute('data-theme') === 'dark' ? '#ffffff' : '#333333',
-                    'line-width': 1
-                }
-            });
+                    // Debug: Log the color stops for density maps
+                    if (!isDeltaMap) {
+                        const colorStops = [
+                            minValue, '#f2f0f7',
+                            minValue + (maxValue - minValue) * 0.2, '#e1d5f0',
+                            minValue + (maxValue - minValue) * 0.4, '#c7b3e3',
+                            minValue + (maxValue - minValue) * 0.6, '#b894d9',
+                            minValue + (maxValue - minValue) * 0.8, '#a375cc',
+                            maxValue, '#ad35fa'
+                        ];
+                        console.log('Density map color stops:', colorStops);
+                        
+                        // Debug: Log what color each district should get
+                        mapData.locationData.forEach(item => {
+                            const ratio = (item.value - minValue) / (maxValue - minValue);
+                            // Calculate color using purple + white mixing
+                            const purple = [173, 53, 250]; // RGB for #ad35fa
+                            const white = [255, 255, 255]; // RGB for #ffffff
+                            
+                            const r = Math.round(purple[0] + (white[0] - purple[0]) * (1 - ratio));
+                            const g = Math.round(purple[1] + (white[1] - purple[1]) * (1 - ratio));
+                            const b = Math.round(purple[2] + (white[2] - purple[2]) * (1 - ratio));
+                            
+                            const expectedColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                            console.log(`District ${item.district}: value=${item.value}, ratio=${ratio.toFixed(2)}, expected color=${expectedColor}`);
+                        });
+                    }
+                    
+                    // Add fill layer for districts
+                    map.addLayer({
+                        id: 'districts-fill',
+                        type: 'fill',
+                        source: 'districts',
+                        paint: {
+                            'fill-color': ['get', 'color'],
+                            'fill-opacity': 1.0
+                        }
+                    });
 
-            // Add hover effect
-            map.on('mouseenter', 'districts-fill', function() {
-                map.getCanvas().style.cursor = 'pointer';
-            });
+                    // Add hover effect
+                    map.on('mouseenter', 'districts-fill', function() {
+                        map.getCanvas().style.cursor = 'pointer';
+                    });
 
-            map.on('mouseleave', 'districts-fill', function() {
-                map.getCanvas().style.cursor = '';
-            });
+                    map.on('mouseleave', 'districts-fill', function() {
+                        map.getCanvas().style.cursor = '';
+                    });
 
-            // Add click handler
-            map.on('click', 'districts-fill', function(e) {
-                const properties = e.features[0].properties;
-                new mapboxgl.Popup()
-                    .setLngLat(e.lngLat)
-                    .setHTML(`
-                        <h4>${properties.title || 'District ' + properties.district}</h4>
-                        <p>Value: ${properties.value}</p>
-                    `)
-                    .addTo(map);
-            });
+                    // Add click handler with enhanced tooltip for delta maps
+                    map.on('click', 'districts-fill', function(e) {
+                        const properties = e.features[0].properties;
+                        let popupContent = `<div style="font-size: 12px; line-height: 1.4; padding: 8px;"><strong>${properties.title || 'District ' + properties.district}</strong>`;
+                        
+                        // Check if this is a delta map (has current_value, previous_value, etc.)
+                        if (properties.current_value !== undefined && properties.previous_value !== undefined) {
+                            popupContent += `<br>Current: ${properties.current_value}<br>Previous: ${properties.previous_value}<br>Change: ${properties.delta || 0}<br>Percent: ${(properties.percent_change * 100).toFixed(1)}%`;
+                        } else {
+                            popupContent += `<br>Value: ${properties.value}`;
+                        }
+                        popupContent += `</div>`;
+                        
+                        new mapboxgl.Popup()
+                            .setLngLat(e.lngLat)
+                            .setHTML(popupContent)
+                            .addTo(map);
+                    });
 
-            hideLoading();
-            updateMapOutlineColor();
+                    // Create legend for choropleth maps
+                    createChoroplethLegend(isDeltaMap, minValue, maxValue);
+                    
+                    hideLoading();
+                })
+                .catch(error => {
+                    console.error('Error loading district boundaries:', error);
+                    showError('Failed to load district boundaries. Please try again.');
+                });
         }
 
         // Load point-based map
@@ -990,7 +1401,7 @@
                     description: item.description || '',
                     value: item.value || 1,
                     color: item.color || item.markerColor || getColorForValue(item.value || 1),
-                    strokeColor: item.strokeColor || (item.color && String(item.color).toLowerCase() === '#ffffff' ? '#ad35fa' : '#ffffff'),
+                    strokeColor: item.strokeColor || '#ffffff',
                     tooltip_fields: item.tooltip_fields || {},
                     scale: item.scale || 1 // Include scale property for dot scaling
                 };
@@ -1199,12 +1610,55 @@
 
         // Helper function to get color for value
         function getColorForValue(value) {
-            // Simple color scale - you can customize this
-            if (value < 25) return '#e5f5e0';
-            if (value < 50) return '#a1d99b';
-            if (value < 75) return '#74c476';
-            if (value < 100) return '#41ab5d';
-            return '#238b45';
+            // Default to bright purple for point maps
+            // Only use gradient scale for density maps with high values
+            if (value >= 250) return '#ad35fa';                    // Bright purple
+            if (value >= 200) return '#936fc9';                   // Darker purple
+            if (value >= 150) return '#ad91d6';                   // Medium purple
+            if (value >= 100) return '#c7b3e3';                   // Medium light purple
+            if (value >= 50) return '#e1d5f0';                    // Light purple
+            // For point maps (value = 1), use bright purple as default
+            return '#ad35fa';                                     // Bright purple (default)
+        }
+
+        // Function to create choropleth legend
+        function createChoroplethLegend(isDeltaMap, minValue, maxValue) {
+            // Find the existing legend area
+            const existingLegend = document.getElementById('legend');
+            if (!existingLegend) {
+                console.warn('Legend area not found');
+                return;
+            }
+
+            // Clear existing legend content
+            existingLegend.innerHTML = '';
+
+            if (isDeltaMap) {
+                // Delta map legend (green to white to red gradient)
+                existingLegend.innerHTML = `
+                    <div style="font-weight: bold; margin-bottom: 8px; text-align: center;">Percent Change</div>
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <div style="width: 150px; height: 20px; background: linear-gradient(to right, #1a9641, #ffffff, #d73027); border: 1px solid #ccc; border-radius: 3px;"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+                        <span>Down</span>
+                        <span>No Change</span>
+                        <span>Up</span>
+                    </div>
+                `;
+            } else {
+                // Density map legend (white to purple gradient)
+                existingLegend.innerHTML = `
+                    <div style="font-weight: bold; margin-bottom: 8px; text-align: center;">Values</div>
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <div style="width: 150px; height: 20px; background: linear-gradient(to right, #ffffff, #ad35fa); border: 1px solid #ccc; border-radius: 3px;"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+                        <span>${Math.round(minValue)}</span>
+                        <span>${Math.round(maxValue)}</span>
+                    </div>
+                `;
+            }
         }
 
         // Function to update map outline color based on theme
@@ -1224,18 +1678,29 @@
 
         function extractDateFromItem(item, preferredField) {
             if (!item || typeof item !== 'object') return null;
-            if (preferredField && item[preferredField]) return item[preferredField];
+            if (preferredField && item[preferredField]) {
+                console.log(`Found date in preferred field '${preferredField}':`, item[preferredField]);
+                return item[preferredField];
+            }
             const preferredKeys = [
                 'date','incident_date','incident_datetime','dba_start_date','dba_end_date',
                 'location_start_date','location_end_date','start_date','end_date','created_at','updated_at'
             ];
             for (const key of preferredKeys) {
-                if (item[key]) return item[key];
+                if (item[key]) {
+                    console.log(`Found date in preferred key '${key}':`, item[key]);
+                    return item[key];
+                }
             }
             const dynamicKey = Object.keys(item).find(k => (
                 k.toLowerCase().includes('date') || k.toLowerCase().includes('time')
             ) && item[k]);
-            return dynamicKey ? item[dynamicKey] : null;
+            if (dynamicKey) {
+                console.log(`Found date in dynamic key '${dynamicKey}':`, item[dynamicKey]);
+                return item[dynamicKey];
+            }
+            console.log('No date field found in item. Available keys:', Object.keys(item));
+            return null;
         }
 
         function buildLegendFromSavedData() {
@@ -1575,6 +2040,454 @@
                 pointCountDisplay.textContent = pointCountText;
             }
         }
+
+        // Animation System
+        let animationState = {
+            isActive: false,
+            isPlaying: false,
+            currentTime: 0,
+            totalTime: 100,
+            speed: 10, // Default to 10x speed
+            animationInterval: null,
+            timeSortedData: [],
+            dateRange: { start: null, end: null },
+            currentVisiblePoints: new Set(),
+            fadeOutDuration: 0.2, // 20% of total animation time for fade out
+            pointTrails: new Map() // Track point appearance and fade times
+        };
+
+        // Initialize animation system
+        function initializeAnimation() {
+            if (!mapData.locationData || mapData.locationData.length === 0) {
+                console.log('No location data available for animation');
+                return;
+            }
+
+            // Extract and sort data by date
+            animationState.timeSortedData = extractAndSortDataByTime(mapData.locationData);
+            
+            if (animationState.timeSortedData.length === 0) {
+                console.log('No time-based data found for animation');
+                return;
+            }
+
+            // Set up date range
+            animationState.dateRange.start = animationState.timeSortedData[0].date;
+            animationState.dateRange.end = animationState.timeSortedData[animationState.timeSortedData.length - 1].date;
+            
+            // Update timeline labels
+            updateTimelineLabels();
+            
+            // Update total points display
+            document.getElementById('total-points').textContent = `Total: ${animationState.timeSortedData.length}`;
+            
+            // Initialize animation date display
+            const animationDateEl = document.getElementById('animation-current-date');
+            if (animationDateEl) {
+                animationDateEl.textContent = formatAnimationDate(animationState.dateRange.start);
+            }
+            
+            console.log('Animation initialized with', animationState.timeSortedData.length, 'time-based points');
+        }
+
+        // Extract and sort data by time
+        function extractAndSortDataByTime(locationData) {
+            const timeData = [];
+            
+            console.log('extractAndSortDataByTime called with data:', locationData);
+            console.log('Data length:', locationData ? locationData.length : 0);
+            
+            if (locationData && locationData.length > 0) {
+                console.log('First item keys:', Object.keys(locationData[0]));
+                console.log('First item:', locationData[0]);
+            }
+            
+            for (let i = 0; i < locationData.length; i++) {
+                const item = locationData[i];
+                const date = extractDateFromItem(item);
+                
+                if (i < 3) { // Log first 3 items for debugging
+                    console.log(`Item ${i}:`, item);
+                    console.log(`Extracted date for item ${i}:`, date);
+                }
+                
+                if (date) {
+                    const dateObj = new Date(date);
+                    if (!isNaN(dateObj.getTime())) {
+                        timeData.push({
+                            ...item,
+                            date: dateObj,
+                            originalIndex: i
+                        });
+                    } else {
+                        console.log(`Invalid date for item ${i}:`, date);
+                    }
+                }
+            }
+            
+            console.log('Time data found:', timeData.length, 'items');
+            
+            // Sort by date
+            timeData.sort((a, b) => a.date - b.date);
+            
+            return timeData;
+        }
+
+        // Update timeline labels
+        function updateTimelineLabels() {
+            const startDateEl = document.getElementById('start-date');
+            const endDateEl = document.getElementById('end-date');
+            
+            if (animationState.dateRange.start && animationState.dateRange.end) {
+                startDateEl.textContent = formatDate(animationState.dateRange.start);
+                endDateEl.textContent = formatDate(animationState.dateRange.end);
+            }
+        }
+
+        // Format date for display
+        function formatDate(date) {
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+            });
+        }
+
+        // Format date for animation display (more detailed)
+        function formatAnimationDate(date) {
+            const now = new Date();
+            const isToday = date.toDateString() === now.toDateString();
+            const isThisYear = date.getFullYear() === now.getFullYear();
+            
+            if (isToday) {
+                return `Today, ${date.toLocaleDateString('en-US', { 
+                    weekday: 'long',
+                    month: 'long', 
+                    day: 'numeric'
+                })}`;
+            } else {
+                return date.toLocaleDateString('en-US', { 
+                    weekday: 'long',
+                    month: 'long', 
+                    day: 'numeric',
+                    year: isThisYear ? undefined : 'numeric'
+                });
+            }
+        }
+
+        // Toggle animation mode
+        function toggleAnimationMode() {
+            const animationControls = document.getElementById('animation-controls');
+            const animationBtn = document.getElementById('animation-mode-btn');
+            
+            if (animationState.isActive) {
+                // Disable animation mode
+                animationControls.classList.add('hidden');
+                animationBtn.innerHTML = '<i class="fas fa-play-circle"></i> Animate';
+                stopAnimation();
+                showAllPoints();
+                animationState.isActive = false;
+            } else {
+                // Enable animation mode
+                initializeAnimation();
+                if (animationState.timeSortedData.length > 0) {
+                    animationControls.classList.remove('hidden');
+                    animationBtn.innerHTML = '<i class="fas fa-stop-circle"></i> Stop Animation';
+                    animationState.isActive = true;
+                } else {
+                    alert('No time-based data found for animation. Make sure your data includes date/time fields.');
+                }
+            }
+        }
+
+        // Toggle animation controls visibility
+        function toggleAnimationControls() {
+            const animationControls = document.getElementById('animation-controls');
+            animationControls.classList.add('hidden');
+        }
+
+        // Toggle playback
+        function togglePlayback() {
+            if (animationState.isPlaying) {
+                pauseAnimation();
+            } else {
+                playAnimation();
+            }
+        }
+
+        // Play animation
+        function playAnimation() {
+            if (!animationState.isActive) return;
+            
+            animationState.isPlaying = true;
+            const playBtn = document.getElementById('play-pause-btn');
+            playBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
+            
+            const interval = 1000 / animationState.speed; // Adjust based on speed
+            animationState.animationInterval = setInterval(() => {
+                if (animationState.currentTime >= animationState.totalTime) {
+                    pauseAnimation();
+                    return;
+                }
+                
+                animationState.currentTime += 1;
+                updateAnimationFrame();
+            }, interval);
+        }
+
+        // Pause animation
+        function pauseAnimation() {
+            animationState.isPlaying = false;
+            const playBtn = document.getElementById('play-pause-btn');
+            playBtn.innerHTML = '<i class="fas fa-play"></i> Play';
+            
+            if (animationState.animationInterval) {
+                clearInterval(animationState.animationInterval);
+                animationState.animationInterval = null;
+            }
+        }
+
+        // Stop animation
+        function stopAnimation() {
+            pauseAnimation();
+            resetAnimation();
+        }
+
+        // Reset animation
+        function resetAnimation() {
+            animationState.currentTime = 0;
+            updateAnimationFrame();
+            const slider = document.getElementById('timeline-slider');
+            slider.value = 0;
+            
+            // Reset animation date display to start date
+            if (animationState.dateRange.start) {
+                const animationDateEl = document.getElementById('animation-current-date');
+                if (animationDateEl) {
+                    animationDateEl.textContent = formatAnimationDate(animationState.dateRange.start);
+                }
+            }
+        }
+
+        // Change animation speed
+        function changeAnimationSpeed() {
+            const speedSelect = document.getElementById('speed-select');
+            animationState.speed = parseFloat(speedSelect.value);
+            
+            // Restart animation with new speed if currently playing
+            if (animationState.isPlaying) {
+                pauseAnimation();
+                playAnimation();
+            }
+        }
+
+        // Change trail duration (fade-out time)
+        function changeTrailDuration() {
+            const trailSelect = document.getElementById('trail-select');
+            animationState.fadeOutDuration = parseFloat(trailSelect.value);
+            
+            // Update current frame to reflect new trail duration
+            if (animationState.isActive) {
+                const progress = animationState.currentTime / animationState.totalTime;
+                const currentDate = new Date(
+                    animationState.dateRange.start.getTime() + 
+                    (animationState.dateRange.end.getTime() - animationState.dateRange.start.getTime()) * progress
+                );
+                updateVisiblePoints(currentDate);
+            }
+        }
+
+        // Update animation frame
+        function updateAnimationFrame() {
+            if (!animationState.isActive || !map) return;
+            
+            const progress = animationState.currentTime / animationState.totalTime;
+            const currentDate = new Date(
+                animationState.dateRange.start.getTime() + 
+                (animationState.dateRange.end.getTime() - animationState.dateRange.start.getTime()) * progress
+            );
+            
+            // Update slider
+            const slider = document.getElementById('timeline-slider');
+            slider.value = animationState.currentTime;
+            
+            // Update current date display
+            document.getElementById('current-date').textContent = formatDate(currentDate);
+            
+            // Update animation current date display with more detailed format
+            const animationDateEl = document.getElementById('animation-current-date');
+            if (animationDateEl) {
+                const newDateText = formatAnimationDate(currentDate);
+                if (animationDateEl.textContent !== newDateText) {
+                    // Add subtle animation when date changes
+                    animationDateEl.classList.add('updating');
+                    animationDateEl.textContent = newDateText;
+                    setTimeout(() => {
+                        animationDateEl.classList.remove('updating');
+                    }, 300);
+                }
+            }
+            
+            // Update progress
+            document.getElementById('animation-progress').textContent = `${Math.round(progress * 100)}%`;
+            
+            // Filter and display points
+            updateVisiblePoints(currentDate);
+        }
+
+        // Update visible points based on current time with fade-out trail effect
+        function updateVisiblePoints(currentDate) {
+            if (!map || !map.getSource('points')) return;
+            
+            const currentProgress = animationState.currentTime / animationState.totalTime;
+            const totalTimeSpan = animationState.dateRange.end.getTime() - animationState.dateRange.start.getTime();
+            const fadeOutTimeSpan = totalTimeSpan * animationState.fadeOutDuration;
+            
+            // Calculate which points should be visible with fade-out effect
+            const visibleFeatures = [];
+            let visibleCount = 0;
+            
+            for (const item of animationState.timeSortedData) {
+                const pointTime = item.date.getTime();
+                const currentTime = currentDate.getTime();
+                const pointProgress = (pointTime - animationState.dateRange.start.getTime()) / totalTimeSpan;
+                
+                // Point appears when its time comes
+                if (pointTime <= currentTime) {
+                    // Calculate fade-out opacity
+                    const timeSinceAppearance = currentTime - pointTime;
+                    const fadeOutTime = fadeOutTimeSpan;
+                    
+                    let opacity = 1.0;
+                    if (timeSinceAppearance > 0) {
+                        // Start fading out after the point appears
+                        const fadeProgress = Math.min(timeSinceAppearance / fadeOutTime, 1.0);
+                        opacity = Math.max(1.0 - fadeProgress, 0.0);
+                    }
+                    
+                    // Only include points that haven't completely faded out
+                    if (opacity > 0.01) {
+                        const { date, originalIndex, ...featureData } = item;
+                        
+                        // Create point with opacity-based styling
+                        const baseColor = featureData.color || getColorForValue(featureData.value || 1);
+                        const colorWithOpacity = addOpacityToColor(baseColor, opacity);
+                        
+                        visibleFeatures.push({
+                            type: 'Feature',
+                            properties: {
+                                ...featureData,
+                                title: featureData.title || `Point ${originalIndex}`,
+                                description: featureData.description || '',
+                                value: featureData.value || 1,
+                                color: colorWithOpacity,
+                                strokeColor: featureData.strokeColor || '#ffffff',
+                                tooltip_fields: featureData.tooltip_fields || {},
+                                scale: featureData.scale || 1,
+                                opacity: opacity
+                            },
+                            geometry: {
+                                type: 'Point',
+                                coordinates: featureData.coordinates || [featureData.lon, featureData.lat]
+                            }
+                        });
+                        
+                        visibleCount++;
+                    }
+                }
+            }
+            
+            // Update visible points count
+            document.getElementById('visible-points').textContent = `Visible: ${visibleCount}`;
+            
+            // Update the map source with fade-out effect
+            map.getSource('points').setData({
+                type: 'FeatureCollection',
+                features: visibleFeatures
+            });
+        }
+
+        // Helper function to add opacity to a color
+        function addOpacityToColor(color, opacity) {
+            // Handle different color formats
+            if (color.startsWith('#')) {
+                // Convert hex to rgba
+                const hex = color.replace('#', '');
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+            } else if (color.startsWith('rgb(')) {
+                // Convert rgb to rgba
+                return color.replace('rgb(', 'rgba(').replace(')', `, ${opacity})`);
+            } else if (color.startsWith('rgba(')) {
+                // Update existing rgba
+                return color.replace(/,\s*[\d.]+\)$/, `, ${opacity})`);
+            }
+            // Fallback
+            return color;
+        }
+
+        // Show all points (when exiting animation mode)
+        function showAllPoints() {
+            if (!map || !map.getSource('points')) return;
+            
+            // Restore original data
+            const originalFeatures = mapData.locationData.map((item, idx) => {
+                let coordinates;
+                
+                if (item.lon && item.lat) {
+                    coordinates = [item.lon, item.lat];
+                } else if (item.location && item.location.coordinates) {
+                    coordinates = item.location.coordinates;
+                } else if (item.coordinates) {
+                    coordinates = item.coordinates;
+                } else {
+                    return null;
+                }
+                
+                const props = {
+                    title: item.title || item.tooltip || `Point ${idx}`,
+                    description: item.description || '',
+                    value: item.value || 1,
+                    color: item.color || item.markerColor || getColorForValue(item.value || 1),
+                    strokeColor: item.strokeColor || '#ffffff',
+                    tooltip_fields: item.tooltip_fields || {},
+                    scale: item.scale || 1
+                };
+                
+                return {
+                    type: 'Feature',
+                    properties: props,
+                    geometry: {
+                        type: 'Point',
+                        coordinates: coordinates
+                    }
+                };
+            }).filter(feature => feature !== null);
+            
+            map.getSource('points').setData({
+                type: 'FeatureCollection',
+                features: originalFeatures
+            });
+        }
+
+        // Handle timeline slider changes
+        function onTimelineSliderChange() {
+            if (!animationState.isActive) return;
+            
+            const slider = document.getElementById('timeline-slider');
+            animationState.currentTime = parseInt(slider.value);
+            updateAnimationFrame();
+        }
+
+        // Add event listener for timeline slider
+        document.addEventListener('DOMContentLoaded', function() {
+            const slider = document.getElementById('timeline-slider');
+            if (slider) {
+                slider.addEventListener('input', onTimelineSliderChange);
+            }
+        });
 
 
 

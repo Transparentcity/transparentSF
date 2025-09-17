@@ -915,13 +915,14 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                                 context_variables={},
                                 map_title=map_title,
                                 map_type="supervisor_district",
-                                location_data=csv_data,
+                                location_data=density_map_data,  # Use list format instead of CSV for MapBox
                                 map_metadata={
                                     "period": last_month_display,
                                     "description": f"Values for {query_name} by supervisor district for {last_month_display}"
                                 },
                                 metric_id=metric_id,
-                                group_field="supervisor_district"
+                                group_field="supervisor_district",
+                                map_provider="mapbox"  # Use MapBox instead of Datawrapper
                             )
                             
                             if map_result and map_result.get("map_id"):
@@ -1070,7 +1071,8 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                                         "map_type": "delta"
                                     },
                                     metric_id=metric_id,
-                                    group_field="supervisor_district"
+                                    group_field="supervisor_district",
+                                    map_provider="mapbox"  # Use MapBox instead of Datawrapper
                                 )
                                 
                                 if map_result and map_result.get("map_id"):
@@ -2024,11 +2026,8 @@ def save_analysis_files(result, metric_id, period_type, output_dir=None, distric
     # Get the markdown content
     markdown_content = result.get('markdown', '')
     
-    # Write markdown file
-    with open(md_path, 'w') as f:
-        f.write(markdown_content)
-    
-    # Also save to GCS if available
+    # Try to save to GCS first if available, then fallback to local filesystem
+    gcs_success = False
     if OUTPUT_MANAGER_AVAILABLE:
         try:
             output_manager = get_output_manager()
@@ -2039,14 +2038,23 @@ def save_analysis_files(result, metric_id, period_type, output_dir=None, distric
             }
             gcs_period_folder = period_folder_map.get(period_type, 'other')
             
-            # Store the analysis file in GCS
-            success = output_manager.store_analysis_file(markdown_content, "md", str(district), file_metric_id)
-            if success:
-                logging.info(f"Analysis file also saved to GCS: {gcs_period_folder}/{district}/{file_metric_id}.md")
+            # Store the analysis file in GCS using the correct file_type
+            gcs_success = output_manager.store_analysis_file(markdown_content, gcs_period_folder, str(district), file_metric_id)
+            if gcs_success:
+                logging.info(f"Analysis file saved to GCS: {gcs_period_folder}/{district}/{file_metric_id}.md")
             else:
                 logging.warning(f"Failed to save analysis file to GCS: {gcs_period_folder}/{district}/{file_metric_id}.md")
         except Exception as e:
             logging.warning(f"Error saving analysis file to GCS: {e}")
+    
+    # Always write to local filesystem as well (for backup and local access)
+    with open(md_path, 'w') as f:
+        f.write(markdown_content)
+    
+    if gcs_success:
+        logging.info(f"Analysis file saved to both GCS and local filesystem: {md_path}")
+    else:
+        logging.info(f"Analysis file saved to local filesystem only: {md_path}")
     
     # Get district description based on district value
     if district == 0 or district is None:

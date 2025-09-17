@@ -2378,26 +2378,70 @@ def process_dataset_for_map(dataset, map_type, series_field=None, color_palette=
             # Handle DataSF location object format
             elif 'location' in row and row['location'] is not None:
                 location_obj = row['location']
-                if isinstance(location_obj, dict) and location_obj.get('type') == 'Point':
-                    coords = location_obj.get('coordinates')
-                    if coords and len(coords) >= 2:
-                        title, description = generate_point_title_and_description(row, idx)
-                        tooltip_fields = extract_tooltip_fields(row, location_fields)
-                        item = {
-                            "lat": coords[1],
-                            "lon": coords[0],
-                            "value": row.get('value', 1),
-                            "title": title,
-                            "description": description,
-                            "coordinates": coords,
-                            "color": "#6B46C1",  # TransparentSF purple
-                            "tooltip_fields": tooltip_fields
-                        }
-                        # Add all original data fields for coloring options
-                        for column, value in row.items():
-                            if column not in ['lat', 'lon', 'long', 'latitude', 'longitude', 'coordinates', 'point', 'point_geom', 'intersection']:
-                                item[column] = value
-                        location_data.append(item)
+                if isinstance(location_obj, dict):
+                    # Handle GeoJSON Point format with coordinates array
+                    if location_obj.get('type') == 'Point':
+                        coords = location_obj.get('coordinates')
+                        if coords and len(coords) >= 2:
+                            title, description = generate_point_title_and_description(row, idx)
+                            tooltip_fields = extract_tooltip_fields(row, location_fields)
+                            item = {
+                                "lat": coords[1],
+                                "lon": coords[0],
+                                "value": row.get('value', 1),
+                                "title": title,
+                                "description": description,
+                                "coordinates": coords,
+                                "color": "#6B46C1",  # TransparentSF purple
+                                "tooltip_fields": tooltip_fields
+                            }
+                            # Add all original data fields for coloring options
+                            for column, value in row.items():
+                                if column not in ['lat', 'lon', 'long', 'latitude', 'longitude', 'coordinates', 'point', 'point_geom', 'intersection']:
+                                    item[column] = value
+                            
+                            # Add tooltip fields as individual properties for coloring
+                            if tooltip_fields:
+                                for field_name, field_value in tooltip_fields.items():
+                                    item[field_name] = field_value
+                            
+                            location_data.append(item)
+                            continue
+                    
+                    # Handle DataSF format with latitude/longitude properties
+                    elif 'latitude' in location_obj and 'longitude' in location_obj:
+                        try:
+                            lat = float(location_obj['latitude'])
+                            lon = float(location_obj['longitude'])
+                            title, description = generate_point_title_and_description(row, idx)
+                            tooltip_fields = extract_tooltip_fields(row, location_fields)
+                            item = {
+                                "lat": lat,
+                                "lon": lon,
+                                "value": row.get('value', 1),
+                                "title": title,
+                                "description": description,
+                                "coordinates": [lon, lat],
+                                "color": "#6B46C1",  # TransparentSF purple
+                                "tooltip_fields": tooltip_fields
+                            }
+                            # Add all original data fields for coloring options
+                            for column, value in row.items():
+                                if column not in ['lat', 'lon', 'long', 'latitude', 'longitude', 'coordinates', 'point', 'point_geom', 'intersection']:
+                                    item[column] = value
+                            
+                            # Add tooltip fields as individual properties for coloring
+                            if tooltip_fields:
+                                for field_name, field_value in tooltip_fields.items():
+                                    item[field_name] = field_value
+                            
+                            location_data.append(item)
+                            if idx < 3:  # Only log first 3 rows to avoid spam
+                                logger.info(f"Row {idx} - Added DataSF location format item to location_data")
+                            continue
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Could not convert DataSF location coordinates to float: {e}")
+                            continue
             
             # Handle point_geom field (DataSF format)
             elif 'point_geom' in row and row['point_geom'] is not None:
@@ -2751,22 +2795,47 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
                     # Handle DataSF location object format
                     elif 'location' in row and row['location'] is not None:
                         location_obj = row['location']
-                        if isinstance(location_obj, dict) and location_obj.get('type') == 'Point':
-                            coords = location_obj.get('coordinates')
-                            if coords and len(coords) >= 2:
-                                processed_item = {
-                                    "location": location_obj,  # Keep original DataSF format
-                                    "title": row.get('title'),
-                                    "tooltip": row.get('tooltip', row.get('description', ''))
-                                }
-                                # Copy over any series field data
-                                if series_field and series_field in row:
-                                    processed_item[series_field] = row[series_field]
-                                # Add all original data fields for coloring options
-                                for column, value in row.items():
-                                    if column not in ['location', 'title', 'tooltip', 'description']:
-                                        processed_item[column] = value
-                                location_data.append(processed_item)
+                        if isinstance(location_obj, dict):
+                            # Handle GeoJSON Point format with coordinates array
+                            if location_obj.get('type') == 'Point':
+                                coords = location_obj.get('coordinates')
+                                if coords and len(coords) >= 2:
+                                    processed_item = {
+                                        "location": location_obj,  # Keep original DataSF format
+                                        "title": row.get('title'),
+                                        "tooltip": row.get('tooltip', row.get('description', ''))
+                                    }
+                                    # Copy over any series field data
+                                    if series_field and series_field in row:
+                                        processed_item[series_field] = row[series_field]
+                                    # Add all original data fields for coloring options
+                                    for column, value in row.items():
+                                        if column not in ['location', 'title', 'tooltip', 'description']:
+                                            processed_item[column] = value
+                                    location_data.append(processed_item)
+                            
+                            # Handle DataSF format with latitude/longitude properties
+                            elif 'latitude' in location_obj and 'longitude' in location_obj:
+                                try:
+                                    lat = float(location_obj['latitude'])
+                                    lon = float(location_obj['longitude'])
+                                    processed_item = {
+                                        "lat": lat,
+                                        "lon": lon,
+                                        "location": location_obj,  # Keep original DataSF format
+                                        "title": row.get('title'),
+                                        "tooltip": row.get('tooltip', row.get('description', ''))
+                                    }
+                                    # Copy over any series field data
+                                    if series_field and series_field in row:
+                                        processed_item[series_field] = row[series_field]
+                                    # Add all original data fields for coloring options
+                                    for column, value in row.items():
+                                        if column not in ['location', 'title', 'tooltip', 'description']:
+                                            processed_item[column] = value
+                                    location_data.append(processed_item)
+                                except (ValueError, TypeError) as e:
+                                    logger.warning(f"Could not convert DataSF location coordinates to float: {e}")
                     
                     # Handle direct coordinates format (already processed data)
                     elif "coordinates" in row or ("lat" in row and "lon" in row):

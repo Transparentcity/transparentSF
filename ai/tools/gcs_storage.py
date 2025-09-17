@@ -99,9 +99,14 @@ class GCSStorageManager:
         """
         base_path = f"transparentsf/{file_type}"
         
-        if file_type in ['dashboard', 'monthly', 'annual', 'weekly']:
+        if file_type in ['dashboard']:
             if metric_id:
                 return f"{base_path}/{district}/{metric_id}.json"
+            else:
+                return f"{base_path}/{district}/"
+        elif file_type in ['monthly', 'annual', 'weekly']:
+            if metric_id:
+                return f"{base_path}/{district}/{metric_id}.md"
             else:
                 return f"{base_path}/{district}/"
         elif file_type == 'reports':
@@ -134,9 +139,14 @@ class GCSStorageManager:
         Returns:
             Local file path
         """
-        if file_type in ['dashboard', 'monthly', 'annual', 'weekly']:
+        if file_type in ['dashboard']:
             if metric_id:
                 return os.path.join(self.local_fallback_dir, file_type, district, f"{metric_id}.json")
+            else:
+                return os.path.join(self.local_fallback_dir, file_type, district)
+        elif file_type in ['monthly', 'annual', 'weekly']:
+            if metric_id:
+                return os.path.join(self.local_fallback_dir, file_type, district, f"{metric_id}.md")
             else:
                 return os.path.join(self.local_fallback_dir, file_type, district)
         elif file_type == 'reports':

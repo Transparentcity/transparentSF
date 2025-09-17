@@ -605,6 +605,216 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Animation Controls for Map Generator */
+        .animation-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            min-width: 300px;
+        }
+
+        .animation-controls.hidden {
+            display: none;
+        }
+
+        .animation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .animation-title {
+            font-weight: bold;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .animation-toggle {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+        }
+
+        .animation-toggle:hover {
+            color: var(--accent-color);
+        }
+
+        .timeline-container {
+            margin-bottom: 10px;
+        }
+
+        .timeline-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--border-primary);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .timeline-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .timeline-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .timeline-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .current-date-display {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin: 10px 0;
+            text-align: center;
+        }
+
+        .date-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 2px;
+        }
+
+        .animation-date {
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--accent-color);
+            font-family: 'IBM Plex Sans', monospace;
+            transition: all 0.3s ease;
+        }
+
+        .animation-date.updating {
+            transform: scale(1.05);
+            color: var(--accent-hover);
+        }
+
+        .playback-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .playback-btn {
+            background-color: var(--accent-color);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s ease;
+        }
+
+        .playback-btn:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .playback-btn:disabled {
+            background-color: var(--border-primary);
+            cursor: not-allowed;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .speed-select {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+
+        .animation-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        /* Animation point effects */
+        .point-appear {
+            animation: pointAppear 0.5s ease-out;
+        }
+
+        .point-disappear {
+            animation: pointDisappear 0.3s ease-in;
+        }
+
+        @keyframes pointAppear {
+            0% {
+                opacity: 0;
+                transform: scale(0);
+            }
+            50% {
+                opacity: 0.8;
+                transform: scale(1.2);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes pointDisappear {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(0);
+            }
+        }
+
+        /* Trail effect styling */
+        .trail-point {
+            filter: drop-shadow(0 0 3px rgba(173, 53, 250, 0.3));
+            transition: opacity 0.1s ease-out;
+        }
     </style>
 </head>
 <body>
@@ -717,6 +927,68 @@
                 </div>
                 <div id="map-preview-container" style="display: none; height: 100%; width: 100%; border-radius: 4px; overflow: hidden; flex: 1; position: relative;">
                     <div id="live-map" style="height: 100%; width: 100%;"></div>
+                    
+                    <!-- Animation Controls -->
+                    <div id="animation-controls" class="animation-controls hidden">
+                        <div class="animation-header">
+                            <div class="animation-title">
+                                <i class="fas fa-play-circle"></i> Trail Animation
+                            </div>
+                            <button class="animation-toggle" onclick="toggleAnimationControls()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="timeline-container">
+                            <input type="range" id="timeline-slider" class="timeline-slider" min="0" max="100" value="0">
+                            <div class="timeline-labels">
+                                <span id="start-date">Start</span>
+                                <span id="current-date">Current</span>
+                                <span id="end-date">End</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Current Animation Date Display -->
+                        <div class="current-date-display">
+                            <div class="date-label">Animating:</div>
+                            <div id="animation-current-date" class="animation-date">Loading...</div>
+                        </div>
+                        
+                        <div class="playback-controls">
+                            <button id="play-pause-btn" class="playback-btn" onclick="togglePlayback()">
+                                <i class="fas fa-play"></i> Play
+                            </button>
+                            <button id="reset-btn" class="playback-btn" onclick="resetAnimation()">
+                                <i class="fas fa-undo"></i> Reset
+                            </button>
+                            <div class="speed-control">
+                                <label>Speed:</label>
+                                <select id="speed-select" class="speed-select" onchange="changeAnimationSpeed()">
+                                    <option value="0.5">0.5x</option>
+                                    <option value="1">1x</option>
+                                    <option value="2">2x</option>
+                                    <option value="4">4x</option>
+                                    <option value="10" selected>10x</option>
+                                </select>
+                            </div>
+                            <div class="speed-control">
+                                <label>Trail:</label>
+                                <select id="trail-select" class="speed-select" onchange="changeTrailDuration()">
+                                    <option value="0.1">Short</option>
+                                    <option value="0.2" selected>Medium</option>
+                                    <option value="0.3">Long</option>
+                                    <option value="0.5">Very Long</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="animation-stats">
+                            <span id="visible-points">Visible: 0</span>
+                            <span id="total-points">Total: 0</span>
+                            <span id="animation-progress">0%</span>
+                        </div>
+                    </div>
+                    
                     <div id="map-preview-subtitle" class="map-preview-subtitle" style="display: none;"></div>
                     <div id="map-info-overlay" class="map-info-overlay" style="display: none;">
                         <div>
@@ -725,6 +997,9 @@
                         <a id="query-url-link" class="query-url-link" href="#" target="_blank" style="display: none;">
                             <i class="fas fa-external-link-alt"></i> View Raw Data
                         </a>
+                        <button id="animation-mode-btn" class="playback-btn" onclick="toggleAnimationMode()" style="margin-left: 10px;">
+                            <i class="fas fa-play-circle"></i> Animate
+                        </button>
                     </div>
                     <div id="map-legend" class="map-legend" style="display: none;">
                         <div class="legend-title">Color Legend</div>
@@ -2654,6 +2929,570 @@
             // Update legend
             updateLegend(colorScale, currentColorField);
         }
+
+        // Animation System for Map Generator
+        let animationState = {
+            isActive: false,
+            isPlaying: false,
+            currentTime: 0,
+            totalTime: 100,
+            speed: 10, // Default to 10x speed
+            animationInterval: null,
+            timeSortedData: [],
+            dateRange: { start: null, end: null },
+            currentVisiblePoints: new Set(),
+            fadeOutDuration: 0.2, // 20% of total animation time for fade out
+            pointTrails: new Map() // Track point appearance and fade times
+        };
+
+        // Initialize animation system
+        function initializeAnimation() {
+            console.log('initializeAnimation called');
+            console.log('previewData:', previewData);
+            console.log('previewData type:', typeof previewData);
+            
+            if (previewData) {
+                console.log('previewData keys:', Object.keys(previewData));
+                console.log('previewData.location_data:', previewData.location_data);
+                console.log('previewData.location_data type:', typeof previewData.location_data);
+                if (previewData.location_data) {
+                    console.log('previewData.location_data length:', previewData.location_data.length);
+                }
+            }
+            
+            // Try to get data from map source if previewData is not available
+            let locationData = null;
+            if (previewData && previewData.location_data) {
+                locationData = previewData.location_data;
+                console.log('Using previewData.location_data');
+            } else if (liveMap && liveMap.getSource('preview-points')) {
+                const sourceData = liveMap.getSource('preview-points')._data;
+                if (sourceData && sourceData.features) {
+                    locationData = sourceData.features.map(feature => feature.properties);
+                    console.log('Using data from map source, found', locationData.length, 'features');
+                }
+            }
+            
+            if (!locationData || locationData.length === 0) {
+                console.log('No location data available for animation');
+                console.log('Available global variables:', Object.keys(window).filter(k => k.includes('preview') || k.includes('data')));
+                return;
+            }
+
+            // Extract and sort data by date
+            animationState.timeSortedData = extractAndSortDataByTime(locationData);
+            
+            if (animationState.timeSortedData.length === 0) {
+                console.log('No time-based data found for animation');
+                return;
+            }
+
+            // Set up date range
+            animationState.dateRange.start = animationState.timeSortedData[0].date;
+            animationState.dateRange.end = animationState.timeSortedData[animationState.timeSortedData.length - 1].date;
+            
+            // Update timeline labels
+            updateTimelineLabels();
+            
+            // Update total points display
+            document.getElementById('total-points').textContent = `Total: ${animationState.timeSortedData.length}`;
+            
+            // Initialize animation date display
+            const animationDateEl = document.getElementById('animation-current-date');
+            if (animationDateEl) {
+                animationDateEl.textContent = formatAnimationDate(animationState.dateRange.start);
+            }
+            
+            console.log('Animation initialized with', animationState.timeSortedData.length, 'time-based points');
+        }
+
+        // Extract and sort data by time
+        function extractAndSortDataByTime(locationData) {
+            const timeData = [];
+            
+            console.log('extractAndSortDataByTime called with data:', locationData);
+            console.log('Data length:', locationData ? locationData.length : 0);
+            
+            if (locationData && locationData.length > 0) {
+                console.log('First item keys:', Object.keys(locationData[0]));
+                console.log('First item:', locationData[0]);
+            }
+            
+            for (let i = 0; i < locationData.length; i++) {
+                const item = locationData[i];
+                const date = extractDateFromItem(item);
+                
+                if (i < 3) { // Log first 3 items for debugging
+                    console.log(`Item ${i}:`, item);
+                    console.log(`Extracted date for item ${i}:`, date);
+                }
+                
+                if (date) {
+                    const dateObj = new Date(date);
+                    if (!isNaN(dateObj.getTime())) {
+                        timeData.push({
+                            ...item,
+                            date: dateObj,
+                            originalIndex: i
+                        });
+                    } else {
+                        console.log(`Invalid date for item ${i}:`, date);
+                    }
+                }
+            }
+            
+            console.log('Time data found:', timeData.length, 'items');
+            
+            // Sort by date
+            timeData.sort((a, b) => a.date - b.date);
+            
+            return timeData;
+        }
+
+        // Extract date from item (reuse existing logic)
+        function extractDateFromItem(item) {
+            if (!item || typeof item !== 'object') return null;
+            
+            const preferredKeys = [
+                'date','incident_date','incident_datetime','dba_start_date','dba_end_date',
+                'location_start_date','location_end_date','start_date','end_date','created_at','updated_at'
+            ];
+            
+            // Check preferred keys first
+            for (const key of preferredKeys) {
+                if (item[key]) {
+                    console.log(`Found date in preferred key '${key}':`, item[key]);
+                    return item[key];
+                }
+            }
+            
+            // Check for dynamic date/time fields
+            const dynamicKey = Object.keys(item).find(k => (
+                k.toLowerCase().includes('date') || k.toLowerCase().includes('time')
+            ) && item[k]);
+            
+            if (dynamicKey) {
+                console.log(`Found date in dynamic key '${dynamicKey}':`, item[dynamicKey]);
+                return item[dynamicKey];
+            }
+            
+            console.log('No date field found in item. Available keys:', Object.keys(item));
+            return null;
+        }
+
+        // Update timeline labels
+        function updateTimelineLabels() {
+            const startDateEl = document.getElementById('start-date');
+            const endDateEl = document.getElementById('end-date');
+            
+            if (animationState.dateRange.start && animationState.dateRange.end) {
+                startDateEl.textContent = formatDate(animationState.dateRange.start);
+                endDateEl.textContent = formatDate(animationState.dateRange.end);
+            }
+        }
+
+        // Format date for display
+        function formatDate(date) {
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+            });
+        }
+
+        // Format date for animation display (more detailed)
+        function formatAnimationDate(date) {
+            const now = new Date();
+            const isToday = date.toDateString() === now.toDateString();
+            const isThisYear = date.getFullYear() === now.getFullYear();
+            
+            if (isToday) {
+                return `Today, ${date.toLocaleDateString('en-US', { 
+                    weekday: 'long',
+                    month: 'long', 
+                    day: 'numeric'
+                })}`;
+            } else {
+                return date.toLocaleDateString('en-US', { 
+                    weekday: 'long',
+                    month: 'long', 
+                    day: 'numeric',
+                    year: isThisYear ? undefined : 'numeric'
+                });
+            }
+        }
+
+        // Toggle animation mode
+        function toggleAnimationMode() {
+            const animationControls = document.getElementById('animation-controls');
+            const animationBtn = document.getElementById('animation-mode-btn');
+            
+            if (animationState.isActive) {
+                // Disable animation mode
+                animationControls.classList.add('hidden');
+                animationBtn.innerHTML = '<i class="fas fa-play-circle"></i> Animate';
+                stopAnimation();
+                showAllPoints();
+                animationState.isActive = false;
+            } else {
+                // Enable animation mode
+                initializeAnimation();
+                if (animationState.timeSortedData.length > 0) {
+                    animationControls.classList.remove('hidden');
+                    animationBtn.innerHTML = '<i class="fas fa-stop-circle"></i> Stop Animation';
+                    animationState.isActive = true;
+                    
+                    // Initialize animation to start state (no points visible initially)
+                    resetAnimation();
+                } else {
+                    alert('No time-based data found for animation. Make sure your data includes date/time fields.');
+                }
+            }
+        }
+
+        // Toggle animation controls visibility
+        function toggleAnimationControls() {
+            const animationControls = document.getElementById('animation-controls');
+            animationControls.classList.add('hidden');
+        }
+
+        // Toggle playback
+        function togglePlayback() {
+            if (animationState.isPlaying) {
+                pauseAnimation();
+            } else {
+                playAnimation();
+            }
+        }
+
+        // Play animation
+        function playAnimation() {
+            if (!animationState.isActive) return;
+            
+            animationState.isPlaying = true;
+            const playBtn = document.getElementById('play-pause-btn');
+            playBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
+            
+            const interval = 1000 / animationState.speed; // Adjust based on speed
+            animationState.animationInterval = setInterval(() => {
+                if (animationState.currentTime >= animationState.totalTime) {
+                    pauseAnimation();
+                    return;
+                }
+                
+                animationState.currentTime += 1;
+                updateAnimationFrame();
+            }, interval);
+        }
+
+        // Pause animation
+        function pauseAnimation() {
+            animationState.isPlaying = false;
+            const playBtn = document.getElementById('play-pause-btn');
+            playBtn.innerHTML = '<i class="fas fa-play"></i> Play';
+            
+            if (animationState.animationInterval) {
+                clearInterval(animationState.animationInterval);
+                animationState.animationInterval = null;
+            }
+        }
+
+        // Stop animation
+        function stopAnimation() {
+            pauseAnimation();
+            resetAnimation();
+        }
+
+        // Reset animation
+        function resetAnimation() {
+            animationState.currentTime = 0;
+            updateAnimationFrame();
+            const slider = document.getElementById('timeline-slider');
+            slider.value = 0;
+            
+            // Reset animation date display to start date
+            if (animationState.dateRange.start) {
+                const animationDateEl = document.getElementById('animation-current-date');
+                if (animationDateEl) {
+                    animationDateEl.textContent = formatAnimationDate(animationState.dateRange.start);
+                }
+            }
+        }
+
+        // Change animation speed
+        function changeAnimationSpeed() {
+            const speedSelect = document.getElementById('speed-select');
+            animationState.speed = parseFloat(speedSelect.value);
+            
+            // Restart animation with new speed if currently playing
+            if (animationState.isPlaying) {
+                pauseAnimation();
+                playAnimation();
+            }
+        }
+
+        // Change trail duration (fade-out time)
+        function changeTrailDuration() {
+            const trailSelect = document.getElementById('trail-select');
+            animationState.fadeOutDuration = parseFloat(trailSelect.value);
+            
+            // Update current frame to reflect new trail duration
+            if (animationState.isActive) {
+                const progress = animationState.currentTime / animationState.totalTime;
+                const currentDate = new Date(
+                    animationState.dateRange.start.getTime() + 
+                    (animationState.dateRange.end.getTime() - animationState.dateRange.start.getTime()) * progress
+                );
+                updateVisiblePoints(currentDate);
+            }
+        }
+
+        // Update animation frame
+        function updateAnimationFrame() {
+            if (!animationState.isActive || !liveMap) return;
+            
+            const progress = animationState.currentTime / animationState.totalTime;
+            const currentDate = new Date(
+                animationState.dateRange.start.getTime() + 
+                (animationState.dateRange.end.getTime() - animationState.dateRange.start.getTime()) * progress
+            );
+            
+            // Update slider
+            const slider = document.getElementById('timeline-slider');
+            slider.value = animationState.currentTime;
+            
+            // Update current date display
+            document.getElementById('current-date').textContent = formatDate(currentDate);
+            
+            // Update animation current date display with more detailed format
+            const animationDateEl = document.getElementById('animation-current-date');
+            if (animationDateEl) {
+                const newDateText = formatAnimationDate(currentDate);
+                if (animationDateEl.textContent !== newDateText) {
+                    // Add subtle animation when date changes
+                    animationDateEl.classList.add('updating');
+                    animationDateEl.textContent = newDateText;
+                    setTimeout(() => {
+                        animationDateEl.classList.remove('updating');
+                    }, 300);
+                }
+            }
+            
+            // Update progress
+            document.getElementById('animation-progress').textContent = `${Math.round(progress * 100)}%`;
+            
+            // Filter and display points
+            updateVisiblePoints(currentDate);
+        }
+
+        // Update visible points based on current time with fade-out trail effect
+        function updateVisiblePoints(currentDate) {
+            if (!liveMap || !liveMap.getSource('preview-points')) return;
+            
+            console.log('updateVisiblePoints called with currentDate:', currentDate);
+            console.log('animationState.timeSortedData length:', animationState.timeSortedData.length);
+            console.log('currentTime:', animationState.currentTime, 'totalTime:', animationState.totalTime);
+            
+            const currentProgress = animationState.currentTime / animationState.totalTime;
+            const totalTimeSpan = animationState.dateRange.end.getTime() - animationState.dateRange.start.getTime();
+            const fadeOutTimeSpan = totalTimeSpan * animationState.fadeOutDuration;
+            
+            console.log('Date range:', animationState.dateRange.start, 'to', animationState.dateRange.end);
+            console.log('Total time span:', totalTimeSpan, 'Fade out time span:', fadeOutTimeSpan);
+            
+            // Calculate which points should be visible with fade-out effect
+            const visibleFeatures = [];
+            let visibleCount = 0;
+            
+            for (let i = 0; i < animationState.timeSortedData.length; i++) {
+                const item = animationState.timeSortedData[i];
+                const pointTime = item.date.getTime();
+                const currentTime = currentDate.getTime();
+                
+                if (i < 3) { // Debug first 3 items
+                    console.log(`Item ${i}:`, item);
+                    console.log(`Point time: ${pointTime}, Current time: ${currentTime}, Point time <= current time: ${pointTime <= currentTime}`);
+                }
+                
+                // Point appears when its time comes
+                if (pointTime <= currentTime) {
+                    // Calculate fade-out opacity
+                    const timeSinceAppearance = currentTime - pointTime;
+                    const fadeOutTime = fadeOutTimeSpan;
+                    
+                    let opacity = 1.0;
+                    if (timeSinceAppearance > 0) {
+                        // Start fading out after the point appears
+                        const fadeProgress = Math.min(timeSinceAppearance / fadeOutTime, 1.0);
+                        opacity = Math.max(1.0 - fadeProgress, 0.0);
+                    }
+                    
+                    if (i < 3) { // Debug first 3 items
+                        console.log(`Item ${i} opacity: ${opacity}, timeSinceAppearance: ${timeSinceAppearance}, fadeOutTime: ${fadeOutTime}`);
+                    }
+                    
+                    // Only include points that haven't completely faded out
+                    if (opacity > 0.01) {
+                        const { date, originalIndex, ...featureData } = item;
+                        
+                        // Create point with opacity-based styling
+                        const baseColor = featureData.color || getColorForValue(featureData.value || 1);
+                        const colorWithOpacity = addOpacityToColor(baseColor, opacity);
+                        
+                        // Handle coordinates properly
+                        let coordinates;
+                        if (featureData.coordinates && Array.isArray(featureData.coordinates)) {
+                            coordinates = featureData.coordinates;
+                        } else if (featureData.lon && featureData.lat) {
+                            coordinates = [featureData.lon, featureData.lat];
+                        } else {
+                            console.warn(`No valid coordinates found for item ${i}:`, featureData);
+                            continue; // Skip this item if no valid coordinates
+                        }
+                        
+                        visibleFeatures.push({
+                            type: 'Feature',
+                            properties: {
+                                ...featureData,
+                                title: featureData.title || `Point ${originalIndex}`,
+                                description: featureData.description || '',
+                                value: featureData.value || 1,
+                                color: colorWithOpacity,
+                                strokeColor: featureData.strokeColor || '#ffffff',
+                                tooltip_fields: featureData.tooltip_fields || {},
+                                scale: featureData.scale || 1,
+                                opacity: opacity
+                            },
+                            geometry: {
+                                type: 'Point',
+                                coordinates: coordinates
+                            }
+                        });
+                        
+                        visibleCount++;
+                    }
+                }
+            }
+            
+            console.log('Visible features created:', visibleCount);
+            
+            // Update visible points count
+            document.getElementById('visible-points').textContent = `Visible: ${visibleCount}`;
+            
+            // Update the map source with fade-out effect
+            liveMap.getSource('preview-points').setData({
+                type: 'FeatureCollection',
+                features: visibleFeatures
+            });
+        }
+
+        // Helper function to get color for value (reuse existing logic)
+        function getColorForValue(value) {
+            // Default to bright purple for point maps
+            // Only use gradient scale for density maps with high values
+            if (value >= 250) return '#ad35fa';                    // Bright purple
+            if (value >= 200) return '#936fc9';                   // Darker purple
+            if (value >= 150) return '#ad91d6';                   // Medium purple
+            if (value >= 100) return '#c7b3e3';                   // Medium light purple
+            if (value >= 50) return '#e1d5f0';                    // Light purple
+            // For point maps (value = 1), use bright purple as default
+            return '#ad35fa';                                     // Bright purple (default)
+        }
+
+        // Helper function to add opacity to a color
+        function addOpacityToColor(color, opacity) {
+            // Handle different color formats
+            if (color.startsWith('#')) {
+                // Convert hex to rgba
+                const hex = color.replace('#', '');
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+            } else if (color.startsWith('rgb(')) {
+                // Convert rgb to rgba
+                return color.replace('rgb(', 'rgba(').replace(')', `, ${opacity})`);
+            } else if (color.startsWith('rgba(')) {
+                // Update existing rgba
+                return color.replace(/,\s*[\d.]+\)$/, `, ${opacity})`);
+            }
+            // Fallback
+            return color;
+        }
+
+        // Show all points (when exiting animation mode)
+        function showAllPoints() {
+            if (!liveMap || !liveMap.getSource('preview-points')) return;
+            
+            // Get location data from the same source as initializeAnimation
+            let locationData = null;
+            if (previewData && previewData.location_data) {
+                locationData = previewData.location_data;
+            } else if (liveMap && liveMap.getSource('preview-points')) {
+                const sourceData = liveMap.getSource('preview-points')._data;
+                if (sourceData && sourceData.features) {
+                    locationData = sourceData.features.map(feature => feature.properties);
+                }
+            }
+            
+            if (!locationData) return;
+            
+            // Restore original data
+            const originalFeatures = locationData.map((item, idx) => {
+                let coordinates;
+                
+                if (item.lon && item.lat) {
+                    coordinates = [item.lon, item.lat];
+                } else if (item.location && item.location.coordinates) {
+                    coordinates = item.location.coordinates;
+                } else if (item.coordinates) {
+                    coordinates = item.coordinates;
+                } else {
+                    return null;
+                }
+                
+                const props = {
+                    title: item.title || item.tooltip || `Point ${idx}`,
+                    description: item.description || '',
+                    value: item.value || 1,
+                    color: item.color || item.markerColor || getColorForValue(item.value || 1),
+                    strokeColor: item.strokeColor || '#ffffff',
+                    tooltip_fields: item.tooltip_fields || {},
+                    scale: item.scale || 1
+                };
+                
+                return {
+                    type: 'Feature',
+                    properties: props,
+                    geometry: {
+                        type: 'Point',
+                        coordinates: coordinates
+                    }
+                };
+            }).filter(feature => feature !== null);
+            
+            liveMap.getSource('preview-points').setData({
+                type: 'FeatureCollection',
+                features: originalFeatures
+            });
+        }
+
+        // Handle timeline slider changes
+        function onTimelineSliderChange() {
+            if (!animationState.isActive) return;
+            
+            const slider = document.getElementById('timeline-slider');
+            animationState.currentTime = parseInt(slider.value);
+            updateAnimationFrame();
+        }
+
+        // Add event listener for timeline slider
+        document.addEventListener('DOMContentLoaded', function() {
+            const slider = document.getElementById('timeline-slider');
+            if (slider) {
+                slider.addEventListener('input', onTimelineSliderChange);
+            }
+        });
     </script>
 </body>
 </html>
