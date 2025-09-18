@@ -88,6 +88,21 @@ async def get_enhanced_queries_db():
             dataset_title = row['dataset_title_from_datasets'] or row['dataset_title'] or ""
             dataset_category = row['dataset_category_from_datasets'] or row['dataset_category'] or ""
             
+            # Normalize JSON fields that might be stored as strings
+            location_fields = row['location_fields'] or []
+            if isinstance(location_fields, str):
+                try:
+                    location_fields = json.loads(location_fields)
+                except Exception:
+                    location_fields = []
+
+            category_fields = row['category_fields'] or []
+            if isinstance(category_fields, str):
+                try:
+                    category_fields = json.loads(category_fields)
+                except Exception:
+                    category_fields = []
+
             # Build the metric data
             metric_data = {
                 "id": row['id'],
@@ -102,8 +117,8 @@ async def get_enhanced_queries_db():
                 "dataset_title": dataset_title,
                 "dataset_category": dataset_category,
                 "greendirection": row['greendirection'] or "up",
-                "location_fields": row['location_fields'] or [],
-                "category_fields": row['category_fields'] or [],
+                "location_fields": location_fields,
+                "category_fields": category_fields,
                 "is_active": row['is_active'] if row['is_active'] is not None else True,
                 "display_order": row['display_order'],
                 "most_recent_data_date": row['most_recent_data_date'].isoformat() if row['most_recent_data_date'] else None,
