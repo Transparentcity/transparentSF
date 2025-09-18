@@ -155,6 +155,23 @@ def load_metrics_from_db():
                     'queries': {}
                 }
             
+            # Normalize fields that might be stored as JSON strings
+            loc_fields = metric['location_fields'] or []
+            cat_fields = metric['category_fields'] or []
+            if isinstance(loc_fields, str):
+                try:
+                    parsed = json.loads(loc_fields)
+                    loc_fields = parsed if isinstance(parsed, list) else []
+                except Exception:
+                    # Fallback: treat comma-separated string as list
+                    loc_fields = [f.strip() for f in loc_fields.split(',')] if loc_fields.strip() else []
+            if isinstance(cat_fields, str):
+                try:
+                    parsed = json.loads(cat_fields)
+                    cat_fields = parsed if isinstance(parsed, list) else []
+                except Exception:
+                    cat_fields = [f.strip() for f in cat_fields.split(',')] if cat_fields.strip() else []
+
             # Create the query entry
             query_name = metric['metric_name']
             query_data = {
@@ -167,8 +184,8 @@ def load_metrics_from_db():
                 'metric_query': metric['metric_query'] or '',
                 'dataset_title': metric['dataset_title'] or '',
                 'dataset_category': metric['dataset_category'] or '',
-                'location_fields': metric['location_fields'] or [],
-                'category_fields': metric['category_fields'] or [],
+                'location_fields': loc_fields,
+                'category_fields': cat_fields,
                 'city_id': metric['city_id'],
                 'display_order': metric['display_order'],
                 'is_active': metric['is_active'],
@@ -263,6 +280,22 @@ def load_single_metric_from_db(metric_id):
             logger.error(f"Metric with ID {metric_id} not found in database")
             return None
         
+        # Normalize fields that might be stored as JSON strings
+        loc_fields = metric['location_fields'] or []
+        cat_fields = metric['category_fields'] or []
+        if isinstance(loc_fields, str):
+            try:
+                parsed = json.loads(loc_fields)
+                loc_fields = parsed if isinstance(parsed, list) else []
+            except Exception:
+                loc_fields = [f.strip() for f in loc_fields.split(',')] if loc_fields.strip() else []
+        if isinstance(cat_fields, str):
+            try:
+                parsed = json.loads(cat_fields)
+                cat_fields = parsed if isinstance(parsed, list) else []
+            except Exception:
+                cat_fields = [f.strip() for f in cat_fields.split(',')] if cat_fields.strip() else []
+
         # Convert to the expected dashboard queries format
         category = metric['category'] or 'uncategorized'
         subcategory = category.title()
@@ -278,8 +311,8 @@ def load_single_metric_from_db(metric_id):
             'metric_query': metric['metric_query'] or '',
             'dataset_title': metric['dataset_title'] or '',
             'dataset_category': metric['dataset_category'] or '',
-            'location_fields': metric['location_fields'] or [],
-            'category_fields': metric['category_fields'] or [],
+            'location_fields': loc_fields,
+            'category_fields': cat_fields,
             'city_id': metric['city_id'],
             'display_order': metric['display_order'],
             'is_active': metric['is_active'],
