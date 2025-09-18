@@ -70,6 +70,13 @@ async def get_available_models_endpoint():
 async def clear_explainer_sessions():
     """Clear all explainer agent sessions to force fresh agent creation."""
     global explainer_sessions
+    
+    # Clear persistent sessions for all agents before removing them
+    for session_key, agent in explainer_sessions.items():
+        if hasattr(agent, 'clear_session'):
+            agent.clear_session()
+            logger.info(f"Cleared persistent session for agent: {session_key}")
+    
     explainer_sessions.clear()
     logger.info("Cleared all explainer agent sessions")
     return JSONResponse(content={"status": "success", "message": "All sessions cleared"})
@@ -270,7 +277,7 @@ async def langchain_explainer_streaming_api(request: Request):
     Expected JSON payload:
     {
         "prompt": "Explain the change in metric X for district Y",
-        "model_key": "claude-3-7-sonnet",
+        "model_key": "gpt-5",
         "tool_groups": ["core", "analysis", "metrics"],
         "session_data": {
             "session_id": "unique_session_id"  // Optional, will create new if not provided
@@ -280,7 +287,7 @@ async def langchain_explainer_streaming_api(request: Request):
     try:
         data = await request.json()
         prompt = data.get("prompt")
-        model_key = data.get("model_key", "claude-3-7-sonnet")
+        model_key = data.get("model_key", "gpt-5")
         tool_groups = data.get("tool_groups", ["core", "analysis", "visualization"])
         session_data = data.get("session_data", {})
         session_id = session_data.get("session_id")
@@ -318,8 +325,12 @@ async def langchain_explainer_streaming_api(request: Request):
             agent = explainer_sessions[session_key]
             # Update agent configuration if needed
             if hasattr(agent, 'model_key') and agent.model_key != model_key:
+                # Preserve conversation history when recreating agent with new model
+                old_messages = getattr(agent, 'messages', [])
                 agent = create_explainer_agent(model_key=model_key, tool_groups=tool_group_enums, enable_session_logging=True)
+                agent.messages = old_messages  # Restore conversation history
                 explainer_sessions[session_key] = agent
+                logger.info(f"Recreated agent with new model {model_key}, preserved {len(old_messages)} messages")
             elif hasattr(agent, 'tool_groups') and agent.tool_groups != tool_group_enums:
                 agent.update_tool_groups(tool_groups)
             logger.info(f"Using existing LangChain explainer agent for session: {session_key}")
@@ -441,6 +452,10 @@ async def cancel_explainer_session(request: Request):
         if session_id:
             session_key = f"langchain_{session_id}"
             if session_key in explainer_sessions:
+                agent = explainer_sessions[session_key]
+                # Clear the agent's persistent session if it has the method
+                if hasattr(agent, 'clear_session'):
+                    agent.clear_session()
                 # Remove the session to cancel any ongoing operations
                 del explainer_sessions[session_key]
                 logger.info(f"Cancelled explainer session: {session_key}")
@@ -506,9 +521,21 @@ async def clear_explainer_session(request: Request):
                 }
             )
         
-        if session_id in explainer_sessions:
-            del explainer_sessions[session_id]
-            logger.info(f"Cleared explainer session: {session_id}")
+        # Check for both regular session and langchain prefixed session
+        session_keys_to_check = [session_id, f"langchain_{session_id}"]
+        session_cleared = False
+        
+        for session_key in session_keys_to_check:
+            if session_key in explainer_sessions:
+                agent = explainer_sessions[session_key]
+                # Clear the agent's persistent session if it has the method
+                if hasattr(agent, 'clear_session'):
+                    agent.clear_session()
+                del explainer_sessions[session_key]
+                logger.info(f"Cleared explainer session: {session_key}")
+                session_cleared = True
+        
+        if session_cleared:
             return JSONResponse(content={"status": "success", "message": f"Session {session_id} cleared"})
         else:
             return JSONResponse(
@@ -738,7 +765,7 @@ async def test_session_logging():
     try:
         # Create a test LangChain agent with session logging enabled
         agent = create_explainer_agent(
-            model_key="claude-3-7-sonnet",
+            model_key="gpt-5",
             tool_groups=[ToolGroup.CORE, ToolGroup.ANALYSIS, ToolGroup.VISUALIZATION],
             enable_session_logging=True
         )

@@ -1199,6 +1199,22 @@
             loadRecentMaps();
             setupEventListeners();
             
+            // Listen for messages from parent frame
+            window.addEventListener('message', function(event) {
+                if (event.data && event.data.type === 'expandRecentMaps') {
+                    // Expand the recent maps section
+                    const content = document.getElementById('recent-maps-content');
+                    const toggleBtn = document.getElementById('recent-maps-toggle');
+                    
+                    if (content && content.classList.contains('hidden')) {
+                        content.classList.remove('hidden');
+                        if (toggleBtn) {
+                            toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i> Hide';
+                        }
+                    }
+                }
+            });
+            
             // Initialize the date range subtitle
             updatePreviewDateRangeSubtitle();
             

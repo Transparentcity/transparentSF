@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Background Jobs</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/darkmode.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        body {
+            font-family: 'IBM Plex Sans', Arial, Helvetica, sans-serif;
+            margin: 0;
+            padding: 20px;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+        }
+        .jobs-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 24px;
+            margin: 0 0 20px 0;
+            color: var(--text-primary);
+        }
+        .jobs-grid {
+            display: grid;
+            gap: 16px;
+        }
+        .job-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 16px;
+            transition: border-color 0.2s ease;
+        }
+        .job-card:hover {
+            border-color: var(--bright-purple);
+        }
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+        .job-title {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+        .job-status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-pending {
+            background: #ffa500;
+            color: white;
+        }
+        .status-running {
+            background: #4caf50;
+            color: white;
+        }
+        .status-completed {
+            background: #2196f3;
+            color: white;
+        }
+        .status-failed {
+            background: #f44336;
+            color: white;
+        }
+        .job-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .detail-item {
+            display: flex;
+            gap: 8px;
+        }
+        .detail-label {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            margin: 12px 0;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--bright-purple);
+            transition: width 0.3s ease;
+        }
+        .job-error {
+            margin-top: 12px;
+            padding: 8px;
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid #f44336;
+            border-radius: 4px;
+            color: #f44336;
+            font-size: 13px;
+        }
+        .no-jobs {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+        .no-jobs-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        .refresh-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 16px;
+            background: var(--bright-purple);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            transition: background 0.2s ease;
+        }
+        .refresh-btn:hover {
+            background: var(--warm-coral);
+        }
+        .refresh-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+        .filter-tab {
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        .filter-tab:hover {
+            background: var(--bg-tertiary);
+        }
+        .filter-tab.active {
+            background: var(--bright-purple);
+            color: white;
+            border-color: var(--bright-purple);
+        }
+        .job-count {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-left: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="jobs-container">
+        <h1>Background Jobs</h1>
+        
+        <button class="refresh-btn" onclick="refreshJobs()">
+            <span id="refresh-icon">🔄</span> Refresh
+        </button>
+        
+        <div class="filter-tabs" id="filter-tabs">
+            <div class="filter-tab active" data-filter="active" onclick="filterJobs('active')">
+                Active<span class="job-count" id="active-count"></span>
+            </div>
+            <div class="filter-tab" data-filter="all" onclick="filterJobs('all')">
+                All<span class="job-count" id="all-count"></span>
+            </div>
+            <div class="filter-tab" data-filter="completed" onclick="filterJobs('completed')">
+                Completed<span class="job-count" id="completed-count"></span>
+            </div>
+            <div class="filter-tab" data-filter="failed" onclick="filterJobs('failed')">
+                Failed<span class="job-count" id="failed-count"></span>
+            </div>
+        </div>
+        
+        <div id="jobs-grid" class="jobs-grid">
+            <!-- Jobs will be loaded here -->
+        </div>
+    </div>
+
+    <script src="/static/js/darkmode.js"></script>
+    <script src="/static/js/iframe-darkmode.js"></script>
+    <script>
+        let currentFilter = 'active';
+        let allJobs = [];
+        let autoRefreshInterval = null;
+
+        async function loadJobs() {
+            try {
+                const response = await fetch('/backend/jobs');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    allJobs = data.jobs;
+                    updateJobCounts();
+                    displayJobs();
+                }
+            } catch (error) {
+                console.error('Error loading jobs:', error);
+                document.getElementById('jobs-grid').innerHTML = `
+                    <div class="job-error">Failed to load jobs: ${error.message}</div>
+                `;
+            }
+        }
+
+        function updateJobCounts() {
+            const activeJobs = allJobs.filter(job => job.status === 'running' || job.status === 'pending');
+            const completedJobs = allJobs.filter(job => job.status === 'completed');
+            const failedJobs = allJobs.filter(job => job.status === 'failed');
+            
+            document.getElementById('active-count').textContent = activeJobs.length > 0 ? ` (${activeJobs.length})` : '';
+            document.getElementById('all-count').textContent = allJobs.length > 0 ? ` (${allJobs.length})` : '';
+            document.getElementById('completed-count').textContent = completedJobs.length > 0 ? ` (${completedJobs.length})` : '';
+            document.getElementById('failed-count').textContent = failedJobs.length > 0 ? ` (${failedJobs.length})` : '';
+            
+            // Enable auto-refresh if there are active jobs
+            if (activeJobs.length > 0 && !autoRefreshInterval) {
+                autoRefreshInterval = setInterval(loadJobs, 5000); // Refresh every 5 seconds
+            } else if (activeJobs.length === 0 && autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
+        function filterJobs(filter) {
+            currentFilter = filter;
+            
+            // Update active tab
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                if (tab.dataset.filter === filter) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
+            
+            displayJobs();
+        }
+
+        function displayJobs() {
+            const grid = document.getElementById('jobs-grid');
+            let filteredJobs = [];
+            
+            switch (currentFilter) {
+                case 'active':
+                    filteredJobs = allJobs.filter(job => job.status === 'running' || job.status === 'pending');
+                    break;
+                case 'completed':
+                    filteredJobs = allJobs.filter(job => job.status === 'completed');
+                    break;
+                case 'failed':
+                    filteredJobs = allJobs.filter(job => job.status === 'failed');
+                    break;
+                case 'all':
+                default:
+                    filteredJobs = allJobs;
+                    break;
+            }
+            
+            if (filteredJobs.length === 0) {
+                grid.innerHTML = `
+                    <div class="no-jobs">
+                        <div class="no-jobs-icon">📋</div>
+                        <div>No ${currentFilter === 'all' ? '' : currentFilter} jobs found</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort jobs by creation time (newest first)
+            filteredJobs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            
+            grid.innerHTML = filteredJobs.map(job => `
+                <div class="job-card">
+                    <div class="job-header">
+                        <div>
+                            <div class="job-title">${job.description || job.job_type}</div>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                                Job ID: ${job.job_id}
+                            </div>
+                        </div>
+                        <span class="job-status status-${job.status}">${job.status.toUpperCase()}</span>
+                    </div>
+                    
+                    ${job.progress !== undefined && job.status === 'running' ? `
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${job.progress}%"></div>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="job-details">
+                        <div class="detail-item">
+                            <span class="detail-label">Type:</span>
+                            <span>${job.job_type}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Created:</span>
+                            <span>${new Date(job.created_at).toLocaleString()}</span>
+                        </div>
+                        ${job.start_time ? `
+                            <div class="detail-item">
+                                <span class="detail-label">Started:</span>
+                                <span>${new Date(job.start_time).toLocaleString()}</span>
+                            </div>
+                        ` : ''}
+                        ${job.end_time ? `
+                            <div class="detail-item">
+                                <span class="detail-label">Ended:</span>
+                                <span>${new Date(job.end_time).toLocaleString()}</span>
+                            </div>
+                        ` : ''}
+                        ${job.status === 'running' || job.status === 'completed' ? `
+                            <div class="detail-item">
+                                <span class="detail-label">Duration:</span>
+                                <span>${formatDuration(job.start_time, job.end_time)}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    ${job.error ? `
+                        <div class="job-error">
+                            <strong>Error:</strong> ${job.error}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        function formatDuration(startTime, endTime) {
+            if (!startTime) return 'N/A';
+            
+            const start = new Date(startTime);
+            const end = endTime ? new Date(endTime) : new Date();
+            const duration = Math.floor((end - start) / 1000); // Duration in seconds
+            
+            if (duration < 60) {
+                return `${duration} seconds`;
+            } else if (duration < 3600) {
+                const minutes = Math.floor(duration / 60);
+                const seconds = duration % 60;
+                return `${minutes}m ${seconds}s`;
+            } else {
+                const hours = Math.floor(duration / 3600);
+                const minutes = Math.floor((duration % 3600) / 60);
+                return `${hours}h ${minutes}m`;
+            }
+        }
+
+        async function refreshJobs() {
+            const btn = document.querySelector('.refresh-btn');
+            const icon = document.getElementById('refresh-icon');
+            
+            btn.disabled = true;
+            icon.style.display = 'inline-block';
+            icon.style.animation = 'spin 1s linear infinite';
+            
+            await loadJobs();
+            
+            btn.disabled = false;
+            icon.style.animation = '';
+        }
+
+        // Load jobs on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadJobs();
+        });
+
+        // Clean up interval on page unload
+        window.addEventListener('beforeunload', () => {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+        });
+
+        // Add spinning animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>

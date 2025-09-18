@@ -239,70 +239,41 @@
             color: var(--warm-coral) !important;
         }
         
-        /* Divider */
-        .sidebar-divider {
-            height: 1px;
-            background: var(--border-primary);
-            margin: 15px auto;
-            width: 80%;
+        /* Settings gear icon at bottom of sidebar */
+        .settings-gear {
+            margin-top: auto;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
         }
         
-        /* Collapsible Admin Section */
-        .nav-section-collapsible {
-            padding: 0 20px;
-            margin: 15px 0 8px 0;
-        }
-        
-        .nav-section-header {
+        .settings-gear-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            border: none;
+            cursor: pointer;
             display: flex;
             align-items: center;
-            cursor: pointer;
-            padding: 8px 0;
-            border-radius: 4px;
-            transition: background-color 0.2s ease;
-        }
-        
-        .nav-section-header:hover {
-            background-color: var(--bg-secondary);
-        }
-        
-        .nav-section-header h3 {
-            font-family: 'Inter', sans-serif;
-            font-weight: 600;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            justify-content: center;
+            transition: background 0.3s ease;
             color: var(--text-primary);
-            margin: 0;
-            flex: 1;
         }
         
-        .nav-collapse-icon {
-            font-size: 12px;
-            color: var(--text-primary);
-            transition: transform 0.2s ease;
-            margin-left: 8px;
+        .settings-gear-btn:hover {
+            background: var(--bg-tertiary);
         }
         
-        .nav-collapse-icon.expanded {
-            transform: rotate(90deg);
+        .settings-gear-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+            transition: transform 0.3s ease;
         }
         
-        .nav-subnav {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-        }
-        
-        .nav-subnav.expanded {
-            max-height: 500px;
-        }
-        
-        .nav-subnav .sidebar button {
-            margin-left: 15px;
-            width: calc(90% - 15px);
-            font-size: 12px;
-            opacity: 0.9;
+        .settings-gear-btn:hover svg {
+            transform: rotate(15deg);
         }
         
         /* Disk space container */
@@ -1540,59 +1511,27 @@
             <div class="nav-section">
                 <h3>Tools</h3>
             </div>
-            <button data-href="/anomaly-analyzer" class="dashboard-btn">Data Review</button>
-            <button data-href="/backend/monthly-reports" class="analysis-btn">Newsletter</button>
+            <button data-href="/anomaly-analyzer" class="dashboard-btn">Metric Review</button>
+            <button data-href="/backend/monthly-reports" class="analysis-btn">Newsletters</button>
             <button data-href="/api/writeups" class="analysis-btn">Write-ups</button>
             <button data-href="/backend/metric-control" class="dashboard-btn">Metric Control</button>
-            <button data-href="/map-generator" class="dashboard-btn">Map Generator</button>
+            <button data-href="/map-generator" class="dashboard-btn">Maps</button>
             <button data-href="/backend/evals-interface" class="dashboard-btn">Agent Evals</button>
-
-            <div class="sidebar-divider"></div>
+            <button data-href="/backend/legal-dashboard" class="dashboard-btn">Legislation</button>
             
-            <!-- Collapsible Admin Section -->
-            <div class="nav-section-collapsible">
-                <div class="nav-section-header" onclick="toggleSettingsSection()">
-                    <h3>Admin</h3>
-                    <span class="nav-collapse-icon">▶</span>
-                </div>
-                <div class="nav-subnav" id="settings-subnav">
-                    <button data-href="/backend/query" class="dashboard-btn">Query Tool</button>
-                    
-                    <!-- Actions -->
-                    <button id="analyze-ytd-btn" class="analysis-btn">Run Dashboard Metrics</button>
-                    <button id="active-jobs-btn" class="management-btn" style="display: none;">See Active Jobs</button>
-                    <button id="reload-sfpublic-metadata-btn" class="management-btn">Reload SF Public Metadata (3-Step)</button>
-                    
-                    <div style="margin: 10px 0;"></div>
-                    
-                    <button data-href="/backend/database-admin" class="management-btn">Database Admin</button>
-                    
-                    <button id="view-notes-btn" class="management-btn" style="opacity: 1; background: #f0f0f0 !important; color: #000000; border-left: 3px solid #777777;" disabled>
-                        Note Viewer (<span id="notes-token-count">0</span>)
-                    </button>
-                    
-                    <div style="margin: 10px 0;"></div>
-                    
-                    <!-- Danger Zone -->
-                    <button id="delete-data-btn" class="danger-btn">Delete Data</button>
-                    
-                    <div style="margin: 10px 0;"></div>
-                    
-                    <!-- Log Viewer -->
-                    <div style="padding: 0 20px; margin: 10px 0;">
-                        <label style="font-size: 11px; color: var(--text-primary); margin-bottom: 5px; display: block;">Log Viewer</label>
-                        <select id="log-selector" class="version-select" style="width: 100%; background: #f0f0f0; color: #000000; border: 1px solid #e0e0e0; padding: 6px; border-radius: 4px; font-size: 12px;">
-                            <option value="">Select a log file...</option>
-                        </select>
-                        <div id="log-info" style="font-size: 10px; color: #666666; margin-top: 3px;"></div>
-                    </div>
-                </div>
+            <!-- Settings Gear Icon at Bottom -->
+            <div class="settings-gear">
+                <button class="settings-gear-btn" data-href="/backend/settings" title="Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                        <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97c0-.33-.03-.65-.07-.97l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.97c0 .33.03.65.07.97l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.13-.22.07-.49-.12-.64l-2.11-1.65Z"/>
+                    </svg>
+                </button>
             </div>
         </div>
 
         <div class="main-content" id="main-content">
-            <!-- Load the main page initially -->
-            <iframe id="content-frame" name="content-frame" src="/webchat"></iframe>
+            <!-- Load the dashboard initially -->
+            <iframe id="content-frame" name="content-frame" src="/backend/dashboard"></iframe>
         </div>
         
         <!-- Explainer Agent Panel -->
@@ -1966,22 +1905,6 @@
                 closeExplainerPanel();
             } else {
                 openExplainerPanel();
-            }
-        }
-        
-        // Admin section toggle functionality
-        function toggleSettingsSection() {
-            const subnav = document.getElementById('settings-subnav');
-            const icon = document.querySelector('.nav-collapse-icon');
-            
-            if (subnav.classList.contains('expanded')) {
-                subnav.classList.remove('expanded');
-                icon.textContent = '▶';
-                icon.classList.remove('expanded');
-            } else {
-                subnav.classList.add('expanded');
-                icon.textContent = '▼';
-                icon.classList.add('expanded');
             }
         }
         
@@ -2788,7 +2711,7 @@
             
             // Load dashboard by default
             const iframe = document.getElementById('content-frame');
-            iframe.src = '/backend/dashboard';
+            // iframe.src is already set to '/backend/dashboard' in HTML, no need to change it
             
             // Send theme to initial iframe load
             iframe.addEventListener('load', function sendInitialTheme() {
@@ -2908,6 +2831,31 @@
                         }, '*');
                     } catch (e) {
                         // Ignore cross-origin errors
+                    }
+                }
+                
+                // Handle navigation requests from dashboard
+                if (event.data && event.data.action === 'navigate') {
+                    const iframe = document.getElementById('content-frame');
+                    iframe.src = event.data.url;
+                    
+                    // If we need to expand recent maps, send a message after the iframe loads
+                    if (event.data.expandRecent) {
+                        iframe.addEventListener('load', function expandRecentMaps() {
+                            // Remove the listener to prevent multiple calls
+                            iframe.removeEventListener('load', expandRecentMaps);
+                            
+                            // Send message to expand recent maps after a short delay
+                            setTimeout(() => {
+                                try {
+                                    iframe.contentWindow.postMessage({
+                                        type: 'expandRecentMaps'
+                                    }, '*');
+                                } catch (e) {
+                                    // Ignore cross-origin errors
+                                }
+                            }, 500);
+                        });
                     }
                 }
                 

@@ -1673,7 +1673,8 @@ def transform_query_for_period(original_query, date_field, category_fields, peri
                             group_by_fields.append(field_name)
             
             # Add period_type to distinguish recent from comparison - FIXED POSITION
-            period_type_select = f", CASE WHEN {date_field_match} >= '{recent_start}' AND {date_field_match} <= '{recent_end}' THEN 'recent' ELSE 'comparison' END as period_type"
+            # Use the same truncated field in CASE statement as in GROUP BY to avoid SQL errors
+            period_type_select = f", CASE WHEN {date_trunc} >= '{recent_start}' AND {date_trunc} <= '{recent_end}' THEN 'recent' ELSE 'comparison' END as period_type"
             
             # Build the complete transformed query
             # Note: Don't include period_type in GROUP BY since it's a calculated field
@@ -1951,7 +1952,12 @@ def transform_query_for_period(original_query, date_field, category_fields, peri
             group_by += f", {field_name}"
         
         # Add period_type to distinguish recent from comparison
-        period_type_select = f", CASE WHEN {date_field} >= '{recent_start}' AND {date_field} <= '{recent_end}' THEN 'recent' ELSE 'comparison' END as period_type"
+        # Use the same truncated field in CASE statement as in GROUP BY to avoid SQL errors
+        if period_type == 'month':
+            date_trunc_field = f"date_trunc_ym({date_field})"
+        else:  # year
+            date_trunc_field = f"date_trunc_y({date_field})"
+        period_type_select = f", CASE WHEN {date_trunc_field} >= '{recent_start}' AND {date_trunc_field} <= '{recent_end}' THEN 'recent' ELSE 'comparison' END as period_type"
         
         # Log the GROUP BY clause
         logging.info(f"GROUP BY clause: {group_by}")

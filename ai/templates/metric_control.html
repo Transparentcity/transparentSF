@@ -3033,22 +3033,44 @@
             
             // Skip category headers
             if (prevItem && !prevItem.classList.contains('reorder-category-header')) {
-                // Swap display_order values
-                const currentOrder = parseInt(currentItem.dataset.displayOrder);
-                const prevOrder = parseInt(prevItem.dataset.displayOrder);
+                // Get all items in the same category to reassign order values
+                const categoryItems = [];
+                let item = prevItem;
                 
-                currentItem.dataset.displayOrder = prevOrder;
-                prevItem.dataset.displayOrder = currentOrder;
+                // Collect all items in the same category (until we hit a category header)
+                while (item && !item.classList.contains('reorder-category-header')) {
+                    categoryItems.unshift(item);
+                    item = item.previousElementSibling;
+                }
                 
-                // Update the order display
-                currentItem.querySelector('.metric-order').textContent = `Order: ${prevOrder}`;
-                prevItem.querySelector('.metric-order').textContent = `Order: ${currentOrder}`;
+                // Add current item and all following items in the same category
+                item = currentItem;
+                while (item && !item.classList.contains('reorder-category-header')) {
+                    categoryItems.push(item);
+                    item = item.nextElementSibling;
+                }
                 
-                // Move the DOM elements
-                currentItem.parentNode.insertBefore(currentItem, prevItem);
-                
-                // Update button states
-                updateReorderButtonStates();
+                // Find the current item's position in the category
+                const currentIndex = categoryItems.indexOf(currentItem);
+                if (currentIndex > 0) {
+                    // Move the item up by swapping positions
+                    [categoryItems[currentIndex], categoryItems[currentIndex - 1]] = 
+                    [categoryItems[currentIndex - 1], categoryItems[currentIndex]];
+                    
+                    // Reassign sequential order values starting from the first item's original order
+                    const baseOrder = parseInt(categoryItems[0].dataset.displayOrder);
+                    categoryItems.forEach((item, index) => {
+                        const newOrder = baseOrder + index;
+                        item.dataset.displayOrder = newOrder;
+                        item.querySelector('.metric-order').textContent = `Order: ${newOrder}`;
+                    });
+                    
+                    // Move the DOM elements
+                    currentItem.parentNode.insertBefore(currentItem, prevItem);
+                    
+                    // Update button states
+                    updateReorderButtonStates();
+                }
             }
         }
         
@@ -3058,22 +3080,44 @@
             
             // Skip category headers
             if (nextItem && !nextItem.classList.contains('reorder-category-header')) {
-                // Swap display_order values
-                const currentOrder = parseInt(currentItem.dataset.displayOrder);
-                const nextOrder = parseInt(nextItem.dataset.displayOrder);
+                // Get all items in the same category to reassign order values
+                const categoryItems = [];
+                let item = currentItem;
                 
-                currentItem.dataset.displayOrder = nextOrder;
-                nextItem.dataset.displayOrder = currentOrder;
+                // Collect all items in the same category (until we hit a category header)
+                while (item && !item.classList.contains('reorder-category-header')) {
+                    categoryItems.push(item);
+                    item = item.previousElementSibling;
+                }
                 
-                // Update the order display
-                currentItem.querySelector('.metric-order').textContent = `Order: ${nextOrder}`;
-                nextItem.querySelector('.metric-order').textContent = `Order: ${currentOrder}`;
+                // Add all following items in the same category
+                item = nextItem;
+                while (item && !item.classList.contains('reorder-category-header')) {
+                    categoryItems.push(item);
+                    item = item.nextElementSibling;
+                }
                 
-                // Move the DOM elements
-                currentItem.parentNode.insertBefore(nextItem, currentItem);
-                
-                // Update button states
-                updateReorderButtonStates();
+                // Find the current item's position in the category
+                const currentIndex = categoryItems.indexOf(currentItem);
+                if (currentIndex < categoryItems.length - 1) {
+                    // Move the item down by swapping positions
+                    [categoryItems[currentIndex], categoryItems[currentIndex + 1]] = 
+                    [categoryItems[currentIndex + 1], categoryItems[currentIndex]];
+                    
+                    // Reassign sequential order values starting from the first item's original order
+                    const baseOrder = parseInt(categoryItems[0].dataset.displayOrder);
+                    categoryItems.forEach((item, index) => {
+                        const newOrder = baseOrder + index;
+                        item.dataset.displayOrder = newOrder;
+                        item.querySelector('.metric-order').textContent = `Order: ${newOrder}`;
+                    });
+                    
+                    // Move the DOM elements
+                    currentItem.parentNode.insertBefore(nextItem, currentItem);
+                    
+                    // Update button states
+                    updateReorderButtonStates();
+                }
             }
         }
         

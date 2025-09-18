@@ -333,6 +333,14 @@
             </div>
         </div>
         
+        <div class="metric-box" id="maps-count" style="cursor: pointer;" onclick="openMapsWithRecentExpanded()">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">🗺️</div>
+            <div class="metric-title">Generated Maps</div>
+            <div class="metric-value">--</div>
+        </div>
+        
         <div class="metric-box" id="postgres-size">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
@@ -420,14 +428,15 @@
             async function loadDashboardData() {
                 try {
                     // Load all metrics
-                    const [datasetsData, timeSeriesData, anomaliesData, postgresData, vectordbData, timeSeriesDataCount, totalMetricsData] = await Promise.all([
+                    const [datasetsData, timeSeriesData, anomaliesData, postgresData, vectordbData, timeSeriesDataCount, totalMetricsData, mapsData] = await Promise.all([
                         fetchDatasetsCount(),
                         fetchTimeSeriesCount(),
                         fetchAnomaliesCount(),
                         fetchPostgresSize(),
                         fetchVectorDBSize(),
                         fetchTimeSeriesDataCount(),
-                        fetchTotalMetricsCount()
+                        fetchTotalMetricsCount(),
+                        fetchMapsCount()
                     ]);
                     
                     // Update UI with the data
@@ -438,6 +447,7 @@
                     updateVectorDBMetric(vectordbData);
                     updateTimeSeriesDataMetric(timeSeriesDataCount);
                     updateTotalMetricsMetric(totalMetricsData);
+                    updateMapsMetric(mapsData);
                     
                     // Load system status
                     await loadSystemStatus();
@@ -639,6 +649,21 @@
                 }
             }
             
+            // Function to fetch maps count
+            async function fetchMapsCount() {
+                try {
+                    const response = await fetch('/api/maps?limit=1000');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch maps count');
+                    }
+                    const data = await response.json();
+                    return { count: data.maps ? data.maps.length : 0 };
+                } catch (error) {
+                    console.error('Error fetching maps count:', error);
+                    return { count: 'Error' };
+                }
+            }
+            
             // Function to update total metrics metric
             function updateTotalMetricsMetric(data) {
                 const box = document.getElementById('total-metrics');
@@ -648,6 +673,24 @@
                 // Add link to metric_control
                 box.style.cursor = 'pointer';
                 box.onclick = () => window.location.href = '/backend/metric-control';
+            }
+            
+            // Function to update maps metric
+            function updateMapsMetric(data) {
+                const box = document.getElementById('maps-count');
+                const valueEl = box.querySelector('.metric-value');
+                
+                valueEl.textContent = typeof data.count === 'number' ? formatNumber(data.count) : data.count;
+            }
+            
+            // Function to open map generator with recent maps expanded
+            window.openMapsWithRecentExpanded = function() {
+                // Navigate to map generator page with a parameter to expand recent maps
+                window.parent.postMessage({ 
+                    action: 'navigate', 
+                    url: '/map-generator',
+                    expandRecent: true 
+                }, '*');
             }
             
             // Function to load system status

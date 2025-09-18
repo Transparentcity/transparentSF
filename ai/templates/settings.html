@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Settings</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/darkmode.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        body {
+            font-family: 'IBM Plex Sans', Arial, Helvetica, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: var(--ink-black);
+            background: var(--bg-primary);
+        }
+        .settings-container {
+            display: flex;
+            height: 100vh;
+        }
+        .tabs {
+            width: 220px;
+            padding: 20px 12px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-primary);
+        }
+        .tabs h2 {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 0 0 12px 8px;
+            color: var(--text-primary);
+        }
+        .tab-btn {
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            margin: 6px 4px;
+            border: none;
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: background .2s ease;
+            font-size: 14px;
+        }
+        .tab-btn:hover { background: var(--bg-tertiary); }
+        .tab-btn.active {
+            background: var(--bright-purple);
+            color: #ffffff;
+        }
+        .panel {
+            flex: 1;
+            padding: 20px;
+            overflow: auto;
+            background: var(--bg-primary);
+        }
+        .panel h3 {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            margin: 0 0 12px 0;
+        }
+        .card {
+            background: var(--bg-secondary);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border-primary);
+        }
+        .card h4 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .card p {
+            color: var(--text-secondary);
+            margin: 8px 0;
+            font-size: 13px;
+        }
+        .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .btn {
+            padding: 10px 14px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .btn.primary { background: var(--bright-purple); color: #fff; }
+        .btn.secondary { 
+            background: var(--bg-tertiary); 
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+        }
+        .btn.secondary:hover {
+            background: var(--bg-secondary);
+        }
+        .btn.danger { background: var(--warm-coral); color: #fff; }
+        .status { margin-top: 10px; font-weight: 500; display: none; }
+        .status.ok { color: #1b5e20; }
+        .status.err { color: #b71c1c; }
+        input[type="file"] { display: none; }
+        label.file { 
+            padding: 10px 14px; 
+            background: var(--bg-tertiary); 
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px; 
+            cursor: pointer; 
+            display: inline-block;
+            transition: background 0.2s ease;
+        }
+        label.file:hover {
+            background: var(--bg-secondary);
+        }
+        .info { 
+            font-family: 'IBM Plex Mono', monospace; 
+            font-size: 13px; 
+            background: var(--bg-tertiary) !important;
+            color: var(--text-primary);
+        }
+        .info div {
+            color: var(--text-primary);
+            padding: 4px 0;
+        }
+    </style>
+    <script>
+        async function fetchJSON(url, opts) {
+            const res = await fetch(url, opts);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.headers.get('content-type')?.includes('application/json') ? res.json() : res;
+        }
+        function show(el, msg, ok=true) {
+            el.style.display = 'block';
+            el.className = 'status ' + (ok ? 'ok' : 'err');
+            el.textContent = msg;
+        }
+        async function initDatabaseTab() {
+            try {
+                const data = await fetchJSON('/backend/api/database-info');
+                document.getElementById('db-status').textContent = data.db_status || 'Unknown';
+                document.getElementById('db-size').textContent = data.db_size || 'Unknown';
+                document.getElementById('db-last-backup').textContent = data.last_backup || 'Never';
+            } catch (e) {}
+        }
+        async function createBackup() {
+            const s = document.getElementById('db-backup-status');
+            try {
+                const data = await fetchJSON('/backend/api/database-backup', { method: 'POST' });
+                show(s, 'Backup created. Downloading...', true);
+                if (data.download_url) { const a = document.createElement('a'); a.href = data.download_url; a.download = data.filename || 'database_backup.sql'; document.body.appendChild(a); a.click(); a.remove(); }
+                setTimeout(initDatabaseTab, 800);
+            } catch (e) { show(s, 'Backup failed: ' + e.message, false); }
+        }
+        let dbRestoreFile = null;
+        function onPickDbRestore(input) { dbRestoreFile = input.files[0] || null; document.getElementById('db-file-label').textContent = dbRestoreFile ? 'Selected: ' + dbRestoreFile.name : 'Choose Backup File'; }
+        async function restoreDatabase() {
+            const s = document.getElementById('db-restore-status');
+            if (!dbRestoreFile) return show(s, 'Select a file first.', false);
+            if (!confirm('This will replace all database data. Continue?')) return;
+            const fd = new FormData(); fd.append('backup_file', dbRestoreFile);
+            try {
+                await fetchJSON('/backend/api/database-restore', { method: 'POST', body: fd });
+                show(s, 'Database restored successfully.');
+            } catch (e) { show(s, 'Restore failed: ' + e.message, false); }
+        }
+        let metricsRestoreFile = null;
+        function onPickMetricsRestore(input) { metricsRestoreFile = input.files[0] || null; document.getElementById('metrics-file-label').textContent = metricsRestoreFile ? 'Selected: ' + metricsRestoreFile.name : 'Choose Metrics Backup File'; }
+        async function backupMetrics() {
+            const s = document.getElementById('metrics-backup-status');
+            try {
+                const data = await fetchJSON('/api/backup-metrics-table', { method: 'POST' });
+                show(s, 'Metrics backup created. Downloading...');
+                if (data.download_url) { const a = document.createElement('a'); a.href = data.download_url; a.download = data.filename || 'metrics_backup.sql'; document.body.appendChild(a); a.click(); a.remove(); }
+            } catch (e) { show(s, 'Metrics backup failed: ' + e.message, false); }
+        }
+        async function restoreMetrics() {
+            const s = document.getElementById('metrics-restore-status');
+            if (!metricsRestoreFile) return show(s, 'Select a file first.', false);
+            if (!confirm('This will replace all metrics configuration. Continue?')) return;
+            const fd = new FormData(); fd.append('backup_file', metricsRestoreFile);
+            try { await fetchJSON('/api/restore-metrics-from-backup', { method: 'POST', body: fd }); show(s, 'Metrics restored successfully.'); } catch (e) { show(s, 'Metrics restore failed: ' + e.message, false); }
+        }
+        async function initLogsTab() {
+            try {
+                const data = await fetchJSON('/backend/api/session-logs-info');
+                document.getElementById('logs-total').textContent = data.total_sessions ?? 0;
+                document.getElementById('logs-latest').textContent = data.latest_session || 'None';
+                document.getElementById('logs-dir').textContent = data.logs_directory || '';
+                
+                // Load log files for the dropdown
+                const logData = await fetchJSON('/backend/api/available-logs');
+                const selector = document.getElementById('log-selector');
+                selector.innerHTML = '<option value="">Select a log file...</option>';
+                if (logData.logs && logData.logs.length > 0) {
+                    logData.logs.forEach(log => {
+                        const option = document.createElement('option');
+                        option.value = log;
+                        option.textContent = log;
+                        selector.appendChild(option);
+                    });
+                }
+            } catch (e) {}
+        }
+        
+        async function runDashboardMetrics() {
+            const s = document.getElementById('metrics-run-status');
+            const btn = document.getElementById('analyze-ytd-btn');
+            const jobsBtn = document.getElementById('active-jobs-btn');
+            btn.disabled = true;
+            try {
+                show(s, 'Starting dashboard metrics generation...');
+                const data = await fetchJSON('/api/analyze-ytd', { method: 'POST' });
+                if (data.job_id) {
+                    show(s, 'Job started successfully. Job ID: ' + data.job_id);
+                    jobsBtn.style.display = 'inline-block';
+                    sessionStorage.setItem('activeJobId', data.job_id);
+                } else {
+                    show(s, 'Metrics generation completed.');
+                }
+            } catch (e) { 
+                show(s, 'Failed to run metrics: ' + e.message, false); 
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        async function viewActiveJobs() {
+            const jobId = sessionStorage.getItem('activeJobId');
+            if (jobId) {
+                window.open('/backend/jobs/' + jobId, '_blank');
+            } else {
+                alert('No active job ID found');
+            }
+        }
+        
+        async function reloadSFMetadata() {
+            const s = document.getElementById('metadata-status');
+            const btn = document.getElementById('reload-sfpublic-btn');
+            if (!confirm('This will reload all SF Public metadata. Continue?')) return;
+            btn.disabled = true;
+            try {
+                show(s, 'Starting metadata reload (Step 1 of 3)...');
+                
+                // Step 1: Fetch dataset URLs
+                const step1 = await fetchJSON('/api/fetch-dataset-urls', { method: 'POST' });
+                show(s, 'Step 1 complete: ' + (step1.urls_found || 'Unknown') + ' URLs found. Starting Step 2...');
+                
+                // Step 2: Fetch metadata
+                const step2 = await fetchJSON('/api/fetch-metadata', { method: 'POST' });
+                show(s, 'Step 2 complete. Starting Step 3...');
+                
+                // Step 3: Direct import
+                const step3 = await fetchJSON('/api/direct-import', { method: 'POST' });
+                show(s, 'All steps complete! Metadata successfully reloaded.');
+            } catch (e) {
+                show(s, 'Failed to reload metadata: ' + e.message, false);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        async function viewNotes() {
+            // Open notes viewer (you may need to implement this endpoint)
+            window.open('/backend/notes-viewer', '_blank');
+        }
+        
+        async function deleteData() {
+            const s = document.getElementById('delete-status');
+            if (!confirm('⚠️ WARNING: This will delete data from the system. Are you sure?')) return;
+            if (!confirm('This action cannot be undone. Type "DELETE" to confirm.') === 'DELETE') return;
+            
+            try {
+                const data = await fetchJSON('/backend/api/delete-data', { method: 'POST' });
+                show(s, 'Data deleted successfully.');
+            } catch (e) {
+                show(s, 'Failed to delete data: ' + e.message, false);
+            }
+        }
+        
+        async function viewLogFile(filename) {
+            if (!filename) return;
+            const info = document.getElementById('log-info');
+            try {
+                const data = await fetchJSON('/backend/api/view-log?file=' + encodeURIComponent(filename));
+                info.textContent = 'File size: ' + (data.size || 'Unknown');
+                // Open log viewer in new window
+                window.open('/backend/log-viewer?file=' + encodeURIComponent(filename), '_blank');
+            } catch (e) {
+                info.textContent = 'Error loading log file';
+            }
+        }
+        async function downloadLogs() {
+            const s = document.getElementById('logs-status');
+            try {
+                const res = await fetch('/backend/api/download-session-logs');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'session_logs.zip'; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+                show(s, 'Logs downloaded.');
+            } catch (e) { show(s, 'Download failed: ' + e.message, false); }
+        }
+        function setActive(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+            document.getElementById('tabbtn-' + tab).classList.add('active');
+            document.getElementById('panel-' + tab).style.display = 'block';
+            if (tab === 'database') initDatabaseTab();
+            if (tab === 'logs') initLogsTab();
+            if (tab === 'utilities') {
+                // Update notes count if needed
+                updateNotesCount();
+            }
+            if (tab === 'jobs') {
+                // Refresh the jobs iframe when tab is activated
+                const jobsIframe = document.querySelector('#panel-jobs iframe');
+                if (jobsIframe) {
+                    jobsIframe.src = jobsIframe.src; // Refresh the iframe
+                }
+            }
+        }
+        
+        async function checkForActiveJobs() {
+            try {
+                const response = await fetch('/backend/jobs');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const activeJobs = data.jobs.filter(job => job.status === 'running' || job.status === 'pending');
+                    const jobsTab = document.getElementById('tabbtn-jobs');
+                    const jobsBadge = document.getElementById('active-jobs-badge');
+                    
+                    if (activeJobs.length > 0) {
+                        jobsTab.style.display = 'block';
+                        jobsBadge.style.display = 'inline-block';
+                        jobsBadge.textContent = activeJobs.length;
+                    } else {
+                        // Still show Jobs tab if there are any jobs (not just active ones)
+                        if (data.jobs && data.jobs.length > 0) {
+                            jobsTab.style.display = 'block';
+                            jobsBadge.style.display = 'none';
+                        } else {
+                            jobsTab.style.display = 'none';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking for jobs:', error);
+            }
+        }
+        
+        async function updateNotesCount() {
+            try {
+                const data = await fetchJSON('/backend/api/notes-count');
+                document.getElementById('notes-token-count').textContent = data.count || 0;
+            } catch (e) {
+                document.getElementById('notes-token-count').textContent = '0';
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            setActive('query');
+            checkForActiveJobs();
+            // Check for active jobs every 10 seconds
+            setInterval(checkForActiveJobs, 10000);
+        });
+    </script>
+    <script src="/static/js/darkmode.js"></script>
+    <script src="/static/js/iframe-darkmode.js"></script>
+</head>
+<body>
+    <div class="settings-container">
+        <div class="tabs">
+            <h2>Settings</h2>
+            <button id="tabbtn-query" class="tab-btn" onclick="setActive('query')">Query Tool</button>
+            <button id="tabbtn-jobs" class="tab-btn" onclick="setActive('jobs')" style="display: none;">Jobs <span id="active-jobs-badge" style="background: var(--warm-coral); color: white; padding: 2px 6px; border-radius: 10px; font-size: 11px; margin-left: 4px; display: none;"></span></button>
+            <button id="tabbtn-actions" class="tab-btn" onclick="setActive('actions')">Actions</button>
+            <button id="tabbtn-database" class="tab-btn" onclick="setActive('database')">Database</button>
+            <button id="tabbtn-metrics" class="tab-btn" onclick="setActive('metrics')">Metrics</button>
+            <button id="tabbtn-utilities" class="tab-btn" onclick="setActive('utilities')">Utilities</button>
+            <button id="tabbtn-logs" class="tab-btn" onclick="setActive('logs')">Logs</button>
+        </div>
+        <div class="panel">
+            <div id="panel-database" class="tab-panel">
+                <h3>Database</h3>
+                <div class="card info">
+                    <div>Status: <span id="db-status">Loading...</span></div>
+                    <div>Size: <span id="db-size">Loading...</span></div>
+                    <div>Last Backup: <span id="db-last-backup">Loading...</span></div>
+                </div>
+                <div class="card">
+                    <div class="row">
+                        <button class="btn primary" onclick="createBackup()">Create & Download Backup</button>
+                        <span id="db-backup-status" class="status"></span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="row">
+                        <label for="db-restore" id="db-file-label" class="file">Choose Backup File</label>
+                        <input id="db-restore" type="file" accept=".sql,.gz,.tar,.zip" onchange="onPickDbRestore(this)">
+                        <button class="btn danger" onclick="restoreDatabase()">Restore Database</button>
+                    </div>
+                    <div id="db-restore-status" class="status"></div>
+                </div>
+            </div>
+            <div id="panel-metrics" class="tab-panel" style="display:none">
+                <h3>Metrics</h3>
+                <div class="card">
+                    <div class="row">
+                        <button class="btn primary" onclick="backupMetrics()">Backup Metrics</button>
+                        <span id="metrics-backup-status" class="status"></span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="row">
+                        <label for="metrics-restore" id="metrics-file-label" class="file">Choose Metrics Backup File</label>
+                        <input id="metrics-restore" type="file" accept=".sql,.gz,.tar,.zip" onchange="onPickMetricsRestore(this)">
+                        <button class="btn danger" onclick="restoreMetrics()">Restore Metrics</button>
+                    </div>
+                    <div id="metrics-restore-status" class="status"></div>
+                </div>
+            </div>
+            <div id="panel-query" class="tab-panel" style="display:none">
+                <iframe src="/backend/query" style="width: 100%; height: calc(100vh - 60px); border: none;"></iframe>
+            </div>
+            
+            <div id="panel-jobs" class="tab-panel" style="display:none">
+                <iframe src="/backend/jobs" style="width: 100%; height: calc(100vh - 60px); border: none;"></iframe>
+            </div>
+            
+            <div id="panel-actions" class="tab-panel" style="display:none">
+                <h3>Actions</h3>
+                <div class="card">
+                    <h4>Dashboard Metrics</h4>
+                    <p>Generate dashboard metrics analysis for the current year-to-date period.</p>
+                    <div class="row">
+                        <button id="analyze-ytd-btn" class="btn primary" onclick="runDashboardMetrics()">Run Dashboard Metrics</button>
+                        <button id="active-jobs-btn" class="btn secondary" style="display:none" onclick="viewActiveJobs()">See Active Jobs</button>
+                    </div>
+                    <div id="metrics-run-status" class="status"></div>
+                </div>
+                
+                <div class="card">
+                    <h4>SF Public Metadata</h4>
+                    <p>Reload metadata from SF Public datasets (3-step process).</p>
+                    <div class="row">
+                        <button id="reload-sfpublic-btn" class="btn primary" onclick="reloadSFMetadata()">Reload SF Public Metadata</button>
+                    </div>
+                    <div id="metadata-status" class="status"></div>
+                </div>
+            </div>
+            
+            <div id="panel-utilities" class="tab-panel" style="display:none">
+                <h3>Utilities</h3>
+                <div class="card">
+                    <h4>Note Viewer</h4>
+                    <p>View and manage system notes.</p>
+                    <div class="row">
+                        <button id="view-notes-btn" class="btn secondary" onclick="viewNotes()">Note Viewer (<span id="notes-token-count">0</span>)</button>
+                    </div>
+                    <div id="notes-status" class="status"></div>
+                </div>
+                
+                <div class="card">
+                    <h4>Data Management</h4>
+                    <p style="color: var(--warm-coral); font-weight: 500;">⚠️ Danger Zone: This action cannot be undone.</p>
+                    <div class="row">
+                        <button id="delete-data-btn" class="btn danger" onclick="deleteData()">Delete Data</button>
+                    </div>
+                    <div id="delete-status" class="status"></div>
+                </div>
+            </div>
+            
+            <div id="panel-logs" class="tab-panel" style="display:none">
+                <h3>Logs</h3>
+                <div class="card info">
+                    <div>Total Sessions: <span id="logs-total">Loading...</span></div>
+                    <div>Latest Session: <span id="logs-latest">Loading...</span></div>
+                    <div>Logs Directory: <span id="logs-dir">Loading...</span></div>
+                </div>
+                <div class="card">
+                    <h4>Log Viewer</h4>
+                    <div style="margin-bottom: 12px;">
+                        <select id="log-selector" style="width: 100%; padding: 10px; cursor: pointer; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-primary); border-radius: 6px;" onchange="viewLogFile(this.value)">
+                            <option value="">Select a log file...</option>
+                        </select>
+                        <div id="log-info" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h4>Session Logs</h4>
+                    <div class="row">
+                        <button class="btn secondary" onclick="initLogsTab()">Refresh</button>
+                        <button class="btn primary" onclick="downloadLogs()">Download All Session Logs</button>
+                    </div>
+                    <div id="logs-status" class="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+

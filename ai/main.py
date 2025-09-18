@@ -214,6 +214,8 @@ from routes.explainer_chat import router as explainer_chat_router, set_templates
 from routes.monthly_reports import router as monthly_reports_router
 from routes.charts import router as charts_router, set_templates as set_charts_templates
 from routes.writeups import router as writeups_router, set_templates as set_writeups_templates
+from routes.legal_code import router as legal_code_router, set_templates as set_legal_code_templates
+from routes.settings import router as settings_router, set_templates as set_settings_templates
 
 app = FastAPI()
 
@@ -221,6 +223,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://beta.transparentsf.com",
         "https://dashboard.transparentsf.com",
         "https://transparentsf.com",
         "https://platform.transparentsf.com",
@@ -835,10 +838,20 @@ set_writeups_templates(templates)
 app.include_router(writeups_router, tags=["writeups"])
 logger.debug("Included write-ups router")
 
+# Mount legal code router
+set_legal_code_templates(templates)
+app.include_router(legal_code_router, prefix="/legal", tags=["legal-code"])
+logger.debug("Included legal code router at /legal")
+
 # Add redirect for anomaly analyzer without trailing slash
 @app.get("/anomaly-analyzer")
 async def redirect_to_anomaly_analyzer():
     return RedirectResponse(url="/anomaly-analyzer/")
+
+# Mount settings router
+set_settings_templates(templates)
+app.include_router(settings_router, prefix="/backend", tags=["settings"])
+logger.debug("Included settings router at /backend")
 
 # Add direct routes for API endpoints that need to be accessible without the /backend prefix
 @app.post("/api/add_subscriber")

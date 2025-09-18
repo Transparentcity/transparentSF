@@ -2088,7 +2088,7 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
     from agents.langchain_agent.explainer_agent import LangChainExplainerAgent
     from agents.langchain_agent.config.tool_config import ToolGroup
     
-    # Use selected model or default to gpt-4o
+    # Use selected model or default to gpt-5
     if model_key:
         try:
             model_config = get_model_config(model_key)
@@ -2785,7 +2785,7 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
     from agents.langchain_agent.config.tool_config import ToolGroup
     client = OpenAI()
     
-    # Use selected model or default to gpt-4o
+    # Use selected model or default to gpt-5
     if model_key:
         try:
             model_config = get_model_config(model_key)
@@ -2795,8 +2795,8 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
             logger.error(f"Error getting model config for {model_key}: {e}. This is a critical error - model selection failed.")
             return {"status": "error", "message": f"Invalid model selection: {model_key}. Please check your model configuration."}
     else:
-        # If no model_key provided, use gpt-4o as default instead of claude
-        AGENT_MODEL = "gpt-4o"
+        # If no model_key provided, use default model
+        AGENT_MODEL = get_default_model()
         logger.info(f"No model specified, using default: {AGENT_MODEL}")
     
     # Create LangChain agent for session logging
@@ -3326,7 +3326,7 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
     from agents.config.models import get_model_config
     client = OpenAI()
     
-    # Use selected model or default to gpt-4o
+    # Use selected model or default to gpt-5
     if model_key:
         try:
             model_config = get_model_config(model_key)
@@ -5122,7 +5122,7 @@ def generate_narrated_report(report_path, output_path=None, model_key=None):
     from agents.langchain_agent.explainer_agent import LangChainExplainerAgent
     from agents.langchain_agent.config.tool_config import ToolGroup
     
-    # Use selected model or default to gpt-4o
+    # Use selected model or default to gpt-5
     if model_key:
         try:
             model_config = get_model_config(model_key)
@@ -5856,7 +5856,7 @@ def regenerate_explanations_for_report(filename, model_key=None):
     
     Args:
         filename: The newsletter filename (e.g., "monthly_report_0_2024_01.html")
-        model_key: Model to use for the LangChain agent (defaults to claude-3-7-sonnet)
+        model_key: Model to use for the LangChain agent (defaults to gpt-5)
         
     Returns:
         Status dictionary with success/error information
@@ -6060,7 +6060,7 @@ def regenerate_explanations_for_report(filename, model_key=None):
         from agents.langchain_agent.config.tool_config import ToolGroup
         from agents.config.models import get_model_config
         
-        # Use selected model or default to gpt-4o
+        # Use selected model or default to gpt-5
         if model_key:
             try:
                 model_config = get_model_config(model_key)
@@ -6068,9 +6068,9 @@ def regenerate_explanations_for_report(filename, model_key=None):
                 logger.info(f"Using selected model for report text generation: {AGENT_MODEL}")
             except Exception as e:
                 logger.warning(f"Error getting model config for {model_key}: {e}. Using default.")
-                AGENT_MODEL = "gpt-4o"
-        else:
-            AGENT_MODEL = "gpt-4o"
+                AGENT_MODEL = get_default_model()
+            else:
+                AGENT_MODEL = get_default_model()
         
         # Create LangChain agent for session logging
         langchain_agent = create_explainer_agent(

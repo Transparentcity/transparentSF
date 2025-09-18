@@ -275,6 +275,25 @@ def load_single_metric_from_db(metric_id):
         subcategory = category.title()
         query_name = metric['metric_name']
         
+        # Parse location_fields and category_fields if they are JSON strings
+        location_fields = metric['location_fields']
+        if isinstance(location_fields, str):
+            try:
+                location_fields = json.loads(location_fields) if location_fields else []
+            except (json.JSONDecodeError, TypeError):
+                location_fields = []
+        elif location_fields is None:
+            location_fields = []
+        
+        category_fields = metric['category_fields']
+        if isinstance(category_fields, str):
+            try:
+                category_fields = json.loads(category_fields) if category_fields else []
+            except (json.JSONDecodeError, TypeError):
+                category_fields = []
+        elif category_fields is None:
+            category_fields = []
+        
         query_data = {
             'id': metric['id'],
             'endpoint': metric['endpoint'],
@@ -285,8 +304,8 @@ def load_single_metric_from_db(metric_id):
             'metric_query': metric['metric_query'] or '',
             'dataset_title': metric['dataset_title'] or '',
             'dataset_category': metric['dataset_category'] or '',
-            'location_fields': metric['location_fields'] or [],
-            'category_fields': metric['category_fields'] or [],
+            'location_fields': location_fields,
+            'category_fields': category_fields,
             'city_id': metric['city_id'],
             'display_order': metric['display_order'],
             'is_active': metric['is_active'],
@@ -1547,18 +1566,22 @@ def process_ytd_trend_query_optimized(query, endpoint, date_ranges=None, target_
         if should_include_district:
             # Add supervisor_district to SELECT and GROUP BY if not already present
             if 'supervisor_district' not in modified_query:
-                # Add supervisor_district to SELECT clause (after date)
+                # Add supervisor_district to SELECT clause - more robust approach
                 if 'SELECT' in modified_query.upper():
-                    # Find the position after the date field
-                    select_pattern = r'(SELECT[^,]+date[^,]*)(.*?)(?=WHERE|ORDER|GROUP|$)'
-                    match = re.search(select_pattern, modified_query, re.IGNORECASE | re.DOTALL)
-                    if match:
-                        select_part = match.group(1)
-                        rest_part = match.group(2)
-                        # Add supervisor_district to SELECT
-                        modified_query = modified_query.replace(match.group(0), 
-                                                               f"{select_part}, supervisor_district{rest_part}")
+                    # Find the SELECT clause and add supervisor_district after the date field
+                    # Look for patterns like "SELECT ... date ..." and add supervisor_district
+                    select_match = re.search(r'(SELECT\s+.*?date.*?)\s+(WHERE|GROUP|ORDER|$)', modified_query, re.IGNORECASE | re.DOTALL)
+                    if select_match:
+                        select_part = select_match.group(1)
+                        rest_part = select_match.group(2)
+                        # Add supervisor_district to the SELECT clause
+                        new_select = f"{select_part}, supervisor_district "
+                        modified_query = modified_query.replace(select_match.group(0), f"{new_select}{rest_part}")
                         logger.info(f"Added supervisor_district to SELECT clause")
+                    else:
+                        # Fallback: try to add it after "as date"
+                        modified_query = re.sub(r'(\s+as\s+date)', r'\1, supervisor_district', modified_query, flags=re.IGNORECASE)
+                        logger.info(f"Added supervisor_district to SELECT clause (fallback)")
                 
                 # Add supervisor_district to GROUP BY clause
                 if 'GROUP BY' in modified_query.upper():
@@ -1644,7 +1667,12 @@ def process_ytd_trend_query_optimized(query, endpoint, date_ranges=None, target_
                     logger.info(f"Ensuring last_year_start is January 1st: {date_ranges['last_year_start']}")
             
             # Check if we have district data
+            logger.info(f"YTD Trend Query dataframe columns: {list(df.columns)}")
+            logger.info(f"YTD Trend Query dataframe shape: {df.shape}")
+            logger.info(f"YTD Trend Query first few rows:\n{df.head()}")
+            
             has_district = 'supervisor_district' in df.columns
+            logger.info(f"Has district data in YTD trend query: {has_district}")
             
             if has_district:
                 # Process trend data for all districts
@@ -1808,6 +1836,12 @@ def generate_ytd_metrics(queries_data, output_dir, target_date=None):
                         # Extract category_fields and location_fields to determine if supervisor_district should be included
                         category_fields = query_data.get("category_fields", []) if isinstance(query_data, dict) else []
                         location_fields = query_data.get("location_fields", []) if isinstance(query_data, dict) else []
+                        
+                        # Ensure both fields are lists before concatenation
+                        if not isinstance(category_fields, list):
+                            category_fields = []
+                        if not isinstance(location_fields, list):
+                            location_fields = []
                         
                         # Combine category_fields and location_fields to check for supervisor_district
                         all_fields = category_fields + location_fields

@@ -128,13 +128,13 @@ async def run_eval_streaming_endpoint(request: Request):
     Expected JSON payload:
     {
         "eval_id": 5,
-        "model_key": "claude-3-7-sonnet"
+        "model_key": "gpt-5"
     }
     """
     try:
         data = await request.json()
         eval_id = data.get("eval_id")
-        model_key = data.get("model_key", "claude-3-7-sonnet")
+        model_key = data.get("model_key", "gpt-5")
         
         if not eval_id:
             return JSONResponse(

@@ -11,7 +11,7 @@ import os
 import sys
 import json
 import math
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pytz
 import subprocess  # ADDED
 import glob
@@ -2156,6 +2156,11 @@ async def get_notes_file():
             "error": f"Error getting notes: {str(e)}"
         }, status_code=500)
 
+@router.get("/notes-viewer")
+async def notes_viewer(request: Request):
+    """Serve the notes viewer page."""
+    return templates.TemplateResponse("notes_viewer.html", {"request": request})
+
 @router.get("/run-evals")
 async def run_evals_endpoint(query: str, model_key: str = None):
     """Run a single eval with the specified query and return results."""
@@ -2236,6 +2241,220 @@ async def evals_interface(request: Request):
     return templates.TemplateResponse("evals.html", {
         "request": request
     })
+
+@router.get("/legal-dashboard")
+async def legal_dashboard(request: Request):
+    """Serve the legal code management dashboard."""
+    logger.debug("Legal dashboard route called")
+    if templates is None:
+        logger.error("Templates not initialized in backend router")
+        raise RuntimeError("Templates not initialized")
+    
+    return templates.TemplateResponse("legal_dashboard.html", {
+        "request": request
+    })
+
+@router.get("/legal/stats")
+async def legal_stats():
+    """Get legal code statistics"""
+    try:
+        from tools.db_utils import get_postgres_connection
+        
+        connection = get_postgres_connection()
+        if not connection:
+            return {"error": "Database connection failed"}
+        
+        with connection.cursor() as cursor:
+            # Get total count
+            cursor.execute("SELECT COUNT(*) FROM legal_documents")
+            total_docs = cursor.fetchone()[0] if cursor.rowcount > 0 else 0
+            
+            # Get type breakdown
+            cursor.execute("SELECT document_type, COUNT(*) FROM legal_documents GROUP BY document_type")
+            doc_types = dict(cursor.fetchall()) if cursor.rowcount > 0 else {}
+            
+            # Get recent ordinances
+            cursor.execute("""
+                SELECT COUNT(*) FROM legal_documents 
+                WHERE document_type = 'ordinance' 
+                AND effective_date >= %s
+            """, (datetime.now() - timedelta(days=730),))
+            recent_ordinances = cursor.fetchone()[0] if cursor.rowcount > 0 else 0
+            
+            # Get last updated
+            cursor.execute("SELECT MAX(updated_at) FROM legal_documents")
+            last_updated_row = cursor.fetchone()
+            last_updated = last_updated_row[0].isoformat() if last_updated_row and last_updated_row[0] else None
+        
+        connection.close()
+        
+        return {
+            "total_documents": total_docs,
+            "document_types": doc_types,
+            "recent_ordinances": recent_ordinances,
+            "municipal_code_sections": doc_types.get('municipal_code', 0),
+            "last_updated": last_updated
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting legal stats: {e}")
+        return {"error": str(e)}
+
+@router.get("/legal/health")
+async def legal_health():
+    """Legal system health check"""
+    try:
+        from tools.db_utils import get_postgres_connection
+        
+        # Check database
+        db_status = "ok"
+        try:
+            connection = get_postgres_connection()
+            if connection:
+                connection.close()
+            else:
+                db_status = "failed"
+        except:
+            db_status = "failed"
+        
+        # Check GCS
+        gcs_status = "disabled"
+        try:
+            from tools.gcs_storage import GCSStorageManager
+            gcs_manager = GCSStorageManager()
+            gcs_status = "ok" if gcs_manager.gcs_enabled else "not_configured"
+        except:
+            gcs_status = "failed"
+        
+        return {
+            "status": "healthy" if db_status == "ok" else "degraded",
+            "database": db_status,
+            "vectors": "not_configured",  # Simplified for now
+            "gcs": gcs_status
+        }
+        
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+@router.get("/legal/documents")
+async def legal_documents(limit: int = 50):
+    """Get legal documents"""
+    try:
+        from tools.db_utils import get_postgres_connection
+        
+        connection = get_postgres_connection()
+        if not connection:
+            return {"error": "Database connection failed"}
+        
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, title, document_type, chapter, effective_date, 
+                       enactment_number, section_number, url, ingested_at
+                FROM legal_documents 
+                ORDER BY effective_date DESC NULLS LAST, ingested_at DESC
+                LIMIT %s
+            """, (limit,))
+            
+            documents = []
+            for row in cursor.fetchall():
+                (doc_id, title, doc_type, chapter, effective_date, 
+                 enactment_number, section_number, url, ingested_at) = row
+                
+                documents.append({
+                    "id": doc_id,
+                    "title": title,
+                    "document_type": doc_type,
+                    "chapter": chapter,
+                    "effective_date": effective_date.isoformat() if effective_date else None,
+                    "enactment_number": enactment_number,
+                    "section_number": section_number,
+                    "url": url,
+                    "ingested_at": ingested_at.isoformat() if ingested_at else None
+                })
+        
+        connection.close()
+        return documents
+        
+    except Exception as e:
+        logger.error(f"Error getting legal documents: {e}")
+        return {"error": str(e)}
+
+@router.get("/legal/files")
+async def legal_files():
+    """Get legal files from GCS and local storage"""
+    try:
+        from tools.gcs_storage import GCSStorageManager
+        
+        gcs_manager = GCSStorageManager()
+        files = []
+        
+        # Try GCS first
+        if gcs_manager.gcs_enabled:
+            try:
+                blobs = gcs_manager.client.list_blobs(
+                    gcs_manager.bucket_name, 
+                    prefix="legal/"
+                )
+                
+                for blob in blobs:
+                    if blob.name.endswith('.json'):
+                        files.append({
+                            "name": blob.name.split('/')[-1],
+                            "path": blob.name,
+                            "size": blob.size,
+                            "created": blob.time_created.isoformat() if blob.time_created else None,
+                            "storage": "gcs"
+                        })
+            except Exception as e:
+                logger.warning(f"Could not list GCS files: {e}")
+        
+        # Also check local storage
+        import os
+        local_legal_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data", "legal"
+        )
+        
+        if os.path.exists(local_legal_dir):
+            for filename in os.listdir(local_legal_dir):
+                if filename.endswith('.json'):
+                    filepath = os.path.join(local_legal_dir, filename)
+                    stat = os.stat(filepath)
+                    
+                    files.append({
+                        "name": filename,
+                        "path": filepath,
+                        "size": stat.st_size,
+                        "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                        "storage": "local"
+                    })
+        
+        # Sort by creation time (newest first)
+        files.sort(key=lambda x: x['created'] or '', reverse=True)
+        
+        return {
+            "files": files,
+            "total_count": len(files),
+            "gcs_enabled": gcs_manager.gcs_enabled
+        }
+        
+    except Exception as e:
+        logger.error(f"Error listing legal files: {e}")
+        return {"error": str(e)}
+
+@router.get("/legal/vector-stats")
+async def legal_vector_stats():
+    """Get vector collection statistics with rich metadata"""
+    try:
+        from tools.legal_vector_processor import LegalVectorProcessor
+        
+        processor = LegalVectorProcessor()
+        stats = processor.get_collection_stats()
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Error getting vector stats: {e}")
+        return {"error": str(e)}
 
 @router.get("/dashboard")
 async def dashboard_page(request: Request):

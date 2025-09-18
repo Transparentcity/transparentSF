@@ -697,6 +697,10 @@ class LangChainExplainerAgent:
             self.session_logger = None
             self.logger.info("Session logging disabled")
         
+        # Initialize persistent session for conversation-level logging
+        self.current_session: Optional[AgentSession] = None
+        self.session_logged: bool = False  # Track if session has been logged to avoid duplicates
+        
         # Log configuration
         self.logger.info(f"LangChain Explainer agent initialized with:")
         self.logger.info(f"  Model: {self.model_key}")
@@ -890,6 +894,129 @@ class LangChainExplainerAgent:
         elif role == "assistant":
             self.messages.append(AIMessage(content=content))
 
+    def _get_or_create_session(self, session_id: Optional[str] = None) -> Optional[AgentSession]:
+        """Get the current session or create a new one if needed."""
+        if not self.enable_session_logging or not self.session_logger:
+            return None
+            
+        # If we don't have a current session, create one
+        if self.current_session is None:
+            self.current_session = self.session_logger.create_session(
+                model=self.model_key,
+                model_config=self.model_config,
+                tool_groups=self.tool_groups,
+                available_tools=[tool.name for tool in self.tools],
+                session_id=session_id
+            )
+            self.logger.info(f"Created new persistent session: {self.current_session.session_id} (requested: {session_id})")
+        else:
+            # Check if the requested session ID matches our current session
+            if session_id and session_id != self.current_session.session_id:
+                self.logger.warning(f"Session ID mismatch: requested {session_id}, current {self.current_session.session_id}")
+                # For now, keep using the current session but log the mismatch
+                # In the future, we might want to handle this differently
+        
+        return self.current_session
+
+    def clear_session(self):
+        """Clear the current session to start a new conversation."""
+        if self.current_session:
+            self.logger.info(f"Clearing persistent session: {self.current_session.session_id}")
+            self.current_session = None
+            self.session_logged = False
+
+    def _log_session_if_needed(self, session: AgentSession, force: bool = False, log_summary: bool = None):
+        """Log the session only if it hasn't been logged yet or if forced."""
+        if not self.enable_session_logging or not self.session_logger or not session:
+            return
+            
+        # Determine whether to log summary - only on first log unless explicitly specified
+        should_log_summary = log_summary if log_summary is not None else (not self.session_logged)
+        
+        if not self.session_logged or force:
+            # Temporarily modify the session logger to control summary logging
+            original_log_session = self.session_logger.log_session
+            
+            def log_session_no_summary(session_obj):
+                """Log session without summary if requested."""
+                try:
+                    # Convert session to dict and handle non-serializable objects
+                    session_dict = self.session_logger._prepare_session_for_json(session_obj)
+                    
+                    # Log to GCS if available
+                    if self.session_logger.gcs_logger:
+                        try:
+                            success = self.session_logger.gcs_logger.log_session(session_dict, session_obj.session_id)
+                            if success:
+                                self.session_logger.logger.info(f"Session logged to GCS: {session_obj.session_id}")
+                            else:
+                                self.session_logger.logger.warning(f"Failed to log session to GCS: {session_obj.session_id}")
+                        except Exception as e:
+                            self.session_logger.logger.error(f"Error logging session to GCS: {e}")
+                    
+                    # Always log locally as well
+                    filename = f"{session_obj.session_id}.json"
+                    filepath = self.session_logger.logs_dir / filename
+                    
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        json.dump(session_dict, f, indent=2, ensure_ascii=False, default=str)
+                    
+                    self.session_logger.logger.info(f"Session logged locally to: {filepath}")
+                    
+                    # Only log summary if requested
+                    if should_log_summary:
+                        self.session_logger._log_session_summary(session_obj)
+                        
+                except Exception as e:
+                    self.session_logger.logger.error(f"Error logging session: {e}")
+            
+            if should_log_summary:
+                # Use original method (includes summary)
+                original_log_session(session)
+            else:
+                # Use modified method (no summary)
+                log_session_no_summary(session)
+                
+            if not self.session_logged:
+                self.session_logged = True
+                
+            self.logger.info(f"Logged session {session.session_id} (force={force}, summary={should_log_summary})")
+        else:
+            self.logger.info(f"Session {session.session_id} already logged, skipping")
+
+    def _update_session_file(self, session: AgentSession):
+        """Update the existing session file without logging a new summary."""
+        if not self.enable_session_logging or not self.session_logger or not session:
+            return
+            
+        try:
+            # Use the same logic as log_session but without summary logging
+            session_dict = self.session_logger._prepare_session_for_json(session)
+            
+            # Log to GCS if available
+            if self.session_logger.gcs_logger:
+                try:
+                    success = self.session_logger.gcs_logger.log_session(session_dict, session.session_id)
+                    if success:
+                        self.logger.info(f"Session updated to GCS: {session.session_id}")
+                    else:
+                        self.logger.warning(f"Failed to update session to GCS: {session.session_id}")
+                except Exception as e:
+                    self.logger.error(f"Error updating session to GCS: {e}")
+            
+            # Always update locally as well
+            filename = f"{session.session_id}.json"
+            filepath = self.session_logger.logs_dir / filename
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(session_dict, f, indent=2, ensure_ascii=False, default=str)
+            
+            self.logger.info(f"Session file updated locally: {filepath}")
+            # Note: No summary logging here - that's the key difference
+                    
+        except Exception as e:
+            self.logger.error(f"Error updating session file: {e}")
+
     def get_conversation_history(self):
         """Get the conversation history as a list of message dictionaries."""
         history = []
@@ -914,15 +1041,9 @@ class LangChainExplainerAgent:
         execution_callback = None
         
         try:
-            # Create session for logging if enabled
-            if self.enable_session_logging and self.session_logger:
-                session = self.session_logger.create_session(
-                    model=self.model_key,
-                    model_config=self.model_config,
-                    tool_groups=self.tool_groups,
-                    available_tools=[tool.name for tool in self.tools],
-                    session_id=session_id
-                )
+            # Get or create persistent session for logging
+            session = self._get_or_create_session(session_id)
+            if session:
                 session.user_input = prompt
                 
                 # Add user message to session conversation
@@ -984,7 +1105,7 @@ class LangChainExplainerAgent:
                 ))
                 
                 # Log the complete session
-                self.session_logger.log_session(session)
+                self._log_session_if_needed(session, log_summary=True)  # Log summary for sync completion
 
             return { 
                 "success": True, 
@@ -1009,8 +1130,7 @@ class LangChainExplainerAgent:
                 ))
                 
                 # Log the session with error
-                if self.session_logger:
-                    self.session_logger.log_session(session)
+                self._log_session_if_needed(session, log_summary=True)  # Log summary for errors
             
             return { "success": False, "error": str(e), "session_id": session.session_id if session else None }
     
@@ -1021,17 +1141,11 @@ class LangChainExplainerAgent:
             self.logger.info(f"=== Starting explain_change_streaming ===")
             self.logger.info(f"Prompt: {prompt}")
             
-            # Create session for logging if enabled
+            # Get or create persistent session for logging
             self.logger.info(f"Session logging check: enable_session_logging={self.enable_session_logging}, session_logger={self.session_logger}")
-            if self.enable_session_logging and self.session_logger:
-                self.logger.info("Creating session for streaming logging")
-                session = self.session_logger.create_session(
-                    model=self.model_key,
-                    model_config=self.model_config,
-                    tool_groups=self.tool_groups,
-                    available_tools=[tool.name for tool in self.tools],
-                    session_id=session_id
-                )
+            session = self._get_or_create_session(session_id)
+            if session:
+                self.logger.info(f"Using persistent session for streaming logging: {session.session_id}")
                 session.user_input = prompt
                 
                 # Add user message to session conversation
@@ -1042,7 +1156,7 @@ class LangChainExplainerAgent:
                 ))
                 
                 # Log the session file immediately so it's available for conversation viewer
-                self.session_logger.log_session(session)
+                self._log_session_if_needed(session, log_summary=True)  # Log summary on first creation
                 self.logger.info(f"Created and logged initial session {session.session_id} for streaming")
             
             # Check if this is an Anthropic model and handle it differently
@@ -1409,9 +1523,9 @@ class LangChainExplainerAgent:
                     session.success = True
                     session.end_time = datetime.now().isoformat()
                     
-                    # Log the complete session
-                    self.session_logger.log_session(session)
-                    self.logger.info(f"Logged streaming session {session.session_id}")
+                    # Update the existing session file with completion data (no new summary)
+                    self._update_session_file(session)
+                    self.logger.info(f"Updated existing session file for {session.session_id}")
                     
                     # Send session_id in completion signal
                     completion_data = {'completed': True, 'session_id': session.session_id}
@@ -1774,7 +1888,7 @@ class LangChainExplainerAgent:
                 session.success = False
                 session.error = error_str
                 session.end_time = datetime.now().isoformat()
-                self.session_logger.log_session(session)
+                self._log_session_if_needed(session, force=True)  # Force log errors
                 self.logger.info(f"Logged streaming session {session.session_id} with error")
         
         # Add assistant message to conversation history (use cleaned content)
@@ -1793,9 +1907,9 @@ class LangChainExplainerAgent:
             session.success = True
             session.end_time = datetime.now().isoformat()
             
-            # Log the complete session
-            self.session_logger.log_session(session)
-            self.logger.info(f"Logged streaming session {session.session_id}")
+            # Update the existing session file with completion data (no new summary)
+            self._update_session_file(session)
+            self.logger.info(f"Updated existing session file for {session.session_id}")
             
             # Send session_id in completion signal
             completion_data = {'completed': True, 'session_id': session.session_id}

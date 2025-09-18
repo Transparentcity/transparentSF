@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Legal Code Management</title>
+    <link rel="stylesheet" href="/static/darkmode.css">
+    <script src="/static/js/darkmode.js"></script>
+    <style>
+        body { 
+            font-family: 'IBM Plex Sans', Arial, Helvetica, sans-serif; 
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+            color: var(--text-primary);
+            background-color: var(--bg-primary);
+            line-height: 1.5;
+        }
+        
+        .page-header {
+            margin-bottom: 30px;
+        }
+        
+        .page-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        
+        .page-subtitle {
+            color: var(--text-secondary);
+            margin: 5px 0 0 0;
+            font-size: 14px;
+        }
+        
+        .status-bar {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--cloud-gray);
+        }
+        
+        .status-dot.ok { background: #28a745; }
+        .status-dot.error { background: var(--warm-coral); }
+        .status-dot.warning { background: #ffc107; }
+        
+        .tabs {
+            border-bottom: 1px solid var(--border-primary);
+            margin-bottom: 20px;
+        }
+        
+        .tab-nav {
+            display: flex;
+            gap: 0;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        
+        .tab-button {
+            background: none;
+            border: none;
+            padding: 12px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+            color: var(--text-secondary);
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+        
+        .tab-button:hover {
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+        }
+        
+        .tab-button.active {
+            color: var(--bright-purple);
+            border-bottom-color: var(--bright-purple);
+            background: var(--bg-secondary);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .metric-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 16px;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .form-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0 0 16px 0;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--bright-purple);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .checkbox {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .checkbox-label {
+            font-size: 14px;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+        
+        .button {
+            background: var(--bright-purple);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .button:hover {
+            background: #9d2ee8;
+        }
+        
+        .button:disabled {
+            background: var(--cloud-gray);
+            cursor: not-allowed;
+        }
+        
+        .button-secondary {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+        }
+        
+        .button-secondary:hover {
+            background: var(--bg-secondary);
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .data-table th {
+            background: var(--bg-tertiary);
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-primary);
+        }
+        
+        .data-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-primary);
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+        
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .data-table tr:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .badge-primary {
+            background: var(--bright-purple);
+            color: white;
+        }
+        
+        .badge-secondary {
+            background: var(--cloud-gray);
+            color: var(--text-primary);
+        }
+        
+        .log-output {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 16px;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            color: var(--text-primary);
+        }
+        
+        .search-container {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+        }
+        
+        .search-results {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .search-result {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .search-result-header {
+            display: flex;
+            justify-content: between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        
+        .search-result-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+            flex: 1;
+        }
+        
+        .search-score {
+            background: var(--bright-purple);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        
+        .search-result-meta {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+        
+        .search-result-content {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 12px;
+            font-size: 13px;
+            color: var(--text-primary);
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .search-result-actions {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+        }
+        
+        .button-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        .alert {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-left: 4px solid var(--warm-coral);
+            border-radius: 4px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+        
+        .alert-warning {
+            border-left-color: #ffc107;
+        }
+        
+        .alert-success {
+            border-left-color: #28a745;
+        }
+        
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        
+        code {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 2px;
+            padding: 2px 4px;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 12px;
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1 class="page-title">Legal Code Management</h1>
+        <p class="page-subtitle">Manage San Francisco Municipal Code and ordinance ingestion</p>
+    </div>
+    
+    <div class="status-bar" id="statusBar">
+        <div class="status-item">
+            <div class="status-dot" id="dbStatus"></div>
+            <span>Database</span>
+        </div>
+        <div class="status-item">
+            <div class="status-dot" id="vectorStatus"></div>
+            <span>Vectors</span>
+        </div>
+        <div class="status-item">
+            <div class="status-dot" id="gcsStatus"></div>
+            <span>Cloud Storage</span>
+        </div>
+        <div class="status-item">
+            <div class="status-dot" id="overallStatus"></div>
+            <span>System</span>
+        </div>
+    </div>
+    
+    <div class="tabs">
+        <ul class="tab-nav">
+            <li><button class="tab-button active" data-tab="overview">Overview</button></li>
+            <li><button class="tab-button" data-tab="ingestion">Ingestion</button></li>
+            <li><button class="tab-button" data-tab="database">Database</button></li>
+            <li><button class="tab-button" data-tab="search">Search</button></li>
+            <li><button class="tab-button" data-tab="files">Files</button></li>
+        </ul>
+    </div>
+    
+    <!-- Overview Tab -->
+    <div class="tab-content active" id="overview">
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value" id="totalDocs">-</div>
+                <div class="metric-label">Total Documents</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="municipalSections">-</div>
+                <div class="metric-label">Municipal Code</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="recentOrdinances">-</div>
+                <div class="metric-label">Ordinances</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="vectorDocs">-</div>
+                <div class="metric-label">Vector Documents</div>
+            </div>
+        </div>
+        
+        <div class="two-column">
+            <div class="form-section">
+                <h3 class="form-title">Document Types</h3>
+                <div id="documentTypes">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+            <div class="form-section">
+                <h3 class="form-title">Recent Activity</h3>
+                <div id="recentActivity">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Ingestion Tab -->
+    <div class="tab-content" id="ingestion">
+        <div class="two-column">
+            <div class="form-section">
+                <h3 class="form-title">Ingestion Configuration</h3>
+                <form id="ingestionForm">
+                    <div class="form-grid">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="ingestMunicipalCode" class="checkbox" checked>
+                            <label for="ingestMunicipalCode" class="checkbox-label">Municipal Code</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="ingestOrdinances" class="checkbox" checked>
+                            <label for="ingestOrdinances" class="checkbox-label">Ordinances</label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="ordinanceLimit" class="form-label">Ordinance Limit</label>
+                        <input type="number" id="ordinanceLimit" class="form-input" value="50" min="1" max="200">
+                    </div>
+                    
+                    <div class="form-grid">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="processVectors" class="checkbox" checked>
+                            <label for="processVectors" class="checkbox-label">Process Vectors</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="useGCS" class="checkbox" checked>
+                            <label for="useGCS" class="checkbox-label">Use Cloud Storage</label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="button" id="startIngestionBtn">
+                        Start Ingestion
+                    </button>
+                </form>
+            </div>
+            
+            <div class="form-section">
+                <h3 class="form-title">Ingestion Log</h3>
+                <div id="ingestionLog" class="log-output">
+                    Ready to start ingestion...
+                </div>
+                <button type="button" class="button button-secondary button-small" onclick="clearLog()" style="margin-top: 12px;">
+                    Clear Log
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Database Tab -->
+    <div class="tab-content" id="database">
+        <div style="margin-bottom: 16px;">
+            <button class="button button-secondary" onclick="loadDatabaseData()">
+                Refresh Database
+            </button>
+        </div>
+        
+        <div class="form-section">
+            <h3 class="form-title">Legal Documents</h3>
+            <div style="overflow-x: auto;">
+                <table class="data-table" id="databaseTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Chapter</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="6" class="empty-state">Click "Refresh Database" to load documents</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Search Tab -->
+    <div class="tab-content" id="search">
+        <div class="search-container">
+            <input type="text" id="searchQuery" class="search-input" placeholder="Search legal code...">
+            <select id="searchType" class="form-input" style="width: auto;">
+                <option value="">All Types</option>
+                <option value="municipal_code">Municipal Code</option>
+                <option value="ordinance">Ordinances</option>
+            </select>
+            <button class="button" onclick="performSearch()">Search</button>
+        </div>
+        
+        <div class="form-section">
+            <h3 class="form-title">Search Results</h3>
+            <div id="searchResults" class="search-results">
+                <div class="empty-state">Enter a search query to find relevant legal code sections</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Files Tab -->
+    <div class="tab-content" id="files">
+        <div style="margin-bottom: 16px;">
+            <button class="button button-secondary" onclick="loadFiles()">
+                Refresh Files
+            </button>
+        </div>
+        
+        <div class="form-section">
+            <h3 class="form-title">Stored Legal Files</h3>
+            <div style="overflow-x: auto;">
+                <table class="data-table" id="filesTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Storage</th>
+                            <th>Size</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="5" class="empty-state">Click "Refresh Files" to load files</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeTabs();
+            loadSystemStatus();
+            loadOverviewData();
+            
+            // Search on Enter
+            document.getElementById('searchQuery').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') performSearch();
+            });
+        });
+        
+        // Tab functionality
+        function initializeTabs() {
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    const tabId = this.dataset.tab;
+                    
+                    // Update buttons
+                    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Update content
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    document.getElementById(tabId).classList.add('active');
+                });
+            });
+        }
+        
+        // Load system status
+        async function loadSystemStatus() {
+            try {
+                const response = await fetch('/backend/legal/health');
+                if (!response.ok) throw new Error('API not available');
+                
+                const data = await response.json();
+                updateStatusDot('dbStatus', data.database);
+                updateStatusDot('vectorStatus', data.vectors);
+                updateStatusDot('gcsStatus', data.gcs);
+                updateStatusDot('overallStatus', data.status);
+                
+            } catch (error) {
+                console.warn('Legal API not available:', error);
+                updateStatusDot('dbStatus', 'unknown');
+                updateStatusDot('vectorStatus', 'unknown');
+                updateStatusDot('gcsStatus', 'unknown');
+                updateStatusDot('overallStatus', 'degraded');
+            }
+        }
+        
+        function updateStatusDot(elementId, status) {
+            const dot = document.getElementById(elementId);
+            dot.className = 'status-dot';
+            
+            if (status === 'ok' || status === 'healthy') {
+                dot.classList.add('ok');
+            } else if (status === 'degraded' || status === 'warning') {
+                dot.classList.add('warning');
+            } else if (status === 'failed' || status === 'unhealthy') {
+                dot.classList.add('error');
+            }
+        }
+        
+        // Load overview data
+        async function loadOverviewData() {
+            try {
+                const response = await fetch('/backend/legal/stats');
+                if (!response.ok) throw new Error('API not available');
+                
+                const data = await response.json();
+                document.getElementById('totalDocs').textContent = data.total_documents || 0;
+                document.getElementById('municipalSections').textContent = data.municipal_code_sections || 0;
+                document.getElementById('recentOrdinances').textContent = data.recent_ordinances || 0;
+                
+                // Load vector stats
+                try {
+                    const vectorResponse = await fetch('/backend/legal/vector-stats');
+                    if (vectorResponse.ok) {
+                        const vectorData = await vectorResponse.json();
+                        document.getElementById('vectorDocs').textContent = vectorData.total_documents || 0;
+                    }
+                } catch (e) {
+                    document.getElementById('vectorDocs').textContent = '0';
+                }
+                
+                // Update document types
+                const docTypesEl = document.getElementById('documentTypes');
+                if (data.document_types && Object.keys(data.document_types).length > 0) {
+                    let html = '';
+                    for (const [type, count] of Object.entries(data.document_types)) {
+                        const percentage = ((count / data.total_documents) * 100).toFixed(1);
+                        html += `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span>${type.replace('_', ' ').toUpperCase()}</span>
+                                <span>${count} (${percentage}%)</span>
+                            </div>
+                        `;
+                    }
+                    docTypesEl.innerHTML = html;
+                } else {
+                    docTypesEl.innerHTML = '<div class="empty-state">No data available</div>';
+                }
+                
+                // Update recent activity
+                const activityEl = document.getElementById('recentActivity');
+                if (data.last_updated) {
+                    const lastUpdated = new Date(data.last_updated).toLocaleString();
+                    activityEl.innerHTML = `<div>Last updated: ${lastUpdated}</div>`;
+                } else {
+                    activityEl.innerHTML = '<div class="empty-state">No recent activity</div>';
+                }
+                
+            } catch (error) {
+                console.warn('Could not load overview data:', error);
+                document.getElementById('totalDocs').textContent = '?';
+                document.getElementById('municipalSections').textContent = '?';
+                document.getElementById('recentOrdinances').textContent = '?';
+                document.getElementById('vectorDocs').textContent = '?';
+            }
+        }
+        
+        // Handle ingestion form
+        document.getElementById('ingestionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                municipal_code: document.getElementById('ingestMunicipalCode').checked,
+                ordinances: document.getElementById('ingestOrdinances').checked,
+                ordinance_limit: parseInt(document.getElementById('ordinanceLimit').value),
+                process_vectors: document.getElementById('processVectors').checked
+            };
+            
+            if (!formData.municipal_code && !formData.ordinances) {
+                addToLog('❌ Please select at least one content type');
+                return;
+            }
+            
+            const btn = document.getElementById('startIngestionBtn');
+            btn.disabled = true;
+            btn.textContent = 'Starting...';
+            
+            addToLog('🚀 Starting legal code ingestion...');
+            addToLog(`📋 Config: Municipal Code: ${formData.municipal_code}, Ordinances: ${formData.ordinances} (limit: ${formData.ordinance_limit})`);
+            
+            try {
+                const response = await fetch('/legal/ingest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    addToLog('✅ Ingestion started successfully');
+                    addToLog('⏳ Processing in background...');
+                    
+                    // Refresh data after delay
+                    setTimeout(() => {
+                        loadOverviewData();
+                        loadSystemStatus();
+                    }, 30000);
+                } else {
+                    addToLog('❌ Ingestion failed - API not available');
+                }
+                
+            } catch (error) {
+                addToLog(`❌ Error: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Start Ingestion';
+            }
+        });
+        
+        // Load database data
+        async function loadDatabaseData() {
+            const tbody = document.querySelector('#databaseTable tbody');
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+            
+            try {
+                const response = await fetch('/backend/legal/documents?limit=50');
+                if (!response.ok) throw new Error('API not available');
+                
+                const documents = await response.json();
+                
+                if (documents.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No documents found</td></tr>';
+                    return;
+                }
+                
+                let html = '';
+                documents.forEach(doc => {
+                    const date = doc.effective_date ? new Date(doc.effective_date).toLocaleDateString() : 'N/A';
+                    const badgeClass = doc.document_type === 'ordinance' ? 'badge-primary' : 'badge-secondary';
+                    
+                    html += `
+                        <tr>
+                            <td><code>${doc.id}</code></td>
+                            <td>${doc.title}</td>
+                            <td><span class="badge ${badgeClass}">${doc.document_type.replace('_', ' ')}</span></td>
+                            <td>${doc.chapter || 'N/A'}</td>
+                            <td>${date}</td>
+                            <td>
+                                <button class="button button-secondary button-small" onclick="viewDocument('${doc.id}')">
+                                    View
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tbody.innerHTML = html;
+                
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="6" class="alert">API endpoints not available. Database may contain data but cannot be displayed.</td></tr>';
+            }
+        }
+        
+        // Search functionality
+        async function performSearch() {
+            const query = document.getElementById('searchQuery').value.trim();
+            const type = document.getElementById('searchType').value;
+            
+            if (!query) {
+                addToLog('Please enter a search query');
+                return;
+            }
+            
+            const resultsEl = document.getElementById('searchResults');
+            resultsEl.innerHTML = '<div class="loading">Searching...</div>';
+            
+            try {
+                const searchData = { query, limit: 10 };
+                if (type) searchData.document_type = type;
+                
+                const response = await fetch('/backend/legal/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(searchData)
+                });
+                
+                if (!response.ok) throw new Error('Search API not available');
+                
+                const results = await response.json();
+                
+                if (results.length === 0) {
+                    resultsEl.innerHTML = '<div class="empty-state">No results found</div>';
+                    return;
+                }
+                
+                let html = '';
+                results.forEach(result => {
+                    html += `
+                        <div class="search-result">
+                            <div class="search-result-header">
+                                <h4 class="search-result-title">${result.title}</h4>
+                                <span class="search-score">${(result.score * 100).toFixed(1)}%</span>
+                            </div>
+                            <div class="search-result-meta">
+                                <span class="badge ${result.document_type === 'ordinance' ? 'badge-primary' : 'badge-secondary'}">
+                                    ${result.document_type.replace('_', ' ')}
+                                </span>
+                                ${result.section_number ? `<code>§${result.section_number}</code>` : ''}
+                                ${result.effective_date ? `<span style="font-size: 11px; color: var(--text-secondary);">${new Date(result.effective_date).toLocaleDateString()}</span>` : ''}
+                            </div>
+                            <div class="search-result-content">
+                                ${result.content_preview}
+                            </div>
+                            <div class="search-result-actions">
+                                <button class="button button-secondary button-small" onclick="viewDocument('${result.document_id}')">
+                                    View Full Document
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                resultsEl.innerHTML = html;
+                
+            } catch (error) {
+                resultsEl.innerHTML = '<div class="alert alert-warning">Search functionality requires vector processing setup and API access.</div>';
+            }
+        }
+        
+        // Load files
+        async function loadFiles() {
+            const tbody = document.querySelector('#filesTable tbody');
+            tbody.innerHTML = '<tr><td colspan="5" class="loading">Loading...</td></tr>';
+            
+            try {
+                const response = await fetch('/backend/legal/files');
+                if (!response.ok) throw new Error('API not available');
+                
+                const data = await response.json();
+                
+                if (data.files.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No files found</td></tr>';
+                    return;
+                }
+                
+                let html = '';
+                data.files.forEach(file => {
+                    const size = formatFileSize(file.size);
+                    const created = new Date(file.created).toLocaleString();
+                    const badgeClass = file.storage === 'gcs' ? 'badge-primary' : 'badge-secondary';
+                    
+                    html += `
+                        <tr>
+                            <td><code>${file.name}</code></td>
+                            <td><span class="badge ${badgeClass}">${file.storage.toUpperCase()}</span></td>
+                            <td>${size}</td>
+                            <td>${created}</td>
+                            <td>
+                                <button class="button button-secondary button-small" onclick="viewFile('${file.name}')">
+                                    View
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tbody.innerHTML = html;
+                
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="5" class="alert">File listing requires API access</td></tr>';
+            }
+        }
+        
+        // Utility functions
+        function addToLog(message) {
+            const log = document.getElementById('ingestionLog');
+            const time = new Date().toLocaleTimeString();
+            log.innerHTML += `<div>[${time}] ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('ingestionLog').innerHTML = 'Ready to start ingestion...';
+        }
+        
+        function formatFileSize(bytes) {
+            if (!bytes) return 'N/A';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+        
+        // Placeholder functions for document/file viewing
+        function viewDocument(docId) {
+            addToLog(`📄 Viewing document: ${docId}`);
+            // In production, this would open a modal or navigate to document view
+        }
+        
+        function viewFile(filename) {
+            addToLog(`📁 Viewing file: ${filename}`);
+            // In production, this would show file contents
+        }
+    </script>
+</body>
+</html>

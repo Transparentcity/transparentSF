@@ -131,7 +131,7 @@ class GCSStorageManager:
         Generate local file path based on file type and parameters.
         
         Args:
-            file_type: Type of file (dashboard, monthly, annual, weekly, reports, notes)
+            file_type: Type of file (dashboard, monthly, annual, weekly, reports, notes, legal)
             district: District ID (defaults to "0" for citywide)
             metric_id: Metric ID for metric-specific files
             filename: Specific filename
@@ -173,7 +173,7 @@ class GCSStorageManager:
         
         Args:
             content: File content (string, bytes, or dict for JSON)
-            file_type: Type of file (dashboard, monthly, annual, weekly, reports, notes)
+            file_type: Type of file (dashboard, monthly, annual, weekly, reports, notes, legal)
             district: District ID (defaults to "0" for citywide)
             metric_id: Metric ID for metric-specific files
             filename: Specific filename

@@ -25,27 +25,64 @@ class WriteupsManager:
     def _ensure_tables_exist(self):
         """Ensure the write-ups tables exist in the database."""
         try:
-            # Read the PostgreSQL SQL file and execute it
-            script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            sql_file = os.path.join(script_dir, '..', 'create_writeups_tables_postgres.sql')
+            def create_tables(conn):
+                cursor = conn.cursor()
+                
+                # Create writeups table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS writeups (
+                        id SERIAL PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        original_prompt TEXT NOT NULL,
+                        output_format VARCHAR(50) DEFAULT 'html',
+                        output_destination TEXT DEFAULT '',
+                        frequency VARCHAR(50) DEFAULT 'one_time',
+                        scheduled_for TIMESTAMP,
+                        model_key VARCHAR(100),
+                        status VARCHAR(50) DEFAULT 'pending',
+                        clarification_questions JSONB,
+                        clarification_answers JSONB,
+                        execution_plan JSONB,
+                        execution_log JSONB,
+                        result_content TEXT,
+                        result_file_path TEXT,
+                        error_message TEXT,
+                        metadata JSONB DEFAULT '{}'::jsonb,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT valid_status CHECK (status IN ('pending', 'awaiting_clarification', 'ready_to_execute', 'in_progress', 'completed', 'failed', 'cancelled')),
+                        CONSTRAINT valid_frequency CHECK (frequency IN ('one_time', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly')),
+                        CONSTRAINT valid_output_format CHECK (output_format IN ('html', 'markdown', 'text', 'pdf', 'json'))
+                    )
+                """)
+                
+                # Create indexes for better performance
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_writeups_status 
+                    ON writeups(status)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_writeups_frequency 
+                    ON writeups(frequency)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_writeups_scheduled_for 
+                    ON writeups(scheduled_for)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_writeups_created_at 
+                    ON writeups(created_at)
+                """)
+                
+                conn.commit()
+                return "Tables created successfully"
             
-            if os.path.exists(sql_file):
-                with open(sql_file, 'r') as f:
-                    sql_script = f.read()
-                
-                def create_tables(conn):
-                    cursor = conn.cursor()
-                    cursor.execute(sql_script)
-                    conn.commit()
-                    return "Tables created successfully"
-                
-                result = execute_with_connection(create_tables)
-                if result['status'] == 'success':
-                    logger.info("Write-ups tables ensured to exist in PostgreSQL")
-                else:
-                    logger.error(f"Error creating tables: {result['message']}")
+            result = execute_with_connection(create_tables)
+            if result['status'] == 'success':
+                logger.info("Write-ups tables ensured to exist in PostgreSQL")
             else:
-                logger.warning(f"SQL file not found: {sql_file}")
+                logger.error(f"Error creating tables: {result['message']}")
+                
         except Exception as e:
             logger.error(f"Error ensuring write-ups tables exist: {e}")
     
