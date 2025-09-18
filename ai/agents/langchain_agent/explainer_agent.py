@@ -686,6 +686,24 @@ class LangChainExplainerAgent:
         self.logger.info(f"  Include all sections: {self.include_all_sections}")
         self.logger.info(f"  Session logging: {self.enable_session_logging}")
 
+    def _build_history_prefix(self, max_messages: int = 8) -> str:
+        """Create a lightweight text prefix of recent conversation to reinforce context."""
+        try:
+            if not self.messages:
+                return ""
+            recent = self.messages[-max_messages:]
+            lines: List[str] = []
+            for m in recent:
+                if isinstance(m, HumanMessage):
+                    lines.append(f"User: {m.content}")
+                elif isinstance(m, AIMessage):
+                    lines.append(f"Assistant: {m.content}")
+            if not lines:
+                return ""
+            return "Previous conversation (most recent first):\n" + "\n".join(lines)
+        except Exception:
+            return ""
+
     def _make_json_serializable(self, obj):
         """Best-effort conversion to JSON-serializable objects."""
         try:
@@ -921,9 +939,13 @@ class LangChainExplainerAgent:
             
             self.add_message("user", prompt)
 
+            input_with_context = prompt
+            history_prefix = self._build_history_prefix()
+            if history_prefix:
+                input_with_context = f"{history_prefix}\n\nCurrent request: {prompt}"
             result = self.agent_executor.invoke(
                 {
-                    "input": prompt,
+                    "input": input_with_context,
                     "chat_history": self.messages[:-1] # Exclude current message
                 },
                 config={"callbacks": [execution_callback]}
@@ -1052,8 +1074,12 @@ class LangChainExplainerAgent:
                 
                 # Use astream_events but with better handling for Anthropic
                 event_count = 0
+                input_with_context = prompt
+                history_prefix = self._build_history_prefix()
+                if history_prefix:
+                    input_with_context = f"{history_prefix}\n\nCurrent request: {prompt}"
                 async for event in self.agent_executor.astream_events({
-                    "input": prompt,
+                    "input": input_with_context,
                     "chat_history": self.messages[:-1]
                 }, version="v1", config={"callbacks": [execution_callback]}):
                     event_count += 1
@@ -1392,8 +1418,12 @@ class LangChainExplainerAgent:
             # Use astream_events to get token and tool streaming with prompts and tools injected
             self.logger.info("Starting astream_events with agent executor")
             event_count = 0
+            input_with_context = prompt
+            history_prefix = self._build_history_prefix()
+            if history_prefix:
+                input_with_context = f"{history_prefix}\n\nCurrent request: {prompt}"
             async for event in self.agent_executor.astream_events({
-                "input": prompt,
+                "input": input_with_context,
                 "chat_history": self.messages[:-1]
             }, version="v1", config={"callbacks": [execution_callback]}):
                 event_count += 1

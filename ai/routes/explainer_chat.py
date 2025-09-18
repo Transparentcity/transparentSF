@@ -297,15 +297,31 @@ async def langchain_explainer_streaming_api(request: Request):
         if not session_id:
             session_id = str(uuid.uuid4())
         session_key = f"langchain_{session_id}"
+        legacy_key = session_id
         
-        if session_key in explainer_sessions:
-            agent = explainer_sessions[session_key]
+        if session_key in explainer_sessions or legacy_key in explainer_sessions:
+            agent = explainer_sessions.get(session_key) or explainer_sessions.get(legacy_key)
+            # If legacy key found, move it to session_key for consistency
+            if legacy_key in explainer_sessions and session_key not in explainer_sessions:
+                explainer_sessions[session_key] = explainer_sessions.pop(legacy_key)
             # Update agent configuration if needed
             if hasattr(agent, 'model_key') and agent.model_key != model_key:
-                agent = create_explainer_agent(model_key=model_key, tool_groups=tool_group_enums, enable_session_logging=True)
+                # Preserve conversation history when switching models
+                old_messages = getattr(agent, 'messages', [])
+                new_agent = create_explainer_agent(
+                    model_key=model_key,
+                    tool_groups=tool_group_enums,
+                    enable_session_logging=True
+                )
+                # Carry over prior messages so chat history is preserved
+                setattr(new_agent, 'messages', old_messages)
+                agent = new_agent
                 explainer_sessions[session_key] = agent
-            elif hasattr(agent, 'tool_groups') and agent.tool_groups != tool_group_enums:
-                agent.update_tool_groups(tool_groups)
+                logger.info("Recreated agent with new model and preserved message history")
+            elif hasattr(agent, 'tool_groups') and set(getattr(agent, 'tool_groups', [])) != set(tool_group_enums):
+                # Update tools in place; this keeps existing message history
+                agent.update_tool_groups(tool_group_enums)
+                logger.info("Updated agent tool groups in place without losing history")
             logger.info(f"Using existing LangChain explainer agent for session: {session_key}")
         else:
             # Create new LangChain agent and session with session logging enabled
@@ -490,8 +506,16 @@ async def clear_explainer_session(request: Request):
                 }
             )
         
+        # Support both prefixed and legacy keys
+        session_key = f"langchain_{session_id}"
+        removed = False
+        if session_key in explainer_sessions:
+            del explainer_sessions[session_key]
+            removed = True
         if session_id in explainer_sessions:
             del explainer_sessions[session_id]
+            removed = True
+        if removed:
             logger.info(f"Cleared explainer session: {session_id}")
             return JSONResponse(content={"status": "success", "message": f"Session {session_id} cleared"})
         else:
