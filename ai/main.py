@@ -196,6 +196,7 @@ from routes.conversation import router as conversation_router, set_templates as 
 from routes.explainer_chat import router as explainer_chat_router, set_templates as set_explainer_chat_templates
 from routes.monthly_reports import router as monthly_reports_router
 from routes.charts import router as charts_router, set_templates as set_charts_templates
+from routes.settings import router as settings_router, set_templates as set_settings_templates
 
 app = FastAPI()
 
@@ -763,6 +764,11 @@ logger.debug("Included charts router")
 @app.get("/anomaly-analyzer")
 async def redirect_to_anomaly_analyzer():
     return RedirectResponse(url="/anomaly-analyzer/")
+
+# Mount settings router
+set_settings_templates(templates)
+app.include_router(settings_router, prefix="/backend", tags=["settings"])
+logger.debug("Included settings router at /backend")
 
 # Add direct routes for API endpoints that need to be accessible without the /backend prefix
 @app.post("/api/add_subscriber")

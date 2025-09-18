@@ -45,7 +45,7 @@
             right: 0;
             height: 60px;
             background: var(--bg-primary);
-            border-bottom: 1px solid var(--border-primary);
+            border-bottom: none;
             z-index: 100;
             display: flex;
             align-items: center;
@@ -141,7 +141,7 @@
             padding: 0;
             color: var(--text-primary);
             z-index: 10;
-            border-right: 1px solid var(--border-primary);
+            border-right: none;
             display: flex;
             flex-direction: column;
             margin-top: 60px; /* Account for top header */
@@ -154,7 +154,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            border-bottom: 1px solid var(--border-primary);
+            border-bottom: none;
         }
 
         /* Navigation section headers */
@@ -322,7 +322,7 @@
             max-width: 800px;
             height: calc(100vh - 60px);
             background: var(--bg-primary);
-            border-left: 1px solid var(--border-primary);
+            border-left: none;
             z-index: 15;
             display: flex;
             flex-direction: column;
@@ -384,7 +384,7 @@
         .explainer-header {
             background: var(--bg-primary);
             padding: 15px 20px;
-            border-bottom: 1px solid var(--border-primary);
+            border-bottom: none;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -420,7 +420,7 @@
         .explainer-share {
             background: var(--bg-secondary);
             color: var(--text-primary);
-            border: 1px solid var(--border-primary);
+            border: none;
             border-radius: 50%;
             width: 24px;
             height: 24px;
@@ -514,7 +514,7 @@
         }
         
         .explainer-input-area {
-            border-top: 1px solid var(--border-primary);
+            border-top: none;
             padding: 15px 20px;
             background: var(--bg-primary);
         }
@@ -944,7 +944,7 @@
             background-color: #ffffff;
             margin: 10% auto;
             padding: 0;
-            border: 1px solid var(--cloud-gray);
+            border: none;
             border-radius: 8px;
             width: 500px;
             max-width: 80%;
@@ -954,7 +954,7 @@
         .modal-header {
             padding: 15px 20px;
             background-color: #ffffff;
-            border-bottom: 1px solid var(--cloud-gray);
+            border-bottom: none;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -992,7 +992,7 @@
         .modal-footer {
             padding: 15px 20px;
             background-color: #ffffff;
-            border-top: 1px solid var(--cloud-gray);
+            border-top: none;
             text-align: right;
         }
         
@@ -1194,7 +1194,7 @@
             flex-direction: column;
             transform: translateX(100%);
             transition: transform 0.3s ease;
-            border-left: 1px solid var(--border-primary);
+            border-left: none;
         }
         
         .explainer-settings-overlay.show {
@@ -1203,7 +1203,7 @@
         
         .settings-header {
             padding: 15px 20px;
-            border-bottom: 1px solid var(--border-primary);
+            border-bottom: none;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -1247,7 +1247,7 @@
         .settings-sidebar {
             width: 180px;
             background: var(--bg-primary);
-            border-right: 1px solid var(--border-primary);
+            border-right: none;
             overflow-y: auto;
             padding: 10px 0;
         }
@@ -1458,12 +1458,7 @@
             <button id="active-jobs-btn" class="management-btn" style="display: none;">See Active Jobs</button>
                             <button id="reload-sfpublic-metadata-btn" class="management-btn">Reload SF Public Metadata (3-Step)</button>
             
-            <div class="nav-section">
-                <h3>Management</h3>
-            </div>
-            <button data-href="/backend/database-admin" class="management-btn">Database Admin</button>
             
-            <div class="sidebar-divider"></div>
             
             <div class="nav-section">
                 <h3>Logs & Notes</h3>
@@ -1478,8 +1473,6 @@
             <button id="view-notes-btn" class="management-btn" style="opacity: 1; background: #f0f0f0 !important; color: #000000; border-left: 3px solid #777777;" disabled>
                 View Notes (<span id="notes-token-count">0</span>)
             </button>
-            
-            <div class="sidebar-divider"></div>
             
             <!-- Danger zone at the bottom -->
             <button id="delete-data-btn" class="danger-btn">Delete Data</button>
@@ -1595,6 +1588,13 @@
             </div>
         </div>
     </div>
+    <!-- Lower-left gear button to open Settings -->
+    <button id="left-settings-gear" class="settings-gear" data-href="/backend/settings" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M19.4 13.5a7.97 7.97 0 0 0 .06-1.5 7.97 7.97 0 0 0-.06-1.5l2.02-1.58a.5.5 0 0 0 .12-.64l-1.91-3.3a.5.5 0 0 0-.6-.22l-2.38.96a7.93 7.93 0 0 0-2.6-1.5l-.36-2.54a.5.5 0 0 0-.5-.42h-3.82a.5.5 0 0 0-.5.42l-.36 2.54a7.93 7.93 0 0 0-2.6 1.5l-2.38-.96a.5.5 0 0 0-.6.22l-1.91 3.3a.5.5 0 0 0 .12.64L4.6 10.5c-.04.5-.06 1-.06 1.5s.02 1 .06 1.5l-2.02 1.58a.5.5 0 0 0-.12.64l1.91 3.3a.5.5 0 0 0 .6.22l2.38-.96c.77.6 1.64 1.1 2.6 1.5l.36 2.54a.5.5 0 0 0 .5.42h3.82a.5.5 0 0 0 .5-.42l.36-2.54c.96-.4 1.83-.9 2.6-1.5l2.38.96a.5.5 0 0 0 .6-.22l1.91-3.3a.5.5 0 0 0-.12-.64L19.4 13.5Z" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+    </button>
     
     <!-- Loading overlay -->
     <div id="loading-overlay" class="loading-overlay">
@@ -2731,6 +2731,14 @@
                     }
                 });
             });
+            // Settings gear loads settings into main iframe
+            const gear = document.getElementById('left-settings-gear');
+            if (gear) {
+                gear.addEventListener('click', function() {
+                    const iframe = document.getElementById('content-frame');
+                    iframe.src = '/backend/settings';
+                });
+            }
             
             // Explainer panel event listeners
             document.getElementById('explainer-toggle').addEventListener('click', toggleExplainerPanel);
