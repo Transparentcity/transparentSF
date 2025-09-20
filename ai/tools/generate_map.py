@@ -1940,6 +1940,11 @@ def generate_mapbox_map(context_variables, map_title, map_type, location_data=No
 
         if map_metadata and isinstance(map_metadata, dict) and location_data:
             selected_color_field = map_metadata.get('color_field')
+            # Fallback to series_field if no color_field specified
+            if not selected_color_field and series_field:
+                selected_color_field = series_field
+                logger.info(f"Using series_field '{series_field}' as color field for Mapbox map")
+            
             if selected_color_field:
                 # Build color scale values list
                 if _is_date_field(selected_color_field):

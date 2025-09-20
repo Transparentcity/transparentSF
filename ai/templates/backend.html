@@ -2702,6 +2702,36 @@
             }
         }
 
+        // Global function to load content in the main iframe
+        function loadInContentFrame(url) {
+            const iframe = document.getElementById('content-frame');
+            iframe.src = url;
+            
+            // Send theme to iframe after it loads
+            iframe.addEventListener('load', function sendThemeToIframe() {
+                // Remove the listener to prevent multiple calls
+                iframe.removeEventListener('load', sendThemeToIframe);
+                
+                // Send current theme to the iframe
+                try {
+                    iframe.contentWindow.postMessage({
+                        type: 'themeChange',
+                        theme: window.darkModeManager ? window.darkModeManager.currentTheme : 'light'
+                    }, '*');
+                } catch (e) {
+                    // Ignore cross-origin errors
+                }
+            });
+            
+            // Clear sidebar selections since this might be from external navigation
+            document.querySelectorAll('.sidebar button[data-href]').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+        }
+
+        // Make it available globally
+        window.loadInContentFrame = loadInContentFrame;
+
         document.addEventListener('DOMContentLoaded', () => {
             // Load available models
             loadAvailableModels();

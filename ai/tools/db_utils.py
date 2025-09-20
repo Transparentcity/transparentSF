@@ -239,6 +239,8 @@ def execute_with_connection(
             with get_pooled_connection() as connection:
                 # Execute the operation
                 result = operation(connection)
+                # Explicit commit to ensure changes are persisted
+                connection.commit()
                 
                 return {
                     "status": "success",

@@ -205,7 +205,8 @@ PREFERRED TOOL - generate_map_with_query: Query DataSF and create map in one ste
      * For change/delta maps: {{"map_type": "delta", "description": "Change from previous period"}}
      * For density maps: {{"description": "Current values by district"}}
      * For locator maps: {{"description": "Description", "center_lat": 37.7749, "center_lon": -122.4194, "zoom": 12}}
-  - series_field: Field name for colored series grouping (point/address/intersection maps only)
+  - series_field: Field name for colored series grouping (point/address/intersection maps only). 
+    This field will be used for coloring if no color_field is specified in map_metadata.
   - color_palette: Series color scheme: "categorical", "status", "priority", "sequential", or custom hex colors
   - metric_id: The metric ID to associate this map with (use the metric_id from the current analysis context)
 
@@ -242,6 +243,7 @@ IMPORTANT NOTES:
 5. Use "symbol" map type when marker size should represent data values
 6. Use proper SOQL syntax - no FROM clause needed, endpoint provides the table
 7. All generated maps are Mapbox-powered for enhanced interactivity and performance
+8. **Color Field Priority**: For point/symbol maps, coloring uses map_metadata.color_field first, then falls back to series_field
 """
 
 # Map field system instructions

@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual Map Comparison | TransparentSF</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Mapbox GL JS -->
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+    <!-- Dark Mode CSS -->
+    <link rel="stylesheet" href="/static/darkmode.css">
+    <!-- Dark Mode JavaScript -->
+    <script src="/static/js/darkmode.js"></script>
+    <script src="/static/js/iframe-darkmode.js"></script>
+
+    <style>
+        /* Custom styles for dual map */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .header {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-primary);
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .header-text {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .header-subtitle {
+            margin-top: 0.25rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+
+        .map-container {
+            position: relative;
+            height: calc(100vh - 100px);
+            width: 100%;
+        }
+
+        /* Optimize for iframe display */
+        body.in-iframe {
+            margin: 0;
+            padding: 0;
+        }
+
+        body.in-iframe .header {
+            padding: 1rem 0;
+        }
+
+        body.in-iframe .map-container {
+            height: calc(100vh - 80px);
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid;
+        }
+
+        .btn-outline-secondary {
+            color: var(--text-secondary);
+            border-color: var(--border-primary);
+            background-color: transparent;
+        }
+
+        .btn-outline-secondary:hover {
+            color: var(--text-primary);
+            border-color: var(--bright-purple, #ad35fa);
+            background-color: var(--bg-secondary);
+        }
+
+        .btn-outline-secondary.copied {
+            color: var(--success, #28a745);
+            border-color: var(--success, #28a745);
+            background-color: var(--success-bg, rgba(40, 167, 69, 0.1));
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .legend-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            max-width: 300px;
+            z-index: 1000;
+        }
+
+        .legend-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+            transition: background-color 0.2s ease;
+        }
+
+        .legend-item:hover {
+            background-color: var(--bg-accent, rgba(0, 123, 255, 0.1));
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 8px;
+            border: 2px solid #ffffff;
+        }
+
+        .legend-label {
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+            margin-left: 8px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--bright-purple, #ad35fa);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(18px);
+        }
+
+        .error-message {
+            background-color: var(--error-bg);
+            color: var(--error-text);
+            padding: 1rem;
+            margin: 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--error-border);
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            border: 3px solid var(--border-primary);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Tooltip styles */
+        .tsf-tooltip {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.85rem;
+            max-width: 250px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .tsf-tooltip-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .tsf-tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .tsf-tooltip-key {
+            font-weight: 500;
+            margin-right: 8px;
+            color: var(--text-secondary);
+        }
+
+        .tsf-tooltip-val {
+            color: var(--text-primary);
+        }
+
+        /* Dark mode adjustments */
+        [data-theme="dark"] .legend-color {
+            border-color: #333;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+
+            .header-text {
+                width: 100%;
+            }
+
+            .btn {
+                font-size: 0.85rem;
+                padding: 0.4rem 0.8rem;
+            }
+
+            .legend-container {
+                position: relative;
+                top: auto;
+                left: auto;
+                right: auto;
+                margin: 1rem;
+                max-width: none;
+            }
+
+            .map-container {
+                height: calc(100vh - 140px);
+            }
+
+            .header-subtitle {
+                font-size: 0.85rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="header-text">
+                <h1>
+                    <i class="fas fa-chart-line me-2"></i>
+                    Map Analysis
+                </h1>
+                <div id="map-comparison-subtitle" class="header-subtitle">
+                    Loading comparison...
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-outline-secondary" id="share-btn" onclick="shareMap()" title="Copy link to share this comparison">
+                    <i class="fas fa-share-alt me-1"></i>
+                    Share
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="map-container">
+        <div id="map"></div>
+        
+
+        <div class="legend-container">
+            <div class="legend-title">Map Layers</div>
+            <div id="legend-content">
+                <!-- Legend items will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Global variables
+        let map = null;
+        let map1Data = null;
+        let map2Data = null;
+        const mapboxToken = "{{ config.MAPBOX_ACCESS_TOKEN }}";
+
+        // Map data from server
+        const serverMap1 = {{ map1 | tojson }};
+        const serverMap2 = {{ map2 | tojson }};
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if we're in an iframe and apply appropriate styling
+            if (window.parent !== window) {
+                document.body.classList.add('in-iframe');
+            }
+            
+            initializePage();
+        });
+
+        function initializePage() {
+            // Set Mapbox access token
+            if (mapboxToken) {
+                mapboxgl.accessToken = mapboxToken;
+            } else {
+                showError('Mapbox access token not configured');
+                return;
+            }
+
+            // Initialize map
+            initMap();
+            
+            // Load dual map data
+            loadDualMapData();
+        }
+
+        function initMap() {
+            try {
+                // Determine map style based on current theme
+                const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+                const mapStyle = currentTheme === 'dark' 
+                    ? 'mapbox://styles/mapbox/dark-v11' 
+                    : 'mapbox://styles/mapbox/light-v11';
+                
+                // Create map instance
+                map = new mapboxgl.Map({
+                    container: 'map',
+                    style: mapStyle,
+                    center: [-122.4194, 37.7749], // San Francisco coordinates
+                    zoom: 11
+                });
+
+                // Add navigation controls
+                map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+
+                // Add fullscreen control
+                map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+
+                // Wait for map to load
+                map.on('load', function() {
+                    console.log('Map loaded successfully');
+                });
+
+                // Handle map errors
+                map.on('error', function(e) {
+                    showError('Map error: ' + e.error.message);
+                });
+
+            } catch (error) {
+                showError('Failed to initialize map: ' + error.message);
+            }
+        }
+
+
+        function loadDualMapData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const map1Id = urlParams.get('map1_id');
+            const map2Id = urlParams.get('map2_id');
+
+            if (!map1Id || !map2Id) {
+                showError('Both map IDs are required');
+                return;
+            }
+
+            showLoading();
+
+            // Fetch dual map data
+            fetch(`/api/dual-map-data?map1_id=${map1Id}&map2_id=${map2Id}`)
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.status === 'success') {
+                        map1Data = data.map1;
+                        map2Data = data.map2;
+                        renderDualMap();
+                        updateLegend();
+                        updateSubtitle();
+                    } else {
+                        showError(data.message || 'Failed to load map data');
+                    }
+                })
+                .catch(error => {
+                    hideLoading();
+                    console.error('Error loading dual map data:', error);
+                    showError('Error loading map data: ' + error.message);
+                });
+        }
+
+        function renderDualMap() {
+            if (!map1Data || !map2Data) return;
+
+            // Wait for map to be ready
+            if (!map.loaded()) {
+                map.on('load', renderDualMap);
+                return;
+            }
+
+            // Create bounds to fit both datasets
+            const bounds = new mapboxgl.LngLatBounds();
+
+            // Define consistent layer colors using brand palette
+            // Get colors from CSS variables for proper theme support
+            const computedStyle = getComputedStyle(document.documentElement);
+            const LAYER1_COLOR = computedStyle.getPropertyValue('--bright-purple').trim() || '#ad35fa'; // Brand bright purple
+            const LAYER2_COLOR = computedStyle.getPropertyValue('--warm-coral').trim() || '#FF6B5A'; // Brand warm coral
+
+            // Process and add layer 1 (map1)
+            const layer1Features = processMapData(map1Data, LAYER1_COLOR, bounds);
+            addMapLayer('layer1', layer1Features, LAYER1_COLOR);
+
+            // Process and add layer 2 (map2)
+            const layer2Features = processMapData(map2Data, LAYER2_COLOR, bounds);
+            addMapLayer('layer2', layer2Features, LAYER2_COLOR);
+
+            // Fit map to show all points
+            if (!bounds.isEmpty()) {
+                map.fitBounds(bounds, {
+                    padding: 50,
+                    maxZoom: 15
+                });
+            }
+        }
+
+        function processMapData(mapData, defaultColor, bounds) {
+            if (!mapData.location_data || !Array.isArray(mapData.location_data)) {
+                return [];
+            }
+
+            return mapData.location_data.map((item, idx) => {
+                let coordinates;
+                
+                // Handle different coordinate formats
+                if (item.lon && item.lat) {
+                    coordinates = [item.lon, item.lat];
+                } else if (item.location && item.location.coordinates) {
+                    coordinates = item.location.coordinates;
+                } else if (item.coordinates) {
+                    coordinates = item.coordinates;
+                } else {
+                    console.warn('No coordinates found for item:', item);
+                    return null;
+                }
+
+                bounds.extend(coordinates);
+
+                return {
+                    type: 'Feature',
+                    properties: {
+                        title: item.title || item.tooltip || `Point ${idx}`,
+                        description: item.description || '',
+                        value: item.value || 1,
+                        color: defaultColor, // Always use the layer's default color for consistency
+                        strokeColor: item.strokeColor || '#ffffff',
+                        tooltip_fields: item.tooltip_fields || {},
+                        scale: item.scale || 1,
+                        layer: mapData.layer_name,
+                        map_title: mapData.title,
+                        layer_color: defaultColor // Store the layer color for reference
+                    },
+                    geometry: {
+                        type: 'Point',
+                        coordinates: coordinates
+                    }
+                };
+            }).filter(feature => feature !== null);
+        }
+
+        function addMapLayer(layerId, features, color) {
+            // Add source
+            map.addSource(layerId, {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: features
+                }
+            });
+
+            // Add circle layer - always use the layer color for consistency
+            map.addLayer({
+                id: `${layerId}-circles`,
+                type: 'circle',
+                source: layerId,
+                paint: {
+                    'circle-radius': [
+                        'case',
+                        ['has', 'scale'],
+                        ['max', ['*', ['get', 'scale'], 15], 4], // Use same 15x multiplier as original map, minimum 4 pixels
+                        6 // Default size of 6 pixels to match original map
+                    ],
+                    'circle-color': color, // Always use the layer color, not individual point colors
+                    'circle-stroke-color': [
+                        'case',
+                        ['has', 'strokeColor'], ['get', 'strokeColor'],
+                        '#ffffff'
+                    ],
+                    'circle-stroke-width': 1,
+                    'circle-opacity': 0.8,
+                    'circle-stroke-opacity': 1
+                }
+            });
+
+            // Add hover effect
+            map.on('mouseenter', `${layerId}-circles`, function() {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+
+            map.on('mouseleave', `${layerId}-circles`, function() {
+                map.getCanvas().style.cursor = '';
+            });
+
+            // Add click handler for popup
+            map.on('click', `${layerId}-circles`, function(e) {
+                const properties = e.features[0].properties;
+                let tooltipFields = properties.tooltip_fields || {};
+                if (typeof tooltipFields === 'string') {
+                    try { tooltipFields = JSON.parse(tooltipFields); } catch (err) { tooltipFields = {}; }
+                }
+
+                let tooltipContent = `<div class="tsf-tooltip">`;
+                tooltipContent += `<div class="tsf-tooltip-title">${properties.title || 'Point'}</div>`;
+                
+                if (properties.map_title) {
+                    tooltipContent += `<div class="tsf-tooltip-row">
+                        <div class="tsf-tooltip-key">From:</div>
+                        <div class="tsf-tooltip-val">${properties.map_title}</div>
+                    </div>`;
+                }
+
+                if (properties.description) {
+                    tooltipContent += `<div class="tsf-tooltip-row">
+                        <div class="tsf-tooltip-key">Description:</div>
+                        <div class="tsf-tooltip-val">${properties.description}</div>
+                    </div>`;
+                }
+
+                if (properties.value) {
+                    tooltipContent += `<div class="tsf-tooltip-row">
+                        <div class="tsf-tooltip-key">Value:</div>
+                        <div class="tsf-tooltip-val">${properties.value}</div>
+                    </div>`;
+                }
+
+                // Add additional tooltip fields
+                const locationFields = new Set(['lat','lon','long','latitude','longitude','coordinates','point','point_geom','intersection','address','street','city','state','zip']);
+                for (const [field, value] of Object.entries(tooltipFields)) {
+                    if (field === 'title' || field === 'description' || field === 'value') continue;
+                    if (locationFields.has(field)) continue;
+                    if (/(^|_)(lat|lon|long|coord|address|street|city|state|zip|point|geom)(_|$)/i.test(field)) continue;
+                    
+                    const displayKey = field.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    tooltipContent += `<div class="tsf-tooltip-row">
+                        <div class="tsf-tooltip-key">${displayKey}:</div>
+                        <div class="tsf-tooltip-val">${value}</div>
+                    </div>`;
+                }
+
+                tooltipContent += `</div>`;
+
+                new mapboxgl.Popup({
+                    closeOnClick: true,
+                    closeButton: true
+                })
+                .setLngLat(e.lngLat)
+                .setHTML(tooltipContent)
+                .addTo(map);
+            });
+        }
+
+        function toggleLayer(layerId, visible) {
+            if (!map || !map.getLayer(`${layerId}-circles`)) return;
+            
+            map.setLayoutProperty(`${layerId}-circles`, 'visibility', visible ? 'visible' : 'none');
+        }
+
+        function updateLegend() {
+            const legendContent = document.getElementById('legend-content');
+            // Get colors from CSS variables for proper theme support
+            const computedStyle = getComputedStyle(document.documentElement);
+            const LAYER1_COLOR = computedStyle.getPropertyValue('--bright-purple').trim() || '#ad35fa'; // Brand bright purple
+            const LAYER2_COLOR = computedStyle.getPropertyValue('--warm-coral').trim() || '#FF6B5A'; // Brand warm coral
+            let legendHTML = '';
+
+            if (map1Data) {
+                const pointCount = map1Data.location_data ? map1Data.location_data.length : 0;
+                legendHTML += `
+                    <div class="legend-item" style="align-items: flex-start; padding: 12px 8px;">
+                        <div class="legend-color" style="background-color: ${LAYER1_COLOR}; border: 2px solid #ffffff; margin-top: 2px;"></div>
+                        <div class="legend-label" style="flex-grow: 1;" onclick="openMap('${map1Data.id}')" title="Click to view ${map1Data.title}">
+                            <strong>${map1Data.title}</strong><br>
+                            <small style="color: var(--text-secondary);">${pointCount} points • Click to view</small>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <i class="fas fa-external-link-alt" onclick="openMap('${map1Data.id}')" style="opacity: 0.6; font-size: 0.8rem; cursor: pointer;" title="View map"></i>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="layer1-toggle" checked onchange="toggleLayer('layer1', this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (map2Data) {
+                const pointCount = map2Data.location_data ? map2Data.location_data.length : 0;
+                legendHTML += `
+                    <div class="legend-item" style="align-items: flex-start; padding: 12px 8px;">
+                        <div class="legend-color" style="background-color: ${LAYER2_COLOR}; border: 2px solid #ffffff; margin-top: 2px;"></div>
+                        <div class="legend-label" style="flex-grow: 1;" onclick="openMap('${map2Data.id}')" title="Click to view ${map2Data.title}">
+                            <strong>${map2Data.title}</strong><br>
+                            <small style="color: var(--text-secondary);">${pointCount} points • Click to view</small>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <i class="fas fa-external-link-alt" onclick="openMap('${map2Data.id}')" style="opacity: 0.6; font-size: 0.8rem; cursor: pointer;" title="View map"></i>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="layer2-toggle" checked onchange="toggleLayer('layer2', this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                `;
+            }
+
+            legendContent.innerHTML = legendHTML;
+        }
+
+        function updateSubtitle() {
+            const subtitle = document.getElementById('map-comparison-subtitle');
+            if (map1Data && map2Data) {
+                const comparisonText = `Comparing ${map1Data.title} to ${map2Data.title}`;
+                subtitle.textContent = comparisonText;
+                
+                // Update the document title
+                document.title = `Dual Map - ${comparisonText} | TransparentSF`;
+            }
+        }
+
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.innerHTML = `
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                ${message}
+            `;
+            
+            const mapContainer = document.querySelector('.map-container');
+            mapContainer.appendChild(errorDiv);
+        }
+
+        function showLoading() {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loading';
+            loadingDiv.className = 'loading';
+            loadingDiv.innerHTML = `
+                <div class="spinner"></div>
+                Loading map data...
+            `;
+            
+            const mapContainer = document.querySelector('.map-container');
+            mapContainer.appendChild(loadingDiv);
+        }
+
+        function hideLoading() {
+            const loadingDiv = document.getElementById('loading');
+            if (loadingDiv) {
+                loadingDiv.remove();
+            }
+        }
+
+        function openMap(mapId) {
+            // Open the individual map in a new tab
+            const mapUrl = `/map/${mapId}`;
+            window.open(mapUrl, '_blank');
+        }
+
+        async function shareMap() {
+            const shareBtn = document.getElementById('share-btn');
+            const originalContent = shareBtn.innerHTML;
+            
+            try {
+                // Get the current URL
+                const currentUrl = window.location.href;
+                
+                // Try to use the modern Clipboard API first
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(currentUrl);
+                } else {
+                    // Fallback for older browsers or non-secure contexts
+                    const textArea = document.createElement('textarea');
+                    textArea.value = currentUrl;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-999999px';
+                    textArea.style.top = '-999999px';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand('copy');
+                    } catch (err) {
+                        throw new Error('Copy failed');
+                    }
+                    
+                    document.body.removeChild(textArea);
+                }
+                
+                // Show success feedback
+                shareBtn.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                shareBtn.classList.add('copied');
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    shareBtn.innerHTML = originalContent;
+                    shareBtn.classList.remove('copied');
+                }, 2000);
+                
+            } catch (err) {
+                console.error('Failed to copy URL:', err);
+                
+                // Show error feedback
+                shareBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Failed';
+                shareBtn.style.color = 'var(--error, #dc3545)';
+                shareBtn.style.borderColor = 'var(--error, #dc3545)';
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    shareBtn.innerHTML = originalContent;
+                    shareBtn.style.color = '';
+                    shareBtn.style.borderColor = '';
+                }, 2000);
+                
+                // Also show a fallback dialog with the URL
+                const urlDialog = prompt('Copy this URL to share:', window.location.href);
+            }
+        }
+    </script>
+</body>
+</html>

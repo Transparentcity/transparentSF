@@ -216,6 +216,8 @@ from routes.charts import router as charts_router, set_templates as set_charts_t
 from routes.writeups import router as writeups_router, set_templates as set_writeups_templates
 from routes.legal_code import router as legal_code_router, set_templates as set_legal_code_templates
 from routes.settings import router as settings_router, set_templates as set_settings_templates
+from routes.vacancy_analysis import router as vacancy_analysis_router, set_templates as set_vacancy_analysis_templates
+from routes.dual_map import router as dual_map_router, set_templates as set_dual_map_templates
 
 app = FastAPI()
 
@@ -852,6 +854,16 @@ async def redirect_to_anomaly_analyzer():
 set_settings_templates(templates)
 app.include_router(settings_router, prefix="/backend", tags=["settings"])
 logger.debug("Included settings router at /backend")
+
+# Mount vacancy analysis router
+set_vacancy_analysis_templates(templates)
+app.include_router(vacancy_analysis_router, tags=["vacancy-analysis"])
+logger.debug("Included vacancy analysis router")
+
+# Mount dual map router
+set_dual_map_templates(templates)
+app.include_router(dual_map_router, tags=["dual-map"])
+logger.debug("Included dual map router")
 
 # Add direct routes for API endpoints that need to be accessible without the /backend prefix
 @app.post("/api/add_subscriber")

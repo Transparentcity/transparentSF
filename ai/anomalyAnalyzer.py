@@ -566,10 +566,14 @@ def get_dataset_columns(context_variables, endpoint=None):
         for col in columns:
             if isinstance(col, dict):
                 info = {
-                    "name": col.get("name", col.get("fieldName", "unknown")),
+                    "name": col.get("fieldName", "unknown"),  # Use fieldName for queries
                     "type": col.get("dataTypeName", col.get("type", "unknown")),
                     "description": col.get("description", "")
                 }
+                # Add display name if available and different from fieldName
+                display_name = col.get("name")
+                if display_name and display_name != col.get("fieldName"):
+                    info["display_name"] = display_name
                 column_info.append(info)
         
         return {

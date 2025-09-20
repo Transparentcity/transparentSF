@@ -275,3 +275,94 @@ async def view_log_info(file: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+
+@router.get("/log-viewer", response_class=HTMLResponse)
+async def log_viewer(request: Request, file: str, lines: int = 1000):
+    """Simple log viewer for files under ai/logs.
+    Displays the last N lines to avoid loading huge files.
+    """
+    try:
+        # Resolve logs directory relative to this module
+        logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+
+        # Sanitize filename and restrict to .log files
+        safe_name = os.path.basename(file)
+        if not safe_name.endswith('.log'):
+            raise HTTPException(status_code=400, detail="Invalid log filename")
+
+        file_path = os.path.join(logs_dir, safe_name)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Log file not found")
+
+        # Clamp lines to a reasonable range
+        try:
+            max_lines = max(100, min(int(lines), 10000))
+        except Exception:
+            max_lines = 1000
+
+        # Read last N lines efficiently
+        tail_lines = []
+        with open(file_path, 'r', errors='ignore') as f:
+            tail_lines = f.readlines()[-max_lines:]
+
+        content = ''.join(tail_lines)
+
+        # Minimal HTML wrapper for display
+        html = """
+<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+    <meta charset=\"UTF-8\">
+    <title>Log Viewer - """ + safe_name + """</title>
+    <link rel=\"icon\" type=\"image/x-icon\" href=\"/static/favicon.ico\">    
+    <style>
+        body { margin: 0; background: #0b0f19; color: #eaeefb; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; }
+        header { position: sticky; top: 0; background: #0f1424; padding: 10px 16px; border-bottom: 1px solid #1f2a44; display: flex; gap: 12px; align-items: center; }
+        header .meta { color: #9fb0d1; font-size: 12px; }
+        main { padding: 12px; }
+        pre { white-space: pre-wrap; word-wrap: break-word; background: #0b0f19; padding: 0; margin: 0; }
+        .log { line-height: 1.4; font-size: 12.5px; }
+        .controls input { width: 90px; background: #0b0f19; border: 1px solid #2a3b63; color: #eaeefb; border-radius: 6px; padding: 6px 8px; }
+        .controls button { background: #5b6ee1; color: white; border: 0; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+        .controls button:hover { background: #6a7bf0; }
+    </style>
+    <script>
+        function refresh() {
+            const params = new URLSearchParams(window.location.search);
+            const file = params.get('file');
+            const lines = document.getElementById('lines').value || '1000';
+            window.location.href = `/backend/log-viewer?file=${encodeURIComponent(file)}&lines=${encodeURIComponent(lines)}`;
+        }
+        function autoScroll() {
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+        window.addEventListener('load', autoScroll);
+    </script>
+    <link rel=\"stylesheet\" href=\"/static/darkmode.css\">
+    <script src=\"/static/js/darkmode.js\"></script>
+    <script src=\"/static/js/iframe-darkmode.js\"></script>
+    
+</head>
+<body>
+    <header>
+        <div><strong>""" + safe_name + """</strong></div>
+        <div class=\"meta\">Showing last """ + str(max_lines) + """ lines</div>
+        <div class=\"controls\">
+            <label>Lines: <input id=\"lines\" type=\"number\" min=\"100\" max=\"10000\" step=\"100\" value=\"""" + str(max_lines) + """\"></label>
+            <button onclick=\"refresh()\">Refresh</button>
+        </div>
+    </header>
+    <main>
+        <pre class=\"log\">""" + content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;') + """</pre>
+    </main>
+</body>
+</html>
+"""
+
+        return HTMLResponse(content=html)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error rendering log viewer: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error rendering log viewer")

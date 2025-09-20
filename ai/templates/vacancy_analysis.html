@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Vacancy Analysis | TransparentSF</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Dark Mode CSS -->
+    <link rel="stylesheet" href="/static/darkmode.css">
+    <!-- Dark Mode JavaScript -->
+    <script src="/static/js/darkmode.js"></script>
+    <script src="/static/js/iframe-darkmode.js"></script>
+    <!-- Mapbox GL JS CSS -->
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'IBM Plex Sans', Arial, sans-serif;
+            color: var(--text-primary);
+            background-color: var(--bg-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .page-header {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px var(--shadow-light);
+        }
+        
+        .page-title {
+            color: var(--text-primary);
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .page-subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin: 5px 0 0 0;
+        }
+        
+        .controls-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px var(--shadow-light);
+        }
+        
+        .stats-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px var(--shadow-light);
+        }
+        
+        .stat-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        
+        .stat-card.open {
+            border-left: 4px solid #28a745;
+        }
+        
+        .stat-card.closed {
+            border-left: 4px solid #dc3545;
+        }
+        
+        .stat-card.vacancy {
+            border-left: 4px solid #ffc107;
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin: 5px 0 0 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .map-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            height: 100vh;
+            overflow: hidden;
+            box-shadow: 0 2px 4px var(--shadow-light);
+            cursor: default;
+        }
+        
+        .map-container .mapboxgl-canvas {
+            cursor: default;
+        }
+        
+        .form-label {
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        
+        .form-select, .form-control {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            border-radius: 6px;
+        }
+        
+        .form-select:focus, .form-control:focus {
+            background: var(--bg-tertiary);
+            border-color: var(--bright-purple);
+            color: var(--text-primary);
+            box-shadow: 0 0 0 0.2rem rgba(173, 53, 250, 0.25);
+        }
+        
+        .btn-primary {
+            background: var(--bright-purple);
+            border: 1px solid var(--bright-purple);
+            color: white;
+            border-radius: 6px;
+            font-weight: 500;
+            padding: 10px 20px;
+        }
+        
+        .btn-primary:hover {
+            background: var(--bright-purple);
+            border-color: var(--bright-purple);
+            opacity: 0.9;
+        }
+        
+        .form-check-input:checked {
+            background-color: var(--bright-purple);
+            border-color: var(--bright-purple);
+        }
+        
+        .form-check-label {
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .district-stats {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .district-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            border-left: 4px solid var(--bright-purple);
+        }
+        
+        .district-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .district-stats-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border-primary);
+            border-top: 2px solid var(--bright-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .section-title {
+            color: var(--text-primary);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .filter-section {
+            margin-bottom: 15px;
+        }
+        
+        /* Popup styling */
+        .popup-content {
+            min-width: 200px;
+            font-size: 0.9rem;
+        }
+        
+        .popup-content h6 {
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+        
+        .popup-content p {
+            margin-bottom: 0.25rem;
+            font-size: 0.85rem;
+        }
+        
+        /* Mapbox popup customization */
+        .mapboxgl-popup-content {
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .mapboxgl-popup-tip {
+            border-top-color: var(--bg-secondary);
+        }
+        
+        .mapboxgl-popup-close-button {
+            color: var(--text-primary);
+            font-size: 1.2rem;
+        }
+        
+        /* Custom popup styling */
+        .custom-popup .mapboxgl-popup-content {
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+    </style>
+</head>
+<body>
+    <div class="d-flex h-100">
+        <!-- Left Sidebar - Controls and Stats -->
+        <div class="sidebar" style="width: 350px; overflow-y: auto; padding: 20px; background: var(--bg-primary);">
+        <!-- Page Header -->
+            <div class="page-header mb-3">
+            <h1 class="page-title">Business Vacancy Analysis</h1>
+            <p class="page-subtitle">Analyze business vacancy rates across San Francisco with interactive mapping and filtering</p>
+        </div>
+        
+                <!-- Controls Panel -->
+                <div class="controls-panel">
+                    <h5 class="section-title">Analysis Controls</h5>
+                    
+                    <div class="filter-section">
+                        <label for="district" class="form-label">Supervisor District:</label>
+                        <select id="district" class="form-select">
+                            <option value="">All Districts</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <label for="businessCorridor" class="form-label">Business Corridor:</label>
+                        <select id="businessCorridor" class="form-select">
+                            <option value="">All Corridors</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-section">
+                    <label for="industryType" class="form-label">Industry Type (NAICS):</label>
+                    <select id="industryType" class="form-select">
+                        <option value="">All Industry Types</option>
+                    </select>
+                </div>
+                
+                <div class="filter-section">
+                    <label for="licenseType" class="form-label">License Type:</label>
+                        <select id="licenseType" class="form-select">
+                            <option value="">All License Types</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="corridorOnly" checked>
+                            <label class="form-check-label" for="corridorOnly">
+                                Show only business corridors
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button id="applyFilters" class="btn btn-primary w-100">
+                        <span id="filterButtonText">Apply Filters</span>
+                        <span id="filterSpinner" class="loading-spinner" style="display: none;"></span>
+                    </button>
+                </div>
+                
+                <!-- Summary Statistics -->
+                <div class="stats-panel">
+                    <h5 class="section-title">Summary Statistics</h5>
+                    <div id="summaryStats">
+                        <div class="stat-card">
+                            <div class="stat-number" id="totalLocations">-</div>
+                            <div class="stat-label">Total Locations</div>
+                        </div>
+                        <div class="stat-card open">
+                            <div class="stat-number" id="openLocations">-</div>
+                            <div class="stat-label">Open Locations</div>
+                        </div>
+                        <div class="stat-card closed">
+                            <div class="stat-number" id="closedLocations">-</div>
+                            <div class="stat-label">Closed Locations</div>
+                        </div>
+                        <div class="stat-card vacancy">
+                            <div class="stat-number" id="vacancyRate">-</div>
+                            <div class="stat-label">Vacancy Rate</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- District Breakdown -->
+                <div class="stats-panel">
+                    <h5 class="section-title">District Breakdown</h5>
+                    <div id="districtStats" class="district-stats">
+                        <!-- District stats will be populated here -->
+                    </div>
+                </div>
+            </div>
+            
+        <!-- Map - Takes remaining space -->
+        <div class="flex-grow-1">
+                <div class="map-container" id="vacancyMap">
+                <!-- Map will be initialized here - content will be cleared -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Global variables
+        let vacancyMap = null;
+        let currentData = null;
+        let mapboxToken = '{{ mapbox_token }}';
+        
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeFilters();
+            initializeMap();
+            // loadInitialData() is now called from initializeFilters() after Larkin Street is selected
+        });
+        
+        // Initialize filter dropdowns
+        async function initializeFilters() {
+            try {
+                const response = await fetch('/api/vacancy-analysis/filters');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    const filters = result.filters;
+                    
+                    // Populate industry types (NAICS)
+                    const industrySelect = document.getElementById('industryType');
+                    filters.industry_types.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = type;
+                        industrySelect.appendChild(option);
+                    });
+                    
+                    // Populate license types
+                    const licenseSelect = document.getElementById('licenseType');
+                    filters.license_types.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = type;
+                        licenseSelect.appendChild(option);
+                    });
+                    
+                    // Populate business corridors
+                    const corridorSelect = document.getElementById('businessCorridor');
+                    filters.business_corridors.forEach(corridor => {
+                        const option = document.createElement('option');
+                        option.value = corridor;
+                        option.textContent = corridor;
+                        if (corridor === 'Larkin Street') {
+                            option.selected = true;
+                        }
+                        corridorSelect.appendChild(option);
+                    });
+                    
+                    // Apply Larkin Street filter immediately
+                    applyFilters();
+                    
+                    // Populate districts
+                    const districtSelect = document.getElementById('district');
+                    filters.districts.forEach(district => {
+                        const option = document.createElement('option');
+                        option.value = district;
+                        option.textContent = `District ${district}`;
+                        districtSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading filters:', error);
+            }
+        }
+        
+        // Initialize Mapbox map
+        function initializeMap() {
+            // Clear the map container to avoid interference
+            const mapContainer = document.getElementById('vacancyMap');
+            mapContainer.innerHTML = '';
+            
+            mapboxgl.accessToken = mapboxToken;
+            
+            // Determine map style based on current theme
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+            const mapStyle = currentTheme === 'dark' 
+                ? 'mapbox://styles/mapbox/dark-v11' 
+                : 'mapbox://styles/mapbox/light-v11';
+            
+            vacancyMap = new mapboxgl.Map({
+                container: 'vacancyMap',
+                style: mapStyle,
+                center: [-122.4194, 37.7749], // San Francisco
+                zoom: 11,
+                attributionControl: false,
+                dragPan: true,
+                dragRotate: false,
+                scrollZoom: true,
+                boxZoom: true,
+                doubleClickZoom: true,
+                keyboard: true
+            });
+            
+            vacancyMap.on('load', function() {
+                // Set initial cursor
+                vacancyMap.getCanvas().style.cursor = 'default';
+                
+                console.log('Map loaded. Container size:', vacancyMap.getContainer().getBoundingClientRect());
+                console.log('Map canvas size:', vacancyMap.getCanvas().getBoundingClientRect());
+                
+                // Use Mapbox's built-in zoom behavior
+            });
+        }
+        
+        // Load initial data
+        async function loadInitialData() {
+            console.log('loadInitialData called');
+            await applyFilters();
+        }
+        
+        // Apply filters and load data
+        async function applyFilters() {
+            const filterButton = document.getElementById('applyFilters');
+            const filterText = document.getElementById('filterButtonText');
+            const filterSpinner = document.getElementById('filterSpinner');
+            
+            // Show loading state
+            filterButton.disabled = true;
+            filterText.style.display = 'none';
+            filterSpinner.style.display = 'inline-block';
+            
+            try {
+                const params = new URLSearchParams();
+                
+                const industryType = document.getElementById('industryType').value;
+                const licenseType = document.getElementById('licenseType').value;
+                const businessCorridor = document.getElementById('businessCorridor').value;
+                const district = document.getElementById('district').value;
+                const corridorOnly = document.getElementById('corridorOnly').checked;
+                
+                if (industryType) params.append('industry_type', industryType);
+                if (licenseType) params.append('license_type', licenseType);
+                if (businessCorridor) params.append('business_corridor', businessCorridor);
+                if (district) params.append('district', district);
+                if (corridorOnly) params.append('corridor_only', 'true');
+                
+                const response = await fetch(`/api/vacancy-analysis/data?${params.toString()}`);
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    console.log('Data loaded successfully, calling updateMap with:', result.data ? result.data.length : 'null', 'items');
+                    currentData = result.data;
+                    updateMap(result.data);
+                    updateStats(result.summary, result.district_stats);
+                } else {
+                    console.error('Error loading data:', result.message);
+                }
+            } catch (error) {
+                console.error('Error applying filters:', error);
+            } finally {
+                // Hide loading state
+                filterButton.disabled = false;
+                filterText.style.display = 'inline';
+                filterSpinner.style.display = 'none';
+            }
+        }
+        
+        // Update map with new data
+        function updateMap(data) {
+            if (!vacancyMap) return;
+            
+            let layerClickDetected = false;
+            
+            // Remove existing sources and layers
+            if (vacancyMap.getSource('points')) {
+                // Remove heatmap layers if they exist
+                if (vacancyMap.getLayer('vacancy-heatmap')) {
+                    vacancyMap.removeLayer('vacancy-heatmap');
+                    vacancyMap.removeLayer('vacancy-heatmap-open');
+                    vacancyMap.removeLayer('vacancy-heatmap-closed');
+                }
+                // Remove point layers if they exist
+                if (vacancyMap.getLayer('points-circles')) {
+                    vacancyMap.removeLayer('points-circles');
+                }
+                vacancyMap.removeSource('points');
+            }
+            
+            // Prepare data for Mapbox heatmap
+            const validData = data.filter(item => item.location && item.location.coordinates && 
+                               item.location.coordinates[0] !== 0 && item.location.coordinates[1] !== 0);
+            
+            // Group businesses by coordinates (same location)
+            const locationGroups = {};
+            validData.forEach(item => {
+                const coordKey = `${item.location.coordinates[0].toFixed(6)},${item.location.coordinates[1].toFixed(6)}`;
+                if (!locationGroups[coordKey]) {
+                    locationGroups[coordKey] = {
+                        coordinates: item.location.coordinates,
+                        businesses: []
+                    };
+                }
+                locationGroups[coordKey].businesses.push(item);
+            });
+            
+            console.log('Location groups created:', Object.keys(locationGroups).length);
+            console.log('Sample location group:', Object.values(locationGroups)[0]);
+            
+            const features = Object.values(locationGroups).map(group => {
+                const businesses = group.businesses;
+                const businessCount = businesses.length;
+                
+                console.log(`Processing group with ${businessCount} businesses at coordinates:`, group.coordinates);
+                
+                // Calculate status summary
+                const openCount = businesses.filter(b => b.status === 'Open').length;
+                const closedCount = businesses.filter(b => b.status === 'Closed').length;
+                
+                // Primary business (first one) for main display
+                const primaryBusiness = businesses[0];
+                
+                return {
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: group.coordinates
+                    },
+                    properties: {
+                            address: primaryBusiness.location,
+                            business_name: primaryBusiness.dba_name,
+                            industry_type: primaryBusiness.naic_code_description,
+                            license_type: primaryBusiness.lic_code_description,
+                            corridor: primaryBusiness.business_corridor,
+                            district: primaryBusiness.supervisor_district,
+                            status: primaryBusiness.status,
+                            open_date: primaryBusiness.most_recent_open_date,
+                            close_date: primaryBusiness.most_recent_close_date,
+                            full_business_address: primaryBusiness.full_business_address,
+                            // Multi-business properties
+                            business_count: businessCount,
+                            all_businesses: businesses,
+                            open_count: openCount,
+                            closed_count: closedCount,
+                            // Heatmap weight - higher for more businesses and closed status
+                            weight: businessCount * (closedCount > openCount ? 2 : 1)
+                        }
+                };
+            });
+            
+            console.log('Features after processing:', features.length);
+            console.log('Sample processed feature:', features[0]);
+            
+            const geojsonData = {
+                type: 'FeatureCollection',
+                features: features
+            };
+            
+            
+            // Add source (like map.html)
+            vacancyMap.addSource('points', {
+                type: 'geojson',
+                data: geojsonData
+            });
+            
+            // Determine visualization type based on data size
+            const useHeatmap = geojsonData.features.length >= 1000;
+            console.log(`Using ${useHeatmap ? 'heatmap' : 'points'} visualization for ${geojsonData.features.length} locations`);
+            
+            // For debugging, let's force points visualization for now
+            const forcePoints = true; // Set to true to force points for testing
+            
+            console.log('Data features count:', geojsonData.features.length);
+            console.log('Will use heatmap:', useHeatmap);
+            console.log('Force points:', forcePoints);
+            console.log('Condition (useHeatmap && !forcePoints):', useHeatmap && !forcePoints);
+            
+            if (geojsonData.features.length === 0) {
+                console.error('ERROR: No features to display! GeoJSON data is empty.');
+                return;
+            }
+            
+            console.log('Sample grouped feature:', geojsonData.features[0]);
+            
+            
+            // Auto-zoom to fit all data points
+            if (geojsonData.features.length > 0) {
+                const bounds = new mapboxgl.LngLatBounds();
+                geojsonData.features.forEach(feature => {
+                    if (feature.geometry && feature.geometry.coordinates) {
+                        bounds.extend(feature.geometry.coordinates);
+                    }
+                });
+                
+                // Fit the map to the bounds with some padding
+                vacancyMap.fitBounds(bounds, {
+                    padding: 50,
+                    maxZoom: 15,
+                    minZoom: 12
+                });
+            }
+            
+            console.log('About to check condition: useHeatmap && !forcePoints');
+            console.log('useHeatmap:', useHeatmap);
+            console.log('!forcePoints:', !forcePoints);
+            console.log('Result:', useHeatmap && !forcePoints);
+            
+            if (useHeatmap && !forcePoints) {
+                console.log('Taking HEATMAP branch');
+                // Add heatmap layer for all businesses
+                vacancyMap.addLayer({
+                    id: 'vacancy-heatmap',
+                    type: 'heatmap',
+                    source: 'points',
+                    paint: {
+                        'heatmap-weight': {
+                            property: 'weight',
+                            type: 'exponential',
+                            stops: [
+                                [0, 0],
+                                [1, 1],
+                                [2, 2]
+                            ]
+                        },
+                        'heatmap-intensity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            0, 0.5,
+                            9, 1,
+                            15, 2
+                        ],
+                        'heatmap-color': [
+                            'interpolate',
+                            ['linear'],
+                            ['heatmap-density'],
+                            0, 'rgba(0, 0, 255, 0)',
+                            0.1, 'rgb(0, 0, 255)',
+                            0.3, 'rgb(0, 255, 0)',
+                            0.5, 'rgb(255, 255, 0)',
+                            0.7, 'rgb(255, 165, 0)',
+                            1, 'rgb(255, 0, 0)'
+                        ],
+                        'heatmap-radius': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            0, 2,
+                            9, 20,
+                            15, 30
+                        ],
+                        'heatmap-opacity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            7, 1,
+                            9, 0.8,
+                            15, 0.6
+                        ]
+                    }
+                });
+                
+                // Add separate heatmap for open businesses (green tint)
+                vacancyMap.addLayer({
+                    id: 'vacancy-heatmap-open',
+                    type: 'heatmap',
+                    source: 'points',
+                    filter: ['==', ['get', 'status'], 'Open'],
+                    paint: {
+                        'heatmap-weight': 1,
+                        'heatmap-intensity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            0, 0.3,
+                            9, 0.6,
+                            15, 1
+                        ],
+                        'heatmap-color': [
+                            'interpolate',
+                            ['linear'],
+                            ['heatmap-density'],
+                            0, 'rgba(0, 255, 0, 0)',
+                            0.1, 'rgba(0, 255, 0, 0.3)',
+                            0.3, 'rgba(0, 255, 0, 0.6)',
+                            0.5, 'rgba(0, 255, 0, 0.8)',
+                            1, 'rgba(0, 255, 0, 1)'
+                        ],
+                        'heatmap-radius': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            0, 2,
+                            9, 15,
+                            15, 25
+                        ],
+                        'heatmap-opacity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            7, 0.8,
+                            9, 0.6,
+                            15, 0.4
+                        ]
+                    }
+                });
+                
+                // Add separate heatmap for closed businesses (red tint)
+                vacancyMap.addLayer({
+                    id: 'vacancy-heatmap-closed',
+                    type: 'heatmap',
+                    source: 'points',
+                    filter: ['==', ['get', 'status'], 'Closed'],
+                    paint: {
+                        'heatmap-weight': 2,
+                        'heatmap-intensity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            0, 0.5,
+                            9, 1,
+                            15, 1.5
+                        ],
+                        'heatmap-color': [
+                            'interpolate',
+                            ['linear'],
+                            ['heatmap-density'],
+                            0, 'rgba(255, 0, 0, 0)',
+                            0.1, 'rgba(255, 0, 0, 0.3)',
+                            0.3, 'rgba(255, 0, 0, 0.6)',
+                            0.5, 'rgba(255, 0, 0, 0.8)',
+                            1, 'rgba(255, 0, 0, 1)'
+                        ],
+                        'heatmap-radius': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            0, 2,
+                            9, 20,
+                            15, 30
+                        ],
+                        'heatmap-opacity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            7, 0.9,
+                            9, 0.7,
+                            15, 0.5
+                        ]
+                    }
+                });
+                
+                // Add click handlers for heatmap layers
+                vacancyMap.on('click', 'vacancy-heatmap', function(e) {
+                    console.log('Clicked on heatmap');
+                    // For heatmap, we can't get individual features, so we'll show a general popup
+                    new mapboxgl.Popup()
+                        .setLngLat(e.lngLat)
+                        .setHTML(`
+                            <div class="popup-content">
+                                <h6 class="fw-bold">Business Density Area</h6>
+                                <p class="mb-1">This area shows high business density. Zoom in to see individual businesses.</p>
+                            </div>
+                        `)
+                        .addTo(vacancyMap);
+                });
+                
+                vacancyMap.on('click', 'vacancy-heatmap-open', function(e) {
+                    console.log('Clicked on open heatmap');
+                    new mapboxgl.Popup()
+                        .setLngLat(e.lngLat)
+                        .setHTML(`
+                            <div class="popup-content">
+                                <h6 class="fw-bold text-success">Open Business Density</h6>
+                                <p class="mb-1">This area shows high density of open businesses. Zoom in to see individual businesses.</p>
+                            </div>
+                        `)
+                        .addTo(vacancyMap);
+                });
+                
+                vacancyMap.on('click', 'vacancy-heatmap-closed', function(e) {
+                    console.log('Clicked on closed heatmap');
+                    new mapboxgl.Popup()
+                        .setLngLat(e.lngLat)
+                        .setHTML(`
+                            <div class="popup-content">
+                                <h6 class="fw-bold text-danger">Closed Business Density</h6>
+                                <p class="mb-1">This area shows high density of closed businesses. Zoom in to see individual businesses.</p>
+                            </div>
+                        `)
+                        .addTo(vacancyMap);
+                });
+                
+                // Change cursor on heatmap hover
+                vacancyMap.on('mouseenter', 'vacancy-heatmap', function() {
+                    vacancyMap.getCanvas().style.cursor = 'pointer';
+                });
+                vacancyMap.on('mouseleave', 'vacancy-heatmap', function() {
+                    vacancyMap.getCanvas().style.cursor = '';
+                });
+                vacancyMap.on('mouseenter', 'vacancy-heatmap-open', function() {
+                    vacancyMap.getCanvas().style.cursor = 'pointer';
+                });
+                vacancyMap.on('mouseleave', 'vacancy-heatmap-open', function() {
+                    vacancyMap.getCanvas().style.cursor = '';
+                });
+                vacancyMap.on('mouseenter', 'vacancy-heatmap-closed', function() {
+                    vacancyMap.getCanvas().style.cursor = 'pointer';
+                });
+                vacancyMap.on('mouseleave', 'vacancy-heatmap-closed', function() {
+                    vacancyMap.getCanvas().style.cursor = '';
+                });
+            } else {
+                console.log('Taking POINTS branch');
+                // Add circle layer for points (exactly like map.html)
+                try {
+                    console.log('Adding points-circles layer...');
+                vacancyMap.addLayer({
+                    id: 'points-circles',
+                    type: 'circle',
+                    source: 'points',
+                    paint: {
+                        'circle-radius': [
+                            'interpolate',
+                            ['linear'],
+                            ['get', 'business_count'],
+                            1, 4,     // Single business: 4px
+                            2, 7,     // 2 businesses: 7px
+                            5, 12,    // 5 businesses: 12px
+                            10, 18,   // 10 businesses: 18px
+                            20, 25,   // 20 businesses: 25px
+                            40, 35    // 40+ businesses: 35px
+                        ],
+                        'circle-color': [
+                            'case',
+                            ['>', ['get', 'closed_count'], ['get', 'open_count']],
+                            '#ff0000',  // More closed than open - red
+                            ['>', ['get', 'open_count'], ['get', 'closed_count']],
+                            '#00ff00',  // More open than closed - green
+                            '#ffa500'   // Equal or mixed - orange
+                        ],
+                        'circle-stroke-color': [
+                            'case',
+                            ['>', ['get', 'business_count'], 1],
+                            '#ffffff',  // White stroke for multiple businesses
+                            '#cccccc'   // Light gray for single business
+                        ],
+                        'circle-stroke-width': [
+                            'interpolate',
+                            ['linear'],
+                            ['get', 'business_count'],
+                            1, 1,       // Thin stroke for single business
+                            2, 2,       // Medium stroke for 2 businesses
+                            5, 3        // Thick stroke for 5+ businesses
+                        ],
+                        'circle-opacity': 0.8,
+                        'circle-stroke-opacity': 1
+                    }
+                });
+                
+                console.log('Successfully added points-circles layer with', geojsonData.features.length, 'features');
+                
+                } catch (error) {
+                    console.error('ERROR adding points-circles layer:', error);
+                    console.error('GeoJSON data:', geojsonData);
+                    return;
+                }
+                
+                // Variable to track if layer click was handled
+                let layerClickHandled = false;
+                
+                // Add click handlers with a delay to ensure layer is ready
+                setTimeout(() => {
+                    console.log('Registering click handlers for points-circles (delayed)');
+                    
+                    // Remove any existing handlers first
+                    vacancyMap.off('mouseenter', 'points-circles');
+                    vacancyMap.off('mouseleave', 'points-circles');
+                    vacancyMap.off('click', 'points-circles');
+                    
+                    // Add hover effects for points
+                    vacancyMap.on('mouseenter', 'points-circles', function(e) {
+                        console.log('MOUSE ENTER: Hovering over business point:', e.features[0].properties.business_name);
+                        vacancyMap.getCanvas().style.cursor = 'pointer';
+                    });
+                    
+                    vacancyMap.on('mouseleave', 'points-circles', function(e) {
+                        console.log('MOUSE LEAVE: Left business point');
+                        vacancyMap.getCanvas().style.cursor = '';
+                    });
+                    
+                    // Add click handler for points
+                    vacancyMap.on('click', 'points-circles', function(e) {
+                        layerClickHandled = true;
+                        console.log('LAYER CLICK: Clicked on business point:', e.features[0].properties.business_name);
+                        console.log('LAYER CLICK: Feature properties:', e.features[0].properties);
+                        showBusinessPopup(e.features[0], e.lngLat);
+                        
+                        // Prevent event bubbling
+                        e.originalEvent.stopPropagation();
+                    });
+                    
+                    console.log('Layer click handler registered for points-circles (delayed)');
+                }, 500);
+                
+                // Debug: Check if layer is actually interactive
+                setTimeout(() => {
+                    console.log('=== LAYER DEBUG INFO ===');
+                    console.log('Layer exists:', !!vacancyMap.getLayer('points-circles'));
+                    console.log('Source exists:', !!vacancyMap.getSource('points'));
+                    console.log('Source loaded:', vacancyMap.isSourceLoaded('points'));
+                    
+                    if (vacancyMap.getLayer('points-circles')) {
+                        const layer = vacancyMap.getLayer('points-circles');
+                        console.log('Layer details:', layer);
+                        console.log('Layer type:', layer.type);
+                        console.log('Layer source:', layer.source);
+                        console.log('Layer visibility:', vacancyMap.getLayoutProperty('points-circles', 'visibility'));
+                    }
+                    
+                    // Test if we can query features
+                    const allFeatures = vacancyMap.queryRenderedFeatures({
+                        layers: ['points-circles']
+                    });
+                    console.log('Total rendered features:', allFeatures.length);
+                    
+                    if (allFeatures.length > 0) {
+                        console.log('Sample feature:', allFeatures[0]);
+                        console.log('Sample feature coordinates:', allFeatures[0].geometry.coordinates);
+                        
+                        // Test clicking on the first feature's location
+                        const testFeature = allFeatures[0];
+                        const testCoords = testFeature.geometry.coordinates;
+                        const testPoint = vacancyMap.project(testCoords);
+                        
+                        console.log('Test feature location:', testCoords);
+                        console.log('Test feature pixel location:', testPoint);
+                        
+                        // Test if we can find features at this known location
+                        const testFeatures = vacancyMap.queryRenderedFeatures(testPoint, {
+                            layers: ['points-circles']
+                        });
+                        console.log('Features found at test location:', testFeatures.length);
+                        
+                        if (testFeatures.length > 0) {
+                            console.log('SUCCESS: Can find feature at known location');
+                        } else {
+                            console.log('PROBLEM: Cannot find feature at its own location!');
+                        }
+                    }
+                    console.log('=== END DEBUG INFO ===');
+                }, 1000);
+                
+                // Ensure cursor resets when leaving the map entirely
+                vacancyMap.on('mouseleave', function() {
+                    vacancyMap.getCanvas().style.cursor = 'default';
+                });
+                
+                // Handle drag events to show appropriate cursor
+                vacancyMap.on('dragstart', function() {
+                    vacancyMap.getCanvas().style.cursor = 'grabbing';
+                });
+                
+                vacancyMap.on('dragend', function() {
+                    vacancyMap.getCanvas().style.cursor = 'default';
+                });
+                
+                // Fallback click handler - only triggers if layer click doesn't work
+                vacancyMap.on('click', function(e) {
+                    // Reset the flag for this click
+                    layerClickHandled = false;
+                    
+                    // Small delay to let layer click handler run first
+                    setTimeout(() => {
+                        if (!layerClickHandled) {
+                        console.log('FALLBACK: Layer click did not fire, checking for nearby features');
+                        console.log('Map clicked at:', e.lngLat, 'pixel:', e.point);
+                        console.log('Map bounds:', vacancyMap.getBounds());
+                        console.log('Map zoom:', vacancyMap.getZoom());
+                        console.log('Map center:', vacancyMap.getCenter());
+                            
+                            // Query for features at the click point using pixel coordinates
+                            const features = vacancyMap.queryRenderedFeatures(e.point, {
+                                layers: ['points-circles']
+                            });
+                            
+                            console.log('Features found at click point:', features.length);
+                            
+                            if (features.length > 0) {
+                                console.log('FALLBACK CLICK: Found feature at click point:', features[0].properties.business_name);
+                                showBusinessPopup(features[0], e.lngLat);
+                            } else {
+                                console.log('FALLBACK CLICK: No features found at exact click point');
+                                
+                                // Try a small radius around the click point
+                                const radius = 10; // pixels
+                                const bbox = [
+                                    [e.point.x - radius, e.point.y - radius],
+                                    [e.point.x + radius, e.point.y + radius]
+                                ];
+                                
+                                const nearbyFeatures = vacancyMap.queryRenderedFeatures(bbox, {
+                        layers: ['points-circles']
+                    });
+                    
+                                console.log('Features found in 10px radius:', nearbyFeatures.length);
+                                
+                                if (nearbyFeatures.length > 0) {
+                                    console.log('FALLBACK CLICK: Found nearby feature:', nearbyFeatures[0].properties.business_name);
+                                    showBusinessPopup(nearbyFeatures[0], e.lngLat);
+                                } else {
+                                    console.log('FALLBACK CLICK: No features found in nearby area');
+                                }
+                            }
+                        } else {
+                            console.log('FALLBACK: Layer click handled the event, skipping fallback');
+                        }
+                    }, 50);
+                });
+                
+                // Helper function to show business popup
+                function showBusinessPopup(feature, lngLat) {
+                    const coordinates = feature.geometry.coordinates.slice();
+                    const properties = feature.properties;
+                    
+                    // Debug: Log the properties to see what we're working with
+                    console.log('Feature properties:', properties);
+                    
+                    // Remove existing popups
+                    document.querySelectorAll('.mapboxgl-popup').forEach(popup => popup.remove());
+
+                    // Create popup based on status
+                    const isOpen = properties.status === 'Open';
+                    const statusClass = isOpen ? 'text-success' : 'text-danger';
+                    const statusText = isOpen ? 'Open' : 'Closed';
+
+                    // Format dates properly
+                    const formatDate = (dateStr) => {
+                        if (!dateStr) return 'N/A';
+                        try {
+                            return new Date(dateStr).toLocaleDateString();
+                        } catch (e) {
+                            return 'N/A';
+                        }
+                    };
+                    
+                    // Extract address from location data and business properties
+                    const getAddressFromLocation = (properties) => {
+                        // Try full business address first
+                        if (properties.full_business_address) {
+                            return properties.full_business_address;
+                        }
+                        
+                        // Fall back to coordinate-based approximation
+                        try {
+                            let locationData = properties.address;
+                            
+                            if (!locationData) return 'Address not available';
+                            
+                            let parsedLocation = locationData;
+                            
+                            // If it's a string, try to parse it
+                            if (typeof locationData === 'string') {
+                                parsedLocation = JSON.parse(locationData);
+                            }
+                            
+                            // Generate approximate address from coordinates
+                            if (parsedLocation.coordinates) {
+                                const [lng, lat] = parsedLocation.coordinates;
+                                
+                                // Simple approximation for SF street addresses based on coordinates
+                                // This is a rough estimate for display purposes
+                                const streetNumber = Math.floor(Math.abs((lat - 37.7) * 10000));
+                                const streetNames = [
+                                    'Larkin St', 'Hyde St', 'Leavenworth St', 'Jones St', 'Taylor St',
+                                    'Mason St', 'Powell St', 'Stockton St', 'Grant Ave', 'Kearny St',
+                                    'Bush St', 'Sutter St', 'Post St', 'Geary St', 'O\'Farrell St'
+                                ];
+                                const streetIndex = Math.floor(Math.abs((lng + 122.4) * 1000)) % streetNames.length;
+                                const streetName = streetNames[streetIndex];
+                                
+                                return `${streetNumber} ${streetName}, San Francisco, CA`;
+                            }
+                            
+                            return 'Address not available';
+                        } catch (e) {
+                            console.error('Error parsing address:', e);
+                            return 'Address not available';
+                        }
+                    };
+                    
+                    // Generate popup content based on single or multiple businesses
+                    const generatePopupContent = (properties) => {
+                        console.log('generatePopupContent called with properties:', properties);
+                        
+                        const businessCount = properties.business_count || 1;
+                        const address = getAddressFromLocation(properties);
+                        
+                        console.log('Business count:', businessCount);
+                        console.log('Address:', address);
+                        
+                        if (businessCount === 1) {
+                            // Single business popup
+                        const isOpen = properties.status === 'Open';
+                        const statusClass = isOpen ? 'text-success' : 'text-danger';
+                        const statusText = isOpen ? 'Open' : 'Closed';
+                            
+                            return `
+                                <div class="popup-content">
+                                    <h6 class="fw-bold ${statusClass} mb-1">${properties.business_name || 'Unknown Business'}</h6>
+                                    <p class="mb-1 text-muted small"><i class="fas fa-map-marker-alt"></i> ${address}</p>
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span><strong>Status:</strong> <span class="${statusClass}">${statusText}</span></span>
+                                        <span class="text-muted">District ${properties.district || 'N/A'}</span>
+                                    </div>
+                                    <p class="mb-1 small"><strong>Industry:</strong> ${properties.industry_type || 'N/A'}</p>
+                                    <p class="mb-1 small"><strong>License:</strong> ${properties.license_type || 'N/A'}</p>
+                                    <p class="mb-1 small"><strong>Corridor:</strong> ${properties.corridor || 'N/A'}</p>
+                                    <div class="d-flex justify-content-between small text-muted">
+                                        <span><i class="fas fa-calendar-plus"></i> Opened: ${formatDate(properties.open_date)}</span>
+                                        ${!isOpen ? `<span><i class="fas fa-calendar-times"></i> Closed: ${formatDate(properties.close_date)}</span>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            // Multiple businesses popup
+                            let businesses = properties.all_businesses || [];
+                            const openCount = properties.open_count || 0;
+                            const closedCount = properties.closed_count || 0;
+                            
+                            // Parse JSON string if needed (Mapbox serializes complex objects as JSON)
+                            if (typeof businesses === 'string') {
+                                try {
+                                    businesses = JSON.parse(businesses);
+                                    console.log('Parsed businesses from JSON string:', businesses);
+                                } catch (e) {
+                                    console.error('Failed to parse businesses JSON:', e);
+                                    return `
+                                        <div class="popup-content">
+                                            <h6 class="fw-bold text-danger mb-1">Error parsing business data</h6>
+                                            <p class="mb-1 text-muted small">${address}</p>
+                                            <p class="small">Business count: ${businessCount}</p>
+                                        </div>
+                                    `;
+                                }
+                            }
+                            
+                            if (!Array.isArray(businesses)) {
+                                console.error('all_businesses is not an array after parsing:', businesses);
+                                return `
+                                    <div class="popup-content">
+                                        <h6 class="fw-bold text-danger mb-1">Invalid business data format</h6>
+                                        <p class="mb-1 text-muted small">${address}</p>
+                                        <p class="small">Business count: ${businessCount}</p>
+                                    </div>
+                                `;
+                            }
+                            
+                            let businessesHtml = businesses.map(business => {
+                                const isOpen = business.status === 'Open';
+                                const statusClass = isOpen ? 'text-success' : 'text-danger';
+                                const statusIcon = isOpen ? '●' : '●';
+                                
+                                // Get business address
+                                const businessAddress = business.full_business_address || 
+                                                      getAddressFromLocation({address: business.location, full_business_address: business.full_business_address});
+                                
+                                return `
+                                    <div class="border-bottom pb-2 mb-2">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <span class="fw-bold small">${business.dba_name || 'Unknown Business'}</span>
+                                            <span class="${statusClass} small">${statusIcon} ${business.status}</span>
+                                        </div>
+                                        <div class="small text-muted"><i class="fas fa-industry"></i> ${business.naic_code_description || 'N/A'}</div>
+                                        ${business.lic_code_description ? `<div class="small text-muted"><i class="fas fa-certificate"></i> ${business.lic_code_description}</div>` : ''}
+                                        <div class="small text-muted"><i class="fas fa-map-marker-alt"></i> ${businessAddress}</div>
+                                        <div class="d-flex justify-content-between small text-muted mt-1">
+                                            <span><i class="fas fa-calendar-plus"></i> ${formatDate(business.most_recent_open_date)}</span>
+                                            ${!isOpen ? `<span><i class="fas fa-calendar-times"></i> ${formatDate(business.most_recent_close_date)}</span>` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('');
+                            
+                            return `
+                                <div class="popup-content">
+                                    <h6 class="fw-bold mb-1"><i class="fas fa-building"></i> ${businessCount} Businesses at This Location</h6>
+                                    <p class="mb-2 text-muted small"><i class="fas fa-map-marker-alt"></i> ${address}</p>
+                                    <div class="d-flex justify-content-between mb-2 small">
+                                        <span class="text-success"><i class="fas fa-store"></i> ${openCount} Open</span>
+                                        <span class="text-danger"><i class="fas fa-store-slash"></i> ${closedCount} Closed</span>
+                                        <span class="text-muted"><i class="fas fa-map-signs"></i> District ${properties.district || 'N/A'}</span>
+                                    </div>
+                                    <div style="max-height: 250px; overflow-y: auto; border-top: 1px solid var(--border-primary); padding-top: 10px;">
+                                        ${businessesHtml}
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    };
+
+                        const popup = new mapboxgl.Popup({
+                            closeButton: true,
+                            closeOnClick: false,
+                            offset: [0, -10],
+                        anchor: 'top',
+                        className: 'custom-popup'
+                        })
+                            .setLngLat(coordinates)
+                        .setHTML(generatePopupContent(properties))
+                            .addTo(vacancyMap);
+
+                    // Fix accessibility issue with close button
+                    setTimeout(() => {
+                        const closeButton = document.querySelector('.custom-popup .mapboxgl-popup-close-button');
+                        if (closeButton) {
+                            closeButton.removeAttribute('aria-hidden');
+                        }
+                    }, 100);
+
+                        console.log('Popup created for:', properties.business_name);
+                    }
+            }
+        }
+        
+        // Update statistics display
+        function updateStats(summary, districtStats) {
+            document.getElementById('totalLocations').textContent = summary.total_locations.toLocaleString();
+            document.getElementById('openLocations').textContent = summary.open_locations.toLocaleString();
+            document.getElementById('closedLocations').textContent = summary.closed_locations.toLocaleString();
+            document.getElementById('vacancyRate').textContent = summary.vacancy_rate.toFixed(1) + '%';
+            
+            // Update district stats
+            const districtStatsContainer = document.getElementById('districtStats');
+            districtStatsContainer.innerHTML = '';
+            
+            Object.entries(districtStats).forEach(([district, stats]) => {
+                const districtItem = document.createElement('div');
+                districtItem.className = 'district-item';
+                districtItem.innerHTML = `
+                    <div class="district-name">District ${district}</div>
+                    <div class="district-stats-text">
+                        Total: ${stats.total} | 
+                        Open: ${stats.open} | 
+                        Closed: ${stats.closed} | 
+                        Vacancy: ${stats.vacancy_rate.toFixed(1)}%
+                    </div>
+                `;
+                districtStatsContainer.appendChild(districtItem);
+            });
+        }
+        
+        // Event listeners
+        document.getElementById('applyFilters').addEventListener('click', applyFilters);
+        
+        // Add change event listeners for all filter dropdowns
+        document.getElementById('industryType').addEventListener('change', applyFilters);
+        document.getElementById('licenseType').addEventListener('change', applyFilters);
+        document.getElementById('businessCorridor').addEventListener('change', applyFilters);
+        document.getElementById('district').addEventListener('change', applyFilters);
+        
+        document.getElementById('corridorOnly').addEventListener('change', applyFilters);
+    </script>
+</body>
+</html>
