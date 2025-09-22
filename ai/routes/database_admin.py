@@ -30,6 +30,33 @@ def set_templates(t):
 # Get logger
 logger = logging.getLogger(__name__)
 
+def check_pg_dump_version_compatibility():
+    """
+    Check if pg_dump is available and get its version.
+    Returns tuple: (is_available, version_info, error_message)
+    """
+    try:
+        result = subprocess.run(
+            ['pg_dump', '--version'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            version_info = result.stdout.strip()
+            logger.info(f"pg_dump version: {version_info}")
+            return True, version_info, None
+        else:
+            return False, None, f"pg_dump --version failed: {result.stderr}"
+            
+    except FileNotFoundError:
+        return False, None, "pg_dump not found in PATH"
+    except subprocess.TimeoutExpired:
+        return False, None, "pg_dump --version timed out"
+    except Exception as e:
+        return False, None, f"Error checking pg_dump version: {str(e)}"
+
 def create_python_backup(backup_path):
     """
     Create a database backup using Python/psycopg2 instead of pg_dump.
@@ -254,6 +281,41 @@ async def create_database_backup():
         backup_filename = f"database_backup_{timestamp}.sql"
         backup_path = os.path.join(backups_dir, backup_filename)
         
+        # Check pg_dump availability and version compatibility first
+        pg_dump_available, pg_dump_version, pg_dump_error = check_pg_dump_version_compatibility()
+        
+        if not pg_dump_available:
+            logger.warning(f"pg_dump not available: {pg_dump_error}")
+            logger.info("Skipping pg_dump and using Python-based backup directly")
+            
+            try:
+                create_python_backup(backup_path)
+                
+                # Verify backup file was created
+                if not os.path.exists(backup_path):
+                    raise Exception("Python backup file was not created")
+                
+                # Get file size for verification
+                file_size = os.path.getsize(backup_path)
+                if file_size == 0:
+                    raise Exception("Python backup file is empty")
+                
+                logger.info(f"Database backup created successfully with Python: {backup_path} ({file_size} bytes)")
+                
+                # Return success with download URL
+                return JSONResponse({
+                    "status": "success",
+                    "message": f"Database backup created successfully with Python fallback ({file_size:,} bytes)",
+                    "filename": backup_filename,
+                    "download_url": f"/backend/api/download-backup/{backup_filename}",
+                    "file_size": file_size,
+                    "backup_method": "python"
+                })
+                
+            except Exception as python_backup_error:
+                logger.error(f"Python backup failed: {str(python_backup_error)}")
+                raise Exception(f"Database backup failed. pg_dump not available ({pg_dump_error}) and Python backup failed: {str(python_backup_error)}")
+        
         # Check if DATABASE_URL is available (common for managed services like Replit PostgreSQL)
         database_url = os.getenv("DATABASE_URL")
         
@@ -317,7 +379,14 @@ async def create_database_backup():
             )
             
             if result.returncode != 0:
-                raise Exception(f"pg_dump failed: {result.stderr}")
+                # Check if it's a version mismatch error
+                stderr_lower = result.stderr.lower()
+                if "version mismatch" in stderr_lower or "server version" in stderr_lower:
+                    logger.warning(f"pg_dump version mismatch detected: {result.stderr}")
+                    logger.info("Version mismatch between pg_dump client and PostgreSQL server - falling back to Python backup")
+                    raise Exception(f"pg_dump version mismatch: {result.stderr}")
+                else:
+                    raise Exception(f"pg_dump failed: {result.stderr}")
             
             # Verify backup file was created
             if not os.path.exists(backup_path):
@@ -330,7 +399,7 @@ async def create_database_backup():
             
             logger.info(f"Database backup created successfully with pg_dump: {backup_path} ({file_size} bytes)")
             
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError, Exception) as e:
             # pg_dump failed or is not available, try Python backup
             logger.warning(f"pg_dump failed or not available: {str(e)}")
             logger.info("Falling back to Python-based backup")
@@ -359,7 +428,8 @@ async def create_database_backup():
             "message": f"Database backup created successfully ({file_size:,} bytes)",
             "filename": backup_filename,
             "download_url": f"/backend/api/download-backup/{backup_filename}",
-            "file_size": file_size
+            "file_size": file_size,
+            "backup_method": "pg_dump" if pg_dump_available else "python"
         })
         
     except subprocess.TimeoutExpired:

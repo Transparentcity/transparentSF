@@ -46,6 +46,8 @@ class WriteupsManager:
                         execution_log JSONB,
                         result_content TEXT,
                         result_file_path TEXT,
+                        final_content TEXT,
+                        session_id VARCHAR(255),
                         error_message TEXT,
                         metadata JSONB DEFAULT '{}'::jsonb,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -55,6 +57,13 @@ class WriteupsManager:
                         CONSTRAINT valid_output_format CHECK (output_format IN ('html', 'markdown', 'text', 'pdf', 'json'))
                     )
                 """)
+                
+                # Add missing columns if they don't exist (migration)
+                try:
+                    cursor.execute("ALTER TABLE writeups ADD COLUMN IF NOT EXISTS final_content TEXT")
+                    cursor.execute("ALTER TABLE writeups ADD COLUMN IF NOT EXISTS session_id VARCHAR(255)")
+                except Exception as e:
+                    logger.warning(f"Migration warning (likely columns already exist): {e}")
                 
                 # Create indexes for better performance
                 cursor.execute("""

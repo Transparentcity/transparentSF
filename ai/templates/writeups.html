@@ -677,7 +677,7 @@
                     
                     // If there's content, show it immediately
                     if (result.content) {
-                        showContentModal('Write-up Content', result.content, 'html');
+                        showContentModal('Write-up Content', result.content, 'html', result.writeup_id);
                     }
                 } else {
                     showError(result.message || 'Failed to create write-up');
@@ -732,10 +732,29 @@
                     </div>
                     <div class="writeup-prompt">${escapeHtml(writeup.original_prompt)}</div>
                     
+                    ${writeup.status === 'completed' ? 
+                        `<div class="share-link-section" style="margin: 10px 0; padding: 10px; background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 4px;">
+                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                                <span style="font-size: 12px; font-weight: 600; color: #0c5460;">🔗 Shareable Link:</span>
+                                <input type="text" value="${window.location.origin}/api/writeups/permalink/${writeup.id}" 
+                                       class="share-link-input" data-writeup-id="${writeup.id}" readonly 
+                                       style="flex: 1; padding: 4px 8px; border: 1px solid #b3d9ff; border-radius: 3px; font-size: 12px; font-family: monospace; background-color: white;">
+                                <button onclick="copyShareLink(${writeup.id})" class="copy-share-button" data-writeup-id="${writeup.id}"
+                                        style="padding: 4px 8px; font-size: 11px; background-color: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer;">Copy</button>
+                            </div>
+                            <div style="font-size: 11px; color: #6c757d;">Share this permanent link to give others access to this write-up</div>
+                        </div>` : 
+                        ''
+                    }
+                    
                     <div class="writeup-actions">
                         <button onclick="viewWriteupDetails(${writeup.id})" class="secondary-button">View Details</button>
                         ${writeup.status === 'completed' ? 
                             `<button onclick="viewWriteupContent(${writeup.id})" class="secondary-button">View Content</button>` : 
+                            ''
+                        }
+                        ${writeup.status === 'completed' ? 
+                            `<button onclick="openPermalink(${writeup.id})" class="secondary-button" style="background-color: #17a2b8;">Open Permalink</button>` : 
                             ''
                         }
                         ${writeup.status === 'in_progress' ? 
@@ -842,7 +861,7 @@
                     
                     // If there's content, show it immediately
                     if (result.content) {
-                        showContentModal('Write-up Content', result.content, 'html');
+                        showContentModal('Write-up Content', result.content, 'html', writeupId);
                     }
                 } else {
                     showError(result.message || 'Failed to execute write-up');
@@ -881,7 +900,7 @@
                     
                     // If there's content, show it immediately
                     if (result.content) {
-                        showContentModal('Write-up Content', result.content, 'html');
+                        showContentModal('Write-up Content', result.content, 'html', writeupId);
                     }
                 } else {
                     showError(result.message || 'Failed to regenerate write-up');
@@ -931,7 +950,7 @@
                 })
                 .then(data => {
                     if (data.status === 'success') {
-                        showContentModal(data.title, data.content, data.output_format);
+                        showContentModal(data.title, data.content, data.output_format, writeupId);
                     } else {
                         showError(data.message || 'Failed to load content');
                     }
@@ -942,7 +961,7 @@
                 });
         }
         
-        function showContentModal(title, content, outputFormat) {
+        function showContentModal(title, content, outputFormat, writeupId = null) {
             const modal = document.getElementById('contentModal');
             const titleElement = document.getElementById('contentModalTitle');
             const contentElement = document.getElementById('contentModalContent');
@@ -952,17 +971,39 @@
             // Process chart placeholders first
             let processedContent = processChartPlaceholders(content);
             
+            // Add share link section at the top if writeupId is provided
+            let shareSection = '';
+            if (writeupId) {
+                const shareUrl = `${window.location.origin}/api/writeups/permalink/${writeupId}`;
+                shareSection = `
+                    <div style="margin-bottom: 20px; padding: 15px; background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 6px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="font-size: 14px; font-weight: 600; color: #0c5460;">🔗 Shareable Link:</span>
+                            <input type="text" value="${shareUrl}" id="modalShareInput-${writeupId}" readonly 
+                                   style="flex: 1; padding: 6px 10px; border: 1px solid #b3d9ff; border-radius: 4px; font-size: 13px; font-family: monospace; background-color: white;">
+                            <button onclick="copyModalShareLink(${writeupId})" id="modalShareButton-${writeupId}"
+                                    style="padding: 6px 12px; font-size: 12px; background-color: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;">Copy Link</button>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button onclick="openPermalink(${writeupId})" 
+                                    style="padding: 6px 12px; font-size: 12px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Open in New Tab</button>
+                            <div style="font-size: 11px; color: #6c757d; align-self: center;">Share this permanent link to give others access to this write-up</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
             if (outputFormat === 'html') {
                 // For HTML format, render directly as HTML
-                contentElement.innerHTML = processedContent;
+                contentElement.innerHTML = shareSection + processedContent;
             } else {
                 // For other formats, treat as markdown if marked.js is available
                 if (typeof marked !== 'undefined') {
-                    contentElement.innerHTML = marked.parse(processedContent);
+                    contentElement.innerHTML = shareSection + marked.parse(processedContent);
                 } else {
                     // Convert newlines to <br> tags for plain text
                     processedContent = processedContent.replace(/\n/g, '<br>');
-                    contentElement.innerHTML = processedContent;
+                    contentElement.innerHTML = shareSection + processedContent;
                 }
             }
             
@@ -996,6 +1037,81 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        function copyShareLink(writeupId) {
+            const input = document.querySelector(`.share-link-input[data-writeup-id="${writeupId}"]`);
+            const button = document.querySelector(`.copy-share-button[data-writeup-id="${writeupId}"]`);
+            
+            if (input && button) {
+                input.select();
+                input.setSelectionRange(0, 99999); // For mobile devices
+                
+                try {
+                    document.execCommand('copy');
+                    button.textContent = 'Copied!';
+                    button.style.backgroundColor = '#28a745';
+                    
+                    setTimeout(() => {
+                        button.textContent = 'Copy';
+                        button.style.backgroundColor = '#17a2b8';
+                    }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy: ', err);
+                    // Fallback for modern browsers
+                    navigator.clipboard.writeText(input.value).then(() => {
+                        button.textContent = 'Copied!';
+                        button.style.backgroundColor = '#28a745';
+                        
+                        setTimeout(() => {
+                            button.textContent = 'Copy';
+                            button.style.backgroundColor = '#17a2b8';
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy: ', err);
+                    });
+                }
+            }
+        }
+        
+        function openPermalink(writeupId) {
+            const url = `${window.location.origin}/api/writeups/permalink/${writeupId}`;
+            window.open(url, '_blank');
+        }
+        
+        function copyModalShareLink(writeupId) {
+            const input = document.getElementById(`modalShareInput-${writeupId}`);
+            const button = document.getElementById(`modalShareButton-${writeupId}`);
+            
+            if (input && button) {
+                input.select();
+                input.setSelectionRange(0, 99999); // For mobile devices
+                
+                try {
+                    document.execCommand('copy');
+                    button.textContent = 'Copied!';
+                    button.style.backgroundColor = '#28a745';
+                    
+                    setTimeout(() => {
+                        button.textContent = 'Copy Link';
+                        button.style.backgroundColor = '#17a2b8';
+                    }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy: ', err);
+                    // Fallback for modern browsers
+                    navigator.clipboard.writeText(input.value).then(() => {
+                        button.textContent = 'Copied!';
+                        button.style.backgroundColor = '#28a745';
+                        
+                        setTimeout(() => {
+                            button.textContent = 'Copy Link';
+                            button.style.backgroundColor = '#17a2b8';
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy: ', err);
+                    });
+                }
+            }
         }
         
         // Close modals when clicking outside or pressing escape

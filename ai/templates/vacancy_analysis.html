@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Business Vacancy Analysis | TransparentSF</title>
+    <title>Storefront Vacancy | TransparentSF</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -270,9 +270,10 @@
         <div class="sidebar" style="width: 350px; overflow-y: auto; padding: 20px; background: var(--bg-primary);">
         <!-- Page Header -->
             <div class="page-header mb-3">
-            <h1 class="page-title">Business Vacancy Analysis</h1>
-            <p class="page-subtitle">Analyze business vacancy rates across San Francisco with interactive mapping and filtering</p>
+            <h1 class="page-title">Storefront Vacancy</h1>
+            <p class="page-subtitle">Analyze storefront vacancy rates across San Francisco with interactive mapping and filtering</p>
         </div>
+        
         
                 <!-- Controls Panel -->
                 <div class="controls-panel">
@@ -293,24 +294,58 @@
                     </div>
                     
                     <div class="filter-section">
-                    <label for="industryType" class="form-label">Industry Type (NAICS):</label>
-                    <select id="industryType" class="form-select">
-                        <option value="">All Industry Types</option>
-                    </select>
-                </div>
+                        <label for="neighborhood" class="form-label">Neighborhood:</label>
+                        <select id="neighborhood" class="form-select">
+                            <option value="">All Neighborhoods</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <label class="form-label">Industry Type (NAICS):</label>
+                        <div id="industryTypeContainer" class="checkbox-container" style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border-primary); border-radius: 6px; padding: 8px; background: var(--bg-tertiary);">
+                            <!-- Industry type checkboxes will be populated here -->
+                        </div>
+                    </div>
                 
-                <div class="filter-section">
-                    <label for="licenseType" class="form-label">License Type:</label>
-                        <select id="licenseType" class="form-select">
-                            <option value="">All License Types</option>
+                    <div class="filter-section">
+                        <label class="form-label">License Type:</label>
+                        <div id="licenseTypeContainer" class="checkbox-container" style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border-primary); border-radius: 6px; padding: 8px; background: var(--bg-tertiary);">
+                            <!-- License type checkboxes will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <label for="statusFilter" class="form-label">Status Filter:</label>
+                        <select id="statusFilter" class="form-select">
+                            <option value="">All (Open & Closed)</option>
+                            <option value="open">Open Only</option>
+                            <option value="closed">Closed Only</option>
                         </select>
                     </div>
                     
                     <div class="filter-section">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="corridorOnly" checked>
+                            <input class="form-check-input" type="checkbox" id="corridorOnly">
                             <label class="form-check-label" for="corridorOnly">
                                 Show only business corridors
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="licensedOnly">
+                            <label class="form-check-label" for="licensedOnly">
+                                Licensed businesses only
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="streetLevelOnly">
+                            <label class="form-check-label" for="streetLevelOnly">
+                                Street-level storefronts only
                             </label>
                         </div>
                     </div>
@@ -319,29 +354,6 @@
                         <span id="filterButtonText">Apply Filters</span>
                         <span id="filterSpinner" class="loading-spinner" style="display: none;"></span>
                     </button>
-                </div>
-                
-                <!-- Summary Statistics -->
-                <div class="stats-panel">
-                    <h5 class="section-title">Summary Statistics</h5>
-                    <div id="summaryStats">
-                        <div class="stat-card">
-                            <div class="stat-number" id="totalLocations">-</div>
-                            <div class="stat-label">Total Locations</div>
-                        </div>
-                        <div class="stat-card open">
-                            <div class="stat-number" id="openLocations">-</div>
-                            <div class="stat-label">Open Locations</div>
-                        </div>
-                        <div class="stat-card closed">
-                            <div class="stat-number" id="closedLocations">-</div>
-                            <div class="stat-label">Closed Locations</div>
-                        </div>
-                        <div class="stat-card vacancy">
-                            <div class="stat-number" id="vacancyRate">-</div>
-                            <div class="stat-label">Vacancy Rate</div>
-                        </div>
-                    </div>
                 </div>
                 
                 <!-- District Breakdown -->
@@ -354,9 +366,40 @@
             </div>
             
         <!-- Map - Takes remaining space -->
-        <div class="flex-grow-1">
-                <div class="map-container" id="vacancyMap">
+        <div class="flex-grow-1" style="position: relative;">
+            <div class="map-container" id="vacancyMap">
                 <!-- Map will be initialized here - content will be cleared -->
+            </div>
+            
+            <!-- Summary Statistics Overlay -->
+            <div class="summary-overlay" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px);">
+                <div id="summaryStatsBar" class="d-flex flex-column small" style="gap: 6px; min-width: 220px;">
+                    <div class="d-flex justify-content-between">
+                        <span><i class="fas fa-building text-primary"></i> Buildings:</span>
+                        <strong id="totalBuildings">-</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span><i class="fas fa-home text-info"></i> Addresses:</span>
+                        <strong id="totalAddresses">-</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span><i class="fas fa-store-alt text-info"></i> Storefronts:</span>
+                        <strong id="totalStorefronts">-</strong>
+                    </div>
+                    <hr style="margin: 6px 0; border-color: var(--border-primary);">
+                    <div class="d-flex justify-content-between">
+                        <span class="text-success"><i class="fas fa-check-circle"></i> Open Storefronts:</span>
+                        <strong id="openStorefronts">-</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-danger"><i class="fas fa-times-circle"></i> Closed Storefronts:</span>
+                        <strong id="closedStorefronts">-</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-warning"><i class="fas fa-percentage"></i> Storefront Vacancy:</span>
+                        <strong id="storefrontVacancyRate">-</strong>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -383,50 +426,105 @@
                 const response = await fetch('/api/vacancy-analysis/filters');
                 const result = await response.json();
                 
+                console.log('Filters API response:', result);
+                
                 if (result.status === 'success') {
                     const filters = result.filters;
                     
-                    // Populate industry types (NAICS)
-                    const industrySelect = document.getElementById('industryType');
-                    filters.industry_types.forEach(type => {
-                        const option = document.createElement('option');
-                        option.value = type;
-                        option.textContent = type;
-                        industrySelect.appendChild(option);
+                    // Log what we received
+                    console.log('Industry types:', filters.industry_types?.length || 'undefined');
+                    console.log('License types:', filters.license_types?.length || 'undefined');
+                    console.log('Business corridors:', filters.business_corridors?.length || 'undefined');
+                    console.log('Neighborhoods:', filters.neighborhoods?.length || 'undefined');
+                    console.log('Districts:', filters.districts?.length || 'undefined');
+                    
+                    // Populate industry types (NAICS) as checkboxes
+                    const industryContainer = document.getElementById('industryTypeContainer');
+                    
+                    (filters.industry_types || []).forEach(type => {
+                        const checkboxWrapper = document.createElement('div');
+                        checkboxWrapper.className = 'form-check';
+                        
+                        const checkbox = document.createElement('input');
+                        checkbox.className = 'form-check-input';
+                        checkbox.type = 'checkbox';
+                        checkbox.id = `industry_${type.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                        checkbox.value = type;
+                        checkbox.name = 'industry_type';
+                        
+                        // No default selection - all unchecked by default
+                        
+                        const label = document.createElement('label');
+                        label.className = 'form-check-label';
+                        label.htmlFor = checkbox.id;
+                        label.textContent = type;
+                        label.style.fontSize = '12px';
+                        
+                        checkboxWrapper.appendChild(checkbox);
+                        checkboxWrapper.appendChild(label);
+                        industryContainer.appendChild(checkboxWrapper);
                     });
                     
-                    // Populate license types
-                    const licenseSelect = document.getElementById('licenseType');
-                    filters.license_types.forEach(type => {
-                        const option = document.createElement('option');
-                        option.value = type;
-                        option.textContent = type;
-                        licenseSelect.appendChild(option);
+                    // Populate license types as checkboxes
+                    const licenseContainer = document.getElementById('licenseTypeContainer');
+                    
+                    (filters.license_types || []).forEach(type => {
+                        const checkboxWrapper = document.createElement('div');
+                        checkboxWrapper.className = 'form-check';
+                        
+                        const checkbox = document.createElement('input');
+                        checkbox.className = 'form-check-input';
+                        checkbox.type = 'checkbox';
+                        checkbox.id = `license_${type.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                        checkbox.value = type;
+                        checkbox.name = 'license_type';
+                        
+                        const label = document.createElement('label');
+                        label.className = 'form-check-label';
+                        label.htmlFor = checkbox.id;
+                        label.textContent = type;
+                        label.style.fontSize = '12px';
+                        
+                        checkboxWrapper.appendChild(checkbox);
+                        checkboxWrapper.appendChild(label);
+                        licenseContainer.appendChild(checkboxWrapper);
                     });
                     
                     // Populate business corridors
                     const corridorSelect = document.getElementById('businessCorridor');
-                    filters.business_corridors.forEach(corridor => {
+                    (filters.business_corridors || []).forEach(corridor => {
                         const option = document.createElement('option');
                         option.value = corridor;
                         option.textContent = corridor;
-                        if (corridor === 'Larkin Street') {
-                            option.selected = true;
-                        }
                         corridorSelect.appendChild(option);
                     });
                     
-                    // Apply Larkin Street filter immediately
-                    applyFilters();
+                    // Populate neighborhoods
+                    const neighborhoodSelect = document.getElementById('neighborhood');
+                    (filters.neighborhoods || []).forEach(neighborhood => {
+                        const option = document.createElement('option');
+                        option.value = neighborhood;
+                        option.textContent = neighborhood;
+                        neighborhoodSelect.appendChild(option);
+                    });
                     
-                    // Populate districts
+                    // Populate districts first
                     const districtSelect = document.getElementById('district');
-                    filters.districts.forEach(district => {
+                    (filters.districts || []).forEach(district => {
                         const option = document.createElement('option');
                         option.value = district;
                         option.textContent = `District ${district}`;
+                        
+                        // Set District 3 as default
+                        if (district === '3') {
+                            option.selected = true;
+                        }
+                        
                         districtSelect.appendChild(option);
                     });
+                    
+                    // Apply filters after all dropdowns are populated (including District 3 selection)
+                    applyFilters();
                 }
             } catch (error) {
                 console.error('Error loading filters:', error);
@@ -492,17 +590,38 @@
             try {
                 const params = new URLSearchParams();
                 
-                const industryType = document.getElementById('industryType').value;
-                const licenseType = document.getElementById('licenseType').value;
-                const businessCorridor = document.getElementById('businessCorridor').value;
-                const district = document.getElementById('district').value;
-                const corridorOnly = document.getElementById('corridorOnly').checked;
+                // Collect checked industry types
+                const checkedIndustryTypes = Array.from(document.querySelectorAll('input[name="industry_type"]:checked'))
+                    .map(checkbox => checkbox.value);
                 
-                if (industryType) params.append('industry_type', industryType);
-                if (licenseType) params.append('license_type', licenseType);
+                // Collect checked license types
+                const checkedLicenseTypes = Array.from(document.querySelectorAll('input[name="license_type"]:checked'))
+                    .map(checkbox => checkbox.value);
+                
+                const businessCorridor = document.getElementById('businessCorridor').value;
+                const neighborhood = document.getElementById('neighborhood').value;
+                const district = document.getElementById('district').value;
+                const statusFilter = document.getElementById('statusFilter').value;
+                const corridorOnly = document.getElementById('corridorOnly').checked;
+                const licensedOnly = document.getElementById('licensedOnly').checked;
+                const streetLevelOnly = document.getElementById('streetLevelOnly').checked;
+                
+                // Add multiple industry types
+                checkedIndustryTypes.forEach(type => {
+                    params.append('industry_type', type);
+                });
+                
+                // Add multiple license types
+                checkedLicenseTypes.forEach(type => {
+                    params.append('license_type', type);
+                });
                 if (businessCorridor) params.append('business_corridor', businessCorridor);
+                if (neighborhood) params.append('neighborhood', neighborhood);
                 if (district) params.append('district', district);
+                if (statusFilter) params.append('status_filter', statusFilter);
                 if (corridorOnly) params.append('corridor_only', 'true');
+                if (licensedOnly) params.append('licensed_only', 'true');
+                if (streetLevelOnly) params.append('street_level_only', 'true');
                 
                 const response = await fetch(`/api/vacancy-analysis/data?${params.toString()}`);
                 const result = await response.json();
@@ -550,60 +669,47 @@
             const validData = data.filter(item => item.location && item.location.coordinates && 
                                item.location.coordinates[0] !== 0 && item.location.coordinates[1] !== 0);
             
-            // Group businesses by coordinates (same location)
-            const locationGroups = {};
-            validData.forEach(item => {
-                const coordKey = `${item.location.coordinates[0].toFixed(6)},${item.location.coordinates[1].toFixed(6)}`;
-                if (!locationGroups[coordKey]) {
-                    locationGroups[coordKey] = {
-                        coordinates: item.location.coordinates,
-                        businesses: []
-                    };
-                }
-                locationGroups[coordKey].businesses.push(item);
-            });
-            
-            console.log('Location groups created:', Object.keys(locationGroups).length);
-            console.log('Sample location group:', Object.values(locationGroups)[0]);
-            
-            const features = Object.values(locationGroups).map(group => {
-                const businesses = group.businesses;
-                const businessCount = businesses.length;
-                
-                console.log(`Processing group with ${businessCount} businesses at coordinates:`, group.coordinates);
-                
-                // Calculate status summary
-                const openCount = businesses.filter(b => b.status === 'Open').length;
-                const closedCount = businesses.filter(b => b.status === 'Closed').length;
-                
-                // Primary business (first one) for main display
-                const primaryBusiness = businesses[0];
+            // Convert backend building data directly to GeoJSON features
+            const features = validData.map(buildingData => {
+                console.log('Processing building data:', buildingData);
                 
                 return {
                     type: 'Feature',
                     geometry: {
                         type: 'Point',
-                        coordinates: group.coordinates
+                        coordinates: buildingData.location.coordinates
                     },
                     properties: {
-                            address: primaryBusiness.location,
-                            business_name: primaryBusiness.dba_name,
-                            industry_type: primaryBusiness.naic_code_description,
-                            license_type: primaryBusiness.lic_code_description,
-                            corridor: primaryBusiness.business_corridor,
-                            district: primaryBusiness.supervisor_district,
-                            status: primaryBusiness.status,
-                            open_date: primaryBusiness.most_recent_open_date,
-                            close_date: primaryBusiness.most_recent_close_date,
-                            full_business_address: primaryBusiness.full_business_address,
-                            // Multi-business properties
-                            business_count: businessCount,
-                            all_businesses: businesses,
-                            open_count: openCount,
-                            closed_count: closedCount,
-                            // Heatmap weight - higher for more businesses and closed status
-                            weight: businessCount * (closedCount > openCount ? 2 : 1)
-                        }
+                        // Building-level properties from backend
+                        address: buildingData.location,
+                        business_name: buildingData.dba_name,
+                        industry_type: buildingData.naic_code_description,
+                        license_type: buildingData.lic_code_description,
+                        corridor: buildingData.business_corridor,
+                        district: buildingData.supervisor_district,
+                        status: buildingData.status,
+                        open_date: buildingData.most_recent_open_date,
+                        close_date: buildingData.most_recent_close_date,
+                        full_business_address: buildingData.full_business_address,
+                        
+                        // Building-specific properties
+                        building_key: buildingData.building_key,
+                        total_addresses: buildingData.total_addresses,
+                        open_addresses: buildingData.open_addresses,
+                        closed_addresses: buildingData.closed_addresses,
+                        street_level_addresses: buildingData.street_level_addresses,
+                        upper_floor_addresses: buildingData.upper_floor_addresses,
+                        total_businesses: buildingData.total_businesses,
+                        addresses_data: buildingData.addresses_data,  // This is the key missing property!
+                        
+                        // For map display compatibility
+                        business_count: buildingData.business_count,
+                        open_count: buildingData.open_count,
+                        closed_count: buildingData.closed_count,
+                        
+                        // Heatmap weight - higher for more addresses and closed status
+                        weight: buildingData.total_addresses * (buildingData.closed_addresses > buildingData.open_addresses ? 2 : 1)
+                    }
                 };
             });
             
@@ -898,22 +1004,8 @@
                             '#00ff00',  // More open than closed - green
                             '#ffa500'   // Equal or mixed - orange
                         ],
-                        'circle-stroke-color': [
-                            'case',
-                            ['>', ['get', 'business_count'], 1],
-                            '#ffffff',  // White stroke for multiple businesses
-                            '#cccccc'   // Light gray for single business
-                        ],
-                        'circle-stroke-width': [
-                            'interpolate',
-                            ['linear'],
-                            ['get', 'business_count'],
-                            1, 1,       // Thin stroke for single business
-                            2, 2,       // Medium stroke for 2 businesses
-                            5, 3        // Thick stroke for 5+ businesses
-                        ],
-                        'circle-opacity': 0.8,
-                        'circle-stroke-opacity': 1
+                        'circle-stroke-width': 0,  // Remove stroke/outline
+                        'circle-opacity': 0.8
                     }
                 });
                 
@@ -1148,114 +1240,244 @@
                         }
                     };
                     
-                    // Generate popup content based on single or multiple businesses
+                    // Generate popup content - organized by building → addresses → businesses
                     const generatePopupContent = (properties) => {
                         console.log('generatePopupContent called with properties:', properties);
                         
-                        const businessCount = properties.business_count || 1;
-                        const address = getAddressFromLocation(properties);
+                        const buildingAddress = getAddressFromLocation(properties);
+                        const totalAddresses = properties.total_addresses || properties.business_count || 1;
+                        const openAddresses = properties.open_addresses || properties.open_count || 0;
+                        const closedAddresses = properties.closed_addresses || properties.closed_count || 0;
+                        const totalBusinesses = properties.total_businesses || 0;
                         
-                        console.log('Business count:', businessCount);
-                        console.log('Address:', address);
+                        console.log('Total addresses:', totalAddresses);
+                        console.log('Building address:', buildingAddress);
                         
-                        if (businessCount === 1) {
-                            // Single business popup
-                        const isOpen = properties.status === 'Open';
-                        const statusClass = isOpen ? 'text-success' : 'text-danger';
-                        const statusText = isOpen ? 'Open' : 'Closed';
-                            
-                            return `
-                                <div class="popup-content">
-                                    <h6 class="fw-bold ${statusClass} mb-1">${properties.business_name || 'Unknown Business'}</h6>
-                                    <p class="mb-1 text-muted small"><i class="fas fa-map-marker-alt"></i> ${address}</p>
-                                    <div class="d-flex justify-content-between mb-1">
-                                        <span><strong>Status:</strong> <span class="${statusClass}">${statusText}</span></span>
-                                        <span class="text-muted">District ${properties.district || 'N/A'}</span>
-                                    </div>
-                                    <p class="mb-1 small"><strong>Industry:</strong> ${properties.industry_type || 'N/A'}</p>
-                                    <p class="mb-1 small"><strong>License:</strong> ${properties.license_type || 'N/A'}</p>
-                                    <p class="mb-1 small"><strong>Corridor:</strong> ${properties.corridor || 'N/A'}</p>
-                                    <div class="d-flex justify-content-between small text-muted">
-                                        <span><i class="fas fa-calendar-plus"></i> Opened: ${formatDate(properties.open_date)}</span>
-                                        ${!isOpen ? `<span><i class="fas fa-calendar-times"></i> Closed: ${formatDate(properties.close_date)}</span>` : ''}
-                                    </div>
-                                </div>
-                            `;
-                        } else {
-                            // Multiple businesses popup
-                            let businesses = properties.all_businesses || [];
-                            const openCount = properties.open_count || 0;
-                            const closedCount = properties.closed_count || 0;
-                            
-                            // Parse JSON string if needed (Mapbox serializes complex objects as JSON)
-                            if (typeof businesses === 'string') {
+                        // Start with building location as primary header
+                        let content = `
+                            <div class="popup-content">
+                                <h5 class="fw-bold mb-2 text-primary"><i class="fas fa-building"></i> ${buildingAddress}</h5>
+                        `;
+                        
+        // Calculate storefront-specific statistics from addresses data
+        let openStorefronts = 0;
+        let closedStorefronts = 0;
+        let streetLevelAddresses = 0;
+        let upperFloorAddresses = 0;
+        
+        // Parse addresses data to calculate storefront stats
+        let addressesForStats = properties.addresses_data;
+        if (typeof addressesForStats === 'string') {
+            try {
+                addressesForStats = JSON.parse(addressesForStats);
+            } catch (e) {
+                addressesForStats = [];
+            }
+        }
+        
+        if (Array.isArray(addressesForStats)) {
+            addressesForStats.forEach(addr => {
+                if (addr.is_street_level) {
+                    streetLevelAddresses++;
+                    if (addr.status === 'Open') {
+                        openStorefronts++;
+                    } else {
+                        closedStorefronts++;
+                    }
+                } else {
+                    upperFloorAddresses++;
+                }
+            });
+        }
+        
+        content += `
+                <div class="mb-2 pb-2 border-bottom">
+                    <div class="d-flex justify-content-between align-items-center small">
+                        <span><i class="fas fa-home"></i> ${totalAddresses} Address${totalAddresses > 1 ? 'es' : ''}</span>
+                        <span><i class="fas fa-store"></i> ${totalBusinesses} Business${totalBusinesses > 1 ? 'es' : ''}</span>
+                        <span><i class="fas fa-map-signs"></i> District ${properties.district || 'N/A'}</span>
+                    </div>
+                    <div class="d-flex justify-content-between small mt-1">
+                        <span class="text-success"><i class="fas fa-store-alt"></i> ${openStorefronts} Open Storefronts</span>
+                        <span class="text-danger"><i class="fas fa-store-slash"></i> ${closedStorefronts} Closed Storefronts</span>
+                        <span class="text-muted"><i class="fas fa-road"></i> ${properties.corridor || 'No Corridor'}</span>
+                    </div>
+                    <div class="d-flex justify-content-between small mt-1">
+                        <span class="text-info"><i class="fas fa-store-alt"></i> ${streetLevelAddresses} Street Level</span>
+                        <span class="text-secondary"><i class="fas fa-building"></i> ${upperFloorAddresses} Upper Floor</span>
+                    </div>
+                </div>
+        `;
+                        
+                        // Helper function to calculate business status
+                        const calculateBusinessStatus = (business) => {
+                            const parseDate = (dateStr) => {
+                                if (!dateStr) return null;
                                 try {
-                                    businesses = JSON.parse(businesses);
-                                    console.log('Parsed businesses from JSON string:', businesses);
-                                } catch (e) {
-                                    console.error('Failed to parse businesses JSON:', e);
-                                    return `
-                                        <div class="popup-content">
-                                            <h6 class="fw-bold text-danger mb-1">Error parsing business data</h6>
-                                            <p class="mb-1 text-muted small">${address}</p>
-                                            <p class="small">Business count: ${businessCount}</p>
+                                    return new Date(dateStr.split('T')[0]);
+                                } catch {
+                                    return null;
+                                }
+                            };
+                            
+                            const dbaStart = parseDate(business.dba_start_date);
+                            const locationStart = parseDate(business.location_start_date);
+                            const dbaEnd = parseDate(business.dba_end_date);
+                            const locationEnd = parseDate(business.location_end_date);
+                            
+                            const openDates = [dbaStart, locationStart].filter(d => d);
+                            const closeDates = [dbaEnd, locationEnd].filter(d => d);
+                            
+                            const mostRecentOpen = openDates.length > 0 ? Math.max(...openDates.map(d => d.getTime())) : null;
+                            const mostRecentClose = closeDates.length > 0 ? Math.max(...closeDates.map(d => d.getTime())) : null;
+                            
+                            if (mostRecentClose && (!mostRecentOpen || mostRecentClose > mostRecentOpen)) {
+                                return 'Closed';
+                            }
+                            return 'Open';
+                        };
+                        
+                        // Display addresses and their businesses
+                        let addressesData = properties.addresses_data;
+                        
+                        // Parse JSON string if needed (Mapbox serializes complex objects as JSON)
+                        if (typeof addressesData === 'string') {
+                            try {
+                                addressesData = JSON.parse(addressesData);
+                                console.log('Parsed addresses data from JSON string:', addressesData);
+                            } catch (e) {
+                                console.error('Failed to parse addresses JSON:', e);
+                                content += `
+                                    <div class="text-danger">
+                                        <p class="small">Error parsing address data</p>
+                                    </div>
+                                </div>`;
+                                return content;
+                            }
+                        }
+                        
+                        if (!Array.isArray(addressesData)) {
+                            console.error('addresses_data is not an array after parsing:', addressesData);
+                            content += `
+                                <div class="text-danger">
+                                    <p class="small">Invalid address data format</p>
+                                </div>
+                            </div>`;
+                            return content;
+                        }
+                        
+                        // Add scrollable address list
+                        content += `<div class="addresses-list" style="max-height: 300px; overflow-y: auto;">`;
+                        
+                        addressesData.forEach((addressData, addressIndex) => {
+                            const isOpen = addressData.status === 'Open';
+                            const statusClass = isOpen ? 'text-success' : 'text-danger';
+                            const statusIcon = isOpen ? '●' : '●';
+                            const isStreetLevel = addressData.is_street_level;
+                            const levelClass = isStreetLevel ? 'text-info' : 'text-secondary';
+                            const levelIcon = isStreetLevel ? 'fas fa-store-alt' : 'fas fa-building';
+                            const levelText = isStreetLevel ? 'Street Level' : 'Upper Floor';
+                            
+                            content += `
+                                <div class="address-item ${addressIndex < addressesData.length - 1 ? 'border-bottom' : ''} pb-3 mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="fw-bold text-secondary"><i class="fas fa-map-marker-alt"></i> ${addressData.address}</span>
+                                        <span class="${statusClass} fw-bold">${statusIcon} ${addressData.status}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between small text-muted mb-2">
+                                        <span><i class="fas fa-store"></i> ${addressData.business_count} Business${addressData.business_count > 1 ? 'es' : ''}</span>
+                                        <span class="${levelClass}"><i class="${levelIcon}"></i> ${levelText}</span>
+                                    </div>
+                            `;
+                            
+                            // Show businesses at this address
+                            if (addressData.businesses && Array.isArray(addressData.businesses)) {
+                                content += `<div class="businesses-at-address ms-3">`;
+                                
+                                // Sort businesses: open first, then closed
+                                const sortedBusinesses = [...addressData.businesses].sort((a, b) => {
+                                    const aStatus = calculateBusinessStatus(a);
+                                    const bStatus = calculateBusinessStatus(b);
+                                    
+                                    if (aStatus === 'Open' && bStatus === 'Closed') return -1;
+                                    if (aStatus === 'Closed' && bStatus === 'Open') return 1;
+                                    return 0;
+                                });
+                                
+                                sortedBusinesses.forEach((business, businessIndex) => {
+                                    const businessStatus = calculateBusinessStatus(business);
+                                    const businessOpen = businessStatus === 'Open';
+                                    const businessStatusClass = businessOpen ? 'text-success' : 'text-danger';
+                                    const businessStatusIcon = businessOpen ? '●' : '●';
+                                    
+                                    // Format closure date if business is closed
+                                    let statusDisplay = businessStatus;
+                                    if (!businessOpen) {
+                                        const parseDate = (dateStr) => {
+                                            if (!dateStr) return null;
+                                            try {
+                                                return new Date(dateStr.split('T')[0]);
+                                            } catch {
+                                                return null;
+                                            }
+                                        };
+                                        
+                                        // Get closure dates from business record
+                                        const dbaEnd = parseDate(business.dba_end_date);
+                                        const locationEnd = parseDate(business.location_end_date);
+                                        const closeDates = [dbaEnd, locationEnd].filter(d => d);
+                                        
+                                        // Also try to get closure date from address-level data
+                                        const addressCloseDate = parseDate(addressData.most_recent_close_date);
+                                        if (addressCloseDate) {
+                                            closeDates.push(addressCloseDate);
+                                        }
+                                        
+                                        if (closeDates.length > 0) {
+                                            const mostRecentClose = new Date(Math.max(...closeDates.map(d => d.getTime())));
+                                            statusDisplay = mostRecentClose.toLocaleDateString();
+                                            
+                                            // Debug logging for date verification
+                                            console.log(`Business: ${business.dba_name}, DBA End: ${business.dba_end_date}, Location End: ${business.location_end_date}, Showing: ${statusDisplay}`);
+                                        } else {
+                                            statusDisplay = 'Closed';
+                                        }
+                                    }
+                                    
+                                    // Build category display (only show non-N/A categories)
+                                    let categoryInfo = '';
+                                    const industry = business.naic_code_description;
+                                    const license = business.lic_code_description;
+                                    
+                                    if (industry && industry !== 'N/A' && industry.trim() !== '') {
+                                        categoryInfo += `<i class="fas fa-industry"></i> ${industry}`;
+                                    }
+                                    
+                                    if (license && license !== 'N/A' && license.trim() !== '') {
+                                        if (categoryInfo) categoryInfo += ' | ';
+                                        categoryInfo += `<i class="fas fa-certificate"></i> ${license}`;
+                                    }
+                                    
+                                    content += `
+                                        <div class="business-item small ${businessIndex < sortedBusinesses.length - 1 ? 'border-bottom border-light' : ''} pb-1 mb-1">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="fw-bold">${business.dba_name || 'Unknown Business'}</span>
+                                                <span class="${businessStatusClass} small">${businessStatusIcon} ${statusDisplay}</span>
+                                            </div>
+                                            ${categoryInfo ? `<div class="text-muted" style="font-size: 0.75rem;">${categoryInfo}</div>` : ''}
                                         </div>
                                     `;
-                                }
+                                });
+                                
+                                content += `</div>`; // Close businesses-at-address
                             }
                             
-                            if (!Array.isArray(businesses)) {
-                                console.error('all_businesses is not an array after parsing:', businesses);
-                                return `
-                                    <div class="popup-content">
-                                        <h6 class="fw-bold text-danger mb-1">Invalid business data format</h6>
-                                        <p class="mb-1 text-muted small">${address}</p>
-                                        <p class="small">Business count: ${businessCount}</p>
-                                    </div>
-                                `;
-                            }
-                            
-                            let businessesHtml = businesses.map(business => {
-                                const isOpen = business.status === 'Open';
-                                const statusClass = isOpen ? 'text-success' : 'text-danger';
-                                const statusIcon = isOpen ? '●' : '●';
-                                
-                                // Get business address
-                                const businessAddress = business.full_business_address || 
-                                                      getAddressFromLocation({address: business.location, full_business_address: business.full_business_address});
-                                
-                                return `
-                                    <div class="border-bottom pb-2 mb-2">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <span class="fw-bold small">${business.dba_name || 'Unknown Business'}</span>
-                                            <span class="${statusClass} small">${statusIcon} ${business.status}</span>
-                                        </div>
-                                        <div class="small text-muted"><i class="fas fa-industry"></i> ${business.naic_code_description || 'N/A'}</div>
-                                        ${business.lic_code_description ? `<div class="small text-muted"><i class="fas fa-certificate"></i> ${business.lic_code_description}</div>` : ''}
-                                        <div class="small text-muted"><i class="fas fa-map-marker-alt"></i> ${businessAddress}</div>
-                                        <div class="d-flex justify-content-between small text-muted mt-1">
-                                            <span><i class="fas fa-calendar-plus"></i> ${formatDate(business.most_recent_open_date)}</span>
-                                            ${!isOpen ? `<span><i class="fas fa-calendar-times"></i> ${formatDate(business.most_recent_close_date)}</span>` : ''}
-                                        </div>
-                                    </div>
-                                `;
-                            }).join('');
-                            
-                            return `
-                                <div class="popup-content">
-                                    <h6 class="fw-bold mb-1"><i class="fas fa-building"></i> ${businessCount} Businesses at This Location</h6>
-                                    <p class="mb-2 text-muted small"><i class="fas fa-map-marker-alt"></i> ${address}</p>
-                                    <div class="d-flex justify-content-between mb-2 small">
-                                        <span class="text-success"><i class="fas fa-store"></i> ${openCount} Open</span>
-                                        <span class="text-danger"><i class="fas fa-store-slash"></i> ${closedCount} Closed</span>
-                                        <span class="text-muted"><i class="fas fa-map-signs"></i> District ${properties.district || 'N/A'}</span>
-                                    </div>
-                                    <div style="max-height: 250px; overflow-y: auto; border-top: 1px solid var(--border-primary); padding-top: 10px;">
-                                        ${businessesHtml}
-                                    </div>
-                                </div>
-                            `;
-                        }
+                            content += `</div>`; // Close address-item
+                        });
+                        
+                        content += `</div>`; // Close addresses-list
+                        content += `</div>`; // Close popup-content
+                        return content;
                     };
 
                         const popup = new mapboxgl.Popup({
@@ -1284,10 +1506,13 @@
         
         // Update statistics display
         function updateStats(summary, districtStats) {
-            document.getElementById('totalLocations').textContent = summary.total_locations.toLocaleString();
-            document.getElementById('openLocations').textContent = summary.open_locations.toLocaleString();
-            document.getElementById('closedLocations').textContent = summary.closed_locations.toLocaleString();
-            document.getElementById('vacancyRate').textContent = summary.vacancy_rate.toFixed(1) + '%';
+            // Update map overlay summary statistics
+            document.getElementById('totalBuildings').textContent = summary.total_buildings.toLocaleString();
+            document.getElementById('totalAddresses').textContent = summary.total_addresses.toLocaleString();
+            document.getElementById('totalStorefronts').textContent = summary.total_street_level.toLocaleString();
+            document.getElementById('openStorefronts').textContent = summary.open_storefronts.toLocaleString();
+            document.getElementById('closedStorefronts').textContent = summary.closed_storefronts.toLocaleString();
+            document.getElementById('storefrontVacancyRate').textContent = summary.storefront_vacancy_rate.toFixed(1) + '%';
             
             // Update district stats
             const districtStatsContainer = document.getElementById('districtStats');
@@ -1312,13 +1537,17 @@
         // Event listeners
         document.getElementById('applyFilters').addEventListener('click', applyFilters);
         
-        // Add change event listeners for all filter dropdowns
-        document.getElementById('industryType').addEventListener('change', applyFilters);
-        document.getElementById('licenseType').addEventListener('change', applyFilters);
+        // Add change event listeners for checkbox containers
+        document.getElementById('industryTypeContainer').addEventListener('change', applyFilters);
+        document.getElementById('licenseTypeContainer').addEventListener('change', applyFilters);
         document.getElementById('businessCorridor').addEventListener('change', applyFilters);
+        document.getElementById('neighborhood').addEventListener('change', applyFilters);
         document.getElementById('district').addEventListener('change', applyFilters);
+        document.getElementById('statusFilter').addEventListener('change', applyFilters);
         
         document.getElementById('corridorOnly').addEventListener('change', applyFilters);
+        document.getElementById('licensedOnly').addEventListener('change', applyFilters);
+        document.getElementById('streetLevelOnly').addEventListener('change', applyFilters);
     </script>
 </body>
 </html>

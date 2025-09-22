@@ -724,7 +724,7 @@
                 </div>
             </div>
             <div class="header-right">
-                <button class="header-btn" onclick="toggleAnimationMode()" id="animation-mode-btn">
+                <button class="header-btn" onclick="toggleAnimationMode()" id="animation-mode-btn" style="display: none;">
                     <i class="fas fa-play-circle"></i> Animate
                 </button>
                 <button class="header-btn" onclick="shareMap()">
@@ -1141,6 +1141,9 @@
                 }
                 // After loading data/layers, build legend to mirror preview using saved color_field
                 try { buildLegendFromSavedData(); } catch (e) { console.warn('Legend build failed:', e); }
+                
+                // Check if animation data is available and show/hide animate button accordingly
+                try { checkAnimationDataAvailability(); } catch (e) { console.warn('Animation data check failed:', e); }
             } catch (error) {
                 showError('Failed to load map data: ' + error.message);
             }
@@ -2055,6 +2058,30 @@
             fadeOutDuration: 0.2, // 20% of total animation time for fade out
             pointTrails: new Map() // Track point appearance and fade times
         };
+
+        // Check if animation data is available and update button visibility
+        function checkAnimationDataAvailability() {
+            const animationBtn = document.getElementById('animation-mode-btn');
+            if (!animationBtn) return false;
+
+            if (!mapData.locationData || mapData.locationData.length === 0) {
+                animationBtn.style.display = 'none';
+                return false;
+            }
+
+            // Test if we can extract any time-based data
+            const testTimeSortedData = extractAndSortDataByTime(mapData.locationData);
+            
+            if (testTimeSortedData.length === 0) {
+                animationBtn.style.display = 'none';
+                console.log('No time-based data found - hiding animate button');
+                return false;
+            } else {
+                animationBtn.style.display = 'block';
+                console.log('Time-based data found - showing animate button');
+                return true;
+            }
+        }
 
         // Initialize animation system
         function initializeAnimation() {

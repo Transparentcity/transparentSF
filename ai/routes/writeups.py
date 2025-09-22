@@ -320,6 +320,41 @@ async def get_writeup_content(writeup_id: int):
             "message": error_message
         }, status_code=500)
 
+@router.get("/permalink/{writeup_id}")
+async def writeup_permalink(request: Request, writeup_id: int):
+    """Serve a permalink page for a specific write-up."""
+    if not templates:
+        raise HTTPException(status_code=500, detail="Templates not initialized")
+    
+    logger.debug(f"Permalink for write-up {writeup_id} called")
+    try:
+        from tools.writeups_manager import WriteupsManager
+        
+        writeup_manager = WriteupsManager()
+        writeup = writeup_manager.get_writeup(writeup_id)
+        
+        if not writeup:
+            raise HTTPException(status_code=404, detail="Write-up not found")
+        
+        if writeup.get("status") != "completed":
+            raise HTTPException(status_code=400, detail=f"Write-up is not completed (status: {writeup.get('status')})")
+        
+        final_content = writeup.get("final_content")
+        if not final_content:
+            raise HTTPException(status_code=404, detail="No content available for this write-up")
+        
+        return templates.TemplateResponse("writeup_permalink.html", {
+            "request": request,
+            "writeup": writeup,
+            "content": final_content
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_message = f"Error loading write-up permalink: {str(e)}"
+        logger.error(error_message)
+        raise HTTPException(status_code=500, detail=error_message)
+
 @router.get("/scheduled/list")
 async def get_scheduled_writeups():
     """Get all scheduled write-ups that need to be executed."""

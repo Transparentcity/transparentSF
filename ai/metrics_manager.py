@@ -1535,9 +1535,16 @@ async def backup_metrics_table_api():
             result = subprocess.run(dump_cmd, env=env, capture_output=True, text=True)
             
             if result.returncode != 0:
-                raise Exception(f"pg_dump failed: {result.stderr}")
+                # Check if it's a version mismatch error
+                stderr_lower = result.stderr.lower()
+                if "version mismatch" in stderr_lower or "server version" in stderr_lower:
+                    logger.warning(f"pg_dump version mismatch detected: {result.stderr}")
+                    logger.info("Version mismatch between pg_dump client and PostgreSQL server - falling back to Python backup")
+                    raise Exception(f"pg_dump version mismatch: {result.stderr}")
+                else:
+                    raise Exception(f"pg_dump failed: {result.stderr}")
                 
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError, Exception) as e:
             # pg_dump failed or is not available, try Python backup
             logger.warning(f"pg_dump failed or not available: {str(e)}")
             logger.info("Falling back to Python-based metrics backup")
