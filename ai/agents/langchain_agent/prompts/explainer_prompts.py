@@ -28,7 +28,7 @@ TASK_INSTRUCTIONS = """Your task is to:
 7. Provide clear, comprehensive explanations with supporting evidence. You don't need to be brief, more is more, so be as complete and thorough as possible.
 8. Return your findings in the form of a JSON object with the following keys:
     - "explanation": A string with your explanation
-    - "charts": a list of charts placeholders, formatted ONLY as either [CHART:anomaly:anomaly_id] or [CHART:time_series_id:chart_id] or [CHART:map:map_id].  
+    - "charts": a list of charts placeholders, formatted ONLY as either [CHART:anomaly:anomaly_id] or [CHART:time_series_id:chart_id] or [CHART:map:map_id] or [CHART:dualmap:map1_id:map2_id].  
     - "trend_analysis" - Your discussion of the trend in the metric short, medium, and long term."""
 
 # Workflow instructions
@@ -178,7 +178,11 @@ For example: [CHART:anomaly:27338]
 
 For Maps: 
 [CHART:map:map_id]
-For example: [CHART:map:123]"""
+For example: [CHART:map:123]
+
+For Dual Map Comparisons:
+[CHART:dualmap:map1_id:map2_id]
+For example: [CHART:dualmap:123:456]"""
 
 
 
@@ -234,6 +238,38 @@ MAPBOX MAP FEATURES:
 - High-quality geographic rendering
 - Support for complex geographic boundaries
 - Real-time data visualization capabilities
+- * NEW DUAL MAP FEATURE * - You can now compare two maps in overlay mode for a better visual comparison of two datasets.
+
+DUAL MAP COMPARISON SYSTEM:
+The system now supports dual map overlays that allow comparing two different datasets on the same map view with different colored layers.
+
+DUAL MAP SHORTCUT:
+Use the shortcut [CHART:dualmap:map1_id:map2_id] to embed dual map comparisons in your explanations.
+
+Example: [CHART:dualmap:123:456] will create a dual map overlay comparing map ID 123 with map ID 456.
+
+WHEN TO USE DUAL MAPS:
+- Comparing before/after scenarios (e.g., crime rates this year vs last year)
+- Contrasting different metrics in the same geographic area (e.g., business openings vs closures)
+- Analyzing correlations between two related datasets (e.g., housing permits vs crime incidents)
+- Showing temporal changes (e.g., same metric across different time periods)
+- Highlighting spatial relationships between different phenomena
+
+DUAL MAP BEST PRACTICES:
+1. Choose maps that have meaningful geographic overlap for comparison
+2. Ensure the two maps represent related or contrasting phenomena
+3. Use dual maps when the comparison adds analytical value beyond individual maps
+4. Consider color differentiation - the system automatically assigns different colors (purple and coral)
+5. Include explanatory text about what each layer represents
+6. Use dual maps sparingly - only when the comparison is central to your explanation
+
+The dual map system automatically:
+- Loads both maps from the database
+- Applies different default colors (purple for map1, coral for map2) 
+- Creates an interactive overlay with layer controls
+- Provides legends for both datasets
+- Maintains zoom and pan synchronization
+]
 
 IMPORTANT NOTES:
 1. **ALWAYS use generate_map_with_query for new maps** - it's more reliable
@@ -561,7 +597,7 @@ These tools work together to investigate and explain metric changes through syst
   Example:
   ```
   get_charts_for_review(
-      limit=20, 
+      limit=40, 
       days_back=30, 
       district_filter='2', 
       metric_id='123'

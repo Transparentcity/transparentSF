@@ -58,7 +58,7 @@
         }
 
         body.embedded-mode .map-container {
-            height: calc(100vh - 80px); /* Leave space for embedded subtitle and query link */
+            height: calc(100vh - 120px); /* Leave space for embedded subtitle and info bar */
         }
 
         body.embedded-mode .toggle-nav-btn {
@@ -105,7 +105,82 @@
         }
 
         body.embedded-mode .embedded-query-link {
+            display: none; /* Hide the old query link - we'll replace it with the new info bar */
+        }
+        
+        body.embedded-mode .map-overlay {
+            display: none;
+        }
+        
+        /* Embedded legend - separate from overlay */
+        .embedded-legend {
+            display: none;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 12px;
+            max-width: 250px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+        
+        body.embedded-mode .embedded-legend {
             display: block;
+        }
+        
+        .embedded-legend .legend-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        
+        .embedded-legend .legend-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.9em;
+        }
+        
+        .embedded-legend .legend-toggle {
+            color: var(--text-secondary);
+            font-size: 0.8em;
+        }
+        
+        /* Embedded info bar - replaces the overlay panel */
+        .embedded-info-bar {
+            display: none;
+            background-color: var(--bg-secondary);
+            border-top: 1px solid var(--border-primary);
+            padding: 8px 20px;
+            font-size: 0.8em;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        body.embedded-mode .embedded-info-bar {
+            display: flex;
+        }
+        
+        .embedded-info-left {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .embedded-info-link {
+            color: var(--accent-color);
+            text-decoration: none;
+            font-size: 0.8em;
+            transition: color 0.3s ease;
+        }
+        
+        .embedded-info-link:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
         }
 
         .header {
@@ -736,9 +811,7 @@
 
     <!-- Embedded Subtitle (hidden by default, shown in embedded mode) -->
     <div class="embedded-subtitle" id="embedded-date-range-subtitle">
-        {% if metadata.period_type and metadata.time_periods %}
-            {{ metadata.period_type }} for {{ metadata.time_periods }}
-        {% endif %}
+        <!-- Content will be populated by JavaScript to include title and calculated date range -->
     </div>
 
     <!-- Map Container -->
@@ -862,6 +935,19 @@
             <p>Failed to load map</p>
             <p id="error-text" style="font-size: 0.9em;"></p>
         </div>
+        
+        <!-- Embedded Legend (only shown in embedded mode) -->
+        <div class="embedded-legend">
+            <div class="legend-header" onclick="toggleEmbeddedLegend()">
+                <span class="legend-title">
+                    <i class="fas fa-palette"></i> <span id="embedded-legend-title">Legend</span>
+                </span>
+                <span class="legend-toggle" id="embedded-legend-toggle">
+                    <i class="fas fa-chevron-down"></i>
+                </span>
+            </div>
+            <div id="embedded-legend-items" style="display: none;"></div>
+        </div>
     </div>
 
     <!-- Embedded Query Link (hidden by default, shown in embedded mode) -->
@@ -869,6 +955,25 @@
         <a href="#" id="executed-query-link" target="_blank">
             <i class="fas fa-chart-line"></i> View Chart Data
         </a>
+    </div>
+    
+    <!-- Embedded Info Bar (replaces map overlay in embedded mode) -->
+    <div class="embedded-info-bar">
+        <div class="embedded-info-left">
+            <span id="embedded-map-info">
+                District: <span id="embedded-district">{{ metadata.district or "All" }}</span> • 
+                Period: <span id="embedded-period">{{ metadata.period_type or "Unknown" }}</span>
+                {% if metadata.anomaly_type %} • Anomaly: <span id="embedded-anomaly">{{ metadata.anomaly_type }}</span>{% endif %}
+            </span>
+            <a href="/map/{{ map_data.id }}" target="_blank" class="embedded-info-link">
+                <i class="fas fa-external-link-alt"></i> Full View
+            </a>
+        </div>
+        <div class="embedded-info-right">
+            <a href="#" id="embedded-executed-query-link" target="_blank" class="embedded-info-link">
+                <i class="fas fa-chart-line"></i> View Chart Data
+            </a>
+        </div>
     </div>
 
     <!-- Map Navigation Toggle Button -->
@@ -1074,7 +1179,9 @@
                 subtitleText = `${periodDescription} (${dateRange}) • ${pointCountText} • ${filterDescription}`;
             }
             
-            embeddedSubtitleElement.textContent = subtitleText;
+            // Preserve the title and add the calculated subtitle
+            const mapTitle = mapData.title || "Untitled Map";
+            embeddedSubtitleElement.innerHTML = `<strong>${mapTitle}</strong> • ${subtitleText}`;
         }
 
         // Mapbox access token (you'll need to set this in your environment)
@@ -1947,7 +2054,7 @@
                 // Update embedded subtitle with calculated date range
                 updateEmbeddedSubtitle();
                 
-                // Set up the executed query link
+                // Set up the executed query link (old one, now hidden)
                 const queryLinkElement = document.getElementById('executed-query-link');
                 if (queryLinkElement && mapData.metadata) {
                     // Construct the query URL based on metadata
@@ -1965,6 +2072,12 @@
                     
                     const queryUrl = `/api/chart-by-metric?${queryParams.toString()}`;
                     queryLinkElement.href = queryUrl;
+                    
+                    // Also set up the new embedded info bar query link
+                    const embeddedQueryLinkElement = document.getElementById('embedded-executed-query-link');
+                    if (embeddedQueryLinkElement) {
+                        embeddedQueryLinkElement.href = queryUrl;
+                    }
                 }
                 
                 // Add "Full View" link to the map overlay
@@ -2015,6 +2128,26 @@
             } else {
                 mapInfoContent.style.display = 'none';
                 toggleIcon.classList.remove('rotated');
+            }
+        }
+        
+        // Toggle embedded legend
+        function toggleEmbeddedLegend() {
+            const legendItems = document.getElementById('embedded-legend-items');
+            const toggleIcon = document.getElementById('embedded-legend-toggle');
+            
+            if (legendItems.style.display === 'none') {
+                legendItems.style.display = 'block';
+                toggleIcon.innerHTML = '<i class="fas fa-chevron-up"></i>';
+                
+                // Copy legend content from main legend
+                const mainLegendItems = document.getElementById('legend-items');
+                if (mainLegendItems) {
+                    legendItems.innerHTML = mainLegendItems.innerHTML;
+                }
+            } else {
+                legendItems.style.display = 'none';
+                toggleIcon.innerHTML = '<i class="fas fa-chevron-down"></i>';
             }
         }
 

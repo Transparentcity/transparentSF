@@ -9,6 +9,7 @@
  * - [CHART:time_series:metric_id:district:period]
  * - [CHART:time_series_id:chart_id]
  * - [CHART:map:map_id]
+ * - [CHART:dualmap:map1_id:map2_id]
  */
 
 class ChartProcessor {
@@ -40,7 +41,7 @@ class ChartProcessor {
 
     /**
      * Create chart element HTML based on chart type and parameters
-     * @param {string} chartType - The type of chart (anomaly, time_series, time_series_id, map)
+     * @param {string} chartType - The type of chart (anomaly, time_series, time_series_id, map, dualmap)
      * @param {string} params - Colon-separated parameters for the chart
      * @returns {string} - HTML for the chart iframe
      */
@@ -59,6 +60,9 @@ class ChartProcessor {
             
             case 'map':
                 return this.createMapChart(paramParts);
+            
+            case 'dualmap':
+                return this.createDualMapChart(paramParts);
             
             default:
                 console.warn(`Unknown chart type: ${chartType}`);
@@ -139,6 +143,31 @@ class ChartProcessor {
         return this.createIframeWrapper(
             `/backend/map-chart?id=${mapId}`,
             `Map Chart ${mapId}`
+        );
+    }
+
+    /**
+     * Create dual map chart iframe
+     * @param {string[]} paramParts - [map1_id, map2_id]
+     * @returns {string} - HTML for dual map chart iframe
+     */
+    createDualMapChart(paramParts) {
+        const map1Id = paramParts[0];
+        const map2Id = paramParts[1];
+        
+        if (!map1Id) {
+            console.error('Missing map1_id for dual map chart');
+            return '[CHART:dualmap:MISSING_MAP1_ID]';
+        }
+        
+        if (!map2Id) {
+            console.error('Missing map2_id for dual map chart');
+            return '[CHART:dualmap:MISSING_MAP2_ID]';
+        }
+
+        return this.createIframeWrapper(
+            `/dual-map?map1_id=${map1Id}&map2_id=${map2Id}`,
+            `Dual Map Comparison - ${map1Id} vs ${map2Id}`
         );
     }
 
@@ -233,6 +262,19 @@ class ChartProcessor {
                         results.errors.push(`Missing map_id in: ${fullMatch}`);
                     } else {
                         results.valid.push(fullMatch);
+                    }
+                    break;
+                
+                case 'dualmap':
+                    if (!params[0]) {
+                        results.errors.push(`Missing map1_id in: ${fullMatch}`);
+                    } else if (!params[1]) {
+                        results.errors.push(`Missing map2_id in: ${fullMatch}`);
+                    } else {
+                        results.valid.push(fullMatch);
+                        if (params.length > 2) {
+                            results.warnings.push(`Extra parameters in: ${fullMatch}`);
+                        }
                     }
                     break;
                 

@@ -555,33 +555,43 @@ class ConversationRenderer {
     processChartPlaceholders(content) {
         if (!this.options.enableChartProcessing) return content;
         
-        return content.replace(/\[CHART:(\w+):(\d+)\]/g, (match, type, id) => {
+        // First handle dual map placeholders with their specific pattern
+        content = content.replace(/\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]/g, (match, map1Id, map2Id) => {
+            const chartUrl = `/dual-map?map1_id=${map1Id}&map2_id=${map2Id}`;
+            return `<div class="chart-container">
+                <iframe src="${chartUrl}" width="100%" height="400" frameborder="0"></iframe>
+                <div class="chart-caption">Dual Map Comparison: ${map1Id} vs ${map2Id}</div>
+            </div>`;
+        });
+        
+        // Then handle regular chart placeholders
+        return content.replace(/\[CHART:(\w+):([a-zA-Z0-9\-:]+)\]/g, (match, type, params) => {
             // Generate correct URLs based on chart type
             let chartUrl;
             if (type === 'time_series_id') {
-                chartUrl = `/backend/time-series-chart?chart_id=${id}`;
+                chartUrl = `/backend/time-series-chart?chart_id=${params}`;
             } else if (type === 'map') {
-                chartUrl = `/backend/map-chart?id=${id}`;
+                chartUrl = `/backend/map-chart?id=${params}`;
             } else if (type === 'anomaly') {
-                chartUrl = `/anomaly-analyzer/anomaly-chart?id=${id}`;
+                chartUrl = `/anomaly-analyzer/anomaly-chart?id=${params}`;
             } else if (type === 'time_series') {
                 // Handle time_series with parameters (metric_id:district_id:period_type)
-                const params = id.split(':');
-                if (params.length === 3) {
-                    const [metric_id, district_id, period_type] = params;
+                const paramParts = params.split(':');
+                if (paramParts.length === 3) {
+                    const [metric_id, district_id, period_type] = paramParts;
                     chartUrl = `/backend/time-series-chart?metric_id=${metric_id}&district_id=${district_id}&period_type=${period_type}`;
                 } else {
                     // Fallback for malformed time_series parameters
-                    chartUrl = `/backend/time-series-chart?chart_id=${id}`;
+                    chartUrl = `/backend/time-series-chart?chart_id=${params}`;
                 }
             } else {
                 // Fallback to generic chart endpoint
-                chartUrl = `/backend/charts/${type}/${id}`;
+                chartUrl = `/backend/charts/${type}/${params}`;
             }
             
             return `<div class="chart-container">
                 <iframe src="${chartUrl}" width="100%" height="400" frameborder="0"></iframe>
-                <div class="chart-caption">Chart ${id} (${type})</div>
+                <div class="chart-caption">Chart ${params} (${type})</div>
             </div>`;
         });
     }

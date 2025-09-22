@@ -28,8 +28,8 @@
         
         body {
             font-family: 'IBM Plex Sans', Arial, sans-serif;
-            color: var(--ink-black);
-            background-color: white;
+            color: var(--text-primary, var(--ink-black));
+            background-color: var(--bg-primary, white);
             padding: 15px;
             font-size: 14px;
         }
@@ -55,13 +55,20 @@
             background-color: white;
             border-radius: 8px;
             padding: 10px;
-            margin: 0 auto;
+            margin: 0; /* Remove auto centering like time_series_chart */
             box-shadow: none;
+            max-width: 600px; /* Cap width at 600px like time_series_chart */
+        }
+        
+        [data-theme="dark"] .chart-container {
+            background-color: #1a1a1a;
             overflow: visible;
             position: relative;
-            display: block;
+            display: flex;
+            justify-content: flex-start; /* Left justify instead of center */
+            align-items: center;
             width: 100%;
-            max-width: 600px;
+            max-width: 600px; /* Cap width at 600px */
             border: none;
             box-sizing: border-box;
         }
@@ -79,6 +86,11 @@
             border-top-right-radius: 8px;
             display: block;
             pointer-events: none;
+            z-index: 1; /* Ensure framing appears above chart content */
+            box-sizing: border-box;
+            /* Use CSS custom properties for dynamic sizing with fallback */
+            max-width: calc(var(--container-width, 61.8%) * 0.618);
+            max-height: calc(var(--container-height, 61.8%) * 0.618);
         }
         
         .chart-container::after {
@@ -93,6 +105,22 @@
             border-bottom-left-radius: 8px;
             display: block;
             pointer-events: none;
+            z-index: 1; /* Ensure framing appears above chart content */
+            box-sizing: border-box;
+            /* Use CSS custom properties for dynamic sizing with fallback */
+            max-width: calc(var(--container-width, 61.8%) * 0.618);
+            max-height: calc(var(--container-height, 61.8%) * 0.618);
+        }
+        
+        /* Dark mode corner frames */
+        [data-theme="dark"] .chart-container::before {
+            border-top: 2px solid rgba(255, 255, 255, 0.3);
+            border-right: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        [data-theme="dark"] .chart-container::after {
+            border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+            border-left: 2px solid rgba(255, 255, 255, 0.3);
         }
         
         .header {
@@ -192,38 +220,38 @@
             }
             
             #anomaly-chart {
-                padding-bottom: 100%; /* Maintain square aspect ratio on very small screens */
+                padding-bottom: 70%; /* Match time_series_chart mobile */
             }
         }
         
         /* Add media query for wider screens */
         @media (min-width: 768px) {
             #anomaly-chart {
-                padding-bottom: 75%; /* Match time_series_chart behavior */
+                padding-bottom: 75%; /* Match time_series_chart - 4:3 aspect ratio */
             }
         }
         
         @media (min-width: 1200px) {
             #anomaly-chart {
-                padding-bottom: 75%; /* Match time_series_chart behavior */
+                padding-bottom: 75%; /* Match time_series_chart - 4:3 aspect ratio */
             }
         }
         
         /* Special handling for small embedded windows */
         @media (max-height: 500px) {
             #anomaly-chart {
-                padding-bottom: 60%; /* Even shorter for very small height windows */
+                padding-bottom: 60%; /* Match time_series_chart small windows */
             }
             
             .chart-container {
-                padding: 5px;
+                padding: 3px; /* Even less padding for small windows */
             }
         }
         
         /* Special handling for very small embedded windows (like 437x437) */
         @media (max-width: 450px) and (max-height: 450px) {
             #anomaly-chart {
-                padding-bottom: 55%; /* Even more compact for very small windows */
+                padding-bottom: 55%; /* Match time_series_chart very small windows */
             }
             
             .chart-container {
@@ -236,16 +264,21 @@
             }
         }
         
-        /* Embedded mode optimizations - left justify and better spacing */
+        /* Embedded mode optimizations - much more aggressive spacing reduction */
+        body.embedded-mode #anomaly-chart {
+            padding-bottom: 30% !important; /* Much more aggressive for embedded */
+        }
+        
+        /* When embedded in fixed-height iframe, adjust body to fit better */
         body.embedded-mode {
             margin: 0 !important;
-            padding: 5px !important;
+            padding: 2px !important;
             overflow: hidden;
         }
         
         body.embedded-mode .container {
             margin: 0 !important;
-            padding: 10px !important;
+            padding: 2px !important;
         }
         
         body.embedded-mode .row {
@@ -259,7 +292,7 @@
         
         body.embedded-mode .chart-container {
             margin: 0 !important;
-            padding: 5px !important;
+            padding: 2px !important;
         }
         
         body.embedded-mode #chart-section {
@@ -270,10 +303,34 @@
             text-align: left !important;
         }
         
-        /* Commented out aggressive embedded mode - let normal mode work first
-        body.embedded-mode #anomaly-chart {
-            padding-bottom: 30% !important; 
-        } */
+        /* Force left alignment for all centering elements in embedded mode */
+        body.embedded-mode .loading {
+            justify-content: flex-start !important;
+        }
+        
+        body.embedded-mode .js-plotly-plot,
+        body.embedded-mode .plot-container {
+            justify-content: flex-start !important;
+        }
+        
+        /* For very large fixed-height iframes (like 600px), still be aggressive */
+        @media (min-height: 500px) {
+            body.embedded-mode #anomaly-chart {
+                padding-bottom: 35% !important; /* Still aggressive even for tall iframes */
+            }
+        }
+        
+        @media (max-width: 576px) {
+            body.embedded-mode #anomaly-chart {
+                padding-bottom: 28% !important; /* More aggressive for small embedded */
+            }
+        }
+        
+        @media (max-width: 450px) and (max-height: 450px) {
+            body.embedded-mode #anomaly-chart {
+                padding-bottom: 25% !important; /* Very aggressive for tiny embedded */
+            }
+        }
         
         /* Fix the "swimming in white" issue - make plotly elements more efficient */
         body.embedded-mode .js-plotly-plot,
@@ -283,24 +340,21 @@
             justify-content: flex-start !important;
         }
         
-        /* Commented out all embedded mode overrides to fix normal viewing
-        @media (min-height: 500px) {
-            body.embedded-mode #anomaly-chart {
-                padding-bottom: 35% !important;
+        /* Ensure framing elements scale properly with container size */
+        .chart-container {
+            position: relative;
+            overflow: visible;
+        }
+        
+        /* Override framing size for very small containers */
+        @media (max-width: 300px) {
+            .chart-container::before,
+            .chart-container::after {
+                width: 50% !important;
+                height: 50% !important;
             }
         }
         
-        @media (max-width: 576px) {
-            body.embedded-mode #anomaly-chart {
-                padding-bottom: 28% !important;
-            }
-        }
-        
-        @media (max-width: 450px) and (max-height: 450px) {
-            body.embedded-mode #anomaly-chart {
-                padding-bottom: 25% !important;
-            }
-        } */
         
         /* Ensure the container takes full height in chart section mode */
         body.chart-section-mode {
@@ -381,7 +435,7 @@
         #anomaly-chart {
             width: 100%;
             height: 0;
-            padding-bottom: 75%; /* Use same as time_series_chart - works correctly */
+            padding-bottom: 75%; /* Match time_series_chart - 4:3 aspect ratio */
             position: relative;
             overflow: visible;
             display: block;
@@ -515,21 +569,66 @@
             // For embedded mode (chart-section-mode)
             if (document.body.classList.contains('chart-section-mode')) {
                 // Style container for embedded view
-                chartContainer.style.maxWidth = '600px';
-                chartContainer.style.margin = '0 auto';
+                chartContainer.style.margin = '0'; // Remove auto centering
                 
-                // Ensure aspect ratio is square
-                const containerWidth = Math.min(window.innerWidth, 600);
-                chartContainer.style.width = containerWidth + 'px';
-                chartContainer.style.height = containerWidth + 'px';
-            } else {
-                // For full view mode
-                // Calculate available width up to 600px maximum
-                const availableWidth = Math.min(chartContainer.parentElement.clientWidth, 600);
-                chartContainer.style.width = availableWidth + 'px';
-                chartContainer.style.height = availableWidth + 'px';
+                // Calculate available width based on the actual container's parent or document body
+                let availableWidth;
+                const parentElement = chartContainer.parentElement;
+                const bodyElement = document.body;
+                
+                if (parentElement && parentElement !== bodyElement) {
+                    // Use parent container's available width, but always cap at 600px
+                    const parentWidth = parentElement.clientWidth || parentElement.offsetWidth;
+                    availableWidth = Math.min(parentWidth, 600);
+                } else {
+                    // Fallback to viewport width, but always cap at 600px
+                    availableWidth = Math.min(window.innerWidth, 600);
+                }
+                
+                // Ensure the chart container itself is also constrained
                 chartContainer.style.maxWidth = '600px';
-                chartContainer.style.maxHeight = '600px';
+                chartContainer.style.width = availableWidth + 'px';
+                
+                // Adjust aspect ratio based on available space
+                let aspectRatio = 0.75; // Default 4:3
+                if (availableWidth < 450 && window.innerHeight < 450) {
+                    aspectRatio = 0.65; // More compact for very small windows
+                } else if (window.innerHeight < 500) {
+                    aspectRatio = 0.70; // Slightly more compact for small height
+                }
+                
+                const containerHeight = Math.min(window.innerHeight, availableWidth * aspectRatio);
+                
+                chartContainer.style.height = containerHeight + 'px';
+
+                // CRITICAL: Override the chart element's CSS padding-bottom to fill the container
+                if (anomalyChart) {
+                    anomalyChart.style.height = containerHeight + 'px';
+                    anomalyChart.style.paddingBottom = '0'; // Disable CSS aspect ratio
+                }
+
+                // Adjust the parent Bootstrap container
+                const bootstrapContainer = chartContainer.closest('.container');
+                if (bootstrapContainer) {
+                    bootstrapContainer.style.height = containerHeight + 'px';
+                    bootstrapContainer.style.maxWidth = 'none'; // Remove Bootstrap container constraints
+                    bootstrapContainer.style.padding = '0'; // Remove Bootstrap container padding
+                }
+            } else {
+                // For full view mode - cap width at 600px
+                const availableWidth = Math.min(chartContainer.parentElement.clientWidth, 600); // Cap at 600px
+                const availableHeight = availableWidth * 0.75; // 4:3 aspect ratio
+                
+                chartContainer.style.width = availableWidth + 'px'; // Use calculated width
+                chartContainer.style.height = availableHeight + 'px'; // ← FIXED: Use 4:3 ratio, not square!
+                chartContainer.style.maxWidth = '600px'; // Cap at 600px
+                chartContainer.style.maxHeight = 'none'; // Remove height constraint
+                
+                // CRITICAL: Override the chart element's CSS padding-bottom to fill the container
+                if (anomalyChart) {
+                    anomalyChart.style.height = availableHeight + 'px';
+                    anomalyChart.style.paddingBottom = '0'; // Disable CSS aspect ratio
+                }
             }
             
             // Make sure the plot fills its container
@@ -538,10 +637,27 @@
                 plotElement.style.height = '100%';
                 Plotly.Plots.resize(plotElement);
             }
+            
+            // Update CSS custom properties for framing elements to scale with actual container size
+            // This ensures the corner framing scales with the actual container size, not the screen size
+            const containerRect = chartContainer.getBoundingClientRect();
+            chartContainer.style.setProperty('--container-width', containerRect.width + 'px');
+            chartContainer.style.setProperty('--container-height', containerRect.height + 'px');
         }
 
         // Add window resize handler for responsiveness
         window.addEventListener('resize', updateChartAspectRatio);
+        
+        // Add ResizeObserver to monitor container size changes
+        const resizeObserver = new ResizeObserver(() => {
+            updateChartAspectRatio();
+        });
+        
+        // Observe the chart container for size changes
+        const chartContainer = document.getElementById('chart-section');
+        if (chartContainer) {
+            resizeObserver.observe(chartContainer);
+        }
         
         // Initial call to set aspect ratio
         updateChartAspectRatio();
@@ -942,9 +1058,16 @@
                             // Handle regular date formats
                             const dateParts = dateStr.split('-');
                             const year = parseInt(dateParts[0]);
-                            const month = parseInt(dateParts[1]) - 1;
-                            const day = dateParts.length > 2 ? parseInt(dateParts[2]) : 1;
-                            dateObj = new Date(year, month, day);
+                            
+                            // For annual data (just year), use January 1st
+                            if (dateParts.length === 1) {
+                                dateObj = new Date(year, 0, 1); // January 1st of the year
+                            } else {
+                                // For monthly or daily data
+                                const month = parseInt(dateParts[1]) - 1;
+                                const day = dateParts.length > 2 ? parseInt(dateParts[2]) : 1;
+                                dateObj = new Date(year, month, day);
+                            }
                         }
                         
                         if (isNaN(dateObj.getTime())) {
@@ -1063,8 +1186,8 @@
             // Combine title and subtitle - FLIPPED ORDER
             const combinedTitleText = `${changeText}<br><span style="font-size: 0.8em;">${objectName}</span>`;
 
-            // Check if we're in embedded mode for margin optimization
-            const isEmbedded = window.location !== window.parent.location;
+            // Use global embedded mode detection
+            const isEmbedded = isEmbeddedGlobal;
             
             // Configuration for the plot
             const layout = {
@@ -1075,10 +1198,10 @@
                         size: 14,
                         color: '#222222'
                     },
-                    y: 0.98,
+                    y: 0.95, // Moved title lower to use less top space
                     x: 0.5,
                     xanchor: 'center',
-                    pad: { t: 10, b: 10 }
+                    pad: { t: 5, b: 5 } // Reduced padding
                 },
                 annotations: [
                     // The original annotation for changeText (annotations[0]) is removed.
@@ -1119,8 +1242,11 @@
                             }
                             
                             return label;
+                        } else if (anomaly.period_type === 'year') {
+                            // For yearly data, just show the year
+                            return year.toString();
                         } else {
-                            // For monthly/yearly data, show month abbreviation
+                            // For monthly data, show month abbreviation
                             let label = fullMonths[month].charAt(0);
                             
                             if (index === 0 || [...comparisonDates, ...recentDates].sort((a, b) => a - b)[index - 1].getFullYear() !== year) {
@@ -1152,7 +1278,7 @@
                     showgrid: true,
                     gridcolor: 'rgba(232, 233, 235, 0.5)',
                     zeroline: false,
-                    rangemode: 'tozero',
+                    autorange: true, // Let Plotly automatically determine the best range
                     tickfont: { 
                         family: 'IBM Plex Sans, Arial, sans-serif',
                         size: 9,
@@ -1163,7 +1289,7 @@
                 legend: {
                     orientation: 'h',
                     x: 0.5,
-                    y: -0.12,
+                    y: -0.05, // Moved legend much closer to chart
                     xanchor: 'center',
                     yanchor: 'top',
                     font: { 
@@ -1171,18 +1297,18 @@
                         size: 9,
                         color: '#222222'
                     },
-                    bgcolor: 'rgba(246, 241, 234, 0.7)'
+                    bgcolor: 'var(--soft-sand, rgba(246, 241, 234, 0.7))'
                 },
-                margin: isEmbedded ? { t: 40, b: 50, l: 40, r: 25 } : { t: 55, b: 80, l: 50, r: 45 }, // Match time_series_chart margins
+                margin: isEmbedded ? { t: 30, b: 20, l: 40, r: 25 } : { t: 40, b: 25, l: 50, r: 45 }, // Much smaller margins to fill container
                 height: null,
                 width: null,
                 autosize: true,
-                paper_bgcolor: 'rgba(255, 255, 255, 0.9)',
-                plot_bgcolor: 'rgba(255, 255, 255, 0.9)',
+                paper_bgcolor: 'transparent', // Use transparent to inherit from container
+                plot_bgcolor: 'transparent', // Use transparent to inherit from container
                 hovermode: 'closest',
                 hoverlabel: {
-                    bgcolor: '#F6F1EA',
-                    bordercolor: '#4A7463',
+                    bgcolor: 'var(--soft-sand, #F6F1EA)',
+                    bordercolor: 'var(--spruce-green, #4A7463)',
                     font: { 
                         family: 'IBM Plex Sans, Arial, sans-serif',
                         size: 9,
@@ -1204,6 +1330,14 @@
             
             // Create the plot
             Plotly.newPlot('anomaly-plot', traces, layout, config).then(() => {
+                // Debug: Check the computed styles
+                const chartElement = document.getElementById('anomaly-chart');
+                const computedStyle = getComputedStyle(chartElement);
+                console.log('Chart element computed paddingBottom:', computedStyle.paddingBottom);
+                console.log('Chart element computed height:', computedStyle.height);
+                console.log('Chart element actual offsetHeight:', chartElement.offsetHeight);
+                console.log('Chart container has embedded-mode class:', document.body.classList.contains('embedded-mode'));
+                
                 // Update chart dimensions
                 updateChartAspectRatio();
                 
@@ -1219,9 +1353,9 @@
                 const plotElement = document.getElementById('anomaly-plot');
                 if (!plotElement) return;
                 
-                // Get the current dimensions and check if embedded
+                // Get the current dimensions and use global embedded detection
                 const chartWidth = plotElement.clientWidth;
-                const isEmbedded = window.location !== window.parent.location;
+                const isEmbedded = isEmbeddedGlobal;
                 
                 // Adjust title and annotation font sizes based on chart width
                 let update = {
@@ -1229,23 +1363,23 @@
                     'legend.font.size': Math.max(8, Math.min(9, chartWidth / 45))
                 };
                 
-                // Adjust margins based on screen size - match time_series_chart behavior
+                // Adjust margins based on screen size - minimal margins to maximize chart space
                 if (chartWidth < 400) {
-                    update['margin.t'] = 50;
-                    update['margin.b'] = isEmbedded ? 50 : 70;  // Larger bottom margins
-                    update['margin.l'] = 40;
-                    update['margin.r'] = isEmbedded ? 45 : 30;
+                    update['margin.t'] = 35;
+                    update['margin.b'] = isEmbedded ? 20 : 25;  // Very small bottom margins
+                    update['margin.l'] = 35;
+                    update['margin.r'] = isEmbedded ? 25 : 30;
                 } else if (chartWidth >= 400) {
-                    update['margin.t'] = 50;
-                    update['margin.b'] = isEmbedded ? 50 : 80;  // Larger bottom margins
+                    update['margin.t'] = 40;
+                    update['margin.b'] = isEmbedded ? 20 : 25;  // Very small bottom margins
                     update['margin.l'] = 45;
-                    update['margin.r'] = isEmbedded ? 50 : 35;
+                    update['margin.r'] = isEmbedded ? 25 : 35;
                 }
                 
                 // For very small screens, adjust vertical positioning
                 if (chartWidth < 400) {
-                    update['title.y'] = 0.98;
-                    update['legend.y'] = -0.10;
+                    update['title.y'] = 0.93; // Lower title position for small screens
+                    update['legend.y'] = -0.03; // Moved legend much closer for small screens
                 }
                 
                 // Apply the updates
@@ -1304,23 +1438,38 @@
             });
         }
         
+        // Detect and apply embedded-mode class IMMEDIATELY for CSS optimizations
+        const isEmbeddedGlobal = window.location !== window.parent.location;
+        console.log('Anomaly chart: Checking embedded mode - isEmbedded:', isEmbeddedGlobal);
+        console.log('Anomaly chart: window.location:', window.location.href);
+        console.log('Anomaly chart: window.parent.location:', window.parent.location.href);
+        
+        if (isEmbeddedGlobal) {
+            document.body.classList.add('embedded-mode');
+            console.log('Anomaly chart: Embedded mode detected and class added IMMEDIATELY');
+            console.log('Anomaly chart: Body classes:', document.body.className);
+            
+            
+            // Comprehensive scroll prevention for embedded mode
+            window.scrollTo(0, 0);
+            document.documentElement.scrollTop = 0;
+            document.body.scrollTop = 0;
+            
+            // Prevent any future scrolling attempts
+            document.addEventListener('scroll', function(e) {
+                e.preventDefault();
+                window.scrollTo(0, 0);
+            }, { passive: false });
+        }
+        
         // Load data when the page loads
         document.addEventListener('DOMContentLoaded', function() {
-            // Handle embedded mode hash removal before anything else
-            const isEmbedded = window.location !== window.parent.location;
-            if (isEmbedded) {
+            // Handle embedded mode hash removal
+            if (isEmbeddedGlobal) {
                 // Remove hash immediately to prevent auto-scrolling
                 if (window.location.hash) {
                     history.replaceState(null, null, window.location.pathname + window.location.search);
                 }
-                // Comprehensive scroll prevention
-                window.scrollTo(0, 0);
-                document.documentElement.scrollTop = 0;
-                document.body.scrollTop = 0;
-                
-                // Add embedded-mode class for CSS optimizations
-                document.body.classList.add('embedded-mode');
-                console.log('Anomaly chart: Embedded mode detected, hash removed, scrolling prevented');
                 
                 // Multiple scroll resets to ensure it sticks
                 setTimeout(() => {
@@ -1357,8 +1506,8 @@
                 'yaxis.gridcolor': gridColor,
                 'legend.font.color': textColor,
                 'title.font.color': textColor,
-                'paper_bgcolor': paperBg,
-                'plot_bgcolor': paperBg
+                'paper_bgcolor': 'transparent', // Keep transparent to inherit from container
+                'plot_bgcolor': 'transparent'   // Keep transparent to inherit from container
             });
         }
 

@@ -183,6 +183,7 @@ def expand_chart_references_local(report_path):
         time_series_id_pattern = r'\[CHART:time_series_id:(\d+)\]\s*[.,;:]*\s*'
         anomaly_pattern = r'\[CHART:anomaly:([a-zA-Z0-9]+)\]\s*[.,;:]*\s*'
         map_pattern = r'\[CHART:map:([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
+        dualmap_pattern = r'\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
         
         # Replace time series chart references with local iframes
         def replace_time_series_local(match):
@@ -258,11 +259,31 @@ def expand_chart_references_local(report_path):
             )
             return iframe_html
         
+        # Replace dual map chart references with local iframes
+        def replace_dualmap_local(match):
+            map1_id = match.group(1)
+            map2_id = match.group(2)
+            
+            logger.info(f"Using local dual map chart for map IDs: {map1_id}, {map2_id}")
+            
+            iframe_html = (
+                f'<div class="chart-container">\n'
+                f'    <iframe src="/dual-map?map1_id={map1_id}&map2_id={map2_id}"\n'
+                f'            style="width: 100%; height: 600px; border: none;" \n'
+                f'            frameborder="0" \n'
+                f'            scrolling="yes"\n'
+                f'            title="Dual Map Comparison - {map1_id} vs {map2_id}">\n'
+                f'    </iframe>\n'
+                f'</div>'
+            )
+            return iframe_html
+        
         # Apply all replacements
         report_html = re.sub(time_series_pattern, replace_time_series_local, report_html)
         report_html = re.sub(anomaly_pattern, replace_anomaly_local, report_html)
         report_html = re.sub(map_pattern, replace_map_local, report_html)
         report_html = re.sub(time_series_id_pattern, replace_time_series_id_local, report_html)
+        report_html = re.sub(dualmap_pattern, replace_dualmap_local, report_html)
         
         # Write the updated report back to the file
         with open(report_path, 'w', encoding='utf-8') as f:
@@ -302,6 +323,7 @@ def expand_chart_references_dw(report_path):
         time_series_id_pattern = r'\[CHART:time_series_id:(\d+)\]\s*[.,;:]*\s*'
         anomaly_pattern = r'\[CHART:anomaly:([a-zA-Z0-9]+)\]\s*[.,;:]*\s*'
         map_pattern = r'\[CHART:map:([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
+        dualmap_pattern = r'\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
         
         # Define pattern for direct image references
         image_pattern_with_alt = r'<img[^>]*src="([^"]+)"[^>]*alt="([^"]+)"[^>]*>'
@@ -553,11 +575,32 @@ def expand_chart_references_dw(report_path):
                 # For non-anomaly images, return as-is
                 return img_tag
         
+        # Replace dual map chart references (fallback to local since no DW equivalent)
+        def replace_dualmap_dw(match):
+            map1_id = match.group(1)
+            map2_id = match.group(2)
+            
+            logger.info(f"Using local dual map fallback for map IDs: {map1_id}, {map2_id} (no DataWrapper equivalent)")
+            
+            # Dual maps don't have DataWrapper equivalents, so use local iframe
+            iframe_html = (
+                f'<div class="chart-container">\n'
+                f'    <iframe src="/dual-map?map1_id={map1_id}&map2_id={map2_id}"\n'
+                f'            style="width: 100%; height: 600px; border: none;" \n'
+                f'            frameborder="0" \n'
+                f'            scrolling="yes"\n'
+                f'            title="Dual Map Comparison - {map1_id} vs {map2_id}">\n'
+                f'    </iframe>\n'
+                f'</div>'
+            )
+            return iframe_html
+        
         # Apply all replacements
         report_html = re.sub(time_series_pattern, replace_time_series_dw, report_html)
         report_html = re.sub(anomaly_pattern, replace_anomaly_dw, report_html)
         report_html = re.sub(map_pattern, replace_map_dw, report_html)
         report_html = re.sub(time_series_id_pattern, replace_time_series_id_dw, report_html)
+        report_html = re.sub(dualmap_pattern, replace_dualmap_dw, report_html)
         report_html = re.sub(image_pattern_with_alt, replace_image_with_alt_dw, report_html)
         report_html = re.sub(image_pattern_without_alt, replace_image_without_alt_dw, report_html)
         
@@ -647,11 +690,28 @@ def expand_chart_references_for_proofreader(report_path):
 '''
             return placeholder_html
         
+        # Replace dual map chart references with simple placeholders
+        def replace_dualmap_placeholder(match):
+            map1_id = match.group(1)
+            map2_id = match.group(2)
+            
+            logger.info(f"Creating placeholder for dual map IDs: {map1_id}, {map2_id}")
+            
+            placeholder_html = f'''
+<div class="chart-placeholder" style="border: 2px dashed #ccc; padding: 20px; margin: 20px 0; text-align: center; background-color: #f9f9f9;">
+    <h4>🗺️ Dual Map Comparison</h4>
+    <p><strong>Map 1 ID:</strong> {map1_id} | <strong>Map 2 ID:</strong> {map2_id}</p>
+    <p><em>Dual map overlay will be rendered here</em></p>
+</div>
+'''
+            return placeholder_html
+        
         # Apply replacements
         content = re.sub(r'\[CHART:time_series:(\d+):(\d+):(\w+)\]', replace_time_series_placeholder, content)
         content = re.sub(r'\[CHART:anomaly:(\d+)\]', replace_anomaly_placeholder, content)
         content = re.sub(r'\[CHART:map:(\d+)\]', replace_map_placeholder, content)
         content = re.sub(r'\[CHART:time_series_id:(\d+)\]', replace_time_series_id_placeholder, content)
+        content = re.sub(r'\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]', replace_dualmap_placeholder, content)
         
         # Write the updated content back to the file
         with open(report_path, 'w', encoding='utf-8') as f:
@@ -692,6 +752,7 @@ def expand_chart_references_with_tabs(report_path):
         time_series_id_pattern = r'\[CHART:time_series_id:(\d+)\]\s*[.,;:]*\s*'
         anomaly_pattern = r'\[CHART:anomaly:([a-zA-Z0-9]+)\]\s*[.,;:]*\s*'
         map_pattern = r'\[CHART:map:([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
+        dualmap_pattern = r'\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
         
         # Define pattern for direct image references
         image_pattern_with_alt = r'<img[^>]*src="([^"]+)"[^>]*alt="([^"]+)"[^>]*>'
@@ -918,11 +979,40 @@ def expand_chart_references_with_tabs(report_path):
 '''
             return tabs_html
         
+        # Replace dual map chart references with tabs (no DataWrapper equivalent)
+        def replace_dualmap_tabs(match):
+            map1_id = match.group(1)
+            map2_id = match.group(2)
+            chart_id = f"dualmap_{map1_id}_{map2_id}"
+            
+            # Dual maps don't have DataWrapper equivalents, so just use local iframe
+            tabs_html = f'''
+<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
+    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+        <div class="chart-tabs-header">
+            <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Dual Map Comparison</button>
+        </div>
+        <div class="chart-tab-content">
+            <div id="{chart_id}_local" class="chart-tab-panel active">
+                <iframe src="/dual-map?map1_id={map1_id}&map2_id={map2_id}"
+                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        frameborder="0" 
+                        scrolling="no"
+                        title="Dual Map Comparison - {map1_id} vs {map2_id}">
+                </iframe>
+            </div>
+        </div>
+    </div>
+</div>
+'''
+            return tabs_html
+        
         # Apply all replacements
         report_html = re.sub(time_series_pattern, replace_time_series_tabs, report_html)
         report_html = re.sub(anomaly_pattern, replace_anomaly_tabs, report_html)
         report_html = re.sub(map_pattern, replace_map_tabs, report_html)
         report_html = re.sub(time_series_id_pattern, replace_time_series_id_tabs, report_html)
+        report_html = re.sub(dualmap_pattern, replace_dualmap_tabs, report_html)
         
         # Add references to external CSS and JavaScript files
         css_and_js = '''
@@ -983,6 +1073,7 @@ def expand_chart_references_with_auto_dw_generation(report_path):
         time_series_id_pattern = r'\[CHART:time_series_id:(\d+)\]\s*[.,;:]*\s*'
         anomaly_pattern = r'\[CHART:anomaly:([a-zA-Z0-9]+)\]\s*[.,;:]*\s*'
         map_pattern = r'\[CHART:map:([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
+        dualmap_pattern = r'\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
         
         # Replace time series chart references with switchable tabs (auto-generate DW if needed)
         def replace_time_series_auto_dw(match):
@@ -1210,11 +1301,40 @@ def expand_chart_references_with_auto_dw_generation(report_path):
 '''
             return tabs_html
         
+        # Replace dual map chart references (no DataWrapper equivalent)
+        def replace_dualmap_auto_dw(match):
+            map1_id = match.group(1)
+            map2_id = match.group(2)
+            chart_id = f"dualmap_{map1_id}_{map2_id}"
+            
+            # Dual maps don't have DataWrapper equivalents, so just use local iframe
+            tabs_html = f'''
+<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
+    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+        <div class="chart-tabs-header">
+            <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Dual Map Comparison</button>
+        </div>
+        <div class="chart-tab-content">
+            <div id="{chart_id}_local" class="chart-tab-panel active">
+                <iframe src="/dual-map?map1_id={map1_id}&map2_id={map2_id}"
+                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        frameborder="0" 
+                        scrolling="no"
+                        title="Dual Map Comparison - {map1_id} vs {map2_id}">
+                </iframe>
+            </div>
+        </div>
+    </div>
+</div>
+'''
+            return tabs_html
+        
         # Apply all replacements
         report_html = re.sub(time_series_pattern, replace_time_series_auto_dw, report_html)
         report_html = re.sub(anomaly_pattern, replace_anomaly_auto_dw, report_html)
         report_html = re.sub(map_pattern, replace_map_auto_dw, report_html)
         report_html = re.sub(time_series_id_pattern, replace_time_series_id_auto_dw, report_html)
+        report_html = re.sub(dualmap_pattern, replace_dualmap_auto_dw, report_html)
         
         # Add references to external CSS and JavaScript files
         css_and_js = '''
@@ -1274,6 +1394,7 @@ def expand_chart_references_for_email(report_path):
         time_series_id_pattern = r'\[CHART:time_series_id:(\d+)\]\s*[.,;:]*\s*'
         anomaly_pattern = r'\[CHART:anomaly:([a-zA-Z0-9]+)\]\s*[.,;:]*\s*'
         map_pattern = r'\[CHART:map:([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
+        dualmap_pattern = r'\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
         
         # Define patterns for already-expanded HTML charts (more comprehensive)
         expanded_time_series_pattern = r'<div class="chart-container"[^>]*>.*?<iframe[^>]*src="/backend/time-series-chart\?chart_id=(\d+)"[^>]*>.*?</div>'
@@ -1720,11 +1841,25 @@ def expand_chart_references_for_email(report_path):
         report_html = re.sub(expanded_anomaly_pattern, replace_expanded_anomaly_email, report_html, flags=re.DOTALL)
         report_html = re.sub(expanded_map_pattern, replace_expanded_map_email, report_html, flags=re.DOTALL)
         
+        # Replace dual map chart references (email format - no DataWrapper equivalent)
+        def replace_dualmap_email(match):
+            map1_id = match.group(1)
+            map2_id = match.group(2)
+            
+            return f'''
+<div class="chart-container" style="margin: 20px 0; padding: 15px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px;">
+    <h4 style="margin: 0 0 10px 0; color: #856404;">Dual Map Comparison - {map1_id} vs {map2_id}</h4>
+    <p style="margin: 0; color: #856404; font-size: 14px;">Dual map comparisons are not available in email format. View the web version for interactive dual map overlay.</p>
+    <p style="margin: 5px 0 0 0; color: #856404; font-size: 12px;"><strong>Map IDs:</strong> {map1_id}, {map2_id}</p>
+</div>
+'''
+        
         # Also try original patterns in case some charts weren't expanded
         report_html = re.sub(time_series_pattern, replace_time_series_email, report_html)
         report_html = re.sub(anomaly_pattern, replace_anomaly_email, report_html)
         report_html = re.sub(map_pattern, replace_map_email, report_html)
         report_html = re.sub(time_series_id_pattern, replace_time_series_id_email, report_html)
+        report_html = re.sub(dualmap_pattern, replace_dualmap_email, report_html)
         
         # Fallback: catch any remaining chart containers
         report_html = re.sub(expanded_chart_container_pattern, replace_any_chart_container, report_html, flags=re.DOTALL)
@@ -1763,7 +1898,8 @@ def keep_placeholders_for_proofreading(report_path):
             'time_series': r'\[CHART:time_series:(\d+):(\d+):(\w+)\]\s*[.,;:]*\s*',
             'time_series_id': r'\[CHART:time_series_id:(\d+)\]\s*[.,;:]*\s*',
             'anomaly': r'\[CHART:anomaly:([a-zA-Z0-9]+)\]\s*[.,;:]*\s*',
-            'map': r'\[CHART:map:([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
+            'map': r'\[CHART:map:([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*',
+            'dualmap': r'\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
         }
         
         def format_placeholder(match, chart_type, chart_id):
@@ -1790,11 +1926,17 @@ def keep_placeholders_for_proofreading(report_path):
             map_id = match.group(1)
             return format_placeholder(match, "Map", map_id)
         
+        def replace_dualmap(match):
+            map1_id = match.group(1)
+            map2_id = match.group(2)
+            return format_placeholder(match, "Dual Map", f"{map1_id} vs {map2_id}")
+        
         # Apply replacements
         content = re.sub(patterns['time_series'], replace_time_series, content)
         content = re.sub(patterns['time_series_id'], replace_time_series_id, content)
         content = re.sub(patterns['anomaly'], replace_anomaly, content)
         content = re.sub(patterns['map'], replace_map, content)
+        content = re.sub(patterns['dualmap'], replace_dualmap, content)
         
         # Write back to file
         with open(report_path, 'w', encoding='utf-8') as f:
@@ -1908,7 +2050,8 @@ def expand_charts_with_tabs_final(report_path):
             'time_series': r'\[CHART:time_series:(\d+):(\d+):(\w+)\]\s*[.,;:]*\s*',
             'time_series_id': r'\[CHART:time_series_id:(\d+)\]\s*[.,;:]*\s*',
             'anomaly': r'\[CHART:anomaly:([a-zA-Z0-9]+)\]\s*[.,;:]*\s*',
-            'map': r'\[CHART:map:([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
+            'map': r'\[CHART:map:([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*',
+            'dualmap': r'\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]\s*[.,;:]*\s*'
         }
         
         def replace_time_series(match):
@@ -2143,11 +2286,39 @@ def expand_charts_with_tabs_final(report_path):
 '''
             return tabs_html
         
+        def replace_dualmap(match):
+            map1_id = match.group(1)
+            map2_id = match.group(2)
+            chart_id = f"dualmap_{map1_id}_{map2_id}"
+            
+            # Dual maps don't have DataWrapper equivalents, so just use local iframe
+            tabs_html = f'''
+<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
+    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+        <div class="chart-tabs-header">
+            <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Dual Map Comparison</button>
+        </div>
+        <div class="chart-tab-content">
+            <div id="{chart_id}_local" class="chart-tab-panel active">
+                <iframe src="/dual-map?map1_id={map1_id}&map2_id={map2_id}"
+                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        frameborder="0" 
+                        scrolling="no"
+                        title="Dual Map Comparison - {map1_id} vs {map2_id}">
+                </iframe>
+            </div>
+        </div>
+    </div>
+</div>
+'''
+            return tabs_html
+        
         # Apply replacements
         content = re.sub(patterns['time_series'], replace_time_series, content)
         content = re.sub(patterns['time_series_id'], replace_time_series_id, content)
         content = re.sub(patterns['anomaly'], replace_anomaly, content)
         content = re.sub(patterns['map'], replace_map, content)
+        content = re.sub(patterns['dualmap'], replace_dualmap, content)
         
         # Add references to external CSS and JavaScript files
         css_and_js = '''
