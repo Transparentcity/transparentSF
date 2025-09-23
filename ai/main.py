@@ -194,6 +194,7 @@ from routes.weekly_analysis import router as weekly_analysis_router
 from routes.map_generator import router as map_generator_router, set_templates as set_map_generator_templates
 from routes.conversation import router as conversation_router, set_templates as set_conversation_templates
 from routes.explainer_chat import router as explainer_chat_router, set_templates as set_explainer_chat_templates
+from routes.writeups import router as writeups_router, set_templates as set_writeups_templates
 from routes.monthly_reports import router as monthly_reports_router
 from routes.charts import router as charts_router, set_templates as set_charts_templates
 
@@ -740,6 +741,11 @@ logger.debug("Included conversation router at /backend")
 set_explainer_chat_templates(templates)
 app.include_router(explainer_chat_router, prefix="/backend", tags=["explainer-chat"])
 logger.debug("Included explainer chat router at /backend")
+
+# Mount writeups router
+set_writeups_templates(templates)
+app.include_router(writeups_router, prefix="/backend", tags=["writeups"])
+logger.debug("Included writeups router at /backend")
 
 # Mount weekly analysis router
 app.include_router(weekly_analysis_router, tags=["weekly-analysis"])
