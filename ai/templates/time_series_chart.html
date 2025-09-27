@@ -1343,7 +1343,8 @@
                         linecolor: '#e5e7eb',
                         linewidth: 1,
                         ticklen: 3,
-                        tickcolor: '#222222'
+                        tickcolor: '#222222',
+                        rangeslider: { visible: true, thickness: 0.1 }
                     },
                     yaxis: {
                         title: {
@@ -1391,7 +1392,7 @@
                     paper_bgcolor: 'transparent',
                     plot_bgcolor: 'transparent',
                     hovermode: 'closest',
-                    dragmode: fullView ? 'zoom' : false, // Enable drag zoom only in full view mode
+                    dragmode: 'zoom', // Always enable drag zoom for YTD charts to handle spikes
                     responsive: true,
                     hoverlabel: {
                         bgcolor: '#F6F1EA',
@@ -1928,8 +1929,9 @@
             const config = {
                 responsive: true,
                 displayModeBar: fullView, // Show modebar only in full view mode
-                scrollZoom: fullView, // Enable scroll zoom only in full view mode
-                doubleClick: fullView ? 'reset' : false, // Enable double-click reset only in full view mode
+                // For YTD charts, allow scroll zoom and double-click reset even when not in full view
+                scrollZoom: (typeof metadata !== 'undefined' && metadata && metadata.group_field === 'year') ? true : fullView,
+                doubleClick: (typeof metadata !== 'undefined' && metadata && metadata.group_field === 'year') ? 'reset' : (fullView ? 'reset' : false),
                 modeBarButtonsToRemove: fullView ? [] : ['toImage', 'pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d'], // Remove all buttons except in full view
                 toImageButtonOptions: {
                     format: 'png',
