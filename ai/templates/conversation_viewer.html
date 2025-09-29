@@ -248,7 +248,10 @@
             }
         }
     </style>
-</head>
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+    </head>
 <body>
     <div class="header">
         <div class="header-left">
@@ -307,11 +310,11 @@
         let conversationRenderer;
         let sessionData;
         
-        // Get session ID from URL parameter
+        // Get session ID from URL parameter or template variable
         const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session') || urlParams.get('id');
+        const sessionId = urlParams.get('session') || urlParams.get('id') || '{{ session_id }}';
         
-        if (!sessionId) {
+        if (!sessionId || sessionId === '{{ session_id }}') {
             showError('No session ID provided. Please check the URL.');
         } else {
             loadConversation(sessionId);

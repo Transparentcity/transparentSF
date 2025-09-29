@@ -144,7 +144,7 @@ def store_time_series_in_db(connection, chart_data, metadata):
         period_type = serializable_metadata.get('period_type', 'month')
         group_field = serializable_metadata.get('group_field', None)
         executed_query_url = serializable_metadata.get('executed_query_url', None)
-        caption = serializable_metadata.get('caption', '')
+        caption = serializable_metadata.get('caption', '') or serializable_metadata.get('chart_title', '')
         
         # Get district from filter conditions if it exists
         district = extract_district_from_filter_conditions(serializable_metadata.get('filter_conditions', []))

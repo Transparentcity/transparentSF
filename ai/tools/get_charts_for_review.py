@@ -40,7 +40,10 @@ def extract_caption_from_metadata(metadata: Any) -> str:
             return ""
         
         # Look for caption in various possible locations
-        caption = metadata_dict.get('caption') or metadata_dict.get('description') or metadata_dict.get('title')
+        caption = (metadata_dict.get('caption') or 
+                  metadata_dict.get('description') or 
+                  metadata_dict.get('title') or 
+                  metadata_dict.get('chart_title'))
         
         return caption if caption else ""
         
@@ -216,8 +219,15 @@ def get_charts_for_review(
                     if include_metadata:
                         # Extract additional caption from metadata if available
                         metadata_caption = extract_caption_from_metadata(row[10])
-                        base_caption = row[2] or "No caption available"
-                        enhanced_caption = f"{base_caption} {metadata_caption}".strip() if metadata_caption else base_caption
+                        base_caption = row[2] or ""
+                        
+                        # If we have a good metadata caption, use it; otherwise use base caption
+                        if metadata_caption and metadata_caption.strip():
+                            enhanced_caption = metadata_caption
+                        elif base_caption and base_caption.strip():
+                            enhanced_caption = base_caption
+                        else:
+                            enhanced_caption = "No caption available"
                         
                         chart_info = {
                             'chart_id': row[0],
@@ -341,8 +351,15 @@ def get_charts_for_review(
                     if include_metadata:
                         # Extract additional caption from metadata if available
                         metadata_caption = extract_caption_from_metadata(row[10])
-                        base_caption = row[1] or "No caption available"
-                        enhanced_caption = f"{base_caption} {metadata_caption}".strip() if metadata_caption else base_caption
+                        base_caption = row[1] or ""
+                        
+                        # If we have a good metadata caption, use it; otherwise use base caption
+                        if metadata_caption and metadata_caption.strip():
+                            enhanced_caption = metadata_caption
+                        elif base_caption and base_caption.strip():
+                            enhanced_caption = base_caption
+                        else:
+                            enhanced_caption = "No caption available"
                         
                         chart_info = {
                             'chart_id': row[0],
@@ -478,7 +495,7 @@ def get_charts_for_review(
                                 'district': None,  # No district column in maps table
                                 'created_at': row[5].isoformat() if row[5] else None,  # created_at
                                 'published_url': row[6],  # published_url
-                                'location_data': row[3],  # location_data
+                                # Removed location_data to avoid bloating context window
                                 'metric_id': row[8],  # metric_id
                                 'group_field': row[9],  # group_field
                                 'active': row[10],  # active

@@ -17,7 +17,10 @@ from agents.langchain_agent.explainer_agent import create_explainer_agent
 from agents.langchain_agent.config.tool_config import ToolGroup
 
 # Import the necessary function for available models
-from agents.config.models import get_available_models, get_default_model
+from agents.config.models import get_available_models, get_default_model, get_default_token_limit
+
+# Import tiktoken for token counting
+import tiktoken
 
 # Initialize router and logger
 router = APIRouter()
@@ -36,6 +39,13 @@ def set_templates(t):
 # This stores ExplainerAgent instances by session_id to maintain conversation history
 explainer_sessions: Dict[str, Any] = {}
 
+# Track session creation and destruction for debugging
+def log_session_event(event: str, session_id: str, details: str = ""):
+    """Log session lifecycle events for debugging."""
+    session_count = len(explainer_sessions)
+    active_sessions = list(explainer_sessions.keys())[:3]  # First 3 session IDs
+    logger.info(f"SESSION {event}: {session_id} | Total sessions: {session_count} | Active: {active_sessions} | {details}")
+
 @router.get("/available-models")
 async def get_available_models_endpoint():
     """Get available models for frontend dropdowns."""
@@ -48,7 +58,10 @@ async def get_available_models_endpoint():
                 "key": model_key,
                 "name": model_config.full_name,
                 "provider": model_config.provider.value,
-                "available": model_config.is_available()
+                "available": model_config.is_available(),
+                "context_window": model_config.context_window,
+                "input_price_per_million": model_config.input_price_per_million,
+                "output_price_per_million": model_config.output_price_per_million
             })
         
         # Sort by provider and then by name
@@ -237,7 +250,7 @@ async def explain_change_streaming_api(request: Request):
                         "period_type": session_data.get('period_type', 'month')
                     }
                 
-                async for chunk in agent.explain_change_streaming(prompt, metric_details):
+                async for chunk in agent.explain_change_streaming(prompt, metric_details, session_id=session_id):
                     if chunk:
                         # The agent already yields properly formatted SSE data, so pass it through directly
                         yield chunk
@@ -303,6 +316,8 @@ async def langchain_explainer_streaming_api(request: Request):
         
         logger.info(f"Starting LangChain streaming explanation with prompt: {prompt}")
         logger.info(f"Model: {model_key}, Tool groups: {tool_groups}")
+        logger.info(f"Session data received: {session_data}")
+        logger.info(f"Session ID from request: {session_id} (type: {type(session_id)})")
         logger.info(f"Tool groups type: {type(tool_groups)}, Tool groups content: {tool_groups}")
         
         # Convert tool group strings to ToolGroup enums
@@ -317,27 +332,41 @@ async def langchain_explainer_streaming_api(request: Request):
             tool_group_enums = [ToolGroup.CORE, ToolGroup.ANALYSIS, ToolGroup.VISUALIZATION]
         
         # Get or create LangChain explainer agent for this session
+        logger.info(f"SESSION LOGIC: session_id is {'None' if session_id is None else 'provided'}: {session_id}")
         if not session_id:
             session_id = str(uuid.uuid4())
+            logger.info(f"SESSION LOGIC: Created new session_id: {session_id}")
+        else:
+            logger.info(f"SESSION LOGIC: Using existing session_id: {session_id}")
         session_key = f"langchain_{session_id}"
+        logger.info(f"SESSION LOGIC: Full session key: {session_key}")
+        
+        logger.info(f"SESSION LOOKUP: Checking if session exists: {session_key} in {list(explainer_sessions.keys())[:3]}")
         
         if session_key in explainer_sessions:
             agent = explainer_sessions[session_key]
+            logger.info(f"SESSION LOOKUP: Found existing agent for session: {session_key}")
+            
             # Update agent configuration if needed
             if hasattr(agent, 'model_key') and agent.model_key != model_key:
                 # Preserve conversation history when recreating agent with new model
-                old_messages = getattr(agent, 'messages', [])
+                old_agent = agent  # Keep reference to old agent
                 agent = create_explainer_agent(model_key=model_key, tool_groups=tool_group_enums, enable_session_logging=True)
-                agent.messages = old_messages  # Restore conversation history
+                
+                # Transfer memory from old agent to new agent
+                agent.transfer_memory_from(old_agent)
+                
                 explainer_sessions[session_key] = agent
-                logger.info(f"Recreated agent with new model {model_key}, preserved {len(old_messages)} messages")
+                logger.info(f"Recreated agent with new model {model_key}, transferred memory from old agent")
             elif hasattr(agent, 'tool_groups') and agent.tool_groups != tool_group_enums:
                 agent.update_tool_groups(tool_groups)
             logger.info(f"Using existing LangChain explainer agent for session: {session_key}")
         else:
+            logger.info(f"SESSION LOOKUP: No existing agent found, creating new one for: {session_key}")
             # Create new LangChain agent and session with session logging enabled
             agent = create_explainer_agent(model_key=model_key, tool_groups=tool_group_enums, enable_session_logging=True)
             explainer_sessions[session_key] = agent
+            log_session_event("CREATED", session_key, f"model={model_key}, tools={tool_groups}")
             logger.info(f"Created new LangChain explainer agent for session: {session_key}")
         
         async def generate_stream():
@@ -356,7 +385,7 @@ async def langchain_explainer_streaming_api(request: Request):
                     }
                 
                 # Use the agent's explain_change_streaming method which includes real-time tool call logging
-                async for chunk in agent.explain_change_streaming(prompt, metric_details):
+                async for chunk in agent.explain_change_streaming(prompt, metric_details, session_id=session_id):
                     if chunk:
                         # The agent already yields properly formatted SSE data, so pass it through directly
                         yield chunk
@@ -457,6 +486,7 @@ async def cancel_explainer_session(request: Request):
                 if hasattr(agent, 'clear_session'):
                     agent.clear_session()
                 # Remove the session to cancel any ongoing operations
+                log_session_event("DELETED", session_key, "via cancel endpoint")
                 del explainer_sessions[session_key]
                 logger.info(f"Cancelled explainer session: {session_key}")
                 return JSONResponse(
@@ -531,6 +561,7 @@ async def clear_explainer_session(request: Request):
                 # Clear the agent's persistent session if it has the method
                 if hasattr(agent, 'clear_session'):
                     agent.clear_session()
+                log_session_event("DELETED", session_key, "via clear endpoint")
                 del explainer_sessions[session_key]
                 logger.info(f"Cleared explainer session: {session_key}")
                 session_cleared = True
@@ -567,6 +598,7 @@ async def clear_all_explainer_sessions():
     """Clear all explainer sessions."""
     try:
         session_count = len(explainer_sessions)
+        log_session_event("ALL_CLEARED", "all", f"cleared {session_count} sessions")
         explainer_sessions.clear()
         logger.info(f"Cleared all {session_count} explainer sessions")
         return JSONResponse(content={
@@ -610,6 +642,176 @@ async def get_explainer_sessions():
                 "status": "error",
                 "message": f"Error getting sessions: {str(e)}"
             }
+        )
+
+@router.post("/api/explainer/context-status")
+async def get_context_status(request: Request):
+    """Get context window status for a session."""
+    try:
+        data = await request.json()
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Session ID is required"}
+            )
+        
+        # Get the agent for this session (using proper session key format)
+        session_key = f"langchain_{session_id}"
+        agent = explainer_sessions.get(session_key)
+        log_session_event("ACCESSED", session_key, f"for context status - found={agent is not None}")
+        logger.info(f"Context status request for session {session_id} (key: {session_key}): agent found = {agent is not None}")
+        
+        if not agent:
+            # No session yet, return zero tokens
+            logger.info(f"No agent found for session {session_id} (key: {session_key}), returning zero tokens")
+            return JSONResponse(content={
+                "current_tokens": 0,
+                "max_tokens": 8192,
+                "percentage": 0
+            })
+        
+        # Calculate current token usage from conversation history
+        current_tokens = 0
+        max_tokens = 8192  # Default
+        
+        if hasattr(agent, 'get_conversation_history'):
+            try:
+                # Get the model being used to determine max tokens
+                if hasattr(agent, 'model_key') and agent.model_key:
+                    max_tokens = get_default_token_limit(agent.model_key)
+                    logger.info(f"Using max tokens {max_tokens} for model {agent.model_key}")
+                else:
+                    logger.info(f"No model_key found on agent, using default max_tokens: {max_tokens}")
+                
+                conversation_history = agent.get_conversation_history()
+                logger.info(f"Conversation history has {len(conversation_history)} messages")
+                
+                # Log first few messages for debugging
+                for i, message in enumerate(conversation_history[:3]):  # Only log first 3
+                    content = message.get('content', '')
+                    role = message.get('role', 'unknown')
+                    content_preview = content[:100] + '...' if len(content) > 100 else content
+                    logger.info(f"Message {i} ({role}): {len(content)} chars - '{content_preview}'")
+                
+                # Use tiktoken to count tokens accurately
+                encoding = tiktoken.get_encoding("cl100k_base")  # Used by most GPT models
+                
+                for i, message in enumerate(conversation_history):
+                    content = message.get('content', '')
+                    if content:
+                        tokens_in_message = len(encoding.encode(str(content)))
+                        current_tokens += tokens_in_message
+                        logger.debug(f"Message {i}: {tokens_in_message} tokens")
+                
+                logger.info(f"Total calculated tokens: {current_tokens} from {len(conversation_history)} messages")
+                
+            except Exception as e:
+                logger.warning(f"Error calculating token count with tiktoken: {str(e)}")
+                # Fallback to simple word-based estimation
+                try:
+                    conversation_history = agent.get_conversation_history()
+                    logger.info(f"Fallback: conversation history has {len(conversation_history)} messages")
+                    
+                    for i, message in enumerate(conversation_history):
+                        content = message.get('content', '')
+                        if content:
+                            # Rough estimation: ~4 characters per token
+                            tokens_in_message = len(content) // 4
+                            current_tokens += tokens_in_message
+                            if i < 3:  # Log details for first 3 messages
+                                logger.info(f"Fallback message {i}: {len(content)} chars = {tokens_in_message} tokens")
+                            
+                    logger.info(f"Fallback total calculated tokens: {current_tokens}")
+                except Exception as e2:
+                    logger.error(f"Even fallback token counting failed: {str(e2)}")
+        else:
+            logger.warning(f"Agent does not have get_conversation_history method")
+            # Let's check what methods the agent has
+            agent_methods = [method for method in dir(agent) if not method.startswith('_')]
+            logger.info(f"Agent methods available: {agent_methods[:10]}...")  # Log first 10 methods
+        
+        percentage = round((current_tokens / max_tokens) * 100) if max_tokens > 0 else 0
+        
+        logger.info(f"Returning context status: {current_tokens}/{max_tokens} tokens ({percentage}%)")
+        
+        return JSONResponse(content={
+            "current_tokens": current_tokens,
+            "max_tokens": max_tokens,
+            "percentage": percentage
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting context status: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error getting context status: {str(e)}"}
+        )
+
+@router.post("/api/explainer/debug-session")
+async def debug_session_info(request: Request):
+    """Debug endpoint to get detailed information about a session."""
+    try:
+        data = await request.json()
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Session ID is required"}
+            )
+        
+        # Get the agent for this session (using proper session key format)
+        session_key = f"langchain_{session_id}"
+        agent = explainer_sessions.get(session_key)
+        debug_info = {
+            "session_id": session_id,
+            "session_key": session_key,
+            "agent_exists": agent is not None,
+            "total_sessions": len(explainer_sessions),
+            "session_keys": list(explainer_sessions.keys())[:5]  # First 5 session keys
+        }
+        
+        if agent:
+            debug_info.update({
+                "agent_type": type(agent).__name__,
+                "has_get_conversation_history": hasattr(agent, 'get_conversation_history'),
+                "has_messages": hasattr(agent, 'messages'),
+                "has_model_key": hasattr(agent, 'model_key')
+            })
+            
+            if hasattr(agent, 'model_key'):
+                debug_info["model_key"] = getattr(agent, 'model_key', None)
+            
+            if hasattr(agent, 'get_conversation_history'):
+                try:
+                    history = agent.get_conversation_history()
+                    debug_info.update({
+                        "conversation_length": len(history),
+                        "message_types": [msg.get('role', 'unknown') for msg in history[:10]],
+                        "message_lengths": [len(msg.get('content', '')) for msg in history[:10]]
+                    })
+                except Exception as e:
+                    debug_info["conversation_history_error"] = str(e)
+            
+            if hasattr(agent, 'messages'):
+                try:
+                    messages = getattr(agent, 'messages', [])
+                    debug_info.update({
+                        "raw_messages_count": len(messages),
+                        "raw_message_types": [type(msg).__name__ for msg in messages[:5]]
+                    })
+                except Exception as e:
+                    debug_info["raw_messages_error"] = str(e)
+        
+        return JSONResponse(content=debug_info)
+        
+    except Exception as e:
+        logger.error(f"Error in debug session info: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error getting debug info: {str(e)}"}
         )
 
 @router.get("/api/test-explainer-session")

@@ -217,9 +217,12 @@ from routes.writeups import router as writeups_router, set_templates as set_writ
 from routes.legal_code import router as legal_code_router, set_templates as set_legal_code_templates
 from routes.settings import router as settings_router, set_templates as set_settings_templates
 from routes.vacancy_analysis import router as vacancy_analysis_router, set_templates as set_vacancy_analysis_templates
+from routes.proven_vacancy_analysis import router as proven_vacancy_router, set_templates as set_proven_vacancy_templates
 from routes.dual_map import router as dual_map_router, set_templates as set_dual_map_templates
 
 app = FastAPI()
+
+# Note: Parcel cache will be initialized on-demand when needed
 
 # Add CORS middleware
 app.add_middleware(
@@ -243,6 +246,13 @@ app.add_middleware(
 # Initialize templates with absolute path
 templates = Jinja2Templates(directory=os.path.join(current_dir, "templates"))
 logger.debug(f"Templates directory: {os.path.join(current_dir, 'templates')}")
+
+# Google Analytics configuration
+GA_PROPERTY_ID = os.getenv("GA_PROPERTY_ID", "")
+logger.debug(f"Google Analytics Property ID: {'Configured' if GA_PROPERTY_ID else 'Not configured'}")
+
+# Add global template context for GA using Jinja2 globals
+templates.env.globals["ga_property_id"] = GA_PROPERTY_ID
 
 # Mount static files
 static_dir = os.path.join(current_dir, "static")
@@ -859,6 +869,13 @@ logger.debug("Included settings router at /backend")
 set_vacancy_analysis_templates(templates)
 app.include_router(vacancy_analysis_router, tags=["vacancy-analysis"])
 logger.debug("Included vacancy analysis router")
+
+# Mount proven vacancy analysis router
+set_proven_vacancy_templates(templates)
+app.include_router(proven_vacancy_router, tags=["proven-vacancy"])
+logger.debug("Included proven vacancy analysis router")
+
+# Local vacancy analysis router removed - using optimized main route instead
 
 # Mount dual map router
 set_dual_map_templates(templates)

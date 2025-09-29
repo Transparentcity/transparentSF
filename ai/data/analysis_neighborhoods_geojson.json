@@ -1,0 +1,124 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "neighborhood": "Financial District",
+        "neighborhood_name": "Financial District",
+        "neighborhood_id": "financial_district"
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [
+                -122.4020,
+                37.7940
+              ],
+              [
+                -122.3980,
+                37.7940
+              ],
+              [
+                -122.3980,
+                37.7900
+              ],
+              [
+                -122.4020,
+                37.7900
+              ],
+              [
+                -122.4020,
+                37.7940
+              ]
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "neighborhood": "Mission",
+        "neighborhood_name": "Mission",
+        "neighborhood_id": "mission"
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [
+                -122.4200,
+                37.7600
+              ],
+              [
+                -122.4100,
+                37.7600
+              ],
+              [
+                -122.4100,
+                37.7500
+              ],
+              [
+                -122.4200,
+                37.7500
+              ],
+              [
+                -122.4200,
+                37.7600
+              ]
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "neighborhood": "Castro",
+        "neighborhood_name": "Castro",
+        "neighborhood_id": "castro"
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [
+                -122.4400,
+                37.7600
+              ],
+              [
+                -122.4300,
+                37.7600
+              ],
+              [
+                -122.4300,
+                37.7500
+              ],
+              [
+                -122.4400,
+                37.7500
+              ],
+              [
+                -122.4400,
+                37.7600
+              ]
+            ]
+          ]
+        ]
+      }
+    }
+  ],
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+    }
+  }
+}
+
+

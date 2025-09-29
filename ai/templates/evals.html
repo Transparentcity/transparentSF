@@ -11,6 +11,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+
     <!-- Dark Mode CSS -->
     <link rel="stylesheet" href="/static/darkmode.css">
     <style>
@@ -1384,6 +1388,31 @@
         let results = [];
         let sessionsData = [];
         
+        // Helper function to format context window size for display
+        function formatContextWindow(contextWindow) {
+            if (contextWindow >= 1000000) {
+                return `${(contextWindow / 1000000).toFixed(1)}M`;
+            } else if (contextWindow >= 1000) {
+                return `${(contextWindow / 1000).toFixed(0)}k`;
+            } else {
+                return `${contextWindow}`;
+            }
+        }
+        
+        // Helper function to format pricing for display
+        function formatPricing(inputPrice, outputPrice) {
+            const formatPrice = (price) => {
+                if (price >= 10) {
+                    return `$${price.toFixed(0)}`;
+                } else if (price >= 1) {
+                    return `$${price.toFixed(1)}`;
+                } else {
+                    return `$${price.toFixed(2)}`;
+                }
+            };
+            return `${formatPrice(inputPrice)}/${formatPrice(outputPrice)}`;
+        }
+
         // Load available models for the dropdown
         async function loadAvailableModels() {
             try {
@@ -1424,7 +1453,9 @@
                         modelsByProvider[provider].forEach(model => {
                             const option = document.createElement('option');
                             option.value = model.key;
-                            option.textContent = model.name;
+                            const contextWindowStr = formatContextWindow(model.context_window);
+                            const pricingStr = formatPricing(model.input_price_per_million, model.output_price_per_million);
+                            option.textContent = `${model.name} (${contextWindowStr} context, ${pricingStr}/M)`;
                             modelSelect.appendChild(option);
                         });
                     });

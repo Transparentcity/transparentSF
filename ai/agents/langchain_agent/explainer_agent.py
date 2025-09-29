@@ -681,11 +681,23 @@ class LangChainExplainerAgent:
         self.logger.info(f"Created LLM: {self.llm}")
         
         # Set up tool groups
-        self.tool_groups = tool_groups or [ToolGroup.CORE]
+        self.tool_groups = tool_groups if tool_groups is not None else [ToolGroup.CORE]
         self.include_all_sections = include_all_sections
         
         # Create tools
         self.tools = self._create_tools()
+        
+        # Initialize LangChain memory for conversation persistence
+        from langchain.memory import ConversationBufferWindowMemory
+        self.memory = ConversationBufferWindowMemory(
+            k=10,  # Keep last 10 exchanges
+            memory_key="chat_history",
+            return_messages=True,
+            output_key="output"
+        )
+        self.logger.info("Initialized LangChain conversation memory")
+        
+        # Keep messages for backward compatibility
         self.messages: List[BaseMessage] = []
         
         # Initialize session logging
@@ -862,10 +874,11 @@ class LangChainExplainerAgent:
             if hasattr(agent, 'tools'):
                 self.logger.info(f"Agent tools: {[tool.name for tool in agent.tools]}")
             
-            self.logger.info(f"Creating AgentExecutor...")
+            self.logger.info(f"Creating AgentExecutor with memory...")
             executor = AgentExecutor(
                 agent=agent,
                 tools=self.tools,
+                memory=self.memory,  # Add memory to the executor
                 verbose=True,
                 handle_parsing_errors=True,
                 max_iterations=50
@@ -924,6 +937,10 @@ class LangChainExplainerAgent:
             self.logger.info(f"Clearing persistent session: {self.current_session.session_id}")
             self.current_session = None
             self.session_logged = False
+        
+        # Clear conversation memory
+        self.memory.clear()
+        self.logger.info("Cleared conversation memory")
 
     def _log_session_if_needed(self, session: AgentSession, force: bool = False, log_summary: bool = None):
         """Log the session only if it hasn't been logged yet or if forced."""
@@ -1019,6 +1036,30 @@ class LangChainExplainerAgent:
 
     def get_conversation_history(self):
         """Get the conversation history as a list of message dictionaries."""
+        # Get from memory first (preferred)
+        memory_variables = self.memory.load_memory_variables({})
+        chat_history = memory_variables.get("chat_history", [])
+        
+        if chat_history:
+            # Convert LangChain messages to our format
+            history = []
+            for message in chat_history:
+                if hasattr(message, 'content'):
+                    if isinstance(message, HumanMessage):
+                        history.append({
+                            "role": "user",
+                            "content": message.content,
+                            "timestamp": getattr(message, 'timestamp', None)
+                        })
+                    elif isinstance(message, AIMessage):
+                        history.append({
+                            "role": "assistant",
+                            "content": message.content,
+                            "timestamp": getattr(message, 'timestamp', None)
+                        })
+            return history
+        
+        # Fallback to self.messages for backward compatibility
         history = []
         for message in self.messages:
             if isinstance(message, HumanMessage):
@@ -1201,11 +1242,16 @@ class LangChainExplainerAgent:
             if is_anthropic:
                 self.logger.info("Using modified agent streaming approach for Anthropic models")
                 
+                # Get conversation history from memory
+                memory_variables = self.memory.load_memory_variables({})
+                chat_history = memory_variables.get("chat_history", [])
+                self.logger.info(f"Loaded {len(chat_history)} messages from memory for Anthropic")
+                
                 # Use astream_events but with better handling for Anthropic
                 event_count = 0
                 async for event in self.agent_executor.astream_events({
                     "input": prompt,
-                    "chat_history": self.messages[:-1]
+                    "chat_history": chat_history
                 }, version="v1", config={"callbacks": [execution_callback]}):
                     event_count += 1
                     self.logger.info(f"=== Anthropic Processing event #{event_count} ===")
@@ -1543,9 +1589,15 @@ class LangChainExplainerAgent:
             # Use astream_events to get token and tool streaming with prompts and tools injected
             self.logger.info("Starting astream_events with agent executor")
             event_count = 0
+            
+            # Get conversation history from memory
+            memory_variables = self.memory.load_memory_variables({})
+            chat_history = memory_variables.get("chat_history", [])
+            self.logger.info(f"Loaded {len(chat_history)} messages from memory")
+            
             async for event in self.agent_executor.astream_events({
                 "input": prompt,
-                "chat_history": self.messages[:-1]
+                "chat_history": chat_history
             }, version="v1", config={"callbacks": [execution_callback]}):
                 event_count += 1
                 self.logger.info(f"=== Processing event #{event_count} ===")
@@ -1916,6 +1968,14 @@ class LangChainExplainerAgent:
         else:
             completion_data = {'completed': True}
         
+        # Save the conversation to memory
+        if response_content:
+            # Add user message to memory
+            self.memory.chat_memory.add_user_message(prompt)
+            # Add assistant response to memory
+            self.memory.chat_memory.add_ai_message(response_content)
+            self.logger.info("Added conversation to memory")
+        
         # Send completion signal
         self.logger.info("Sending completion signal")
         yield f"data: {json.dumps(completion_data)}\n\n"
@@ -2172,6 +2232,14 @@ class LangChainExplainerAgent:
         self.tools = self._create_tools()
         self.agent_executor = self._create_agent(metric_details={})
         self.logger.info(f"Updated tool groups to: {[g.value for g in self.tool_groups]}")
+    
+    def transfer_memory_from(self, other_agent):
+        """Transfer conversation memory from another agent instance."""
+        if hasattr(other_agent, 'memory') and hasattr(other_agent.memory, 'chat_memory'):
+            self.memory.chat_memory.messages = other_agent.memory.chat_memory.messages.copy()
+            self.logger.info(f"Transferred memory with {len(self.memory.chat_memory.messages)} messages")
+        else:
+            self.logger.warning("Source agent does not have memory to transfer")
 
 def create_explainer_agent(
     model_key: Optional[str] = None,

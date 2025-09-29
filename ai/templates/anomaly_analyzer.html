@@ -10,6 +10,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
     <!-- Add Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -1268,13 +1272,35 @@
                 })
                 .then(data => {
                     if (data.status === 'success') {
+                        // Create periods object with global target periods if available
+                        let periods = null;
+                        console.log('🔍 FRONTEND DEBUG: API data received:', {
+                            target_recent_period: data.target_recent_period,
+                            target_comparison_period: data.target_comparison_period,
+                            positive_changes_length: data.positive_changes ? data.positive_changes.length : 0,
+                            negative_changes_length: data.negative_changes ? data.negative_changes.length : 0
+                        });
+                        
+                        if (data.target_recent_period && data.target_comparison_period) {
+                            // Use global target periods from API response
+                            periods = {
+                                recent_period: data.target_recent_period,
+                                previous_period: data.target_comparison_period
+                            };
+                            console.log('🔍 FRONTEND DEBUG: Using global target periods:', periods);
+                        } else {
+                            // Fallback to individual result periods
+                            periods = data.positive_changes && data.positive_changes.length > 0 ? 
+                                data.positive_changes[0] : 
+                                (data.negative_changes && data.negative_changes.length > 0 ? data.negative_changes[0] : null);
+                            console.log('🔍 FRONTEND DEBUG: Using fallback periods:', periods);
+                        }
+                        
                         return {
                             positive_changes: data.positive_changes || [],
                             negative_changes: data.negative_changes || [],
                             stale_data_warnings: data.stale_data_warnings || 0,
-                            periods: data.positive_changes && data.positive_changes.length > 0 ? 
-                                data.positive_changes[0] : 
-                                (data.negative_changes && data.negative_changes.length > 0 ? data.negative_changes[0] : null)
+                            periods: periods
                         };
                     } else {
                         throw new Error(data.message || 'Error fetching metric changes');
@@ -1420,6 +1446,12 @@
             // Use provided metricData or fall back to stored data
             const dataToUse = metricData || lastMetricData;
             
+            console.log('🔍 HEADER DEBUG: updateTableHeaders called with:', {
+                metricData: metricData,
+                dataToUse: dataToUse,
+                periods: dataToUse ? dataToUse.periods : null
+            });
+            
             // If we have period data from metrics, use it
             if (dataToUse && dataToUse.periods) {
                 if (dataToUse.periods.previous_period) {
@@ -1493,12 +1525,26 @@
                     } else {
                         // Try to format as date
                         try {
-                            const date = new Date(periodValue);
-                            if (!isNaN(date.getTime())) {
-                                label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                            // Parse the date string manually to avoid timezone issues
+                            const parts = periodValue.split('-');
+                            if (parts.length >= 2) {
+                                const year = parseInt(parts[0]);
+                                const month = parseInt(parts[1]) - 1; // JavaScript months are 0-based
+                                const day = parseInt(parts[2]) || 1;
+                                const date = new Date(year, month, day);
+                                
+                                if (!isNaN(date.getTime())) {
+                                    label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                                    console.log(`🔍 FORMAT DEBUG: Converting "${periodValue}" to "${label}"`);
+                                } else {
+                                    console.log(`🔍 FORMAT DEBUG: Invalid date "${periodValue}"`);
+                                }
+                            } else {
+                                console.log(`🔍 FORMAT DEBUG: Invalid date format "${periodValue}"`);
                             }
                         } catch (e) {
                             label = periodValue;
+                            console.log(`🔍 FORMAT DEBUG: Error parsing "${periodValue}": ${e.message}`);
                         }
                     }
                     break;

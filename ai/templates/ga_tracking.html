@@ -1,0 +1,207 @@
+<!-- Google Analytics 4 Tracking Code -->
+{% if ga_property_id %}
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_property_id }}"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', '{{ ga_property_id }}', {
+    'anonymize_ip': true,
+    'cookie_flags': 'SameSite=None;Secure',
+    'send_page_view': true
+  });
+  
+  // Enhanced measurement for better insights
+  gtag('config', '{{ ga_property_id }}', {
+    'enhanced_measurement': {
+      'scrolls': true,
+      'outbound_clicks': true,
+      'site_search': true,
+      'video_engagement': true,
+      'file_downloads': true
+    }
+  });
+  
+  // Custom event tracking functions
+  function trackEvent(eventName, parameters = {}) {
+    gtag('event', eventName, {
+      'event_category': parameters.category || 'User Interaction',
+      'event_label': parameters.label || '',
+      'value': parameters.value || 0,
+      ...parameters
+    });
+  }
+  
+  function trackPageView(pageTitle, pagePath) {
+    gtag('event', 'page_view', {
+      'page_title': pageTitle,
+      'page_location': window.location.href,
+      'page_path': pagePath || window.location.pathname
+    });
+  }
+  
+  // Track custom events for TransparentSF platform
+  function trackDashboardInteraction(metricName, action) {
+    trackEvent('dashboard_interaction', {
+      'category': 'Dashboard',
+      'label': metricName,
+      'action': action
+    });
+  }
+  
+  function trackDataExport(format, dataset) {
+    trackEvent('data_export', {
+      'category': 'Data Export',
+      'label': format,
+      'dataset': dataset
+    });
+  }
+  
+  function trackMapInteraction(mapType, district) {
+    trackEvent('map_interaction', {
+      'category': 'Map',
+      'label': mapType,
+      'district': district
+    });
+  }
+  
+  function trackAnalysisView(analysisType, district) {
+    trackEvent('analysis_view', {
+      'category': 'Analysis',
+      'label': analysisType,
+      'district': district
+    });
+  }
+  
+  // Make tracking functions globally available
+  window.trackEvent = trackEvent;
+  window.trackPageView = trackPageView;
+  window.trackDashboardInteraction = trackDashboardInteraction;
+  window.trackDataExport = trackDataExport;
+  window.trackMapInteraction = trackMapInteraction;
+  window.trackAnalysisView = trackAnalysisView;
+</script>
+
+<!-- Cookie Consent Banner (GDPR/CCPA Compliance) -->
+<div id="cookie-consent-banner" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-primary, #ffffff); border-top: 1px solid var(--border-color, #e0e0e0); padding: 1rem; z-index: 1000; box-shadow: 0 -2px 10px rgba(0,0,0,0.1);">
+  <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+    <div style="flex: 1; min-width: 300px;">
+      <p style="margin: 0; font-size: 14px; color: var(--text-primary, #333);">
+        We use cookies to analyze site usage and improve your experience. 
+        <a href="/privacy" style="color: var(--link-color, #0066cc);">Learn more</a>
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <button id="accept-cookies" style="background: var(--primary-color, #0066cc); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 14px;">
+        Accept
+      </button>
+      <button id="decline-cookies" style="background: transparent; color: var(--text-primary, #333); border: 1px solid var(--border-color, #e0e0e0); padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 14px;">
+        Decline
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Cookie consent management
+(function() {
+  const COOKIE_CONSENT_KEY = 'ga_consent_given';
+  const COOKIE_EXPIRY_DAYS = 365;
+  
+  function setCookie(name, value, days) {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = name + '=' + value + ';expires=' + expires.toUTCString() + ';path=/;SameSite=Lax';
+  }
+  
+  function getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for(let i = 0; i < ca.length; i++) {
+      let c = ca[i];
+      while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+      if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+  }
+  
+  function showConsentBanner() {
+    const banner = document.getElementById('cookie-consent-banner');
+    if (banner) {
+      banner.style.display = 'block';
+    }
+  }
+  
+  function hideConsentBanner() {
+    const banner = document.getElementById('cookie-consent-banner');
+    if (banner) {
+      banner.style.display = 'none';
+    }
+  }
+  
+  function acceptCookies() {
+    setCookie(COOKIE_CONSENT_KEY, 'true', COOKIE_EXPIRY_DAYS);
+    hideConsentBanner();
+    
+    // Enable Google Analytics
+    gtag('consent', 'update', {
+      'analytics_storage': 'granted',
+      'ad_storage': 'denied'
+    });
+    
+    // Track consent acceptance
+    trackEvent('cookie_consent', {
+      'category': 'Privacy',
+      'action': 'accepted'
+    });
+  }
+  
+  function declineCookies() {
+    setCookie(COOKIE_CONSENT_KEY, 'false', COOKIE_EXPIRY_DAYS);
+    hideConsentBanner();
+    
+    // Disable Google Analytics
+    gtag('consent', 'update', {
+      'analytics_storage': 'denied',
+      'ad_storage': 'denied'
+    });
+    
+    // Track consent decline
+    trackEvent('cookie_consent', {
+      'category': 'Privacy',
+      'action': 'declined'
+    });
+  }
+  
+  // Initialize consent
+  document.addEventListener('DOMContentLoaded', function() {
+    const consent = getCookie(COOKIE_CONSENT_KEY);
+    
+    if (consent === null) {
+      // No consent given yet, show banner
+      showConsentBanner();
+    } else if (consent === 'true') {
+      // Consent given, enable analytics
+      gtag('consent', 'update', {
+        'analytics_storage': 'granted',
+        'ad_storage': 'denied'
+      });
+    } else {
+      // Consent declined, disable analytics
+      gtag('consent', 'update', {
+        'analytics_storage': 'denied',
+        'ad_storage': 'denied'
+      });
+    }
+    
+    // Set up event listeners
+    const acceptBtn = document.getElementById('accept-cookies');
+    const declineBtn = document.getElementById('decline-cookies');
+    
+    if (acceptBtn) acceptBtn.addEventListener('click', acceptCookies);
+    if (declineBtn) declineBtn.addEventListener('click', declineCookies);
+  });
+})();
+</script>
+{% endif %}

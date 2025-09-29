@@ -5,6 +5,9 @@
     <title>Settings</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/darkmode.css">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
         body {
@@ -142,6 +145,12 @@
                 document.getElementById('db-status').textContent = data.db_status || 'Unknown';
                 document.getElementById('db-size').textContent = data.db_size || 'Unknown';
                 document.getElementById('db-last-backup').textContent = data.last_backup || 'Never';
+                
+                // Load business cache stats
+                getCacheStats();
+                
+                // Check for active cache refresh jobs
+                checkCacheRefreshJobs();
             } catch (e) {}
         }
         async function createBackup() {
@@ -165,6 +174,7 @@
                 show(s, 'Database restored successfully.');
             } catch (e) { show(s, 'Restore failed: ' + e.message, false); }
         }
+        
         let metricsRestoreFile = null;
         function onPickMetricsRestore(input) { metricsRestoreFile = input.files[0] || null; document.getElementById('metrics-file-label').textContent = metricsRestoreFile ? 'Selected: ' + metricsRestoreFile.name : 'Choose Metrics Backup File'; }
         async function backupMetrics() {
@@ -266,16 +276,91 @@
             window.open('/backend/notes-viewer', '_blank');
         }
         
-        async function deleteData() {
-            const s = document.getElementById('delete-status');
-            if (!confirm('⚠️ WARNING: This will delete data from the system. Are you sure?')) return;
-            if (!confirm('This action cannot be undone. Type "DELETE" to confirm.') === 'DELETE') return;
+        
+        // Data cleanup functions
+        async function clearInactiveTimeSeries() {
+            const s = document.getElementById('cleanup-status');
+            if (!confirm('Clear inactive time series data and reclaim database space?')) return;
             
             try {
-                const data = await fetchJSON('/backend/api/delete-data', { method: 'POST' });
-                show(s, 'Data deleted successfully.');
+                const data = await fetchJSON('/backend/clear-inactive-timeseries', { method: 'POST' });
+                show(s, data.message || 'Inactive time series data cleared successfully.', true);
             } catch (e) {
-                show(s, 'Failed to delete data: ' + e.message, false);
+                show(s, 'Failed to clear inactive time series: ' + e.message, false);
+            }
+        }
+        
+        async function clearPostgresData() {
+            const s = document.getElementById('cleanup-status');
+            if (!confirm('⚠️ WARNING: This will clear ALL PostgreSQL data. Are you sure?')) return;
+            if (!confirm('This action cannot be undone. Continue?')) return;
+            
+            try {
+                const data = await fetchJSON('/backend/clear-postgres-data', { method: 'POST' });
+                show(s, data.message || 'PostgreSQL data cleared successfully.', true);
+            } catch (e) {
+                show(s, 'Failed to clear PostgreSQL data: ' + e.message, false);
+            }
+        }
+        
+        async function clearVectorDatabase() {
+            const s = document.getElementById('cleanup-status');
+            if (!confirm('Clear vector database collections (except SFPublicData)?')) return;
+            
+            try {
+                const data = await fetchJSON('/backend/clear-vector-db', { method: 'POST' });
+                show(s, data.message || 'Vector database cleared successfully.', true);
+            } catch (e) {
+                show(s, 'Failed to clear vector database: ' + e.message, false);
+            }
+        }
+        
+        async function clearAllOutput() {
+            const s = document.getElementById('cleanup-status');
+            if (!confirm('Clear all output files from both GCS and local storage?')) return;
+            
+            try {
+                const data = await fetchJSON('/backend/clear-all-output', { method: 'POST' });
+                show(s, data.message || 'Output files cleared successfully.', true);
+            } catch (e) {
+                show(s, 'Failed to clear output files: ' + e.message, false);
+            }
+        }
+        
+        async function clearChartFiles() {
+            const s = document.getElementById('cleanup-status');
+            if (!confirm('Clear all chart files?')) return;
+            
+            try {
+                const data = await fetchJSON('/backend/clear-chart-files', { method: 'POST' });
+                show(s, data.message || 'Chart files cleared successfully.', true);
+            } catch (e) {
+                show(s, 'Failed to clear chart files: ' + e.message, false);
+            }
+        }
+        
+        async function clearLogs() {
+            const s = document.getElementById('cleanup-status');
+            if (!confirm('Clear all log files?')) return;
+            
+            try {
+                const data = await fetchJSON('/backend/clear-logs', { method: 'POST' });
+                show(s, data.message || 'Logs cleared successfully.', true);
+            } catch (e) {
+                show(s, 'Failed to clear logs: ' + e.message, false);
+            }
+        }
+        
+        async function vacuumPostgresDatabase() {
+            const s = document.getElementById('cleanup-status');
+            if (!confirm('Run VACUUM FULL on PostgreSQL database to reclaim unused space? This may take a while.')) return;
+            
+            try {
+                show(s, 'Running VACUUM FULL on database... This may take several minutes.', true);
+                const data = await fetchJSON('/backend/clear-inactive-timeseries', { method: 'POST' });
+                show(s, data.message || 'Database space reclaimed successfully.', true);
+            } catch (e) {
+                show(s, 'Failed to reclaim database space: ' + e.message, false);
             }
         }
         
@@ -313,43 +398,8 @@
                 // Update notes count if needed
                 updateNotesCount();
             }
-            if (tab === 'jobs') {
-                // Refresh the jobs iframe when tab is activated
-                const jobsIframe = document.querySelector('#panel-jobs iframe');
-                if (jobsIframe) {
-                    jobsIframe.src = jobsIframe.src; // Refresh the iframe
-                }
-            }
         }
         
-        async function checkForActiveJobs() {
-            try {
-                const response = await fetch('/backend/jobs');
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    const activeJobs = data.jobs.filter(job => job.status === 'running' || job.status === 'pending');
-                    const jobsTab = document.getElementById('tabbtn-jobs');
-                    const jobsBadge = document.getElementById('active-jobs-badge');
-                    
-                    if (activeJobs.length > 0) {
-                        jobsTab.style.display = 'block';
-                        jobsBadge.style.display = 'inline-block';
-                        jobsBadge.textContent = activeJobs.length;
-                    } else {
-                        // Still show Jobs tab if there are any jobs (not just active ones)
-                        if (data.jobs && data.jobs.length > 0) {
-                            jobsTab.style.display = 'block';
-                            jobsBadge.style.display = 'none';
-                        } else {
-                            jobsTab.style.display = 'none';
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Error checking for jobs:', error);
-            }
-        }
         
         async function updateNotesCount() {
             try {
@@ -360,11 +410,141 @@
             }
         }
         
+        // Function to check for active jobs and update badge visibility
+        async function checkActiveJobs() {
+            try {
+                console.log('Checking for active jobs...');
+                const response = await fetch('/backend/jobs');
+                const data = await response.json();
+                
+                console.log('Jobs response:', data);
+                
+                if (data.status === 'success') {
+                    const activeJobs = data.jobs.filter(job => job.status === 'running' || job.status === 'pending');
+                    const jobsBadge = document.getElementById('jobs-badge');
+                    
+                    console.log('Active jobs found:', activeJobs.length);
+                    console.log('Jobs badge element:', jobsBadge);
+                    
+                    if (activeJobs.length > 0) {
+                        // Show jobs badge with count
+                        if (jobsBadge) {
+                            jobsBadge.style.display = 'inline-block';
+                            jobsBadge.textContent = activeJobs.length;
+                            jobsBadge.style.cursor = 'pointer';
+                            jobsBadge.title = 'Click to view active jobs';
+                            console.log('Showing jobs badge with count:', activeJobs.length);
+                        }
+                    } else {
+                        // Hide jobs badge
+                        if (jobsBadge) {
+                            jobsBadge.style.display = 'none';
+                            console.log('Hiding jobs badge - no active jobs');
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking active jobs:', error);
+            }
+        }
+        
+        // Check for active jobs on page load
+        function initializeJobsBadge() {
+            console.log('=== INITIALIZING JOBS BADGE ===');
+            checkActiveJobs();
+        }
+        
+        // Business Cache Management Functions
+        async function refreshBusinessCache() {
+            const s = document.getElementById('cache-status');
+            const statsDiv = document.getElementById('cache-stats');
+            
+            if (!confirm('Refresh the business cache? This will fetch fresh data from DataSF API and may take several minutes.')) return;
+            
+            try {
+                show(s, 'Starting business cache refresh job...', true);
+                statsDiv.style.display = 'none';
+                
+                const data = await fetchJSON('/api/vacancy/refresh-cache', { method: 'POST' });
+                
+                if (data.status === 'success') {
+                    show(s, `Business cache refresh job started! Job ID: ${data.job_id}. Check the jobs page to monitor progress.`, true);
+                    // Auto-refresh stats after a delay to allow job to complete
+                    setTimeout(getCacheStats, 5000);
+                    // Also refresh the jobs badge
+                    checkActiveJobs();
+                } else {
+                    show(s, 'Failed to start cache refresh: ' + (data.message || 'Unknown error'), false);
+                }
+            } catch (e) {
+                show(s, 'Failed to start cache refresh: ' + e.message, false);
+            }
+        }
+        
+        async function getCacheStats() {
+            const s = document.getElementById('cache-status');
+            const statsDiv = document.getElementById('cache-stats');
+            
+            try {
+                show(s, 'Loading cache statistics...', true);
+                
+                const data = await fetchJSON('/api/vacancy/cache-stats');
+                
+                if (data.status === 'success') {
+                    const stats = data.stats || {};
+                    document.getElementById('cache-business-count').textContent = (stats.business_records || 0).toLocaleString();
+                    document.getElementById('cache-open-count').textContent = (stats.open_businesses || 0).toLocaleString();
+                    document.getElementById('cache-closed-count').textContent = (stats.closed_businesses || 0).toLocaleString();
+                    document.getElementById('cache-tax-count').textContent = (stats.tax_records || 0).toLocaleString();
+                    document.getElementById('cache-last-updated').textContent = stats.last_updated ? new Date(stats.last_updated).toLocaleString() : 'Never';
+                    
+                    statsDiv.style.display = 'block';
+                    show(s, 'Cache statistics loaded successfully.', true);
+                } else {
+                    show(s, 'Failed to load cache statistics: ' + (data.message || 'Unknown error'), false);
+                }
+            } catch (e) {
+                show(s, 'Failed to load cache statistics: ' + e.message, false);
+            }
+        }
+        
+        async function checkCacheRefreshJobs() {
+            try {
+                const response = await fetch('/backend/jobs');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const activeCacheJobs = data.jobs.filter(job => 
+                        job.job_type === 'business_cache_refresh' && 
+                        (job.status === 'running' || job.status === 'pending')
+                    );
+                    
+                    if (activeCacheJobs.length > 0) {
+                        const s = document.getElementById('cache-status');
+                        show(s, `Cache refresh in progress (${activeCacheJobs.length} job(s)). Check jobs page for details.`, true);
+                    }
+                }
+            } catch (e) {
+                console.error('Error checking cache refresh jobs:', e);
+            }
+        }
+        
         document.addEventListener('DOMContentLoaded', () => {
             setActive('query');
-            checkForActiveJobs();
-            // Check for active jobs every 10 seconds
-            setInterval(checkForActiveJobs, 10000);
+            
+            // Initialize job badge polling
+            initializeJobsBadge();
+            
+            // Check for active jobs every 30 seconds
+            setInterval(checkActiveJobs, 30000);
+            
+            // Add click handler for jobs badge
+            const jobsBadge = document.getElementById('jobs-badge');
+            if (jobsBadge) {
+                jobsBadge.addEventListener('click', () => {
+                    window.open('/backend/jobs', '_blank');
+                });
+            }
         });
     </script>
     <script src="/static/js/darkmode.js"></script>
@@ -375,7 +555,6 @@
         <div class="tabs">
             <h2>Settings</h2>
             <button id="tabbtn-query" class="tab-btn" onclick="setActive('query')">Query Tool</button>
-            <button id="tabbtn-jobs" class="tab-btn" onclick="setActive('jobs')" style="display: none;">Jobs <span id="active-jobs-badge" style="background: var(--warm-coral); color: white; padding: 2px 6px; border-radius: 10px; font-size: 11px; margin-left: 4px; display: none;"></span></button>
             <button id="tabbtn-actions" class="tab-btn" onclick="setActive('actions')">Actions</button>
             <button id="tabbtn-database" class="tab-btn" onclick="setActive('database')">Database</button>
             <button id="tabbtn-metrics" class="tab-btn" onclick="setActive('metrics')">Metrics</button>
@@ -404,6 +583,26 @@
                     </div>
                     <div id="db-restore-status" class="status"></div>
                 </div>
+                
+                <!-- Business Cache Management -->
+                <div class="card">
+                    <h4>Business Cache Management</h4>
+                    <p>Manage the business data cache for fast vacancy map searches. Cache refresh runs as a background job.</p>
+                    <div class="row">
+                        <button class="btn primary" onclick="refreshBusinessCache()">Refresh Business Cache</button>
+                        <button class="btn secondary" onclick="getCacheStats()">Check Cache Status</button>
+                        <button class="btn secondary" onclick="window.open('/backend/jobs', '_blank')">View Jobs</button>
+                    </div>
+                    <div id="cache-status" class="status"></div>
+                    <div id="cache-stats" class="card info" style="display: none; margin-top: 12px;">
+                        <div>Business Records: <span id="cache-business-count">-</span></div>
+                        <div>Open Businesses: <span id="cache-open-count">-</span></div>
+                        <div>Closed Businesses: <span id="cache-closed-count">-</span></div>
+                        <div>Tax Records: <span id="cache-tax-count">-</span></div>
+                        <div>Last Updated: <span id="cache-last-updated">-</span></div>
+                    </div>
+                </div>
+                
             </div>
             <div id="panel-metrics" class="tab-panel" style="display:none">
                 <h3>Metrics</h3>
@@ -426,9 +625,6 @@
                 <iframe src="/backend/query" style="width: 100%; height: calc(100vh - 60px); border: none;"></iframe>
             </div>
             
-            <div id="panel-jobs" class="tab-panel" style="display:none">
-                <iframe src="/backend/jobs" style="width: 100%; height: calc(100vh - 60px); border: none;"></iframe>
-            </div>
             
             <div id="panel-actions" class="tab-panel" style="display:none">
                 <h3>Actions</h3>
@@ -463,13 +659,22 @@
                     <div id="notes-status" class="status"></div>
                 </div>
                 
+                
                 <div class="card">
-                    <h4>Data Management</h4>
-                    <p style="color: var(--warm-coral); font-weight: 500;">⚠️ Danger Zone: This action cannot be undone.</p>
-                    <div class="row">
-                        <button id="delete-data-btn" class="btn danger" onclick="deleteData()">Delete Data</button>
+                    <h4>Selective Data Cleanup</h4>
+                    <p>Choose specific types of data to delete and clean up.</p>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <button class="btn secondary" onclick="clearInactiveTimeSeries()">Clear Inactive Time Series</button>
+                        <button class="btn secondary" onclick="clearPostgresData()">Clear PostgreSQL Data</button>
+                        <button class="btn secondary" onclick="clearVectorDatabase()">Clear Vector Database</button>
+                        <button class="btn secondary" onclick="clearAllOutput()">Clear Output Files</button>
+                        <button class="btn secondary" onclick="clearChartFiles()">Clear Chart Files</button>
+                        <button class="btn secondary" onclick="clearLogs()">Clear Logs</button>
                     </div>
-                    <div id="delete-status" class="status"></div>
+                    <div class="row">
+                        <button class="btn primary" onclick="vacuumPostgresDatabase()">Reclaim Database Space (VACUUM)</button>
+                    </div>
+                    <div id="cleanup-status" class="status"></div>
                 </div>
             </div>
             

@@ -370,30 +370,96 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
     # Determine period description based on period_type
     period_desc = 'Monthly' if period_type == 'month' else 'Annual'
     
-    # Check if this is a fiscal year query
-    is_fiscal_year_query = 'fiscal_year' in metric_info.get('query_data', {}).get('ytd_query', '').lower()
-    
-    # Get time ranges based on period type
-    recent_period, comparison_period = get_time_ranges(period_type, is_fiscal_year=is_fiscal_year_query)
+    # Try to use structured configuration first
+    try:
+        from tools.structured_query_parser import get_structured_query_info, validate_query_config
+        
+        # Get structured query information
+        query_info = get_structured_query_info(metric_info)
+        
+        # Validate query configuration
+        is_valid, errors = validate_query_config(metric_info)
+        if is_valid:
+            logging.info(f"Using structured configuration for metric {query_name}")
+            
+            # Extract configuration values
+            date_field = query_info['date_field']
+            aggregation_function = query_info['aggregation_function']
+            date_field_name = query_info['date_field_name']
+            is_fiscal_year = query_info['is_fiscal_year']
+            supports_districts = query_info['supports_districts']
+            is_ytd_query = query_info['is_ytd_query']
+            
+            # Get time ranges
+            recent_period, comparison_period = get_time_ranges(period_type, is_fiscal_year=is_fiscal_year)
+            
+            # Get the original query
+            original_query = None
+            if isinstance(metric_info.get('query_data'), dict):
+                original_query = metric_info['query_data'].get('ytd_query', '')
+                if not original_query:
+                    original_query = metric_info['query_data'].get('metric_query', '')
+            else:
+                original_query = metric_info.get('query_data', '')
+            
+            if not original_query:
+                logging.error(f"No query found for {query_name}")
+                return None
+            
+            logging.info(f"Using structured configuration - date_field: {date_field}, aggregation: {aggregation_function}")
+            
+            # Use the structured metric processor
+            try:
+                from tools.structured_metric_processor import process_metric_analysis_structured
+                return process_metric_analysis_structured(metric_info, period_type, process_districts)
+            except ImportError:
+                logging.warning("Structured metric processor not available, falling back to regex-based processing")
+                # Continue with fallback processing below
+            
+        else:
+            logging.warning(f"Invalid structured configuration for metric {query_name}: {errors}")
+            raise ValueError("Invalid structured configuration")
+            
+    except (ImportError, ValueError, Exception) as e:
+        logging.warning(f"Structured configuration not available for metric {query_name}: {e}")
+        logging.info("Falling back to regex-based processing")
+        
+        # Fallback to original regex-based processing
+        # Check if this is a fiscal year query
+        is_fiscal_year_query = 'fiscal_year' in metric_info.get('query_data', {}).get('ytd_query', '').lower()
+        
+        # Get time ranges based on period type
+        recent_period, comparison_period = get_time_ranges(period_type, is_fiscal_year=is_fiscal_year_query)
+        
+        # Get the query from metric_info - USE YTD QUERY INSTEAD OF METRIC QUERY
+        original_query = None
+        if isinstance(metric_info.get('query_data'), dict):
+            original_query = metric_info['query_data'].get('ytd_query', '')
+            if not original_query:
+                # Fall back to metric_query if ytd_query is not available
+                original_query = metric_info['query_data'].get('metric_query', '')
+        else:
+            original_query = metric_info.get('query_data', '')
+        
+        if not original_query:
+            logging.error(f"No query found for {query_name}")
+            return None
+        
+        logging.info(f"Original query: {original_query}")
+        
+        # Determine the date field to use from the query
+        date_field = extract_date_field_from_query(original_query)
+        if not date_field:
+            logging.warning(f"No date field found in query for {query_name}")
+            date_field = 'date'  # Default to 'date'
+        
+        logging.info(f"Using date field: {date_field}")
+        
+        # Determine the appropriate date field name based on period type and query
+        date_field_name = determine_date_field_name(original_query, date_field, period_type)
     
     # Create context variables and set the dataset
     context_variables = {}
-    
-    # Get the query from metric_info - USE YTD QUERY INSTEAD OF METRIC QUERY
-    original_query = None
-    if isinstance(metric_info.get('query_data'), dict):
-        original_query = metric_info['query_data'].get('ytd_query', '')
-        if not original_query:
-            # Fall back to metric_query if ytd_query is not available
-            original_query = metric_info['query_data'].get('metric_query', '')
-    else:
-        original_query = metric_info.get('query_data', '')
-    
-    if not original_query:
-        logging.error(f"No query found for {query_name}")
-        return None
-    
-    logging.info(f"Original query: {original_query}")
     
     # Check if the query uses AVG() aggregation
     uses_avg = detect_avg_aggregation(original_query)
@@ -422,17 +488,6 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
     )
     logging.info(f"Final category_fields: {category_fields}")
     logging.info(f"has_district set to: {has_district}")
-    
-    # Determine the date field to use from the query
-    date_field = extract_date_field_from_query(original_query)
-    if not date_field:
-        logging.warning(f"No date field found in query for {query_name}")
-        date_field = 'date'  # Default to 'date'
-    
-    logging.info(f"Using date field: {date_field}")
-    
-    # Determine the appropriate date field name based on period type and query
-    date_field_name = determine_date_field_name(original_query, date_field, period_type)
     
     # Set up filter conditions for date filtering
     filter_conditions = []
@@ -1305,8 +1360,8 @@ def process_single_analysis(context_variables, category_fields, period_type, per
             logging.warning(f"Category field '{category_field_name}' not found in dataset for {query_name}")
             continue
         
-        # Skip supervisor_district if we're doing district-specific analysis
-        if district is not None and category_field_name == 'supervisor_district':
+        # Skip supervisor_district if we're doing district-specific analysis (but not for citywide)
+        if district is not None and district > 0 and category_field_name == 'supervisor_district':
             logging.info(f"Skipping supervisor_district category for district-specific analysis (district {district})")
             continue
         
@@ -1471,23 +1526,42 @@ def determine_date_field_name(query, date_field, period_type):
 
 def extract_aggregation_function(query):
     """Extract the aggregation function (COUNT(*), SUM(count), etc.) from a query."""
-    # Look for common aggregation patterns - be more specific to avoid false matches
-    aggregation_patterns = [
-        r'(SUM\s*\(\s*count\s*\))',          # SUM(count) - most specific first
-        r'(COUNT\s*\(\s*DISTINCT\s+[^)]+\))', # COUNT(DISTINCT field)
-        r'(COUNT\s*\(\s*\*\s*\))',            # COUNT(*)
-        r'(SUM\s*\([^)]+\))',                 # SUM(field)
-        r'(AVG\s*\([^)]+\))',                 # AVG(field)
-        r'(MAX\s*\([^)]+\))',                 # MAX(field)
-        r'(MIN\s*\([^)]+\))',                 # MIN(field)
-    ]
     
-    for pattern in aggregation_patterns:
-        match = re.search(pattern, query, re.IGNORECASE)
-        if match:
-            aggregation_func = match.group(1)
-            logging.info(f"Extracted aggregation function: {aggregation_func}")
-            return aggregation_func
+    def extract_balanced_parentheses(text, start_pos):
+        """Extract content within balanced parentheses starting from start_pos."""
+        if start_pos >= len(text) or text[start_pos] != '(':
+            return ""
+        
+        paren_count = 0
+        i = start_pos
+        while i < len(text):
+            if text[i] == '(':
+                paren_count += 1
+            elif text[i] == ')':
+                paren_count -= 1
+                if paren_count == 0:
+                    return text[start_pos:i+1]
+            i += 1
+        return ""
+    
+    # Look for aggregation function patterns with balanced parentheses
+    aggregation_functions = ['SUM', 'COUNT', 'AVG', 'MAX', 'MIN']
+    
+    for func in aggregation_functions:
+        # Find all occurrences of the function name
+        pattern = rf'\b{func}\s*\('
+        matches = list(re.finditer(pattern, query, re.IGNORECASE))
+        
+        for match in matches:
+            # Extract the full function with balanced parentheses
+            start_pos = match.start()
+            paren_start = match.end() - 1  # Position of the opening parenthesis
+            balanced_content = extract_balanced_parentheses(query, paren_start)
+            
+            if balanced_content:
+                full_function = query[start_pos:start_pos + len(func)] + balanced_content
+                logging.info(f"Extracted aggregation function: {full_function}")
+                return full_function
     
     # Default fallback to COUNT(*)
     logging.warning("Could not extract aggregation function, using default COUNT(*)")
@@ -1596,10 +1670,10 @@ def transform_query_for_period(original_query, date_field, category_fields, peri
         # Extract the core table and WHERE conditions from the original query
         # This pattern looks for date_trunc, field selection, conditions.
         # It supports two formats:
-        # 1. SELECT date_trunc... as date, value_expression WHERE ...
-        # 2. SELECT value_expression, date_trunc... as date WHERE ...
-        ytd_pattern_1 = r'SELECT\s+date_trunc_[ymd]+\((.*?)\)\s+as\s+date,\s+(.*?)WHERE\s+(.*?)(?:GROUP BY|ORDER BY|$)'
-        ytd_pattern_2 = r'SELECT\s+(.*?),\s*date_trunc_[ymd]+\((.*?)\)\s+as\s+date\s+WHERE\s+(.*?)(?:GROUP BY|ORDER BY|$)'
+        # 1. SELECT date_trunc... as date, value_expression FROM table WHERE ...
+        # 2. SELECT value_expression, date_trunc... as date FROM table WHERE ...
+        ytd_pattern_1 = r'SELECT\s+date_trunc_[ymd]+\((.*?)\)\s+as\s+date,\s+(.*?)\s+FROM\s+[\w-]+\s+WHERE\s+(.*?)(?:GROUP BY|ORDER BY|$)'
+        ytd_pattern_2 = r'SELECT\s+(.*?),\s*date_trunc_[ymd]+\((.*?)\)\s+as\s+date\s+FROM\s+[\w-]+\s+WHERE\s+(.*?)(?:GROUP BY|ORDER BY|$)'
         
         ytd_match = re.search(ytd_pattern_1, modified_query, re.IGNORECASE | re.DOTALL)
         match_type = 1
@@ -1971,7 +2045,6 @@ def transform_query_for_period(original_query, date_field, category_fields, peri
             {aggregation_func} as value
             {period_type_select}
             {category_select}
-        FROM {from_clause}
         {where_clause}
         {group_by}
         ORDER BY {period_type}_period
@@ -2158,6 +2231,7 @@ def main():
             'data_sf_url': metric_row['data_sf_url'],
             'category_fields': metric_row['category_fields'] or [],
             'location_fields': metric_row['location_fields'] or [],
+            'metadata': metric_row['metadata'],
             'query_data': {
                 'ytd_query': metric_row['ytd_query'],
                 'metric_query': metric_row['metric_query'],

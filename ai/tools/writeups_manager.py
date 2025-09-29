@@ -88,18 +88,21 @@ class WriteupsManager:
             
             result = execute_with_connection(create_tables)
             if result['status'] == 'success':
-                logger.info("Write-ups tables ensured to exist in PostgreSQL")
+                logger.debug("Write-ups tables ensured to exist in PostgreSQL")
             else:
                 logger.error(f"Error creating tables: {result['message']}")
                 
         except Exception as e:
             logger.error(f"Error ensuring write-ups tables exist: {e}")
     
-    def create_writeup(self, title: str, original_prompt: str, output_format: str = "html", 
+    async def create_writeup(self, title: str, original_prompt: str, output_format: str = "html", 
                       output_destination: str = "", frequency: str = "one_time", 
-                      scheduled_for: str = None, model_key: str = None) -> Dict[str, Any]:
-        """Create a new write-up request and execute it immediately."""
+                      scheduled_for: str = None, model_key: str = None, generate_title: bool = True) -> Dict[str, Any]:
+        """Create a new write-up request and generate title if needed."""
         try:
+            # Use placeholder title if generating title asynchronously
+            final_title = title if title and title.strip() else "Generating title..."
+            
             def create_writeup_db(conn):
                 cursor = conn.cursor()
                 
@@ -116,8 +119,8 @@ class WriteupsManager:
                                         frequency, scheduled_for, model_key, status)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
-                """, (title, original_prompt, output_format, output_destination, 
-                     frequency, scheduled_timestamp, model_key, 'in_progress'))
+                """, (final_title, original_prompt, output_format, output_destination, 
+                     frequency, scheduled_timestamp, model_key, 'pending'))
                 
                 writeup_id = cursor.fetchone()[0]
                 conn.commit()
@@ -128,30 +131,136 @@ class WriteupsManager:
                 return {"status": "error", "message": f"Database error: {result['message']}"}
             
             writeup_id = result['result']
-            logger.info(f"Created write-up {writeup_id}: {title}")
+            logger.info(f"Created write-up {writeup_id}: {final_title}")
             
-            # Execute the write-up immediately
-            execution_result = self._execute_writeup_directly(writeup_id, original_prompt, output_format, model_key)
+            # Generate title asynchronously if requested and not provided
+            if generate_title and (not title or title.strip() == ""):
+                logger.info("Starting async title generation for writeup...")
+                import asyncio
+                asyncio.create_task(self._generate_title_async(writeup_id, original_prompt, model_key))
             
-            if execution_result.get("status") == "success":
-                return {
-                    "status": "success",
-                    "writeup_id": writeup_id,
-                    "content": execution_result.get("content", ""),
-                    "message": "Write-up created and executed successfully"
-                }
-            else:
-                return {
-                    "status": "error",
-                    "writeup_id": writeup_id,
-                    "message": f"Write-up created but execution failed: {execution_result.get('message', 'Unknown error')}"
-                }
+            # Note: Write-up created but not executed immediately
+            # Execution should be triggered via the API endpoint which uses the job system
+            return {
+                "status": "success",
+                "writeup_id": writeup_id,
+                "title": final_title,
+                "message": "Write-up created successfully. Use the execute endpoint to run it."
+            }
                 
         except Exception as e:
             logger.error(f"Error creating write-up: {e}")
             return {"status": "error", "message": str(e)}
     
-    def _execute_writeup_directly(self, writeup_id: int, original_prompt: str, output_format: str, model_key: str = None) -> Dict[str, Any]:
+    async def _generate_title(self, original_prompt: str, model_key: str = None) -> str:
+        """Generate a title for the writeup using the explainer agent with no tools."""
+        try:
+            from agents.langchain_agent.explainer_agent import LangChainExplainerAgent
+            
+            # Create agent instance with no tools for title generation
+            agent = LangChainExplainerAgent(
+                model_key=model_key,
+                tool_groups=[],  # No tools for title generation
+                include_all_sections=False,
+                enable_session_logging=True  # Enable logging for debugging
+            )
+            
+            # Create a simple prompt for title generation
+            title_prompt = f"""
+            You are a title generator. Your ONLY task is to create a concise, descriptive title based on the writeup request below.
+            
+            IMPORTANT: 
+            - Do NOT use any tools or search for data
+            - Do NOT analyze datasets or query information
+            - Simply read the request and generate a title
+            - Respond with ONLY the title, nothing else
+            
+            Title requirements:
+            - Maximum 60 characters
+            - Clear and specific about what the writeup will cover
+            - Use title case
+            - Be engaging but professional
+            - Avoid jargon or overly technical terms
+            - Capture the main topic or question being addressed
+            
+            Writeup request: "{original_prompt}"
+            
+            Title:
+            """
+            
+            # Get response from agent
+            response_content = ""
+            async for chunk in agent.explain_change_streaming(title_prompt, metric_details={}):
+                if chunk.startswith("data: "):
+                    try:
+                        import json
+                        data = json.loads(chunk[6:])  # Remove "data: " prefix
+                        
+                        if 'content' in data:
+                            response_content += data['content']
+                        elif 'completion' in data:
+                            break
+                    except json.JSONDecodeError:
+                        continue
+            
+            # Clean up the title
+            title = response_content.strip()
+            # Remove any quotes or extra formatting
+            title = title.strip('"\'')
+            # Ensure it's not too long
+            if len(title) > 60:
+                title = title[:57] + "..."
+            
+            logger.info(f"Generated title: '{title}' for prompt: '{original_prompt[:50]}...'")
+            return title
+            
+        except Exception as e:
+            logger.error(f"Error generating title: {e}")
+            # Fallback to a generic title
+            return "Writeup Analysis"
+    
+    async def _generate_title_async(self, writeup_id: int, original_prompt: str, model_key: str = None):
+        """Generate a title for the writeup asynchronously and update the database."""
+        try:
+            logger.info(f"Starting async title generation for writeup {writeup_id}")
+            
+            # Generate the title using the existing method
+            generated_title = await self._generate_title(original_prompt, model_key)
+            
+            # Update the writeup with the generated title
+            def update_title_db(conn):
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE writeups 
+                    SET title = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (generated_title, writeup_id))
+                conn.commit()
+                return "Title updated"
+            
+            result = execute_with_connection(update_title_db)
+            if result['status'] == 'success':
+                logger.info(f"Updated writeup {writeup_id} title to: {generated_title}")
+            else:
+                logger.error(f"Failed to update title for writeup {writeup_id}: {result['message']}")
+                
+        except Exception as e:
+            logger.error(f"Error in async title generation for writeup {writeup_id}: {e}")
+            
+            # Update with fallback title
+            def update_fallback_title_db(conn):
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE writeups 
+                    SET title = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, ("Writeup Analysis", writeup_id))
+                conn.commit()
+                return "Fallback title updated"
+            
+            execute_with_connection(update_fallback_title_db)
+
+    async def _execute_writeup_directly(self, writeup_id: int, original_prompt: str, output_format: str, model_key: str = None) -> Dict[str, Any]:
         """Execute a write-up directly using the LangChain agent."""
         try:
             from agents.langchain_agent.explainer_agent import LangChainExplainerAgent
@@ -160,7 +269,7 @@ class WriteupsManager:
             # Create agent instance with all necessary tools
             agent = LangChainExplainerAgent(
                 model_key=model_key,  # Use specified model or default
-                tool_groups=[ToolGroup.CORE, ToolGroup.DATA_ANALYSIS, ToolGroup.ANALYSIS],  # Include all tools
+                tool_groups=[ToolGroup.CORE, ToolGroup.DATA_ANALYSIS, ToolGroup.ANALYSIS, ToolGroup.VISUALIZATION],  # Include all tools including mapping
                 include_all_sections=False,
                 enable_session_logging=True
             )
@@ -174,25 +283,60 @@ class WriteupsManager:
             OUTPUT FORMAT: {output_format}
             
             INSTRUCTIONS:
-            1. Use all available tools to gather relevant data and information
-            2. Analyze the data thoroughly to identify key insights and patterns
-            3. Create a well-structured, comprehensive write-up that addresses the request
-            4. Ensure the content is accurate, informative, and well-organized
-            5. Format the output according to the specified format ({output_format})
+            1. Use available tools strategically to gather relevant data - be targeted and specific in your queries
+            2. ALWAYS include LIMIT clauses in DataSF queries (recommended: 500-1000 records max per query)
+            3. For large datasets, make multiple focused queries rather than one large query
+            4. Prioritize recent data and filter by relevant categories, districts, or time periods
+            5. Analyze the data thoroughly to identify key insights and patterns
+            6. Create maps and visualizations when geographic data is relevant using generate_map_with_query
+            7. Create a well-structured, comprehensive write-up that addresses the request
+            8. If data sampling was applied, acknowledge this limitation in your analysis
+            9. Ensure the content is accurate, informative, and well-organized
+            10. Format the output according to the specified format ({output_format})
+            
+            CONTEXT WINDOW MANAGEMENT:
+            - The system will automatically limit data to prevent context overflow
+            - If you receive sampling warnings, adjust your queries to be more targeted
+            - Focus on quality insights from representative data rather than exhaustive data collection
             
             Please create a complete, professional write-up that thoroughly addresses the request.
             """
             
-            # Get response from agent
-            result = agent.explain_change_sync(writeup_prompt, metric_details={})
+            # Get response from agent using async streaming
+            response_content = ""
+            session_id = None
             
-            # Extract session ID from the result
-            session_id = result.get('session_id') if isinstance(result, dict) else None
+            async for chunk in agent.explain_change_streaming(writeup_prompt, metric_details={}):
+                # Process streaming chunks
+                if chunk.startswith("data: "):
+                    try:
+                        import json
+                        data = json.loads(chunk[6:])  # Remove "data: " prefix
+                        
+                        if 'content' in data:
+                            response_content += data['content']
+                        elif 'session_id' in data:
+                            session_id = data['session_id']
+                        elif 'completion' in data:
+                            # Stream completed
+                            break
+                    except json.JSONDecodeError:
+                        continue
+            
+            # Create result object similar to the sync version
+            result = {
+                'status': 'success',
+                'content': response_content,
+                'session_id': session_id
+            }
+            
             if session_id:
                 logger.info(f"Captured session ID for write-up execution: {session_id}")
             
             # Extract the actual response text from the agent's result
-            if isinstance(result, dict) and 'output' in result and result['output']:
+            if isinstance(result, dict) and 'content' in result:
+                content = result['content']
+            elif isinstance(result, dict) and 'output' in result and result['output']:
                 content = result['output'][0].get('text', '')
             elif isinstance(result, dict) and 'explanation' in result:
                 content = result['explanation']
@@ -244,21 +388,33 @@ class WriteupsManager:
             return {"status": "error", "message": str(e)}
     
     
-    def execute_writeup(self, writeup_id: int) -> Dict[str, Any]:
-        """Execute a write-up directly (simplified approach)."""
+    async def execute_writeup(self, writeup_id: int) -> Dict[str, Any]:
+        """Execute a write-up using the job system."""
         try:
             writeup = self.get_writeup(writeup_id)
             if not writeup:
                 return {"status": "error", "message": "Write-up not found"}
             
-            original_prompt = writeup.get('original_prompt', '')
-            output_format = writeup.get('output_format', 'html')
+            # Import job manager
+            from background_jobs import job_manager
+            import asyncio
+            
+            # Create a background job for the writeup execution
+            job_id = job_manager.create_job("writeup_execution", f"Execute writeup {writeup_id}")
+            logger.info(f"Created job {job_id} for writeup {writeup_id}")
+            
+            # Import the job execution function
+            from routes.writeups import _run_writeup_execution_job
+            
+            # Start the writeup execution in the background
             model_key = writeup.get('model_key')
+            asyncio.create_task(_run_writeup_execution_job(job_id, writeup_id, model_key))
             
-            # Execute the write-up directly
-            execution_result = self._execute_writeup_directly(writeup_id, original_prompt, output_format, model_key)
-            
-            return execution_result
+            return {
+                "status": "success",
+                "message": "Write-up execution started",
+                "job_id": job_id
+            }
                 
         except Exception as e:
             logger.error(f"Error executing write-up: {e}")
@@ -471,7 +627,7 @@ class WriteupsManager:
             logger.error(f"Error getting write-up responses: {e}")
             return []
     
-    def regenerate_writeup(self, writeup_id: int, model_key: str = None) -> Dict[str, Any]:
+    async def regenerate_writeup(self, writeup_id: int, model_key: str = None) -> Dict[str, Any]:
         """Regenerate a write-up by re-executing it with the same or new parameters."""
         try:
             # Get the existing write-up
@@ -507,21 +663,26 @@ class WriteupsManager:
             
             logger.info(f"Reset write-up {writeup_id} for regeneration")
             
-            # Execute the write-up directly
-            execution_result = self._execute_writeup_directly(writeup_id, original_prompt, output_format, final_model_key)
+            # Use the job system for regeneration
+            from background_jobs import job_manager
+            import asyncio
             
-            if execution_result.get("status") == "success":
-                return {
-                    "status": "success", 
-                    "message": "Write-up regenerated successfully",
-                    "writeup_id": writeup_id,
-                    "content": execution_result.get("content", "")
-                }
-            else:
-                return {
-                    "status": "error", 
-                    "message": f"Failed to regenerate write-up: {execution_result.get('message', 'Unknown error')}"
-                }
+            # Create a background job for the writeup regeneration
+            job_id = job_manager.create_job("writeup_regeneration", f"Regenerate writeup {writeup_id}")
+            logger.info(f"Created regeneration job {job_id} for writeup {writeup_id}")
+            
+            # Import the job execution function
+            from routes.writeups import _run_writeup_execution_job
+            
+            # Start the writeup regeneration in the background
+            asyncio.create_task(_run_writeup_execution_job(job_id, writeup_id, final_model_key))
+            
+            return {
+                "status": "success", 
+                "message": "Write-up regeneration started",
+                "writeup_id": writeup_id,
+                "job_id": job_id
+            }
                 
         except Exception as e:
             logger.error(f"Error regenerating write-up: {e}")

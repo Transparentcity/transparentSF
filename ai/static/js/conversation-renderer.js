@@ -35,6 +35,22 @@ class ConversationRenderer {
             console.warn('marked.js not available - markdown rendering disabled');
             this.options.enableMarkdown = false;
         }
+        
+        // Add CSS for map loading spinner if not already added
+        if (!document.getElementById('conversation-renderer-styles')) {
+            const style = document.createElement('style');
+            style.id = 'conversation-renderer-styles';
+            style.textContent = `
+                @keyframes spin { 
+                    0% { transform: rotate(0deg); } 
+                    100% { transform: rotate(360deg); } 
+                }
+                .conversation-renderer .loading-spinner {
+                    animation: spin 1s linear infinite;
+                }
+            `;
+            document.head.appendChild(style);
+        }
     }
     
     /**
@@ -242,10 +258,35 @@ class ConversationRenderer {
         // Store the raw content for streaming updates
         messageDiv._rawContent = content;
         
+        // Initialize chart tracking for assistant messages
+        if (sender === 'assistant') {
+            messageDiv._renderedCharts = new Set();
+        }
+        
         // Process content
         let processedContent = content;
         if (sender === 'assistant' && this.options.enableChartProcessing) {
+            // For initial message creation, render charts immediately and mark them as rendered
             processedContent = this.processChartPlaceholders(content);
+            
+            // Track rendered charts
+            if (messageDiv._renderedCharts) {
+                const chartRegex = /\[CHART:(\w+):([a-zA-Z0-9\-:]+)\]/g;
+                let match;
+                while ((match = chartRegex.exec(content)) !== null) {
+                    const [fullMatch, chartType, params] = match;
+                    const chartId = `${chartType}:${params}`;
+                    messageDiv._renderedCharts.add(chartId);
+                }
+                
+                // Also track dual map charts
+                const dualMapRegex = /\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]/g;
+                while ((match = dualMapRegex.exec(content)) !== null) {
+                    const [fullMatch, map1Id, map2Id] = match;
+                    const chartId = `dualmap:${map1Id}:${map2Id}`;
+                    messageDiv._renderedCharts.add(chartId);
+                }
+            }
         }
         
         if (isMarkdown && this.options.enableMarkdown) {
@@ -278,24 +319,174 @@ class ConversationRenderer {
         // Accumulate the raw content
         messageDiv._rawContent += additionalContent;
         
-        // Re-render the entire content with proper markdown
+        // Use smart chart rendering to preserve existing charts
+        this.updateMessageContentWithChartPreservation(messageDiv, messageDiv._rawContent);
+        
+        if (this.options.autoScroll) {
+            this.scrollToBottom();
+        }
+    }
+    
+    /**
+     * Smart chart rendering function that preserves existing charts during streaming
+     */
+    updateMessageContentWithChartPreservation(messageDiv, content) {
         const contentDiv = messageDiv.querySelector('.conversation-content');
-        if (contentDiv) {
-            let processedContent = messageDiv._rawContent;
-            
-            if (this.options.enableChartProcessing) {
-                processedContent = this.processChartPlaceholders(processedContent);
+        if (!contentDiv) return;
+        
+        // Initialize chart tracking if not exists
+        if (!messageDiv._renderedCharts) {
+            messageDiv._renderedCharts = new Set();
+        }
+        
+        // Process content to find chart placeholders
+        const chartPlaceholders = [];
+        const chartRegex = /\[CHART:(\w+):([a-zA-Z0-9\-:]+)\]/g;
+        let match;
+        while ((match = chartRegex.exec(content)) !== null) {
+            const [fullMatch, chartType, params] = match;
+            const chartId = `${chartType}:${params}`;
+            chartPlaceholders.push({
+                fullMatch,
+                chartType,
+                params,
+                chartId,
+                startIndex: match.index,
+                endIndex: match.index + fullMatch.length
+            });
+        }
+        
+        // Handle dual map placeholders separately
+        const dualMapRegex = /\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]/g;
+        while ((match = dualMapRegex.exec(content)) !== null) {
+            const [fullMatch, map1Id, map2Id] = match;
+            const chartId = `dualmap:${map1Id}:${map2Id}`;
+            chartPlaceholders.push({
+                fullMatch,
+                chartType: 'dualmap',
+                params: `${map1Id}:${map2Id}`,
+                chartId,
+                startIndex: match.index,
+                endIndex: match.index + fullMatch.length
+            });
+        }
+        
+        // Preserve existing chart elements
+        const existingCharts = new Map();
+        chartPlaceholders.forEach(placeholder => {
+            if (messageDiv._renderedCharts.has(placeholder.chartId)) {
+                // Find existing chart element
+                const existingChart = contentDiv.querySelector(`[data-chart-id="${placeholder.chartId}"]`);
+                if (existingChart) {
+                    existingCharts.set(placeholder.chartId, existingChart.cloneNode(true));
+                }
             }
-            
-            if (this.options.enableMarkdown && typeof marked !== 'undefined') {
-                contentDiv.innerHTML = marked.parse(processedContent);
+        });
+        
+        // Process chart placeholders - render new ones immediately, preserve existing ones
+        let processedContent = content;
+        chartPlaceholders.forEach(placeholder => {
+            if (!messageDiv._renderedCharts.has(placeholder.chartId)) {
+                // New chart - render it immediately during streaming
+                const chartHtml = this.generateChartHtml(placeholder.chartType, placeholder.params, placeholder.chartId);
+                if (chartHtml) {
+                    processedContent = processedContent.replace(placeholder.fullMatch, chartHtml);
+                    // Mark this chart as rendered
+                    messageDiv._renderedCharts.add(placeholder.chartId);
+                }
             } else {
-                contentDiv.innerHTML = processedContent.replace(/\n/g, '<br>');
+                // Existing chart - use placeholder that will be replaced with preserved element
+                const placeholderHtml = `<div class="chart-placeholder" data-chart-id="${placeholder.chartId}"></div>`;
+                processedContent = processedContent.replace(placeholder.fullMatch, placeholderHtml);
             }
+        });
+        
+        // Update content with markdown parsing
+        if (this.options.enableMarkdown && typeof marked !== 'undefined') {
+            contentDiv.innerHTML = marked.parse(processedContent);
+        } else {
+            contentDiv.innerHTML = processedContent.replace(/\n/g, '<br>');
+        }
+        
+        // Restore preserved chart elements
+        existingCharts.forEach((chartElement, chartId) => {
+            const placeholder = contentDiv.querySelector(`[data-chart-id="${chartId}"].chart-placeholder`);
+            if (placeholder) {
+                placeholder.replaceWith(chartElement);
+            }
+        });
+    }
+    
+    
+    /**
+     * Generate chart HTML for a specific chart type
+     */
+    generateChartHtml(chartType, params, chartId) {
+        if (chartType === 'dualmap') {
+            const [map1Id, map2Id] = params.split(':');
+            return `<div class="chart-container" data-chart-id="${chartId}">
+                <iframe src="/dual-map?map1_id=${map1Id}&map2_id=${map2Id}" width="100%" height="400" frameborder="0"></iframe>
+                <div class="chart-caption">Dual Map Comparison: ${map1Id} vs ${map2Id}</div>
+            </div>`;
+        } else if (chartType === 'time_series_id') {
+            return `<div class="chart-container" data-chart-id="${chartId}">
+                <iframe src="/backend/time-series-chart?chart_id=${params}" width="100%" height="400" frameborder="0"></iframe>
+                <div class="chart-caption">Chart ${params} (${chartType})</div>
+            </div>`;
+        } else if (chartType === 'time_series') {
+            const paramParts = params.split(':');
+            if (paramParts.length === 3) {
+                const [metric_id, district_id, period_type] = paramParts;
+                return `<div class="chart-container" data-chart-id="${chartId}">
+                    <iframe src="/backend/time-series-chart?metric_id=${metric_id}&district_id=${district_id}&period_type=${period_type}" width="100%" height="400" frameborder="0"></iframe>
+                    <div class="chart-caption">Chart ${params} (${chartType})</div>
+                </div>`;
+            } else {
+                return `<div class="chart-container" data-chart-id="${chartId}">
+                    <iframe src="/backend/time-series-chart?chart_id=${params}" width="100%" height="400" frameborder="0"></iframe>
+                    <div class="chart-caption">Chart ${params} (${chartType})</div>
+                </div>`;
+            }
+        } else if (chartType === 'map') {
+            // For maps, show a fast-loading preview first, then load full map
+            const mapHtml = `<div class="chart-container map-container" data-chart-id="${chartId}" data-map-id="${params}">
+                <div class="map-preview" style="width: 100%; height: 400px; background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; position: relative; border: 1px solid #ddd;">
+                    <div style="text-align: center; color: #1976d2;">
+                        <div style="font-size: 24px; margin-bottom: 8px;">🗺️</div>
+                        <div style="font-weight: 600; margin-bottom: 4px;">Loading Interactive Map</div>
+                        <div style="font-size: 12px; opacity: 0.8;">Map ID: ${params}</div>
+                        <div class="loading-spinner" style="margin-top: 12px; width: 20px; height: 20px; border: 2px solid #1976d2; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin: 12px auto 0;"></div>
+                    </div>
+                </div>
+                <div class="chart-caption">Chart ${params} (${chartType})</div>
+            </div>`;
             
-            if (this.options.autoScroll) {
-                this.scrollToBottom();
-            }
+            // Load the actual map after a brief delay to avoid blocking the stream
+            setTimeout(() => {
+                const mapContainer = document.querySelector(`[data-chart-id="${chartId}"]`);
+                if (mapContainer) {
+                    const preview = mapContainer.querySelector('.map-preview');
+                    if (preview) {
+                        preview.innerHTML = `<iframe src="/backend/map-chart?id=${params}" 
+                                                    style="width: 100%; height: 100%; border: none; border-radius: 8px;" 
+                                                    frameborder="0" scrolling="no">
+                                            </iframe>`;
+                    }
+                }
+            }, 500); // 500ms delay to let streaming continue smoothly
+            
+            return mapHtml;
+        } else if (chartType === 'anomaly') {
+            return `<div class="chart-container" data-chart-id="${chartId}">
+                <iframe src="/anomaly-analyzer/anomaly-chart?id=${params}" width="100%" height="400" frameborder="0"></iframe>
+                <div class="chart-caption">Chart ${params} (${chartType})</div>
+            </div>`;
+        } else {
+            // Fallback to generic chart endpoint
+            return `<div class="chart-container" data-chart-id="${chartId}">
+                <iframe src="/backend/charts/${chartType}/${params}" width="100%" height="400" frameborder="0"></iframe>
+                <div class="chart-caption">Chart ${params} (${chartType})</div>
+            </div>`;
         }
     }
     
@@ -508,6 +699,12 @@ class ConversationRenderer {
             data.endTime = Date.now();
             data.duration = data.endTime - data.startTime;
         }
+        
+        // Update context window status after tool call completion if function is available
+        if (typeof window.fetchContextWindowStatus === 'function') {
+            console.log('Tool call completed in conversation renderer, updating context window status');
+            window.fetchContextWindowStatus();
+        }
     }
     
     /**
@@ -558,7 +755,8 @@ class ConversationRenderer {
         // First handle dual map placeholders with their specific pattern
         content = content.replace(/\[CHART:dualmap:([a-zA-Z0-9\-]+):([a-zA-Z0-9\-]+)\]/g, (match, map1Id, map2Id) => {
             const chartUrl = `/dual-map?map1_id=${map1Id}&map2_id=${map2Id}`;
-            return `<div class="chart-container">
+            const chartId = `dualmap:${map1Id}:${map2Id}`;
+            return `<div class="chart-container" data-chart-id="${chartId}">
                 <iframe src="${chartUrl}" width="100%" height="400" frameborder="0"></iframe>
                 <div class="chart-caption">Dual Map Comparison: ${map1Id} vs ${map2Id}</div>
             </div>`;
@@ -568,6 +766,7 @@ class ConversationRenderer {
         return content.replace(/\[CHART:(\w+):([a-zA-Z0-9\-:]+)\]/g, (match, type, params) => {
             // Generate correct URLs based on chart type
             let chartUrl;
+            const chartId = `${type}:${params}`;
             if (type === 'time_series_id') {
                 chartUrl = `/backend/time-series-chart?chart_id=${params}`;
             } else if (type === 'map') {
@@ -589,7 +788,7 @@ class ConversationRenderer {
                 chartUrl = `/backend/charts/${type}/${params}`;
             }
             
-            return `<div class="chart-container">
+            return `<div class="chart-container" data-chart-id="${chartId}">
                 <iframe src="${chartUrl}" width="100%" height="400" frameborder="0"></iframe>
                 <div class="chart-caption">Chart ${params} (${type})</div>
             </div>`;

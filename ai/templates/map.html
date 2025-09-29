@@ -11,6 +11,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome for icons -->
@@ -1108,8 +1112,12 @@
                 return;
             }
             
+            // Always show the map title, even if metadata is not available
+            const mapTitle = mapData.title || "Untitled Map";
+            
             if (!mapData.metadata) {
                 console.log('No metadata available for embedded subtitle calculation');
+                embeddedSubtitleElement.innerHTML = `<strong>${mapTitle}</strong>`;
                 return;
             }
 
@@ -1118,6 +1126,7 @@
             
             if (!periodType || !timePeriods) {
                 console.log('Period type or time periods not available in metadata');
+                embeddedSubtitleElement.innerHTML = `<strong>${mapTitle}</strong>`;
                 return;
             }
 
@@ -1180,7 +1189,6 @@
             }
             
             // Preserve the title and add the calculated subtitle
-            const mapTitle = mapData.title || "Untitled Map";
             embeddedSubtitleElement.innerHTML = `<strong>${mapTitle}</strong> • ${subtitleText}`;
         }
 
@@ -1248,6 +1256,9 @@
                 }
                 // After loading data/layers, build legend to mirror preview using saved color_field
                 try { buildLegendFromSavedData(); } catch (e) { console.warn('Legend build failed:', e); }
+                
+                // Update embedded subtitle after data is loaded
+                try { updateEmbeddedSubtitle(); } catch (e) { console.warn('Embedded subtitle update failed:', e); }
                 
                 // Check if animation data is available and show/hide animate button accordingly
                 try { checkAnimationDataAvailability(); } catch (e) { console.warn('Animation data check failed:', e); }
@@ -1820,12 +1831,75 @@
 
             const data = mapData.locationData || [];
             const colorField = mapData.metadata && mapData.metadata.color_field;
-            if (!data.length || !colorField) {
+            const seriesInfo = mapData.metadata && mapData.metadata.series_info;
+            
+            if (!data.length) {
                 const emptyEl = document.createElement('div');
                 emptyEl.className = 'legend-item';
-                emptyEl.innerHTML = `<span class="legend-label" style="color: var(--text-secondary); font-style: italic;">No legend available</span>`;
+                emptyEl.innerHTML = `<span class="legend-label" style="color: var(--text-secondary); font-style: italic;">No data available</span>`;
                 legendContainer.appendChild(emptyEl);
                 return;
+            }
+            
+            // If we have series_info, use it to build the legend
+            if (seriesInfo && seriesInfo.color_mapping) {
+                console.log('Building legend from series_info:', seriesInfo);
+                
+                // Update legend title
+                const legendTitle = document.getElementById('legend-title');
+                if (legendTitle && seriesInfo.legend_title) {
+                    legendTitle.textContent = seriesInfo.legend_title;
+                }
+                
+                // Build legend items from color mapping
+                const entries = Object.entries(seriesInfo.color_mapping);
+                entries.sort((a, b) => a[0].localeCompare(b[0])); // Sort by series value
+                
+                for (const [seriesValue, color] of entries) {
+                    const legendItem = document.createElement('div');
+                    legendItem.className = 'legend-item';
+                    legendItem.innerHTML = `
+                        <div class="legend-color" style="background-color: ${color};"></div>
+                        <span class="legend-label">${seriesValue}</span>
+                    `;
+                    legendContainer.appendChild(legendItem);
+                }
+                return;
+            }
+            
+            // If no color field specified, try to build legend from actual colors in the data
+            if (!colorField) {
+                const colorMap = new Map();
+                for (const item of data) {
+                    if (item.color) {
+                        const colorKey = item.color;
+                        if (!colorMap.has(colorKey)) {
+                            colorMap.set(colorKey, 1);
+                        } else {
+                            colorMap.set(colorKey, colorMap.get(colorKey) + 1);
+                        }
+                    }
+                }
+                
+                if (colorMap.size > 0) {
+                    // Build legend from actual colors
+                    for (const [color, count] of colorMap.entries()) {
+                        const legendItem = document.createElement('div');
+                        legendItem.className = 'legend-item';
+                        legendItem.innerHTML = `
+                            <div class="legend-color" style="background-color: ${color};"></div>
+                            <span class="legend-label">${count} point${count > 1 ? 's' : ''}</span>
+                        `;
+                        legendContainer.appendChild(legendItem);
+                    }
+                    return;
+                } else {
+                    const emptyEl = document.createElement('div');
+                    emptyEl.className = 'legend-item';
+                    emptyEl.innerHTML = `<span class="legend-label" style="color: var(--text-secondary); font-style: italic;">No color information available</span>`;
+                    legendContainer.appendChild(emptyEl);
+                    return;
+                }
             }
 
             // Update legend title based on color field

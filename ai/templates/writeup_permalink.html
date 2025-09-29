@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ writeup.title }} - WHAT'S HAPPENING IN SF?</title>
     
     <!-- Favicon -->
@@ -10,6 +11,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+
     
     <!-- Meta tags for social sharing -->
     <meta name="description" content="{{ writeup.original_prompt[:160] }}...">
@@ -56,6 +61,18 @@
             max-width: 900px;
             margin: 0 auto;
             padding: 20px;
+        }
+        
+        /* Mobile-first responsive design */
+        @media (max-width: 768px) {
+            body {
+                padding: 8px;
+            }
+            
+            .container {
+                padding: 8px;
+                max-width: none;
+            }
         }
         
         .header {
@@ -182,6 +199,41 @@
             border: none;
         }
         
+        /* Mobile chart improvements */
+        @media (max-width: 768px) {
+            .chart-container {
+                margin: 10px -8px; /* Negative margin to break out of container padding */
+                border-radius: 0;
+            }
+            
+            .chart-container iframe {
+                width: 100vw; /* Full viewport width */
+                max-width: 100vw;
+                min-height: 300px; /* Ensure minimum height for readability */
+            }
+            
+            /* Chart titles on mobile */
+            .chart-title {
+                margin: 10px -8px 8px -8px !important;
+                border-radius: 0 !important;
+                padding: 12px 16px !important; /* Larger touch targets */
+                font-size: 18px !important; /* Larger text for mobile */
+            }
+            
+            /* Improve touch targets for mobile */
+            .copy-button {
+                padding: 10px 16px;
+                font-size: 14px;
+                min-height: 44px; /* iOS recommended touch target size */
+            }
+            
+            .share-input {
+                padding: 10px 12px;
+                font-size: 14px;
+                min-height: 44px;
+            }
+        }
+        
         /* Content styling */
         .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 {
             color: var(--text-primary);
@@ -256,10 +308,6 @@
         }
         
         @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-            
             .header-top {
                 flex-direction: column;
                 gap: 15px;
@@ -291,7 +339,43 @@
             }
             
             .content {
-                padding: 20px;
+                padding: 15px;
+                margin: 0 -8px; /* Break out of container padding for full width */
+            }
+        }
+        
+        /* Extra small screens */
+        @media (max-width: 480px) {
+            body {
+                padding: 4px;
+            }
+            
+            .container {
+                padding: 4px;
+            }
+            
+            .title {
+                font-size: 20px;
+                line-height: 1.3;
+            }
+            
+            .content {
+                padding: 12px;
+                margin: 0 -4px;
+            }
+            
+            .chart-container {
+                margin: 8px -4px;
+            }
+            
+            .chart-title {
+                margin: 8px -4px 6px -4px !important;
+                padding: 10px 12px !important;
+                font-size: 16px !important;
+            }
+            
+            .chart-container iframe {
+                min-height: 250px;
             }
         }
         
@@ -398,7 +482,7 @@
                 if (chartType === 'anomaly') {
                     // For anomaly charts: [CHART:anomaly:anomaly_id]
                     const anomalyId = paramParts[0];
-                    return `<div class="chart-container" style="margin: 15px 0;">
+                    return `<div class="chart-container">
                         <iframe src="/anomaly-analyzer/anomaly-chart?id=${anomalyId}" 
                                 style="width: 100%; height: 550px; border: none;" 
                                 frameborder="0" scrolling="no">
@@ -410,7 +494,7 @@
                     if (paramParts.length === 1) {
                         // Chart ID format: [CHART:time_series_id:chart_id]
                         const chartId = paramParts[0];
-                        return `<div class="chart-container" style="margin: 15px 0;">
+                        return `<div class="chart-container">
                             <iframe src="/backend/time-series-chart?chart_id=${chartId}" 
                                     style="width: 100%; height: 500px; border: none;" 
                                     frameborder="0" scrolling="no">
@@ -421,7 +505,7 @@
                         const metricId = paramParts[0];
                         const district = paramParts[1] || '0';
                         const period = paramParts[2] || 'month';
-                        return `<div class="chart-container" style="margin: 15px 0;">
+                        return `<div class="chart-container">
                             <iframe src="/backend/time-series-chart?metric_id=${metricId}&district=${district}&period_type=${period}" 
                                     style="width: 100%; height: 500px; border: none;" 
                                     frameborder="0" scrolling="no">
@@ -432,7 +516,10 @@
                 } else if (chartType === 'map') {
                     // For map charts: [CHART:map:map_id]
                     const mapId = paramParts[0];
-                    return `<div class="chart-container" style="margin: 15px 0;">
+                    return `<div class="chart-container">
+                        <div class="chart-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; padding: 8px 12px; background: var(--bg-secondary); border-radius: 4px; border-left: 3px solid var(--bright-purple);">
+                            📍 Interactive Map
+                        </div>
                         <iframe src="/backend/map-chart?id=${mapId}&embedded=true" 
                                 style="width: 100%; height: 800px; border: none;" 
                                 frameborder="0" scrolling="yes">
@@ -443,7 +530,10 @@
                     // For dual map charts: [CHART:dualmap:map1_id:map2_id]
                     const map1Id = paramParts[0];
                     const map2Id = paramParts[1];
-                    return `<div class="chart-container" style="margin: 15px 0;">
+                    return `<div class="chart-container">
+                        <div class="chart-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; padding: 8px 12px; background: var(--bg-secondary); border-radius: 4px; border-left: 3px solid var(--bright-purple);">
+                            📍 Interactive Dual Map
+                        </div>
                         <iframe src="/dual-map?map1_id=${map1Id}&map2_id=${map2Id}" 
                                 style="width: 100%; height: 800px; border: none;" 
                                 frameborder="0" scrolling="yes">

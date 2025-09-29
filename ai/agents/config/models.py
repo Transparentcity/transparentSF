@@ -34,11 +34,14 @@ class ModelProvider(Enum):
 
 class ModelConfig:
     """Configuration for a specific model."""
-    def __init__(self, provider: ModelProvider, model_name: str, config: Dict[str, Any] = None, api_key_env_var: Optional[str] = None):
+    def __init__(self, provider: ModelProvider, model_name: str, config: Dict[str, Any] = None, api_key_env_var: Optional[str] = None, context_window: int = 128000, input_price_per_million: float = 0.0, output_price_per_million: float = 0.0):
         self.provider = provider
         self.model_name = model_name
         self.config = config or {}
         self.api_key_env_var = api_key_env_var or f"{provider.value.upper()}_API_KEY"
+        self.context_window = context_window  # Context window size in tokens
+        self.input_price_per_million = input_price_per_million  # Price per million input tokens
+        self.output_price_per_million = output_price_per_million  # Price per million output tokens
 
     @property
     def full_name(self) -> str:
@@ -84,101 +87,114 @@ MODEL_CONFIGS = {
     "gpt-5": ModelConfig(ModelProvider.OPENAI, "gpt-5", {
         "max_tokens": 8192
         # temperature parameter removed - GPT-5 only supports default (1.0)
-    }),
+    }, context_window=128000, input_price_per_million=1.25, output_price_per_million=10.00),
+    "gpt-5-reasoning": ModelConfig(ModelProvider.OPENAI, "gpt-5-reasoning", {
+        "max_tokens": 8192,
+        "reasoning_effort": "high"
+        # temperature parameter removed - GPT-5 only supports default (1.0)
+    }, context_window=128000, input_price_per_million=1.25, output_price_per_million=10.00),
     "gpt-4o": ModelConfig(ModelProvider.OPENAI, "gpt-4o", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }),
-    # Fast Turbo Models - optimized for speed and cost
-    "gpt-4-turbo": ModelConfig(ModelProvider.OPENAI, "gpt-4-turbo", {
-        "max_tokens": 8192,
-        "temperature": 0.1
-    }),
-    "gpt-4-turbo-2024-04-09": ModelConfig(ModelProvider.OPENAI, "gpt-4-turbo-2024-04-09", {
-        "max_tokens": 8192,
-        "temperature": 0.1
-    }),
+    }, context_window=128000, input_price_per_million=2.50, output_price_per_million=10.00),
+    # Faster GPT-5 variants - optimized for speed and reasoning
+    "gpt-5-chat-latest": ModelConfig(ModelProvider.OPENAI, "gpt-5-chat-latest", {
+        "max_tokens": 8192
+        # temperature parameter removed - GPT-5 only supports default (1.0)
+    }, context_window=128000, input_price_per_million=1.25, output_price_per_million=10.00),
+    "gpt-5-mini": ModelConfig(ModelProvider.OPENAI, "gpt-5-mini", {
+        "max_tokens": 8192
+        # temperature parameter removed - GPT-5 only supports default (1.0)
+    }, context_window=128000, input_price_per_million=0.25, output_price_per_million=2.00),
+    "gpt-5-nano": ModelConfig(ModelProvider.OPENAI, "gpt-5-nano", {
+        "max_tokens": 8192
+        # temperature parameter removed - GPT-5 only supports default (1.0)
+    }, context_window=128000, input_price_per_million=0.05, output_price_per_million=0.40),
+    "gpt-5-codex": ModelConfig(ModelProvider.OPENAI, "gpt-5-codex", {
+        "max_tokens": 8192
+        # temperature parameter removed - GPT-5 only supports default (1.0)
+    }, context_window=128000, input_price_per_million=1.25, output_price_per_million=10.00),
     "gpt-4o-mini": ModelConfig(ModelProvider.OPENAI, "gpt-4o-mini", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }),
-    "gpt-3.5-turbo": ModelConfig(ModelProvider.OPENAI, "gpt-3.5-turbo", {
-        "max_tokens": 4096,  # GPT-3.5-turbo has lower token limit
+    }, context_window=128000, input_price_per_million=0.15, output_price_per_million=0.60),
+    # GPT-4.1 Models - Next generation with improved capabilities
+    "gpt-4.1": ModelConfig(ModelProvider.OPENAI, "gpt-4.1", {
+        "max_tokens": 8192,
         "temperature": 0.1
-    }),
-    "gpt-3.5-turbo-16k": ModelConfig(ModelProvider.OPENAI, "gpt-3.5-turbo-16k", {
-        "max_tokens": 4096,
+    }, context_window=1000000, input_price_per_million=2.00, output_price_per_million=8.00),
+    "gpt-4.1-mini": ModelConfig(ModelProvider.OPENAI, "gpt-4.1-mini", {
+        "max_tokens": 8192,
         "temperature": 0.1
-    }),
+    }, context_window=1000000, input_price_per_million=0.40, output_price_per_million=1.60),
+    "gpt-4.1-nano": ModelConfig(ModelProvider.OPENAI, "gpt-4.1-nano", {
+        "max_tokens": 8192,
+        "temperature": 0.1
+    }, context_window=1000000, input_price_per_million=0.10, output_price_per_million=0.40),
     # Anthropic Models (Latest versions - updated 2025) - with increased token limits
     "claude-opus-4": ModelConfig(ModelProvider.ANTHROPIC, "claude-opus-4-20250514", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }),
+    }, context_window=200000, input_price_per_million=15.00, output_price_per_million=75.00),
     "claude-sonnet-4": ModelConfig(ModelProvider.ANTHROPIC, "claude-sonnet-4-20250514", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }),
+    }, context_window=200000, input_price_per_million=3.00, output_price_per_million=15.00),
     "claude-3-7-sonnet": ModelConfig(ModelProvider.ANTHROPIC, "claude-3-7-sonnet-20250219", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }),
+    }, context_window=200000, input_price_per_million=3.00, output_price_per_million=15.00),
     "claude-3-5-haiku": ModelConfig(ModelProvider.ANTHROPIC, "claude-3-5-haiku-20241022", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }),
+    }, context_window=200000, input_price_per_million=0.80, output_price_per_million=4.00),
     "claude-3-5-sonnet": ModelConfig(ModelProvider.ANTHROPIC, "claude-3-5-sonnet-20241022", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }),
-    "claude-3-haiku": ModelConfig(ModelProvider.ANTHROPIC, "claude-3-haiku-20240307", {
+    }, context_window=200000, input_price_per_million=3.00, output_price_per_million=15.00),
+    # Thinking models - optimized for complex reasoning
+    "claude-3-7-thinking": ModelConfig(ModelProvider.ANTHROPIC, "claude-3-7-thinking-20250219", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }),
-    "claude-3-haiku-20240307": ModelConfig(ModelProvider.ANTHROPIC, "claude-3-haiku-20240307", {
+    }, context_window=200000, input_price_per_million=3.00, output_price_per_million=15.00),
+    "claude-sonnet-4-thinking": ModelConfig(ModelProvider.ANTHROPIC, "claude-sonnet-4-thinking-20250514", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }),
+    }, context_window=200000, input_price_per_million=3.00, output_price_per_million=15.00),
     # Google Models (Latest versions - with specific config for tool calling)
     "gemini-2.5-pro": ModelConfig(ModelProvider.GOOGLE, "gemini-2.5-pro", {
         "temperature": 0.1,
         "top_p": 0.8,
         "top_k": 40,
         "max_output_tokens": 8192
-    }),
+    }, context_window=2000000, input_price_per_million=2.00, output_price_per_million=8.00),
     "gemini-1.5-pro": ModelConfig(ModelProvider.GOOGLE, "gemini-1.5-pro", {
         "temperature": 0.1,
         "top_p": 0.8,
         "top_k": 40,
         "max_output_tokens": 8192
-    }),
+    }, context_window=2000000, input_price_per_million=1.25, output_price_per_million=5.00),
     "gemini-1.5-flash": ModelConfig(ModelProvider.GOOGLE, "gemini-1.5-flash", {
         "temperature": 0.1,
         "top_p": 0.8,
         "top_k": 40,
         "max_output_tokens": 8192
-    }),
+    }, context_window=1000000, input_price_per_million=0.30, output_price_per_million=1.20),
     "gemini-1.5-flash-8b": ModelConfig(ModelProvider.GOOGLE, "gemini-1.5-flash-8b", {
         "temperature": 0.1,
         "top_p": 0.8,
         "top_k": 40,
         "max_output_tokens": 8192
-    }),
-    "gemini-1.0-pro": ModelConfig(ModelProvider.GOOGLE, "gemini-1.0-pro", {
-        "temperature": 0.1,
-        "top_p": 0.8,
-        "top_k": 40,
-        "max_output_tokens": 8192
-    }),
+    }, context_window=1000000, input_price_per_million=0.15, output_price_per_million=0.60),
     # Grok Models (X-AI) - with Live Search capabilities
     "grok-4": ModelConfig(ModelProvider.GROK, "grok-4", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }, api_key_env_var="XAI_API_KEY"),
+    }, api_key_env_var="XAI_API_KEY", context_window=128000, input_price_per_million=5.00, output_price_per_million=15.00),
     "grok-3-latest": ModelConfig(ModelProvider.GROK, "grok-3-latest", {
         "max_tokens": 8192,
         "temperature": 0.1
-    }, api_key_env_var="XAI_API_KEY"),
+    }, api_key_env_var="XAI_API_KEY", context_window=128000, input_price_per_million=5.00, output_price_per_million=15.00),
 }
 
 def get_model_config(model_key: str) -> ModelConfig:
@@ -193,13 +209,13 @@ def get_available_models() -> Dict[str, ModelConfig]:
 
 def get_default_model() -> str:
     """Get the default model from environment or fallback."""
-    return os.getenv("AGENT_MODEL", "gpt-5")
+    return os.getenv("AGENT_MODEL", "claude-3-7-sonnet")
 
 def create_langchain_llm(model_key: Optional[str] = None, max_tokens: Optional[int] = None):
     """Create a LangChain LLM instance for the specified model.
     
     Args:
-        model_key: Model identifier (defaults to AGENT_MODEL env var or gpt-5)
+        model_key: Model identifier (defaults to AGENT_MODEL env var or claude-3-7-sonnet)
         max_tokens: Override the default max_tokens for this model instance
     """
     if model_key is None:
@@ -252,7 +268,7 @@ def create_langchain_llm_with_fallback(model_key: Optional[str] = None, max_toke
     """Create a LangChain LLM with automatic fallback on errors.
     
     Args:
-        model_key: Model identifier (defaults to AGENT_MODEL env var or gpt-5)
+        model_key: Model identifier (defaults to AGENT_MODEL env var or claude-3-7-sonnet)
         max_tokens: Override the default max_tokens for this model instance
         
     Returns:

@@ -80,9 +80,27 @@ def fetch_data_from_api(query_object):
         if not has_limit:
             paginated_query = f"{cleaned_query} LIMIT {limit} OFFSET {offset}"
             params["$query"] = paginated_query
+        else:
+            # If there's already a LIMIT in the query, we need to handle large limits by pagination
+            # Extract the limit from the query and break it into smaller chunks
+            import re
+            limit_match = re.search(r'LIMIT\s+(\d+)', cleaned_query, re.IGNORECASE)
+            if limit_match:
+                total_limit = int(limit_match.group(1))
+                if total_limit > 5000:  # DataSF API max limit per request
+                    # Remove the LIMIT from the query and handle pagination manually
+                    query_without_limit = re.sub(r'\s+LIMIT\s+\d+', '', cleaned_query, flags=re.IGNORECASE)
+                    paginated_query = f"{query_without_limit} LIMIT {min(5000, total_limit - offset)} OFFSET {offset}"
+                    params["$query"] = paginated_query
+                else:
+                    # Use the original query as-is
+                    params["$query"] = cleaned_query
+            else:
+                # Use the original query as-is
+                params["$query"] = cleaned_query
         logger.debug("URL being requested: %s, params: %s", url, params)
         try:
-            response = requests.get(url, params=params, headers=headers)
+            response = requests.get(url, params=params, headers=headers, timeout=60)  # 60 second timeout
             logger.debug("Response Status Code: %s", response.status_code)
             response.raise_for_status()
             try:
@@ -99,13 +117,35 @@ def fetch_data_from_api(query_object):
             all_data.extend(data)
             logger.info("Fetched %d records in current batch.", len(data))
 
-            if has_limit or len(data) < limit:
-                has_more_data = False
-                logger.debug("No more data to fetch; ending pagination.")
-                logger.info("url: %s", url)
+            # Check if we should continue pagination
+            if has_limit:
+                # Check if we've reached the total limit or if we got fewer records than requested
+                limit_match = re.search(r'LIMIT\s+(\d+)', cleaned_query, re.IGNORECASE)
+                if limit_match:
+                    total_limit = int(limit_match.group(1))
+                    if len(all_data) >= total_limit or len(data) < min(5000, total_limit - offset):
+                        has_more_data = False
+                        logger.debug("Reached total limit or end of data; ending pagination.")
+                    else:
+                        offset += min(5000, total_limit - offset)
+                        logger.debug("Proceeding to next offset: %d", offset)
+                else:
+                    # Original logic for queries with LIMIT but no large limit handling
+                    if len(data) < limit:
+                        has_more_data = False
+                        logger.debug("No more data to fetch; ending pagination.")
+                    else:
+                        offset += limit
+                        logger.debug("Proceeding to next offset: %d", offset)
             else:
-                offset += limit
-                logger.debug("Proceeding to next offset: %d", offset)
+                # Original logic for queries without LIMIT
+                if len(data) < limit:
+                    has_more_data = False
+                    logger.debug("No more data to fetch; ending pagination.")
+                    logger.info("url: %s", url)
+                else:
+                    offset += limit
+                    logger.debug("Proceeding to next offset: %d", offset)
         except requests.HTTPError as http_err:
             error_content = ''
             try:

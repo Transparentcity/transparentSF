@@ -26,6 +26,9 @@ def set_dataset_tool(endpoint: str, query: str) -> Dict[str, Any]:
     NOTE: Due to LangChain tool limitations, this tool cannot store data in context_variables
     for other tools to access. Use generate_map_with_query instead for map generation.
     
+    IMPORTANT: This tool automatically limits data to prevent context window overflow.
+    For large datasets, it will sample data intelligently and warn about the limitation.
+    
     Args:
         endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx')
         query: The complete SoQL query string using standard SQL syntax
@@ -61,6 +64,24 @@ def set_dataset_tool(endpoint: str, query: str) -> Dict[str, Any]:
             endpoint = f"{endpoint}.json"
             logger.info(f"Added .json to endpoint: {endpoint}")
 
+        # CONTEXT WINDOW PROTECTION: Add automatic LIMIT if not present
+        query_lower = query.lower()
+        if 'limit' not in query_lower:
+            # Add a reasonable default limit to prevent context overflow
+            DEFAULT_LIMIT = 1000
+            query = f"{query} LIMIT {DEFAULT_LIMIT}"
+            logger.info(f"Added automatic LIMIT {DEFAULT_LIMIT} to prevent context window overflow")
+        else:
+            # Check if existing limit is too high
+            import re
+            limit_match = re.search(r'limit\s+(\d+)', query_lower)
+            if limit_match:
+                existing_limit = int(limit_match.group(1))
+                MAX_SAFE_LIMIT = 2000
+                if existing_limit > MAX_SAFE_LIMIT:
+                    query = re.sub(r'limit\s+\d+', f'LIMIT {MAX_SAFE_LIMIT}', query, flags=re.IGNORECASE)
+                    logger.warning(f"Reduced LIMIT from {existing_limit} to {MAX_SAFE_LIMIT} to prevent context window overflow")
+
         # Import the original function and call it
         import sys
         import os
@@ -76,13 +97,50 @@ def set_dataset_tool(endpoint: str, query: str) -> Dict[str, Any]:
             if data:
                 df = pd.DataFrame(data)
                 logger.info(f"Dataset successfully created with shape: {df.shape}")
+                
+                # CONTEXT WINDOW PROTECTION: Smart sampling for very large datasets
+                MAX_CONTEXT_ROWS = 1000  # Conservative limit to prevent context overflow
+                original_rows = len(df)
+                was_sampled = False
+                sampling_message = ""
+                
+                if original_rows > MAX_CONTEXT_ROWS:
+                    # Smart sampling: Try to get a representative sample
+                    if 'date' in str(df.columns).lower() or 'time' in str(df.columns).lower():
+                        # For time-series data, get recent data
+                        date_cols = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
+                        if date_cols:
+                            try:
+                                df[date_cols[0]] = pd.to_datetime(df[date_cols[0]], errors='coerce')
+                                df = df.sort_values(date_cols[0], ascending=False).head(MAX_CONTEXT_ROWS)
+                                sampling_message = f"Sampled {MAX_CONTEXT_ROWS} most recent records from {original_rows} total records to prevent context overflow."
+                                was_sampled = True
+                            except:
+                                # Fallback to random sampling
+                                df = df.sample(n=MAX_CONTEXT_ROWS, random_state=42)
+                                sampling_message = f"Randomly sampled {MAX_CONTEXT_ROWS} records from {original_rows} total records to prevent context overflow."
+                                was_sampled = True
+                    else:
+                        # Random sampling for other data types
+                        df = df.sample(n=MAX_CONTEXT_ROWS, random_state=42)
+                        sampling_message = f"Randomly sampled {MAX_CONTEXT_ROWS} records from {original_rows} total records to prevent context overflow."
+                        was_sampled = True
+                
+                # Prepare the return message
+                base_message = 'Dataset loaded successfully. Use generate_map_with_query for map generation.'
+                if was_sampled:
+                    base_message = f"⚠️  DATA SAMPLING APPLIED: {sampling_message} {base_message}"
+                    logger.warning(sampling_message)
+                
                 return {
                     'status': 'success', 
                     'data': df.to_dict('records'),
                     'shape': df.shape,
+                    'original_rows': original_rows,
+                    'was_sampled': was_sampled,
                     'columns': list(df.columns),
                     'queryURL': result.get('queryURL'),
-                    'message': 'Dataset loaded successfully. Use generate_map_with_query for map generation.'
+                    'message': base_message
                 }
             else:
                 logger.warning("API returned empty data")
@@ -305,7 +363,7 @@ def get_charts_for_review_tool(
     metric_id: str = None,
     only_recent: bool = True,  # New parameter
     max_total_charts: int = 20,  # New parameter
-    include_metadata: bool = False,  # New parameter - keep false but we'll add caption extraction
+    include_metadata: bool = True,  # Changed to True to ensure caption extraction
     include_urls: bool = False,  # New parameter
     sort_by: str = "created_at"  # New parameter
 ) -> Dict[str, Any]:
@@ -319,7 +377,7 @@ def get_charts_for_review_tool(
         metric_id: Filter by specific metric ID/object_id (optional)
         only_recent: Only return charts from last 7 days (default: True)
         max_total_charts: Maximum total charts across all types (default: 20)
-        include_metadata: Whether to include full metadata (default: False)
+        include_metadata: Whether to include full metadata (default: True - ensures caption extraction)
         include_urls: Whether to include query URLs (default: False)
         sort_by: Sort order - created_at, out_of_bounds (default: created_at)
         

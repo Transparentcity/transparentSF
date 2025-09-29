@@ -245,7 +245,7 @@ class ToolConfig:
                 group=ToolGroup.DATA_ANALYSIS,
                 required_prompt_sections=["map_generation"],
                 examples=[
-                    "get_map_by_id(context_variables, map_id=123)",
+                    "get_map_by_id(map_id=123)",
                     "Use this to retrieve the details of a map that was previously created"
                 ]
             ),
@@ -256,7 +256,7 @@ class ToolConfig:
                 group=ToolGroup.DATA_ANALYSIS,
                 required_prompt_sections=["map_generation"],
                 examples=[
-                    "get_recent_maps(context_variables, limit=10, map_type='supervisor_district')",
+                    "get_recent_maps(limit=10, map_type='supervisor_district')",
                     "Use this to see what maps have been created recently"
                 ]
             )

@@ -12,6 +12,9 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="manifest" href="/static/site.webmanifest">
     
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+    
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome for icons -->
@@ -31,6 +34,23 @@
             padding: 0;
             height: 100vh;
             overflow: hidden;
+        }
+        
+        /* Mobile-first responsive design */
+        @media (max-width: 768px) {
+            .sidebar {
+                display: none !important;
+            }
+            
+            .mobile-header {
+                display: flex !important;
+            }
+        }
+        
+        @media (min-width: 769px) {
+            .mobile-header {
+                display: none !important;
+            }
         }
         
         .page-header {
@@ -259,9 +279,259 @@
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
+        
+        /* Compact popup styles */
+        .address-item {
+            border-bottom: 1px solid var(--border-light, #e9ecef);
+        }
+        
+        .address-item.upper-floor {
+            opacity: 0.7;
+        }
+        
+        .address-item:last-child {
+            border-bottom: none;
+        }
+        
+        .businesses-detail {
+            background-color: var(--bg-tertiary, #f8f9fa);
+            border-radius: 4px;
+            padding: 8px;
+            margin-top: 8px;
+        }
+        
+        .business-item {
+            border-bottom: 1px solid var(--border-light, #e9ecef);
+        }
+        
+        .business-item:last-child {
+            border-bottom: none;
+        }
+        
+        .btn-outline-secondary {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        
+        .btn-outline-secondary:hover {
+            background-color: var(--bg-tertiary, #f8f9fa);
+            border-color: var(--border-primary, #6c757d);
+        }
+        
+        .btn-outline-secondary i {
+            transition: transform 0.3s ease;
+        }
+        
+        .collapse {
+            transition: height 0.3s ease;
+        }
+        
+        .addresses-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .addresses-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .addresses-list::-webkit-scrollbar-track {
+            background: var(--bg-tertiary, #f8f9fa);
+            border-radius: 3px;
+        }
+        
+        .addresses-list::-webkit-scrollbar-thumb {
+            background: var(--border-primary, #6c757d);
+            border-radius: 3px;
+        }
+        
+        .addresses-list::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary, #495057);
+        }
+        
+        /* Mobile header and filter styles */
+        .mobile-header {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1100;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-primary);
+            padding: 10px 15px;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 4px var(--shadow-light);
+        }
+        
+        .mobile-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        
+        .mobile-filter-btn {
+            background: var(--bright-purple);
+            border: 1px solid var(--bright-purple);
+            color: white;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .mobile-filter-btn:hover {
+            opacity: 0.9;
+        }
+        
+        .mobile-filter-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1200;
+            background: rgba(0, 0, 0, 0.5);
+        }
+        
+        .mobile-filter-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-primary);
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            max-height: 85vh;
+            overflow-y: auto;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .mobile-filter-panel.show {
+            transform: translateY(0);
+        }
+        
+        .mobile-filter-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 20px 0 20px;
+            border-bottom: 1px solid var(--border-primary);
+            margin-bottom: 20px;
+        }
+        
+        .mobile-filter-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        
+        .mobile-close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        
+        .mobile-filter-content {
+            padding: 0 20px 20px 20px;
+        }
+        
+        .mobile-filter-actions {
+            position: sticky;
+            bottom: 0;
+            background: var(--bg-primary);
+            border-top: 1px solid var(--border-primary);
+            padding: 15px 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .mobile-apply-btn {
+            flex: 1;
+            background: var(--bs-secondary);
+            border: 1px solid var(--bs-secondary);
+            color: white;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        .mobile-clear-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-size: 16px;
+        }
+        
+        /* Adjust map container for mobile */
+        @media (max-width: 768px) {
+            .map-container {
+                height: calc(100vh - 60px) !important;
+                margin-top: 60px;
+            }
+            
+            .summary-overlay {
+                top: 70px !important;
+                right: 10px !important;
+                left: 10px !important;
+                max-width: none !important;
+            }
+        }
+        
+        /* Force Street Level row to black */
+        .street-level-row span,
+        .street-level-row strong,
+        .street-level-row i {
+            color: #000 !important;
+        }
     </style>
 </head>
 <body>
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+        <h1 class="mobile-title">Storefront Vacancy</h1>
+        <button class="mobile-filter-btn" id="mobileFilterBtn">
+            <i class="fas fa-filter"></i> Filters
+        </button>
+    </div>
+    
+    <!-- Mobile Filter Overlay -->
+    <div class="mobile-filter-overlay" id="mobileFilterOverlay">
+        <div class="mobile-filter-panel" id="mobileFilterPanel">
+            <div class="mobile-filter-header">
+                <h2 class="mobile-filter-title">Filter Options</h2>
+                <button class="mobile-close-btn" id="mobileCloseBtn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="mobile-filter-content">
+                <!-- Filter content will be duplicated here for mobile -->
+                <div id="mobileFiltersContainer">
+                    <!-- Filters will be populated here -->
+                </div>
+            </div>
+            
+            <div class="mobile-filter-actions">
+                <button class="mobile-clear-btn" id="mobileClearBtn">Clear All</button>
+                <button class="mobile-apply-btn" id="mobileApplyBtn">
+                    <span id="mobileFilterButtonText">Apply Filters</span>
+                    <span id="mobileFilterSpinner" class="loading-spinner" style="display: none;"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="d-flex h-100">
         <!-- Left Sidebar - Controls and Stats -->
         <div class="sidebar" style="width: 350px; overflow-y: auto; padding: 20px; background: var(--bg-primary);">
@@ -273,15 +543,32 @@
             </div>
         </div>
         
+        <!-- Business Search - Under Storefront Vacancy Header -->
+        <div class="filter-section mb-3" id="searchSection" style="border: 2px solid var(--primary-color); border-radius: 8px; padding: 15px; background: var(--bg-secondary);">
+            <label for="businessSearch" class="form-label fw-bold">Business Search</label>
+            <div class="input-group">
+                <input type="text" class="form-control" id="businessSearch" placeholder="Search business names... (3+ chars overrides filters)">
+                <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn" title="Clear search">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <small class="text-muted">Enter 3+ characters to search across all businesses</small>
+            <div id="searchOverrideIndicator" class="mt-2" style="display: none;">
+                <small class="text-warning fw-bold">
+                    <i class="fas fa-exclamation-triangle"></i> Search mode: All other filters are disabled
+                </small>
+            </div>
+        </div>
         
-                <!-- Controls Panel -->
-                <div class="controls-panel">
-                    <h5 class="section-title">Analysis Controls</h5>
+        <!-- Main Controls Panel -->
+        <div class="controls-panel">
+            <h5 class="section-title">Analysis Controls</h5>
+            
                     
                     <div class="filter-section">
                         <label for="district" class="form-label">Supervisor District:</label>
                         <select id="district" class="form-select">
-                            <option value="">All Districts</option>
+                            <option value="">Citywide (All Districts)</option>
                         </select>
                     </div>
                     
@@ -313,6 +600,7 @@
                         </div>
                     </div>
                     
+                    
                     <div class="filter-section">
                         <label for="statusFilter" class="form-label">Status Filter:</label>
                         <select id="statusFilter" class="form-select">
@@ -322,11 +610,12 @@
                         </select>
                     </div>
                     
+                    
                     <div class="filter-section">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="corridorOnly" checked>
                             <label class="form-check-label" for="corridorOnly">
-                                Show only business corridors
+                                Show only business corridors <span class="badge badge-sm bg-success ms-1">Default</span>
                             </label>
                         </div>
                     </div>
@@ -342,14 +631,23 @@
                     
                     <div class="filter-section">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="streetLevelOnly" checked>
+                            <input class="form-check-input" type="checkbox" id="streetLevelOnly">
                             <label class="form-check-label" for="streetLevelOnly">
                                 Street-level storefronts only
                             </label>
                         </div>
                     </div>
                     
-                    <button id="applyFilters" class="btn btn-primary w-100">
+                    <div class="filter-section">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="commercialTaxFilingOnly" checked>
+                            <label class="form-check-label" for="commercialTaxFilingOnly">
+                                Vacancy Tax Addresses
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button id="applyFilters" class="btn btn-secondary w-100">
                         <span id="filterButtonText">Apply Filters</span>
                         <span id="filterSpinner" class="loading-spinner" style="display: none;"></span>
                     </button>
@@ -362,6 +660,7 @@
                         <!-- District stats will be populated here -->
                     </div>
                 </div>
+                
             </div>
             
         <!-- Map - Takes remaining space -->
@@ -374,36 +673,44 @@
             <div id="mapLoadingIndicator" class="map-loading-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 999; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; border-radius: 8px;">
                 <div class="text-center">
                     <div class="loading-spinner" style="width: 40px; height: 40px; border-width: 4px; margin-bottom: 15px;"></div>
-                    <p class="text-muted mb-0">Loading map data...</p>
+                    <p class="text-muted mb-0" id="loadingMessage">Loading map data...</p>
+                    <p class="text-muted small mt-2" id="loadingDetails">Initializing...</p>
                 </div>
             </div>
             
             <!-- Summary Statistics Overlay -->
-            <div class="summary-overlay" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px);">
-                <div id="summaryStatsBar" class="d-flex flex-column small" style="gap: 6px; min-width: 220px;">
+            <div class="summary-overlay" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px);">
+                <div id="summaryHeaderToggle" class="d-flex align-items-center justify-content-between px-2 py-1 border-bottom" style="cursor: pointer; transition: background-color 0.2s ease;" onclick="toggleSummary()" role="button" tabindex="0" aria-expanded="true" onmouseover="this.style.backgroundColor='var(--bg-tertiary, rgba(0,0,0,0.05))'" onmouseout="this.style.backgroundColor='transparent'">
+                    <span class="small fw-bold">Overview</span>
+                    <i id="summaryChevron" class="fas fa-chevron-down small"></i>
+                </div>
+                <div id="summaryStatsBar" class="d-flex flex-column small px-3 py-2" style="gap: 6px; min-width: 220px; display: block; transition: all 0.3s ease-in-out; overflow: hidden;">
                     <div class="d-flex justify-content-between">
                         <span><i class="fas fa-building text-primary"></i> Buildings:</span>
                         <strong id="totalBuildings">-</strong>
                     </div>
-                    <div class="d-flex justify-content-between">
-                        <span><i class="fas fa-home text-info"></i> Addresses:</span>
+                    <div class="d-flex justify-content-between street-level-row">
+                        <span><i class="fas fa-home"></i> Street Level:</span>
                         <strong id="totalAddresses">-</strong>
                     </div>
                     <div class="d-flex justify-content-between">
-                        <span><i class="fas fa-store-alt text-info"></i> Storefronts:</span>
+                        <span><i class="fas fa-store"></i> Storefronts:</span>
                         <strong id="totalStorefronts">-</strong>
                     </div>
-                    <hr style="margin: 6px 0; border-color: var(--border-primary);">
                     <div class="d-flex justify-content-between">
-                        <span class="text-success"><i class="fas fa-check-circle"></i> Open Storefronts:</span>
+                        <span class="text-muted"><i class="fas fa-building"></i> Upper Floor:</span>
+                        <strong id="upperFloorCount" class="text-muted">-</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span><i class="fas fa-store text-success"></i> Open Storefronts:</span>
                         <strong id="openStorefronts">-</strong>
                     </div>
                     <div class="d-flex justify-content-between">
-                        <span class="text-danger"><i class="fas fa-times-circle"></i> Closed Storefronts:</span>
+                        <span><i class="fas fa-store text-danger"></i> Closed Storefronts:</span>
                         <strong id="closedStorefronts">-</strong>
                     </div>
                     <div class="d-flex justify-content-between">
-                        <span class="text-warning"><i class="fas fa-percentage"></i> Storefront Vacancy:</span>
+                        <span><i class="fas fa-percentage text-warning"></i> Storefront Vacancy:</span>
                         <strong id="storefrontVacancyRate">-</strong>
                     </div>
                 </div>
@@ -419,7 +726,238 @@
         let vacancyMap = null;
         let currentData = null;
         let mapboxToken = '{{ mapbox_token }}';
+        let filterTimeout = null; // For debouncing filter changes
+        let queryCache = new Map(); // Simple cache for database query responses
         
+        // Loading message helper
+        function updateLoadingMessage(message, details = '') {
+            const loadingMessage = document.getElementById('loadingMessage');
+            const loadingDetails = document.getElementById('loadingDetails');
+            if (loadingMessage) loadingMessage.textContent = message;
+            if (loadingDetails) loadingDetails.textContent = details;
+            console.log(`Loading: ${message}${details ? ' - ' + details : ''}`);
+        }
+        
+        // Mobile filter functionality
+        function initializeMobileFilters() {
+            const mobileFilterBtn = document.getElementById('mobileFilterBtn');
+            const mobileFilterOverlay = document.getElementById('mobileFilterOverlay');
+            const mobileFilterPanel = document.getElementById('mobileFilterPanel');
+            const mobileCloseBtn = document.getElementById('mobileCloseBtn');
+            const mobileApplyBtn = document.getElementById('mobileApplyBtn');
+            const mobileClearBtn = document.getElementById('mobileClearBtn');
+            
+            // Show mobile filter panel
+            function showMobileFilters() {
+                mobileFilterOverlay.style.display = 'block';
+                // Force a reflow before adding the show class for smooth animation
+                mobileFilterPanel.offsetHeight;
+                mobileFilterPanel.classList.add('show');
+                document.body.style.overflow = 'hidden'; // Prevent scrolling
+                
+                // Populate mobile filters with current desktop filter values
+                populateMobileFilters();
+            }
+            
+            // Hide mobile filter panel
+            function hideMobileFilters() {
+                mobileFilterPanel.classList.remove('show');
+                document.body.style.overflow = ''; // Restore scrolling
+                setTimeout(() => {
+                    mobileFilterOverlay.style.display = 'none';
+                }, 300); // Wait for animation to complete
+            }
+            
+            // Populate mobile filters with current values from desktop filters
+            function populateMobileFilters() {
+                const mobileContainer = document.getElementById('mobileFiltersContainer');
+                const desktopControls = document.querySelector('.controls-panel');
+                
+                if (desktopControls && mobileContainer) {
+                    // Clone the desktop controls but modify for mobile
+                    const clonedControls = desktopControls.cloneNode(true);
+                    
+                    // Remove the title and apply button from cloned content
+                    const title = clonedControls.querySelector('.section-title');
+                    const applyBtn = clonedControls.querySelector('#applyFilters');
+                    if (title) title.remove();
+                    if (applyBtn) applyBtn.remove();
+                    
+                    // Update IDs to avoid conflicts (add 'mobile-' prefix)
+                    const elements = clonedControls.querySelectorAll('[id]');
+                    elements.forEach(el => {
+                        const oldId = el.id;
+                        const newId = 'mobile-' + oldId;
+                        el.id = newId;
+                        
+                        // Update any labels that reference this ID
+                        const labels = clonedControls.querySelectorAll(`[for="${oldId}"]`);
+                        labels.forEach(label => label.setAttribute('for', newId));
+                    });
+                    
+                    // Clear and populate mobile container
+                    mobileContainer.innerHTML = '';
+                    mobileContainer.appendChild(clonedControls);
+                    
+                    // Sync values from desktop to mobile
+                    syncFiltersDesktopToMobile();
+                }
+            }
+            
+            // Sync filter values from desktop to mobile
+            function syncFiltersDesktopToMobile() {
+                // Sync dropdowns
+                const dropdowns = ['district', 'businessCorridor', 'neighborhood', 'statusFilter'];
+                dropdowns.forEach(id => {
+                    const desktop = document.getElementById(id);
+                    const mobile = document.getElementById('mobile-' + id);
+                    if (desktop && mobile) {
+                        mobile.value = desktop.value;
+                    }
+                });
+                
+                // Sync checkboxes
+                const checkboxes = ['corridorOnly', 'licensedOnly', 'streetLevelOnly'];
+                checkboxes.forEach(id => {
+                    const desktop = document.getElementById(id);
+                    const mobile = document.getElementById('mobile-' + id);
+                    if (desktop && mobile) {
+                        mobile.checked = desktop.checked;
+                    }
+                });
+                
+                // Sync industry type checkboxes
+                const industryCheckboxes = document.querySelectorAll('input[name="industry_type"]:checked');
+                industryCheckboxes.forEach(checkbox => {
+                    const mobileCheckbox = document.querySelector(`input[name="industry_type"][value="${checkbox.value}"]`);
+                    if (mobileCheckbox && mobileCheckbox.id.startsWith('mobile-')) {
+                        mobileCheckbox.checked = true;
+                    }
+                });
+                
+                // Sync license type checkboxes
+                const licenseCheckboxes = document.querySelectorAll('input[name="license_type"]:checked');
+                licenseCheckboxes.forEach(checkbox => {
+                    const mobileCheckbox = document.querySelector(`input[name="license_type"][value="${checkbox.value}"]`);
+                    if (mobileCheckbox && mobileCheckbox.id.startsWith('mobile-')) {
+                        mobileCheckbox.checked = true;
+                    }
+                });
+            }
+            
+            // Sync filter values from mobile to desktop
+            function syncFiltersMobileToDesktop() {
+                // Sync dropdowns
+                const dropdowns = ['district', 'businessCorridor', 'neighborhood', 'statusFilter'];
+                dropdowns.forEach(id => {
+                    const desktop = document.getElementById(id);
+                    const mobile = document.getElementById('mobile-' + id);
+                    if (desktop && mobile) {
+                        desktop.value = mobile.value;
+                    }
+                });
+                
+                // Sync checkboxes
+                const checkboxes = ['corridorOnly', 'licensedOnly', 'streetLevelOnly'];
+                checkboxes.forEach(id => {
+                    const desktop = document.getElementById(id);
+                    const mobile = document.getElementById('mobile-' + id);
+                    if (desktop && mobile) {
+                        desktop.checked = mobile.checked;
+                    }
+                });
+                
+                // Sync industry type checkboxes
+                const mobileIndustryCheckboxes = document.querySelectorAll('input[name="industry_type"]');
+                mobileIndustryCheckboxes.forEach(mobileCheckbox => {
+                    if (mobileCheckbox.id.startsWith('mobile-')) {
+                        const desktopCheckbox = document.querySelector(`input[name="industry_type"][value="${mobileCheckbox.value}"]:not([id^="mobile-"])`);
+                        if (desktopCheckbox) {
+                            desktopCheckbox.checked = mobileCheckbox.checked;
+                        }
+                    }
+                });
+                
+                // Sync license type checkboxes  
+                const mobileLicenseCheckboxes = document.querySelectorAll('input[name="license_type"]');
+                mobileLicenseCheckboxes.forEach(mobileCheckbox => {
+                    if (mobileCheckbox.id.startsWith('mobile-')) {
+                        const desktopCheckbox = document.querySelector(`input[name="license_type"][value="${mobileCheckbox.value}"]:not([id^="mobile-"])`);
+                        if (desktopCheckbox) {
+                            desktopCheckbox.checked = mobileCheckbox.checked;
+                        }
+                    }
+                });
+            }
+            
+            // Clear all mobile filters
+            function clearMobileFilters() {
+                // Clear dropdowns
+                const dropdowns = document.querySelectorAll('#mobileFiltersContainer select');
+                dropdowns.forEach(select => {
+                    select.selectedIndex = 0;
+                });
+                
+                // Uncheck all checkboxes
+                const checkboxes = document.querySelectorAll('#mobileFiltersContainer input[type="checkbox"]');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                
+                // Set defaults for certain checkboxes
+                const defaultChecked = ['mobile-corridorOnly', 'mobile-streetLevelOnly'];
+                defaultChecked.forEach(id => {
+                    const checkbox = document.getElementById(id);
+                    if (checkbox) checkbox.checked = true;
+                });
+            }
+            
+            // Event listeners
+            mobileFilterBtn.addEventListener('click', showMobileFilters);
+            mobileCloseBtn.addEventListener('click', hideMobileFilters);
+            
+            // Close on overlay click (but not on panel click)
+            mobileFilterOverlay.addEventListener('click', (e) => {
+                if (e.target === mobileFilterOverlay) {
+                    hideMobileFilters();
+                }
+            });
+            
+            // Clear filters
+            mobileClearBtn.addEventListener('click', () => {
+                clearMobileFilters();
+            });
+            
+            // Apply filters
+            mobileApplyBtn.addEventListener('click', async () => {
+                // Show loading state
+                const mobileFilterButtonText = document.getElementById('mobileFilterButtonText');
+                const mobileFilterSpinner = document.getElementById('mobileFilterSpinner');
+                
+                mobileApplyBtn.disabled = true;
+                mobileFilterButtonText.style.display = 'none';
+                mobileFilterSpinner.style.display = 'inline-block';
+                
+                try {
+                    // Sync mobile filters to desktop
+                    syncFiltersMobileToDesktop();
+                    
+                    // Hide mobile filter panel
+                    hideMobileFilters();
+                    
+                    // Apply filters using the existing desktop function
+                    await applyFilters();
+                } catch (error) {
+                    console.error('Error applying mobile filters:', error);
+                } finally {
+                    // Reset button state
+                    mobileApplyBtn.disabled = false;
+                    mobileFilterButtonText.style.display = 'inline';
+                    mobileFilterSpinner.style.display = 'none';
+                }
+            });
+        }
+
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
             // Log current theme state on page load
@@ -429,10 +967,15 @@
             console.log('  system prefers dark:', window.matchMedia('(prefers-color-scheme: dark)').matches);
             console.log('  body background:', getComputedStyle(document.body).backgroundColor);
             
+            updateLoadingMessage('Initializing page...', 'Loading filter options...');
             initializeFilters();
+            
+            // Initialize mobile filters
+            initializeMobileFilters();
             
             // Small delay to ensure dark mode scripts are fully loaded
             setTimeout(() => {
+                updateLoadingMessage('Initializing map...', 'Setting up Mapbox...');
                 initializeMap();
             }, 100);
             // loadInitialData() is now called from initializeFilters() after filters are set
@@ -441,7 +984,10 @@
         // Initialize filter dropdowns
         async function initializeFilters() {
             try {
-                const response = await fetch('/api/vacancy-analysis/filters');
+                updateLoadingMessage('Loading filters...', 'Fetching filter options...');
+                const response = await fetch('/api/vacancy/filters');
+                
+                updateLoadingMessage('Processing filters...', 'Parsing filter data...');
                 const result = await response.json();
                 
                 console.log('Filters API response:', result);
@@ -510,6 +1056,9 @@
                         licenseContainer.appendChild(checkboxWrapper);
                     });
                     
+                    // Populate zoning categories as checkboxes
+                    // Zoning categories removed - no longer needed
+                    
                     // Populate business corridors
                     const corridorSelect = document.getElementById('businessCorridor');
                     (filters.business_corridors || []).forEach(corridor => {
@@ -540,11 +1089,14 @@
                         districtSelect.appendChild(option);
                     });
                     
+                    updateLoadingMessage('Filters loaded...', 'Applying initial data load...');
+                    
                     // Apply filters after all dropdowns are populated (including District 3 selection)
                     applyFilters();
                 }
             } catch (error) {
                 console.error('Error loading filters:', error);
+                updateLoadingMessage('Error loading filters', error.message || 'Unknown error');
             }
         }
         
@@ -593,11 +1145,52 @@
                 return isDark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
             };
             
+            // Get theme-appropriate colors for map points
+            const getThemeColors = () => {
+                const dataTheme = document.documentElement.getAttribute('data-theme');
+                let storedTheme = null;
+                try {
+                    storedTheme = localStorage.getItem('theme');
+                } catch (e) {
+                    // localStorage might not be available
+                }
+                const prefersColorScheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                
+                let isDark = false;
+                if (dataTheme) {
+                    isDark = dataTheme === 'dark';
+                } else if (storedTheme) {
+                    isDark = storedTheme === 'dark';
+                } else {
+                    isDark = prefersColorScheme;
+                }
+                
+                console.log('Theme detection - dataTheme:', dataTheme, 'storedTheme:', storedTheme, 'prefersColorScheme:', prefersColorScheme, 'isDark:', isDark);
+                
+                if (isDark) {
+                    const colors = {
+                        closed: '#ff6b6b',  // Lighter red for dark mode
+                        open: '#51cf66',    // Lighter green for dark mode
+                        mixed: '#adb5bd'    // Light gray for mixed/50-50 buildings
+                    };
+                    console.log('Using dark mode colors:', colors);
+                    return colors;
+                } else {
+                    const colors = {
+                        closed: '#ff0000',  // Red for light mode
+                        open: '#00ff00',    // Green for light mode  
+                        mixed: '#868e96'    // Dark gray for mixed/50-50 buildings
+                    };
+                    console.log('Using light mode colors:', colors);
+                    return colors;
+                }
+            };
+            
             vacancyMap = new mapboxgl.Map({
                 container: 'vacancyMap',
                 style: getMapStyle(),
                 center: [-122.4194, 37.7749], // San Francisco
-                zoom: 11,
+                zoom: 12, // Slightly closer zoom for better detail
                 attributionControl: false,
                 dragPan: true,
                 dragRotate: false,
@@ -606,6 +1199,29 @@
                 doubleClickZoom: true,
                 keyboard: true
             });
+            
+            // Update point colors for current theme
+            const updatePointColors = () => {
+                try {
+                    if (vacancyMap && vacancyMap.getLayer('points-circles')) {
+                        const colors = getThemeColors();
+                        console.log('Updating point colors with:', colors);
+                        vacancyMap.setPaintProperty('points-circles', 'circle-color', [
+                            'case',
+                            ['==', ['get', 'building_color'], 'red'],
+                            colors.closed,  // Red for majority closed buildings
+                            ['==', ['get', 'building_color'], 'green'],
+                            colors.open,    // Green for majority open buildings
+                            colors.mixed    // Gray for 50/50 mixed buildings
+                        ]);
+                        console.log('Successfully updated point colors for theme:', colors);
+                    } else {
+                        console.log('Cannot update point colors - map or layer not ready');
+                    }
+                } catch (error) {
+                    console.error('Error updating point colors:', error);
+                }
+            };
             
             // Listen for theme changes and update map style
             const updateMapTheme = () => {
@@ -625,6 +1241,9 @@
                             updateMap(currentData);
                         }
                     });
+                } else {
+                    // Style didn't change, just update point colors
+                    updatePointColors();
                 }
             };
             
@@ -661,7 +1280,8 @@
                 console.log('Map loaded. Container size:', vacancyMap.getContainer().getBoundingClientRect());
                 console.log('Map canvas size:', vacancyMap.getCanvas().getBoundingClientRect());
                 
-                // Use Mapbox's built-in zoom behavior
+                // Ensure map is properly centered on San Francisco
+                ensureMapCenteredOnSF();
             });
         }
         
@@ -669,6 +1289,35 @@
         async function loadInitialData() {
             console.log('loadInitialData called');
             await applyFilters();
+        }
+        
+        // Debounced version of applyFilters to prevent rapid API calls
+        function debouncedApplyFilters() {
+            // Clear existing timeout
+            if (filterTimeout) {
+                clearTimeout(filterTimeout);
+            }
+            
+            // Show immediate feedback that filter change was registered
+            const filterButton = document.getElementById('applyFilters');
+            const filterText = document.getElementById('filterButtonText');
+            const filterSpinner = document.getElementById('filterSpinner');
+            
+            filterButton.disabled = true;
+            filterText.textContent = 'Applying...';
+            filterSpinner.style.display = 'inline-block';
+            
+            // Show loading indicator with descriptive message
+            const mapLoadingIndicator = document.getElementById('mapLoadingIndicator');
+            if (mapLoadingIndicator) {
+                mapLoadingIndicator.style.display = 'flex';
+                updateLoadingMessage('Preparing filters...', 'Debouncing changes...');
+            }
+            
+            // Set new timeout
+            filterTimeout = setTimeout(() => {
+                applyFilters();
+            }, 500); // 500ms delay
         }
         
         // Apply filters and load data
@@ -683,9 +1332,17 @@
             filterText.style.display = 'none';
             filterSpinner.style.display = 'inline-block';
             
-            // Show map loading indicator
+            // Show map loading indicator with initial message
             if (mapLoadingIndicator) {
                 mapLoadingIndicator.style.display = 'flex';
+                const businessSearch = document.getElementById('businessSearch').value;
+                const isSearchOverride = businessSearch && businessSearch.trim().length >= 3;
+                
+                if (isSearchOverride) {
+                    updateLoadingMessage('Searching Businesses...', `Searching for "${businessSearch}" across all business data...`);
+                } else {
+                    updateLoadingMessage('Loading Vacancy Analysis Data...', 'Fetching commercial tax filing data and business registrations...');
+                }
             }
             
             try {
@@ -703,40 +1360,168 @@
                 const neighborhood = document.getElementById('neighborhood').value;
                 const district = document.getElementById('district').value;
                 const statusFilter = document.getElementById('statusFilter').value;
+                const businessSearch = document.getElementById('businessSearch').value;
+                
+                // Check if search should override all filters (3+ characters)
+                const isSearchOverride = businessSearch && businessSearch.trim().length >= 3;
+                
+                // Debug logging
+                console.log('DEBUG: Filter values:', {
+                    industry_types: checkedIndustryTypes,
+                    license_types: checkedLicenseTypes,
+                    business_corridor: businessCorridor,
+                    neighborhood: neighborhood,
+                    district: district,
+                    status_filter: statusFilter,
+                    business_search: businessSearch
+                });
                 const corridorOnly = document.getElementById('corridorOnly').checked;
                 const licensedOnly = document.getElementById('licensedOnly').checked;
                 const streetLevelOnly = document.getElementById('streetLevelOnly').checked;
                 
-                // Add multiple industry types
-                checkedIndustryTypes.forEach(type => {
-                    params.append('industry_type', type);
-                });
+                // If search override is active, use fast search endpoint
+                if (isSearchOverride) {
+                    console.log('Search override active - using fast search endpoint');
+                    // Use the fast search endpoint for business searches
+                    updateLoadingMessage('Searching Businesses...', `Searching for "${businessSearch}" across all business data...`);
+                    
+                    // Check cache for search results
+                    const searchCacheKey = `search_${businessSearch}`;
+                    if (queryCache.has(searchCacheKey)) {
+                        console.log('Using cached search data:', searchCacheKey);
+                        updateLoadingMessage('Loading search results...', 'Using cached search data...');
+                        const cachedResult = queryCache.get(searchCacheKey);
+                        currentData = cachedResult.data;
+                        updateMap(cachedResult.data);
+                        updateStats(cachedResult.summary, {});
+                        return;
+                    }
+                    
+                    // Use fast search endpoint
+                    const searchResponse = await fetch(`/api/vacancy/search?business_search=${encodeURIComponent(businessSearch)}&limit=100`);
+                    
+                    if (!searchResponse.ok) {
+                        if (searchResponse.status === 504) {
+                            updateLoadingMessage('Search Timeout', 'Search is taking longer than expected. Try a more specific search term.');
+                            throw new Error('Search query timed out. Please try a more specific search term.');
+                        } else {
+                            updateLoadingMessage('Search Error', `Server returned ${searchResponse.status}`);
+                            throw new Error(`Search error: ${searchResponse.status}`);
+                        }
+                    }
+                    
+                    updateLoadingMessage('Processing search results...', 'Processing search results...');
+                    const searchResult = await searchResponse.json();
+                    
+                    if (searchResult.status === 'success') {
+                        console.log('Search successful, found', searchResult.data.length, 'businesses');
+                        
+                        // Cache the search results
+                        queryCache.set(searchCacheKey, searchResult);
+                        
+                        currentData = searchResult.data;
+                        updateMap(searchResult.data);
+                        updateStats(searchResult.summary, {});
+                        
+                        // Update loading state
+                        filterButton.disabled = false;
+                        filterText.style.display = 'inline-block';
+                        filterSpinner.style.display = 'none';
+                        if (mapLoadingIndicator) {
+                            mapLoadingIndicator.style.display = 'none';
+                        }
+                        
+                        return;
+                    } else {
+                        throw new Error('Search failed: ' + (searchResult.message || 'Unknown error'));
+                    }
+                } else {
+                    // Normal filter mode - add all filters
+                    // Add multiple industry types
+                    checkedIndustryTypes.forEach(type => {
+                        params.append('industry_type', type);
+                    });
+                    
+                    // Add multiple license types
+                    checkedLicenseTypes.forEach(type => {
+                        params.append('license_type', type);
+                    });
+                    
+                    if (businessCorridor) params.append('business_corridor', businessCorridor);
+                    if (neighborhood) params.append('neighborhood', neighborhood);
+                    if (district) params.append('district', district);
+                    if (statusFilter) params.append('status_filter', statusFilter);
+                    if (businessSearch) params.append('business_search', businessSearch);
+                    if (corridorOnly) params.append('corridor_only', 'true');
+                    if (licensedOnly) params.append('licensed_only', 'true');
+                    if (streetLevelOnly) params.append('street_level_only', 'true');
+                    
+                    // Commercial tax filing filter
+                    const commercialTaxFilingOnly = document.getElementById('commercialTaxFilingOnly').checked;
+                    if (commercialTaxFilingOnly) params.append('commercial_tax_filing_only', 'true');
+                }
                 
-                // Add multiple license types
-                checkedLicenseTypes.forEach(type => {
-                    params.append('license_type', type);
-                });
-                if (businessCorridor) params.append('business_corridor', businessCorridor);
-                if (neighborhood) params.append('neighborhood', neighborhood);
-                if (district) params.append('district', district);
-                if (statusFilter) params.append('status_filter', statusFilter);
-                if (corridorOnly) params.append('corridor_only', 'true');
-                if (licensedOnly) params.append('licensed_only', 'true');
-                if (streetLevelOnly) params.append('street_level_only', 'true');
+                // Check cache first
+                const cacheKey = params.toString();
+                if (queryCache.has(cacheKey)) {
+                    console.log('Using cached data for filters:', cacheKey);
+                    updateLoadingMessage('Loading vacancy data...', 'Using cached data...');
+                    const cachedResult = queryCache.get(cacheKey);
+                    currentData = cachedResult.data;
+                    updateMap(cachedResult.data);
+                    updateStats(cachedResult.summary, cachedResult.district_stats);
+                    return;
+                }
                 
-                const response = await fetch(`/api/vacancy-analysis/data?${params.toString()}`);
+                updateLoadingMessage('Loading vacancy data...', 'Querying cached business data (fast)...');
+                const response = await fetch(`/api/vacancy/cached?${params.toString()}`);
+                
+                if (!response.ok) {
+                    if (response.status === 504) {
+                        updateLoadingMessage('Database Timeout', 'Query is taking longer than expected. Try with more specific filters.');
+                        throw new Error('Database query timed out. Please try with more specific filters to reduce the dataset size.');
+                    } else {
+                        updateLoadingMessage('Database Error', `Server returned ${response.status}`);
+                        throw new Error(`Server error: ${response.status}`);
+                    }
+                }
+                
+                updateLoadingMessage('Processing data...', 'Processing database results...');
                 const result = await response.json();
                 
                 if (result.status === 'success') {
                     console.log('Data loaded successfully, calling updateMap with:', result.data ? result.data.length : 'null', 'items');
+                    
+                    updateLoadingMessage('Updating map...', `Processing ${result.data ? result.data.length : 0} buildings...`);
+                    
+                    // Cache the successful result
+                    queryCache.set(cacheKey, result);
+                    
+                    // Limit cache size to prevent memory issues
+                    if (queryCache.size > 10) {
+                        const firstKey = queryCache.keys().next().value;
+                        queryCache.delete(firstKey);
+                    }
+                    
                     currentData = result.data;
                     updateMap(result.data);
                     updateStats(result.summary, result.district_stats);
+                    
+                    updateLoadingMessage('Finalizing...', 'Map update complete');
                 } else {
                     console.error('Error loading data:', result.message);
+                    updateLoadingMessage('Error loading data', result.message || 'Unknown error');
                 }
             } catch (error) {
                 console.error('Error applying filters:', error);
+                updateLoadingMessage('Error', error.message || 'Unknown error occurred');
+                
+                // Show helpful message for timeout errors
+                if (error.message && error.message.includes('timeout')) {
+                    setTimeout(() => {
+                        updateLoadingMessage('Try more specific filters', 'Select a district or corridor to reduce data size');
+                    }, 2000);
+                }
             } finally {
                 // Hide loading state
                 filterButton.disabled = false;
@@ -750,14 +1535,41 @@
             }
         }
         
+        // Ensure map stays centered on San Francisco
+        function ensureMapCenteredOnSF() {
+            if (!vacancyMap) return;
+            
+            const sfCenter = [-122.4194, 37.7749]; // San Francisco coordinates
+            const currentCenter = vacancyMap.getCenter();
+            const currentZoom = vacancyMap.getZoom();
+            
+            // Check if map has drifted too far from SF or zoomed out too much
+            const distance = Math.sqrt(
+                Math.pow(currentCenter.lng - sfCenter[0], 2) + 
+                Math.pow(currentCenter.lat - sfCenter[1], 2)
+            );
+            
+            // If map is more than 0.1 degrees away from SF center or zoomed out too much, reset it
+            if (distance > 0.1 || currentZoom < 10) {
+                console.log('Resetting map to San Francisco center and appropriate zoom');
+                vacancyMap.setCenter(sfCenter);
+                vacancyMap.setZoom(12);
+            }
+        }
+        
         // Update map with new data
         function updateMap(data) {
             if (!vacancyMap) return;
             
+            updateLoadingMessage('Rendering map...', `Adding ${data ? data.length : 0} data points...`);
+            
             // Hide map loading indicator when data is loaded
             const mapLoadingIndicator = document.getElementById('mapLoadingIndicator');
             if (mapLoadingIndicator) {
-                mapLoadingIndicator.style.display = 'none';
+                // Delay hiding to show the final message briefly
+                setTimeout(() => {
+                    mapLoadingIndicator.style.display = 'none';
+                }, 1000);
             }
             
             let layerClickDetected = false;
@@ -777,50 +1589,117 @@
                 vacancyMap.removeSource('points');
             }
             
-            // Prepare data for Mapbox heatmap
-            const validData = data.filter(item => item.location && item.location.coordinates && 
-                               item.location.coordinates[0] !== 0 && item.location.coordinates[1] !== 0);
+            // Check if street-level only filter is active
+            const streetLevelOnly = document.getElementById('streetLevelOnly').checked;
             
-            // Convert backend building data directly to GeoJSON features
-            const features = validData.map(buildingData => {
-                console.log('Processing building data:', buildingData);
+            // Prepare data for Mapbox - filter for valid coordinates
+            let validData = data.filter(item => {
+                // Individual unit records have location in GeoJSON format
+                const location = item.location;
+                if (!location || !location.coordinates || !Array.isArray(location.coordinates) || location.coordinates.length < 2) {
+                    return false;
+                }
+                const [lon, lat] = location.coordinates; // GeoJSON format: [longitude, latitude]
+                return lat && lon && lat !== 0 && lon !== 0 && 
+                       lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+            });
+            
+            console.log('Valid coordinates:', validData.length, 'of', data.length, 'items');
+            
+            // If street-level only filter is active, also filter out buildings with no street-level addresses
+            if (streetLevelOnly) {
+                console.log('Street-level filter is active, filtering data...');
+                console.log('Before street-level filter:', validData.length, 'items');
+                validData = validData.filter(item => {
+                    // Individual unit records have is_street_level field directly
+                    const isStreetLevel = item.is_street_level;
+                    // Filter out upper-floor units when street-level only is active
+                    return isStreetLevel;
+                });
+                console.log('After street-level filter:', validData.length, 'items');
+            }
+            
+            // Convert backend individual unit data directly to GeoJSON features
+            const features = validData.map(unitData => {
+                
+                // Each record is now an individual unit, not a building aggregate
+                // Extract individual unit information
+                const isStreetLevel = unitData.is_street_level;
+                const unitStatus = unitData.status;
+                const isOpen = unitStatus === 'Open';
+                
+                // For individual units, counts are simple
+                let streetLevelOpen = (isStreetLevel && isOpen) ? 1 : 0;
+                let streetLevelClosed = (isStreetLevel && !isOpen) ? 1 : 0;
+                let streetLevelTotal = isStreetLevel ? 1 : 0;
+                
+                // Calculate upper floor counts for individual units
+                let upperFloorOpen = (!isStreetLevel && isOpen) ? 1 : 0;
+                let upperFloorClosed = (!isStreetLevel && !isOpen) ? 1 : 0;
+                let upperFloorTotal = !isStreetLevel ? 1 : 0;
+                
+                // Determine which counts to use for coloring based on filter  
+                const displayOpenCount = streetLevelOnly ? streetLevelOpen : (streetLevelOpen + upperFloorOpen);
+                const displayClosedCount = streetLevelOnly ? streetLevelClosed : (streetLevelClosed + upperFloorClosed);
+                const displayTotalCount = streetLevelOnly ? streetLevelTotal : (streetLevelTotal + upperFloorTotal);
+                
+                const coordinates = unitData.location.coordinates; // Already in GeoJSON format [lon, lat]
                 
                 return {
                     type: 'Feature',
                     geometry: {
                         type: 'Point',
-                        coordinates: buildingData.location.coordinates
+                        coordinates: coordinates
                     },
                     properties: {
-                        // Building-level properties from backend
-                        address: buildingData.location,
-                        business_name: buildingData.dba_name,
-                        industry_type: buildingData.naic_code_description,
-                        license_type: buildingData.lic_code_description,
-                        corridor: buildingData.business_corridor,
-                        district: buildingData.supervisor_district,
-                        status: buildingData.status,
-                        open_date: buildingData.most_recent_open_date,
-                        close_date: buildingData.most_recent_close_date,
-                        full_business_address: buildingData.full_business_address,
+                        // Individual unit properties from backend
+                        address: unitData.full_business_address,
+                        business_name: unitData.dba_name,
+                        industry_type: unitData.naic_code_description,
+                        license_type: unitData.lic_code_description,
+                        corridor: unitData.business_corridor,
+                        district: unitData.supervisor_district,
+                        status: unitData.status,
+                        open_date: unitData.dba_start_date,
+                        close_date: unitData.dba_end_date,
+                        full_business_address: unitData.full_business_address,
+                        certificate_number: unitData.certificate_number,
                         
-                        // Building-specific properties
-                        building_key: buildingData.building_key,
-                        total_addresses: buildingData.total_addresses,
-                        open_addresses: buildingData.open_addresses,
-                        closed_addresses: buildingData.closed_addresses,
-                        street_level_addresses: buildingData.street_level_addresses,
-                        upper_floor_addresses: buildingData.upper_floor_addresses,
-                        total_businesses: buildingData.total_businesses,
-                        addresses_data: buildingData.addresses_data,  // This is the key missing property!
+                        // Unit-specific properties (each unit is now a single point)
+                        total_addresses: displayTotalCount,  // Always 1 for individual units
+                        open_addresses: displayOpenCount,    // 1 if open, 0 if closed
+                        closed_addresses: displayClosedCount, // 1 if closed, 0 if open
+                        street_level_addresses: streetLevelTotal, // 1 if street level, 0 if upper
+                        upper_floor_addresses: upperFloorTotal,   // 1 if upper floor, 0 if street
+                        total_businesses: 1,  // Each unit is one business
+                        addresses_data: [unitData],  // Individual unit as single-item array
                         
-                        // For map display compatibility
-                        business_count: buildingData.business_count,
-                        open_count: buildingData.open_count,
-                        closed_count: buildingData.closed_count,
+                        // Street-level specific counts
+                        street_level_open: streetLevelOpen,
+                        street_level_closed: streetLevelClosed,
+                        street_level_total: streetLevelTotal,
                         
-                        // Heatmap weight - higher for more addresses and closed status
-                        weight: buildingData.total_addresses * (buildingData.closed_addresses > buildingData.open_addresses ? 2 : 1)
+                        // Upper-floor specific counts
+                        upper_floor_open: upperFloorOpen,
+                        upper_floor_closed: upperFloorClosed,
+                        upper_floor_total: upperFloorTotal,
+                        
+                        // For map display compatibility - use building data directly
+                        business_count: unitData.total_units || unitData.business_count || 1,
+                        open_count: unitData.open_units || (isOpen ? 1 : 0),
+                        closed_count: unitData.closed_units || (isOpen ? 0 : 1),
+                        
+                        // Building-level coloring  
+                        building_color: unitData.building_color || (isOpen ? 'green' : 'red'),
+                        total_units: unitData.total_units || 1,
+                        
+                        // Individual unit tax filing information
+                        has_commercial_tax_filing: unitData.has_commercial_tax_filing,
+                        vacancy_status: unitData.vacancy_status,
+                        tax_filing_year: unitData.tax_filing_year,
+                        
+                        // Heatmap weight - for buildings, weight by unit count and closure
+                        weight: (unitData.total_units || 1) * (unitData.closed_units > unitData.open_units ? 2 : 1)
                     }
                 };
             });
@@ -860,22 +1739,10 @@
             console.log('Sample grouped feature:', geojsonData.features[0]);
             
             
-            // Auto-zoom to fit all data points
-            if (geojsonData.features.length > 0) {
-                const bounds = new mapboxgl.LngLatBounds();
-                geojsonData.features.forEach(feature => {
-                    if (feature.geometry && feature.geometry.coordinates) {
-                        bounds.extend(feature.geometry.coordinates);
-                    }
-                });
-                
-                // Fit the map to the bounds with some padding
-                vacancyMap.fitBounds(bounds, {
-                    padding: 50,
-                    maxZoom: 15,
-                    minZoom: 12
-                });
-            }
+            // Keep map at fixed zoom and center (no auto-zoom)
+            // Map stays centered on San Francisco regardless of data bounds
+            // This prevents the map from jumping around when different data is loaded
+            ensureMapCenteredOnSF();
             
             console.log('About to check condition: useHeatmap && !forcePoints');
             console.log('useHeatmap:', useHeatmap);
@@ -1110,11 +1977,11 @@
                         ],
                         'circle-color': [
                             'case',
-                            ['>', ['get', 'closed_count'], ['get', 'open_count']],
-                            '#ff0000',  // More closed than open - red
-                            ['>', ['get', 'open_count'], ['get', 'closed_count']],
-                            '#00ff00',  // More open than closed - green
-                            '#ffa500'   // Equal or mixed - orange
+                            ['==', ['get', 'building_color'], 'red'],
+                            '#ff6b6b',  // Red for majority closed buildings
+                            ['==', ['get', 'building_color'], 'green'], 
+                            '#51cf66',  // Green for majority open buildings
+                            '#868e96'   // Gray for 50/50 mixed buildings
                         ],
                         'circle-stroke-width': 0,  // Remove stroke/outline
                         'circle-opacity': 0.8
@@ -1122,6 +1989,12 @@
                 });
                 
                 console.log('Successfully added points-circles layer with', geojsonData.features.length, 'features');
+                
+                // Update point colors for current theme with a small delay to ensure layer is ready
+                console.log('Calling updatePointColors after layer creation...');
+                setTimeout(() => {
+                    updatePointColors();
+                }, 100);
                 
                 } catch (error) {
                     console.error('ERROR adding points-circles layer:', error);
@@ -1309,11 +2182,14 @@
                     
                     // Extract address from location data and business properties
                     const getAddressFromLocation = (properties) => {
-                        // Try full business address first
+                        // Try canonicalized address first, then full business address
+                        if (properties.distinct_address) {
+                            return properties.distinct_address;
+                        }
                         if (properties.full_business_address) {
                             return properties.full_business_address;
                         }
-                        
+
                         // Fall back to coordinate-based approximation
                         try {
                             let locationData = properties.address;
@@ -1357,10 +2233,10 @@
                         console.log('generatePopupContent called with properties:', properties);
                         
                         const buildingAddress = getAddressFromLocation(properties);
-                        const totalAddresses = properties.total_addresses || properties.business_count || 1;
-                        const openAddresses = properties.open_addresses || properties.open_count || 0;
-                        const closedAddresses = properties.closed_addresses || properties.closed_count || 0;
-                        const totalBusinesses = properties.total_businesses || 0;
+                        const totalAddresses = properties.total_streetfront_addresses || properties.total_addresses || 1;
+                        const openAddresses = properties.streetfront_open_count || properties.open_addresses || 0;
+                        const closedAddresses = properties.streetfront_closed_count || properties.closed_addresses || 0;
+                        const totalBusinesses = properties.business_count || 0;
                         
                         console.log('Total addresses:', totalAddresses);
                         console.log('Building address:', buildingAddress);
@@ -1368,7 +2244,7 @@
                         // Start with building location as primary header
                         let content = `
                             <div class="popup-content">
-                                <h5 class="fw-bold mb-2 text-primary"><i class="fas fa-building"></i> ${buildingAddress}</h5>
+                                <h5 class="fw-bold mb-2" style="color: #ad35fa;"><i class="fas fa-building"></i> ${buildingAddress}</h5>
                         `;
                         
         // Calculate storefront-specific statistics from addresses data
@@ -1407,7 +2283,6 @@
                     <div class="d-flex justify-content-between align-items-center small">
                         <span><i class="fas fa-home"></i> ${totalAddresses} Address${totalAddresses > 1 ? 'es' : ''}</span>
                         <span><i class="fas fa-store"></i> ${totalBusinesses} Business${totalBusinesses > 1 ? 'es' : ''}</span>
-                        <span><i class="fas fa-map-signs"></i> District ${properties.district || 'N/A'}</span>
                     </div>
                     <div class="d-flex justify-content-between small mt-1">
                         <span class="text-success"><i class="fas fa-store-alt"></i> ${openStorefronts} Open Storefronts</span>
@@ -1478,113 +2353,314 @@
                             return content;
                         }
                         
-                        // Add scrollable address list
-                        content += `<div class="addresses-list" style="max-height: 300px; overflow-y: auto;">`;
+                        // Add compact address list
+                        content += `<div class="addresses-list" style="max-height: 400px; overflow-y: auto;">`;
                         
-                        addressesData.forEach((addressData, addressIndex) => {
+                        // Split into street-level and upper-floor lists
+                        const streetList = (addressesData || []).filter(a => a.is_street_level);
+                        const upperList = (addressesData || []).filter(a => !a.is_street_level);
+
+                        // Sort within each list: Open first, then by canonicalized address
+                        const sortWithin = (arr) => arr.sort((a, b) => {
+                            if (a.status !== b.status) return a.status === 'Open' ? -1 : 1;
+                            return (a.distinct_address || a.address || '').localeCompare(b.distinct_address || b.address || '');
+                        });
+                        sortWithin(streetList);
+                        sortWithin(upperList);
+
+                        let streetLevelCount = streetList.length;
+                        let upperFloorCount = upperList.length;
+
+                        // Render Street Level header (if any)
+                        if (streetLevelCount > 0) {
+                            content += `
+                                <div class="mb-2">
+                                    <small class="fw-bold" style="color:#000;">Street Level Units (${streetLevelCount})</small>
+                                </div>`;
+                        }
+
+                        // Render Street Level items
+                        streetList.forEach((addressData, idx) => {
                             const isOpen = addressData.status === 'Open';
                             const statusClass = isOpen ? 'text-success' : 'text-danger';
                             const statusIcon = isOpen ? '●' : '●';
-                            const isStreetLevel = addressData.is_street_level;
-                            const levelClass = isStreetLevel ? 'text-info' : 'text-secondary';
-                            const levelIcon = isStreetLevel ? 'fas fa-store-alt' : 'fas fa-building';
-                            const levelText = isStreetLevel ? 'Street Level' : 'Upper Floor';
+                            const isStreetLevel = true;
+                            const levelClass = 'text-info';
+                            const levelText = 'Street Level';
+                            const addressIndex = idx; // for template continuity
+                            
+                            // Track counts and add divider between street level and upper floor
+                            // (No divider here; will render upper section after)
+                            
+                            // Get the most recent business and filing date
+                            let lastBusinessName = 'No Business';
+                            let lastFilingDate = 'N/A';
+                            
+                            if (addressData.businesses && Array.isArray(addressData.businesses) && addressData.businesses.length > 0) {
+                                // Sort businesses by most recent activity
+                                const sortedBusinesses = [...addressData.businesses].sort((a, b) => {
+                                    const parseDate = (dateStr) => {
+                                        if (!dateStr) return null;
+                                        try {
+                                            return new Date(dateStr.split('T')[0]);
+                                        } catch {
+                                            return null;
+                                        }
+                                    };
+                                    
+                                    const aDates = [
+                                        parseDate(a.dba_start_date),
+                                        parseDate(a.location_start_date),
+                                        parseDate(a.dba_end_date),
+                                        parseDate(a.location_end_date)
+                                    ].filter(d => d);
+                                    
+                                    const bDates = [
+                                        parseDate(b.dba_start_date),
+                                        parseDate(b.location_start_date),
+                                        parseDate(b.dba_end_date),
+                                        parseDate(b.location_end_date)
+                                    ].filter(d => d);
+                                    
+                                    const aLatest = aDates.length > 0 ? Math.max(...aDates.map(d => d.getTime())) : 0;
+                                    const bLatest = bDates.length > 0 ? Math.max(...bDates.map(d => d.getTime())) : 0;
+                                    
+                                    return bLatest - aLatest;
+                                });
+                                
+                                const mostRecentBusiness = sortedBusinesses[0];
+                                lastBusinessName = mostRecentBusiness.dba_name || 'Unknown Business';
+                                
+                                // Get the most recent filing date - prioritize end dates for closed businesses
+                                const parseDate = (dateStr) => {
+                                    if (!dateStr) return null;
+                                    try {
+                                        return new Date(dateStr.split('T')[0]);
+                                    } catch {
+                                        return null;
+                                    }
+                                };
+                                
+                                // For closed businesses, prioritize end dates; for open businesses, prioritize start dates
+                                const businessStatus = calculateBusinessStatus(mostRecentBusiness);
+                                let relevantDates = [];
+                                
+                                if (businessStatus === 'Closed') {
+                                    // For closed businesses, show the closure date
+                                    relevantDates = [
+                                        parseDate(mostRecentBusiness.dba_end_date),
+                                        parseDate(mostRecentBusiness.location_end_date),
+                                        parseDate(addressData.most_recent_close_date)
+                                    ].filter(d => d);
+                                } else {
+                                    // For open businesses, show the most recent activity (start or end dates)
+                                    relevantDates = [
+                                        parseDate(mostRecentBusiness.dba_start_date),
+                                        parseDate(mostRecentBusiness.location_start_date),
+                                        parseDate(mostRecentBusiness.dba_end_date),
+                                        parseDate(mostRecentBusiness.location_end_date),
+                                        parseDate(addressData.most_recent_open_date)
+                                    ].filter(d => d);
+                                }
+                                
+                                if (relevantDates.length > 0) {
+                                    const mostRecentDate = new Date(Math.max(...relevantDates.map(d => d.getTime())));
+                                    lastFilingDate = mostRecentDate.toLocaleDateString();
+                                }
+                            }
+                            
+                            // Count total businesses for expand button
+                            const totalBusinesses = addressData.business_count || (addressData.businesses ? addressData.businesses.length : 0);
+                            const hasMultipleBusinesses = totalBusinesses > 1;
                             
                             content += `
-                                <div class="address-item ${addressIndex < addressesData.length - 1 ? 'border-bottom' : ''} pb-3 mb-3">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <span class="fw-bold text-secondary"><i class="fas fa-map-marker-alt"></i> ${addressData.address}</span>
-                                        <span class="${statusClass} fw-bold">${statusIcon} ${addressData.status}</span>
+                                <div class="address-item ${addressIndex < streetList.length - 1 ? 'border-bottom' : ''} pb-2 mb-2">
+                                    <!-- Compact 2-line display -->
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="fw-bold text-secondary small"><i class="fas fa-map-marker-alt"></i> ${addressData.distinct_address || addressData.address}</span>
+                                        <span class="${statusClass} fw-bold small">${statusIcon} ${addressData.status}</span>
                                     </div>
-                                    <div class="d-flex justify-content-between small text-muted mb-2">
-                                        <span><i class="fas fa-store"></i> ${addressData.business_count} Business${addressData.business_count > 1 ? 'es' : ''}</span>
-                                        <span class="${levelClass}"><i class="${levelIcon}"></i> ${levelText}</span>
+                                    <div class="d-flex justify-content-between align-items-center small text-muted">
+                                        <span><i class="fas fa-store"></i> ${lastBusinessName}</span>
+                                        <span><i class="fas fa-calendar"></i> ${lastFilingDate}</span>
                                     </div>
                             `;
                             
-                            // Show businesses at this address
-                            if (addressData.businesses && Array.isArray(addressData.businesses)) {
-                                content += `<div class="businesses-at-address ms-3">`;
+                            // Add expandable section for detailed business information
+                            if (hasMultipleBusinesses) {
+                                const expandId = `expand-${addressIndex}`;
+                                content += `
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#${expandId}" aria-expanded="false" aria-controls="${expandId}" onclick="toggleChevron(this)">
+                                            <i class="fas fa-chevron-down"></i> Show ${totalBusinesses} Business${totalBusinesses > 1 ? 'es' : ''}
+                                        </button>
+                                        <div class="collapse mt-2" id="${expandId}">
+                                            <div class="businesses-detail ms-3 small">
+                                `;
                                 
-                                // Sort businesses: open first, then closed
-                                const sortedBusinesses = [...addressData.businesses].sort((a, b) => {
-                                    const aStatus = calculateBusinessStatus(a);
-                                    const bStatus = calculateBusinessStatus(b);
+                                // Show detailed business information
+                                if (addressData.businesses && Array.isArray(addressData.businesses)) {
+                                    // Sort businesses: open first, then closed
+                                    const sortedBusinesses = [...addressData.businesses].sort((a, b) => {
+                                        const aStatus = calculateBusinessStatus(a);
+                                        const bStatus = calculateBusinessStatus(b);
+                                        
+                                        if (aStatus === 'Open' && bStatus === 'Closed') return -1;
+                                        if (aStatus === 'Closed' && bStatus === 'Open') return 1;
+                                        return 0;
+                                    });
                                     
-                                    if (aStatus === 'Open' && bStatus === 'Closed') return -1;
-                                    if (aStatus === 'Closed' && bStatus === 'Open') return 1;
-                                    return 0;
-                                });
-                                
-                                sortedBusinesses.forEach((business, businessIndex) => {
-                                    const businessStatus = calculateBusinessStatus(business);
-                                    const businessOpen = businessStatus === 'Open';
-                                    const businessStatusClass = businessOpen ? 'text-success' : 'text-danger';
-                                    const businessStatusIcon = businessOpen ? '●' : '●';
-                                    
-                                    // Format closure date if business is closed
-                                    let statusDisplay = businessStatus;
-                                    if (!businessOpen) {
-                                        const parseDate = (dateStr) => {
-                                            if (!dateStr) return null;
-                                            try {
-                                                return new Date(dateStr.split('T')[0]);
-                                            } catch {
-                                                return null;
-                                            }
-                                        };
+                                    sortedBusinesses.forEach((business, businessIndex) => {
+                                        const businessStatus = calculateBusinessStatus(business);
+                                        const businessOpen = businessStatus === 'Open';
+                                        const businessStatusClass = businessOpen ? 'text-success' : 'text-danger';
+                                        const businessStatusIcon = businessOpen ? '●' : '●';
                                         
-                                        // Get closure dates from business record
-                                        const dbaEnd = parseDate(business.dba_end_date);
-                                        const locationEnd = parseDate(business.location_end_date);
-                                        const closeDates = [dbaEnd, locationEnd].filter(d => d);
-                                        
-                                        // Also try to get closure date from address-level data
-                                        const addressCloseDate = parseDate(addressData.most_recent_close_date);
-                                        if (addressCloseDate) {
-                                            closeDates.push(addressCloseDate);
-                                        }
-                                        
-                                        if (closeDates.length > 0) {
-                                            const mostRecentClose = new Date(Math.max(...closeDates.map(d => d.getTime())));
-                                            statusDisplay = mostRecentClose.toLocaleDateString();
+                                        // Format closure date if business is closed
+                                        let statusDisplay = businessStatus;
+                                        if (!businessOpen) {
+                                            const parseDate = (dateStr) => {
+                                                if (!dateStr) return null;
+                                                try {
+                                                    return new Date(dateStr.split('T')[0]);
+                                                } catch {
+                                                    return null;
+                                                }
+                                            };
                                             
-                                            // Debug logging for date verification
-                                            console.log(`Business: ${business.dba_name}, DBA End: ${business.dba_end_date}, Location End: ${business.location_end_date}, Showing: ${statusDisplay}`);
-                                        } else {
-                                            statusDisplay = 'Closed';
+                                            // Get closure dates from business record
+                                            const dbaEnd = parseDate(business.dba_end_date);
+                                            const locationEnd = parseDate(business.location_end_date);
+                                            const closeDates = [dbaEnd, locationEnd].filter(d => d);
+                                            
+                                            // Also try to get closure date from address-level data
+                                            const addressCloseDate = parseDate(addressData.most_recent_close_date);
+                                            if (addressCloseDate) {
+                                                closeDates.push(addressCloseDate);
+                                            }
+                                            
+                                            if (closeDates.length > 0) {
+                                                const mostRecentClose = new Date(Math.max(...closeDates.map(d => d.getTime())));
+                                                statusDisplay = mostRecentClose.toLocaleDateString();
+                                            } else {
+                                                statusDisplay = 'Closed';
+                                            }
                                         }
-                                    }
-                                    
-                                    // Build category display (only show non-N/A categories)
-                                    let categoryInfo = '';
-                                    const industry = business.naic_code_description;
-                                    const license = business.lic_code_description;
-                                    
-                                    if (industry && industry !== 'N/A' && industry.trim() !== '') {
-                                        categoryInfo += `<i class="fas fa-industry"></i> ${industry}`;
-                                    }
-                                    
-                                    if (license && license !== 'N/A' && license.trim() !== '') {
-                                        if (categoryInfo) categoryInfo += ' | ';
-                                        categoryInfo += `<i class="fas fa-certificate"></i> ${license}`;
-                                    }
-                                    
-                                    content += `
-                                        <div class="business-item small ${businessIndex < sortedBusinesses.length - 1 ? 'border-bottom border-light' : ''} pb-1 mb-1">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="fw-bold">${business.dba_name || 'Unknown Business'}</span>
-                                                <span class="${businessStatusClass} small">${businessStatusIcon} ${statusDisplay}</span>
+                                        
+                                        // Build category display (only show non-N/A categories)
+                                        let categoryInfo = '';
+                                        const industry = business.naic_code_description;
+                                        const license = business.lic_code_description;
+                                        
+                                        if (industry && industry !== 'N/A' && industry.trim() !== '') {
+                                            categoryInfo += `<i class="fas fa-industry"></i> ${industry}`;
+                                        }
+                                        
+                                        if (license && license !== 'N/A' && license.trim() !== '') {
+                                            if (categoryInfo) categoryInfo += ' | ';
+                                            categoryInfo += `<i class="fas fa-certificate"></i> ${license}`;
+                                        }
+                                        
+                                        content += `
+                                            <div class="business-item ${businessIndex < sortedBusinesses.length - 1 ? 'border-bottom border-light' : ''} pb-1 mb-1">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-bold">${business.dba_name || 'Unknown Business'}</span>
+                                                    <span class="${businessStatusClass}">${businessStatusIcon} ${statusDisplay}</span>
+                                                </div>
+                                                ${categoryInfo ? `<div class="text-muted" style="font-size: 0.7rem;">${categoryInfo}</div>` : ''}
                                             </div>
-                                            ${categoryInfo ? `<div class="text-muted" style="font-size: 0.75rem;">${categoryInfo}</div>` : ''}
-                                        </div>
-                                    `;
-                                });
+                                        `;
+                                    });
+                                }
                                 
-                                content += `</div>`; // Close businesses-at-address
+                                content += `
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
                             }
                             
                             content += `</div>`; // Close address-item
+                        });
+                        
+                        // Render Upper Floor divider and header (if any)
+                        if (upperFloorCount > 0) {
+                            content += `
+                                <div class="border-top border-secondary my-2 pt-2">
+                                    <small class="text-muted fw-bold">Upper Floor Units (${upperFloorCount})</small>
+                                </div>`;
+                        }
+
+                        // Render Upper Floor items (greyed)
+                        upperList.forEach((addressData, idx) => {
+                            const isOpen = addressData.status === 'Open';
+                            const statusClass = isOpen ? 'text-success' : 'text-danger';
+                            const statusIcon = isOpen ? '●' : '●';
+                            const addressIndex = idx; // for template continuity
+
+                            let lastBusinessName = 'No Business';
+                            let lastFilingDate = 'N/A';
+                            if (addressData.businesses && Array.isArray(addressData.businesses) && addressData.businesses.length > 0) {
+                                const sortedBusinesses = [...addressData.businesses].sort((a, b) => {
+                                    const parseDate = (dateStr) => {
+                                        if (!dateStr) return null;
+                                        try { return new Date(dateStr.split('T')[0]); } catch { return null; }
+                                    };
+                                    const aDates = [parseDate(a.dba_start_date), parseDate(a.location_start_date), parseDate(a.dba_end_date), parseDate(a.location_end_date)].filter(Boolean);
+                                    const bDates = [parseDate(b.dba_start_date), parseDate(b.location_start_date), parseDate(b.dba_end_date), parseDate(b.location_end_date)].filter(Boolean);
+                                    const aLatest = aDates.length ? Math.max(...aDates.map(d => d.getTime())) : 0;
+                                    const bLatest = bDates.length ? Math.max(...bDates.map(d => d.getTime())) : 0;
+                                    return bLatest - aLatest;
+                                });
+                                const mostRecentBusiness = sortedBusinesses[0];
+                                lastBusinessName = mostRecentBusiness.dba_name || 'Unknown Business';
+                                const parseDate = (dateStr) => { if (!dateStr) return null; try { return new Date(dateStr.split('T')[0]); } catch { return null; } };
+                                let relevantDates = [];
+                                if (addressData.status === 'Closed') {
+                                    relevantDates = [parseDate(mostRecentBusiness.dba_end_date), parseDate(mostRecentBusiness.location_end_date)].filter(Boolean);
+                                } else {
+                                    relevantDates = [parseDate(mostRecentBusiness.dba_start_date), parseDate(mostRecentBusiness.location_start_date), parseDate(mostRecentBusiness.dba_end_date), parseDate(mostRecentBusiness.location_end_date)].filter(Boolean);
+                                }
+                                if (relevantDates.length > 0) {
+                                    const mostRecentDate = new Date(Math.max(...relevantDates.map(d => d.getTime())));
+                                    lastFilingDate = mostRecentDate.toLocaleDateString();
+                                }
+                            }
+
+                            content += `
+                                <div class="address-item upper-floor ${addressIndex < upperList.length - 1 ? 'border-bottom' : ''} pb-2 mb-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="fw-bold text-secondary small"><i class="fas fa-map-marker-alt"></i> ${addressData.distinct_address || addressData.address}</span>
+                                        <span class="${statusClass} fw-bold small">${statusIcon} ${addressData.status}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center small text-muted">
+                                        <span><i class="fas fa-store"></i> ${lastBusinessName}</span>
+                                        <span><i class="fas fa-calendar"></i> ${lastFilingDate}</span>
+                                    </div>`;
+
+                            const totalBusinesses = addressData.business_count || (addressData.businesses ? addressData.businesses.length : 0);
+                            const hasMultipleBusinesses = totalBusinesses > 1;
+                            if (hasMultipleBusinesses) {
+                                const expandId = `expand-upper-${addressIndex}`;
+                                content += `
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#${expandId}" aria-expanded="false" aria-controls="${expandId}" onclick="toggleChevron(this)">
+                                            <i class="fas fa-chevron-down"></i> Show ${totalBusinesses} Business${totalBusinesses > 1 ? 'es' : ''}
+                                        </button>
+                                        <div class="collapse mt-2" id="${expandId}">
+                                            <div class="businesses-detail ms-3 small">
+                                `;
+                                (addressData.businesses || []).forEach((biz) => {
+                                    const nm = biz.dba_name || 'Unknown Business';
+                                    const s = biz.status || '';
+                                    const sd = biz.dba_start_date || biz.location_start_date || '';
+                                    const ed = biz.dba_end_date || biz.location_end_date || '';
+                                    content += `<div class="mb-1"><span class="fw-bold">${nm}</span> ${s ? '('+s+')' : ''} — ${sd || ''} ${ed ? ' → '+ed : ''}</div>`;
+                                });
+                                content += `</div></div></div>`;
+                            }
+
+                            content += `</div>`;
                         });
                         
                         content += `</div>`; // Close addresses-list
@@ -1618,19 +2694,70 @@
         
         // Update statistics display
         function updateStats(summary, districtStats) {
+            try { console.debug('updateStats summary:', summary); } catch(e) {}
             // Update map overlay summary statistics
             document.getElementById('totalBuildings').textContent = summary.total_buildings.toLocaleString();
-            document.getElementById('totalAddresses').textContent = summary.total_addresses.toLocaleString();
-            document.getElementById('totalStorefronts').textContent = summary.total_street_level.toLocaleString();
-            document.getElementById('openStorefronts').textContent = summary.open_storefronts.toLocaleString();
-            document.getElementById('closedStorefronts').textContent = summary.closed_storefronts.toLocaleString();
-            document.getElementById('storefrontVacancyRate').textContent = summary.storefront_vacancy_rate.toFixed(1) + '%';
+            document.getElementById('totalAddresses').textContent = summary.total_streetfront_addresses.toLocaleString();
+            if (document.getElementById('upperFloorCount')) {
+                document.getElementById('upperFloorCount').textContent = (summary.upper_floor_addresses || 0).toLocaleString();
+            }
+            const openSF = (summary.open_streetfront_addresses ?? 0);
+            const closedSF = (summary.closed_streetfront_addresses ?? 0);
+            document.getElementById('totalStorefronts').textContent = summary.total_streetfront_addresses.toLocaleString();
+            document.getElementById('openStorefronts').textContent = openSF.toLocaleString();
+            document.getElementById('closedStorefronts').textContent = closedSF.toLocaleString();
+            if (document.getElementById('openUpperFloor')) {
+                document.getElementById('openUpperFloor').textContent = (summary.open_upper_floor_addresses || 0).toLocaleString();
+            }
+            if (document.getElementById('closedUpperFloor')) {
+                document.getElementById('closedUpperFloor').textContent = (summary.closed_upper_floor_addresses || 0).toLocaleString();
+            }
+            let vr = summary.storefront_vacancy_rate;
+            if (typeof vr !== 'number' || !isFinite(vr)) {
+                const denom = openSF + closedSF;
+                vr = denom > 0 ? (closedSF / denom * 100) : 0;
+            }
+            document.getElementById('storefrontVacancyRate').textContent = vr.toFixed(1) + '%';
             
             // Update district stats
             const districtStatsContainer = document.getElementById('districtStats');
             districtStatsContainer.innerHTML = '';
             
-            Object.entries(districtStats).forEach(([district, stats]) => {
+            // Check if showing all districts (no specific district selected)
+            const selectedDistrict = document.getElementById('district').value;
+            const isAllDistricts = !selectedDistrict || selectedDistrict === '';
+            
+            if (isAllDistricts) {
+                // Calculate citywide totals
+                const citywideTotals = Object.values(districtStats || {}).reduce((totals, stats) => {
+                    totals.total += stats.total || 0;
+                    totals.open += stats.open || 0;
+                    totals.closed += stats.closed || 0;
+                    return totals;
+                }, { total: 0, open: 0, closed: 0 });
+                
+                const citywideVacancyRate = citywideTotals.total > 0 ? 
+                    (citywideTotals.closed / citywideTotals.total * 100) : 0;
+                
+                // Add header for all districts view
+                const allDistrictsHeader = document.createElement('div');
+                allDistrictsHeader.className = 'district-item';
+                allDistrictsHeader.style.backgroundColor = 'var(--primary-color)';
+                allDistrictsHeader.style.color = 'white';
+                allDistrictsHeader.style.fontWeight = 'bold';
+                allDistrictsHeader.innerHTML = `
+                    <div class="district-name">🌆 All Districts (Citywide View)</div>
+                    <div class="district-stats-text">
+                        Total: ${citywideTotals.total} | 
+                        Open: ${citywideTotals.open} | 
+                        Closed: ${citywideTotals.closed} | 
+                        Vacancy: ${citywideVacancyRate.toFixed(1)}%
+                    </div>
+                `;
+                districtStatsContainer.appendChild(allDistrictsHeader);
+            }
+            
+            Object.entries(districtStats || {}).forEach(([district, stats]) => {
                 const districtItem = document.createElement('div');
                 districtItem.className = 'district-item';
                 districtItem.innerHTML = `
@@ -1646,20 +2773,123 @@
             });
         }
         
+        // Function to toggle chevron icon rotation
+        function toggleChevron(button) {
+            const chevron = button.querySelector('i');
+            const isExpanded = button.getAttribute('aria-expanded') === 'true';
+            
+            if (isExpanded) {
+                chevron.style.transform = 'rotate(0deg)';
+            } else {
+                chevron.style.transform = 'rotate(180deg)';
+            }
+        }
+        
+        
+        
+        // Function to update search override UI
+        function updateSearchOverrideUI() {
+            const businessSearch = document.getElementById('businessSearch').value;
+            const isSearchOverride = businessSearch && businessSearch.trim().length >= 3;
+            const searchOverrideIndicator = document.getElementById('searchOverrideIndicator');
+            const searchSection = document.getElementById('searchSection');
+            
+            // Show/hide search override indicator
+            if (isSearchOverride) {
+                searchOverrideIndicator.style.display = 'block';
+                searchSection.style.borderColor = 'var(--warning-color, #ffc107)';
+                searchSection.style.backgroundColor = 'var(--warning-bg, rgba(255, 193, 7, 0.1))';
+            } else {
+                searchOverrideIndicator.style.display = 'none';
+                searchSection.style.borderColor = 'var(--primary-color)';
+                searchSection.style.backgroundColor = 'var(--bg-secondary)';
+            }
+        }
+        
         // Event listeners
         document.getElementById('applyFilters').addEventListener('click', applyFilters);
+        document.getElementById('commercialTaxFilingOnly').addEventListener('change', debouncedApplyFilters);
         
-        // Add change event listeners for checkbox containers
-        document.getElementById('industryTypeContainer').addEventListener('change', applyFilters);
-        document.getElementById('licenseTypeContainer').addEventListener('change', applyFilters);
-        document.getElementById('businessCorridor').addEventListener('change', applyFilters);
-        document.getElementById('neighborhood').addEventListener('change', applyFilters);
-        document.getElementById('district').addEventListener('change', applyFilters);
-        document.getElementById('statusFilter').addEventListener('change', applyFilters);
+        // Add change event listeners for checkbox containers (use debounced version)
+        document.getElementById('industryTypeContainer').addEventListener('change', debouncedApplyFilters);
+        document.getElementById('licenseTypeContainer').addEventListener('change', debouncedApplyFilters);
+        document.getElementById('businessCorridor').addEventListener('change', debouncedApplyFilters);
+        document.getElementById('neighborhood').addEventListener('change', debouncedApplyFilters);
+        document.getElementById('district').addEventListener('change', debouncedApplyFilters);
+        document.getElementById('statusFilter').addEventListener('change', debouncedApplyFilters);
+        document.getElementById('businessSearch').addEventListener('input', (e) => {
+            updateSearchOverrideUI();
+            debouncedApplyFilters();
+        });
+        document.getElementById('clearSearchBtn').addEventListener('click', () => {
+            document.getElementById('businessSearch').value = '';
+            updateSearchOverrideUI();
+            debouncedApplyFilters();
+        });
         
-        document.getElementById('corridorOnly').addEventListener('change', applyFilters);
-        document.getElementById('licensedOnly').addEventListener('change', applyFilters);
-        document.getElementById('streetLevelOnly').addEventListener('change', applyFilters);
+        document.getElementById('corridorOnly').addEventListener('change', debouncedApplyFilters);
+        document.getElementById('licensedOnly').addEventListener('change', debouncedApplyFilters);
+        document.getElementById('streetLevelOnly').addEventListener('change', debouncedApplyFilters);
+        
+        // Summary toggle
+        function toggleSummary() {
+            const bar = document.getElementById('summaryStatsBar');
+            const chev = document.getElementById('summaryChevron');
+            const header = document.getElementById('summaryHeaderToggle');
+            if (!bar || !chev || !header) return;
+            
+            const isExpanded = header.getAttribute('aria-expanded') === 'true';
+            
+            if (isExpanded) {
+                // Collapse
+                bar.style.maxHeight = bar.scrollHeight + 'px';
+                // Force reflow
+                bar.offsetHeight;
+                bar.style.maxHeight = '0px';
+                bar.style.padding = '0 12px';
+                chev.style.transform = 'rotate(0deg)';
+                header.setAttribute('aria-expanded', 'false');
+                
+                // After animation, hide the element
+                setTimeout(() => {
+                    bar.style.display = 'none';
+                }, 300);
+            } else {
+                // Expand
+                bar.style.display = 'block';
+                bar.style.maxHeight = '0px';
+                bar.style.padding = '0 12px';
+                // Force reflow
+                bar.offsetHeight;
+                bar.style.maxHeight = bar.scrollHeight + 'px';
+                bar.style.padding = '12px';
+                chev.style.transform = 'rotate(180deg)';
+                header.setAttribute('aria-expanded', 'true');
+                
+                // After animation, remove maxHeight to allow natural height
+                setTimeout(() => {
+                    bar.style.maxHeight = 'none';
+                }, 300);
+            }
+        }
+        // Robust listener via delegation after DOM ready
+        document.addEventListener('DOMContentLoaded', () => {
+            document.addEventListener('click', (e) => {
+                const hdr = e.target.closest('#summaryHeaderToggle');
+                if (hdr) {
+                    toggleSummary();
+                }
+            });
+            
+            // Add keyboard support for accessibility
+            document.addEventListener('keydown', (e) => {
+                const hdr = e.target.closest('#summaryHeaderToggle');
+                if (hdr && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    toggleSummary();
+                }
+            });
+        });
     </script>
     
     <!-- Dark Mode JavaScript -->

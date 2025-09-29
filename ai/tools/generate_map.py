@@ -118,7 +118,7 @@ Supported Map Types for Series:
 - address: Address-based markers (geocoded automatically)
 - intersection: Street intersection markers
 
-Note: Series functionality is not available for district-based maps (supervisor_district, police_district)
+Note: Series functionality is not available for district-based maps (supervisor_district, police_district, analysis_neighborhood)
 as these use choropleth styling instead of individual markers.
 """
 
@@ -980,7 +980,7 @@ def process_location_data(location_data, map_type):
     
     Args:
         location_data: List of location data objects or JSON string
-        map_type: Type of map (supervisor_district, police_district, intersection, point, address, symbol)
+        map_type: Type of map (supervisor_district, police_district, analysis_neighborhood, intersection, point, address, symbol)
         
     Returns:
         Processed location data
@@ -1064,7 +1064,7 @@ def process_location_data(location_data, map_type):
                     processed_item["address"] = address
                     processed_data.append(processed_item)
             
-    elif map_type in ["supervisor_district", "police_district"]:
+    elif map_type in ["supervisor_district", "police_district", "analysis_neighborhood"]:
         # For district maps, process district identifiers
         for item in location_data:
             if isinstance(item, str):
@@ -1151,7 +1151,7 @@ def create_datawrapper_chart(chart_title, location_data, map_type="point", refer
 
     try:
         # Handle location_data that might be passed as JSON string from LLM
-        if isinstance(location_data, str) and map_type in ["supervisor_district", "police_district"]:
+        if isinstance(location_data, str) and map_type in ["supervisor_district", "police_district", "analysis_neighborhood"]:
             try:
                 # Try to parse as JSON first
                 parsed_data = json.loads(location_data)
@@ -1189,7 +1189,7 @@ def create_datawrapper_chart(chart_title, location_data, map_type="point", refer
                     logger.error(f"Failed to parse location_data string for locator map ({map_type}): {parse_err}")
         
         # Handle location_data format conversion for district maps and symbol maps
-        if map_type in ["supervisor_district", "police_district"] and isinstance(location_data, list):
+        if map_type in ["supervisor_district", "police_district", "analysis_neighborhood"] and isinstance(location_data, list):
             # Convert list of dictionaries to CSV format for district-based maps
             logger.info(f"Converting list format to CSV for {map_type} map")
             
@@ -1215,17 +1215,20 @@ def create_datawrapper_chart(chart_title, location_data, map_type="point", refer
             # Add the has_change_data flag to metadata
             map_metadata["has_change_data"] = has_change_data
             
+            # Determine the key field based on map type
+            key_field = "neighborhood" if map_type == "analysis_neighborhood" else "district"
+            
             if has_change_data:
                 # Enhanced CSV format for change/delta maps
                 # For delta maps, put the percentage value first as the main 'value' column
                 if map_metadata and map_metadata.get("map_type") == "delta":
-                    csv_data = "district,value,current_value,previous_value,delta,percent_change\n"
+                    csv_data = f"{key_field},value,current_value,previous_value,delta,percent_change\n"
                 else:
-                    csv_data = "district,current_value,previous_value,delta,percent_change,value\n"
+                    csv_data = f"{key_field},current_value,previous_value,delta,percent_change,value\n"
                 
                 for item in location_data:
-                    if isinstance(item, dict) and "district" in item:
-                        district = item.get('district', '')
+                    if isinstance(item, dict) and key_field in item:
+                        key_value = item.get(key_field, '')
                         current = item.get('current_value', item.get('value', 0))
                         previous = item.get('previous_value', 0)
                         delta = item.get('delta', current - previous)
@@ -1239,20 +1242,20 @@ def create_datawrapper_chart(chart_title, location_data, map_type="point", refer
                             # Convert to percentage, round to nearest integer, and clamp to [-100, 100] so extreme outliers use edge colours
                             value_for_coloring = max(min(round(percent_change * 100), 100), -100)
                             # For delta maps, reorganize CSV to put percentage value first
-                            csv_data += f"{district},{value_for_coloring},{current},{previous},{delta},{percent_change}\n"
+                            csv_data += f"{key_value},{value_for_coloring},{current},{previous},{delta},{percent_change}\n"
                         else:
                             value_for_coloring = current
-                            csv_data += f"{district},{current},{previous},{delta},{percent_change},{value_for_coloring}\n"
+                            csv_data += f"{key_value},{current},{previous},{delta},{percent_change},{value_for_coloring}\n"
                     else:
-                        logger.warning(f"Skipping invalid district data item: {item}")
+                        logger.warning(f"Skipping invalid {key_field} data item: {item}")
             else:
                 # Standard CSV format for backward compatibility
-                csv_data = "district,value\n"
+                csv_data = f"{key_field},value\n"
                 for item in location_data:
-                    if isinstance(item, dict) and "district" in item and "value" in item:
-                        csv_data += f"{item['district']},{item['value']}\n"
+                    if isinstance(item, dict) and key_field in item and "value" in item:
+                        csv_data += f"{item[key_field]},{item['value']}\n"
                     else:
-                        logger.warning(f"Skipping invalid district data item: {item}")
+                        logger.warning(f"Skipping invalid {key_field} data item: {item}")
                 
             location_data = csv_data
             logger.info(f"Converted to CSV format: {location_data}")
@@ -1589,7 +1592,7 @@ def create_datawrapper_chart(chart_title, location_data, map_type="point", refer
             logger.info(f"Uploaded data to chart ID {chart_id}")
 
         # Apply custom styling before publishing (only for district maps that need special choropleth styling)
-        if map_type in ["supervisor_district", "police_district"]:
+        if map_type in ["supervisor_district", "police_district", "analysis_neighborhood"]:
             _apply_custom_map_styling(chart_id, map_type, map_metadata)
         elif map_type == "symbol":
             # Configure symbol map metadata to enable tooltips
@@ -1676,13 +1679,13 @@ def _apply_custom_map_styling(chart_id, map_type, map_metadata=None):
         }
         
         # Apply different styling based on map type
-        if map_type in ["supervisor_district", "police_district"]:
+        if map_type in ["supervisor_district", "police_district", "analysis_neighborhood"]:
             # Base configuration for all district maps
             base_config = {
                 "basemap": "custom_upload",
-                "basemapFilename": "districts_geojson.json",
+                "basemapFilename": "districts_geojson.json" if map_type in ["supervisor_district", "police_district"] else "analysis_neighborhoods_geojson.json",
                 "basemapProjection": "geoAzimuthalEqualArea",
-                "map-key-attr": "district",
+                "map-key-attr": "district" if map_type in ["supervisor_district", "police_district"] else "neighborhood",
                 "map-type-set": True,
                 "chart-type-set": True,
                 "zoomable": True,
@@ -1828,10 +1831,10 @@ def _apply_custom_map_styling(chart_id, map_type, map_metadata=None):
 
 def get_db_connection():
     """Get a connection to the PostgreSQL database using centralized db_utils."""
-    from ai.tools.db_utils import get_postgres_connection
+    from .db_utils import get_postgres_connection
     return get_postgres_connection()
 
-def generate_mapbox_map(context_variables, map_title, map_type, location_data=None, map_metadata=None, metric_id=None, group_field=None, series_field=None, color_palette=None, map_config=None, preview_mode=False, scale_dots=True):
+def generate_mapbox_map(context_variables, map_title, map_type, location_data=None, map_metadata=None, metric_id=None, group_field=None, series_field=None, color_palette=None, series_info=None, map_config=None, preview_mode=False, scale_dots=True):
     """
     Generates a map using Mapbox and stores its metadata in the database.
     
@@ -1864,6 +1867,52 @@ def generate_mapbox_map(context_variables, map_title, map_type, location_data=No
             else:
                 logger.error("No location_data provided and no dataset available in context_variables")
                 return {"error": "No location_data provided and no dataset available in context_variables"}
+        
+        # Create series_info if series_field is provided but series_info is not
+        if series_field and not series_info and location_data:
+            unique_series = set()
+            for item in location_data:
+                series_value = item.get(series_field)
+                if series_value is not None:
+                    unique_series.add(str(series_value))
+            
+            if unique_series:
+                # Use default categorical palette if none specified
+                if color_palette is None:
+                    color_palette = 'categorical'
+                
+                series_info = {
+                    'series_field': series_field,
+                    'legend_title': series_field.replace('_', ' ').title(),
+                    'color_mapping': {}
+                }
+                
+                # Create color mapping for the series values
+                # Use the same palette logic as _prepare_locator_marker_data
+                default_color_palettes = {
+                    'categorical': [
+                        '#ad35fa', '#FF6B5A', '#4A7463', '#71B2CA', '#FFC107', '#9C27B0', '#2196F3', '#E91E63', '#4CAF50', '#FF5722',
+                        '#795548', '#607D8B', '#1A365D', '#2D3748', '#4A5568', '#718096', '#A0AEC0', '#E2E8F0', '#F7FAFC', '#FF0080',
+                        '#00FF80', '#8000FF', '#FF8000', '#0080FF', '#80FF00', '#00FFFF', '#FF00FF', '#FFFF00', '#8B4513', '#228B22',
+                        '#FF1493', '#00CED1', '#FFD700', '#FF69B4', '#32CD32', '#FF4500', '#9370DB', '#20B2AA', '#FF6347', '#7B68EE',
+                        '#3CB371', '#FF7F50', '#6A5ACD', '#00FA9A', '#FFB6C1', '#4169E1', '#DC143C', '#00BFFF', '#FF8C00', '#9932CC'
+                    ]
+                }
+                
+                if color_palette is None:
+                    palette = default_color_palettes['categorical']
+                elif isinstance(color_palette, str) and color_palette in default_color_palettes:
+                    palette = default_color_palettes[color_palette]
+                else:
+                    palette = default_color_palettes['categorical']
+                
+                unique_series_list = sorted(list(unique_series))
+                
+                for i, series_value in enumerate(unique_series_list):
+                    series_info['color_mapping'][series_value] = palette[i % len(palette)]
+                
+                logger.info(f"Created series_info for {len(unique_series)} series: {unique_series_list}")
+                logger.info(f"Color mapping: {series_info['color_mapping']}")
         
         # If a desired color field is provided in metadata, attach it so the viewer can replicate preview coloring
         if map_metadata and isinstance(map_metadata, dict):
@@ -2003,7 +2052,8 @@ def generate_mapbox_map(context_variables, map_title, map_type, location_data=No
             "metric_id": metric_id,
             "group_field": group_field,
             "series_field": series_field,
-            "color_palette": color_palette
+            "color_palette": color_palette,
+            "series_info": series_info
         }
         
         # Add any additional metadata
@@ -2634,7 +2684,7 @@ def process_dataset_for_map(dataset, map_type, series_field=None, color_palette=
                             break
         
         # Handle shape data if point data is not available or threshold exceeded
-        elif map_type == "supervisor_district" or (not use_point_data and location_fields):
+        elif map_type in ["supervisor_district", "analysis_neighborhood"] or (not use_point_data and location_fields):
             # Look for shape fields
             for location_field in sorted(location_fields, key=lambda x: x.get('priority', 999)):
                 field_name = location_field.get('fieldName')
@@ -2644,29 +2694,32 @@ def process_dataset_for_map(dataset, map_type, series_field=None, color_palette=
                     # Process shape field (district, neighborhood, etc.)
                     shape_value = row[field_name]
                     if shape_value and str(shape_value).strip():
+                        # Use appropriate field name based on map type
+                        key_field = "neighborhood" if map_type == "analysis_neighborhood" else "district"
                         item = {
-                            "district": str(shape_value),
+                            key_field: str(shape_value),
                             "value": row.get('value', 1),
                             "title": f"{location_field.get('name', field_name)} {shape_value}",
                             "description": f"Value: {row.get('value', 1)}"
                         }
                         # Add all original data fields for coloring options
                         for column, value in row.items():
-                            if column not in ['district', 'value', 'title', 'description']:
+                            if column not in ['district', 'neighborhood', 'value', 'title', 'description']:
                                 item[column] = value
                         location_data.append(item)
                         break
-            # For district maps, expect district and value fields
-            if 'district' in row and 'value' in row:
+            # For district maps, expect district/neighborhood and value fields
+            key_field = "neighborhood" if map_type == "analysis_neighborhood" else "district"
+            if key_field in row and 'value' in row:
                 item = {
-                    "district": str(row['district']),
+                    key_field: str(row[key_field]),
                     "value": float(row['value']),
-                    "title": f"District {row['district']}",
+                    "title": f"{key_field.title()} {row[key_field]}",
                     "description": f"Value: {row['value']}"
                 }
                 # Add all original data fields for coloring options
                 for column, value in row.items():
-                    if column not in ['district', 'value', 'title', 'description']:
+                    if column not in ['district', 'neighborhood', 'value', 'title', 'description']:
                         item[column] = value
                 location_data.append(item)
         
@@ -2691,7 +2744,7 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
     Args:
         context_variables (dict): Dictionary of context variables (e.g., for database connection).
         map_title (str): Desired title for the map.
-        map_type (str): Type of map (e.g., 'supervisor_district', 'police_district', 'point', 'address', 'intersection', 'symbol').
+        map_type (str): Type of map (e.g., 'supervisor_district', 'police_district', 'analysis_neighborhood', 'point', 'address', 'intersection', 'symbol').
         location_data (list or str, optional): Data for the map. 
                                    If None or "from_context", will use dataset from context_variables.
                                    For locator maps ('point', 'address', 'intersection'): list of dicts with point/address details.
@@ -2714,7 +2767,7 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
         map_config = context_variables.get("map_config")
         # Get scale_dots from map_metadata if available
         scale_dots = map_metadata.get("scale_dots", True) if map_metadata else True
-        return generate_mapbox_map(context_variables, map_title, map_type, location_data, map_metadata, metric_id, group_field, series_field, color_palette, map_config, preview_mode, scale_dots)
+        return generate_mapbox_map(context_variables, map_title, map_type, location_data, map_metadata, metric_id, group_field, series_field, color_palette, None, map_config, preview_mode, scale_dots)
     
     # Check if we should use dataset from context_variables
     if location_data is None or location_data == "from_context":
@@ -3052,7 +3105,7 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
                 
                 logger.info(f"Converted dataset to {len(location_data)} symbol map locations")
                 
-            elif map_type in ["supervisor_district", "police_district"]:
+            elif map_type in ["supervisor_district", "police_district", "analysis_neighborhood"]:
                 # For district maps, we'd need aggregation logic here
                 # This is more complex and might need the original district aggregation approach
                 logger.warning("District maps from context dataset not yet implemented - falling back to original location_data")
@@ -3114,7 +3167,7 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
                 logger.error(f"Failed to parse location_data string for locator map ({map_type}): {parse_err}")
     
     # Handle location_data format conversion for district maps and symbol maps
-    if map_type in ["supervisor_district", "police_district"] and isinstance(location_data, list):
+    if map_type in ["supervisor_district", "police_district", "analysis_neighborhood"] and isinstance(location_data, list):
         # Convert list of dictionaries to CSV format for district-based maps
         logger.info(f"Converting list format to CSV for {map_type} map")
         
@@ -3140,17 +3193,20 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
         # Add the has_change_data flag to metadata
         map_metadata["has_change_data"] = has_change_data
         
+        # Determine the key field based on map type
+        key_field = "neighborhood" if map_type == "analysis_neighborhood" else "district"
+        
         if has_change_data:
             # Enhanced CSV format for change/delta maps
             # For delta maps, put the percentage value first as the main 'value' column
             if map_metadata and map_metadata.get("map_type") == "delta":
-                csv_data = "district,value,current_value,previous_value,delta,percent_change\n"
+                csv_data = f"{key_field},value,current_value,previous_value,delta,percent_change\n"
             else:
-                csv_data = "district,current_value,previous_value,delta,percent_change,value\n"
+                csv_data = f"{key_field},current_value,previous_value,delta,percent_change,value\n"
             
             for item in location_data:
-                if isinstance(item, dict) and "district" in item:
-                    district = item.get('district', '')
+                if isinstance(item, dict) and key_field in item:
+                    key_value = item.get(key_field, '')
                     current = item.get('current_value', item.get('value', 0))
                     previous = item.get('previous_value', 0)
                     delta = item.get('delta', current - previous)
@@ -3164,20 +3220,20 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
                         # Convert to percentage, round to nearest integer, and clamp to [-100, 100] so extreme outliers use edge colours
                         value_for_coloring = max(min(round(percent_change * 100), 100), -100)
                         # For delta maps, reorganize CSV to put percentage value first
-                        csv_data += f"{district},{value_for_coloring},{current},{previous},{delta},{percent_change}\n"
+                        csv_data += f"{key_value},{value_for_coloring},{current},{previous},{delta},{percent_change}\n"
                     else:
                         value_for_coloring = current
-                        csv_data += f"{district},{current},{previous},{delta},{percent_change},{value_for_coloring}\n"
+                        csv_data += f"{key_value},{current},{previous},{delta},{percent_change},{value_for_coloring}\n"
                 else:
-                    logger.warning(f"Skipping invalid district data item: {item}")
+                    logger.warning(f"Skipping invalid {key_field} data item: {item}")
         else:
             # Standard CSV format for backward compatibility
-            csv_data = "district,value\n"
+            csv_data = f"{key_field},value\n"
             for item in location_data:
-                if isinstance(item, dict) and "district" in item and "value" in item:
-                    csv_data += f"{item['district']},{item['value']}\n"
+                if isinstance(item, dict) and key_field in item and "value" in item:
+                    csv_data += f"{item[key_field]},{item['value']}\n"
                 else:
-                    logger.warning(f"Skipping invalid district data item: {item}")
+                    logger.warning(f"Skipping invalid {key_field} data item: {item}")
             
         location_data = csv_data
         logger.info(f"Converted to CSV format: {location_data}")
@@ -3249,7 +3305,7 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
             map_metadata['metric_info'] = metric_info
         
         # Apply custom styling before publishing (only for district maps that need special choropleth styling)
-        if map_type in ["supervisor_district", "police_district"]:
+        if map_type in ["supervisor_district", "police_district", "analysis_neighborhood"]:
             _apply_custom_map_styling(chart_id, map_type, map_metadata)
         elif map_type == "symbol":
             # Configure symbol map metadata to enable tooltips
@@ -3373,9 +3429,25 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
                     group_field TEXT,
                     active BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT maps_type_check CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol'))
                 )
             """)
+            
+            # Update existing constraint to include analysis_neighborhood if it exists
+            try:
+                cursor.execute("""
+                    ALTER TABLE maps 
+                    DROP CONSTRAINT IF EXISTS maps_type_check
+                """)
+                cursor.execute("""
+                    ALTER TABLE maps 
+                    ADD CONSTRAINT maps_type_check 
+                    CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol'))
+                """)
+                logger.info("Updated maps_type_check constraint to include analysis_neighborhood")
+            except Exception as e:
+                logger.warning(f"Could not update constraint (table might not exist yet): {str(e)}")
             
             # Prepare location data for storage
             if isinstance(location_data, str):
@@ -3591,13 +3663,9 @@ def get_recent_maps(context_variables, limit=10, map_type=None):
         for map_record in maps:
             map_data = dict(map_record)
             
-            # Handle location_data - could be string or already parsed JSON
-            if isinstance(map_data["location_data"], str):
-                try:
-                    map_data["location_data"] = json.loads(map_data["location_data"])
-                except json.JSONDecodeError:
-                    logger.error(f"Invalid JSON in location_data: {map_data['location_data']}")
-                    map_data["location_data"] = []
+            # Remove location_data to avoid bloating the context window
+            if "location_data" in map_data:
+                del map_data["location_data"]
             
             # Handle metadata if it exists
             if map_data["metadata"]:

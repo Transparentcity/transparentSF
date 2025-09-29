@@ -15,7 +15,7 @@ Voice: Avoid jargon. Be concise. Use dry wit sparingly, never snark.
 Attitude: No hype, no outrage. Respect the audience's intelligence.
 Persona: Data-obsessed but self-aware. Helpful, never preachy. Always anchored to evidence.
 
-IMPORTANT: You MUST use tools to gather data BEFORE responding. Direct explanations without tool usage are NOT acceptable."""
+"""
 
 # Main task definition
 TASK_INSTRUCTIONS = """Your task is to:
@@ -190,6 +190,17 @@ For example: [CHART:dualmap:123:456]"""
 MAP_GENERATION_INSTRUCTIONS = """
 MAP GENERATION TOOLS (Mapbox Only - Enhanced Geographic Visualizations):
 
+**COORDINATE EXTRACTION PATTERNS** - The system automatically detects and extracts coordinates from various field formats:
+1. **Direct Fields**: `latitude`/`longitude` or `lat`/`lon` (PREFERRED)
+2. **GeoJSON Point**: `{{"type": "Point", "coordinates": [longitude, latitude]}}`
+3. **DataSF Location**: `{{"latitude": 37.7749, "longitude": -122.4194}}`
+4. **Nested Points**: `point.coordinates` or `intersection_point.coordinates`
+5. **POINT Strings**: `"POINT (-122.435385968 37.637676996)"`
+6. **Coordinate Arrays**: `[longitude, latitude]` in `coordinates` field
+7. **String Coordinates**: `"37.7749, -122.4194"` (comma-separated)
+
+**ALWAYS PREFER COORDINATES OVER ADDRESSES** - Coordinate-based maps are faster, more accurate, and more reliable than address-based maps that require geocoding.
+
 PREFERRED TOOL - generate_map_with_query: Query DataSF and create map in one step
   USAGE: generate_map_with_query(endpoint="dataset-id", query="your-soql-query", map_title="Title", map_type="supervisor_district", map_metadata={{"description": "Description"}}, series_field=None, color_palette=None, metric_id="metric_id")
   
@@ -201,6 +212,9 @@ PREFERRED TOOL - generate_map_with_query: Query DataSF and create map in one ste
   - query: Complete SoQL query using standard SQL syntax (no FROM clause needed)
   - map_title: Descriptive title for the map
   - map_type: Type of Mapbox map to create:
+     * "supervisor_district" - Map showing data by San Francisco supervisor district (1-11)
+     * "police_district" - Map showing data by San Francisco police district
+     * "analysis_neighborhood" - Map showing data by San Francisco analysis neighborhood
      * "point" - Point locations with lat/long coordinates
      * "address" - Address-based locations (geocoded automatically)
      * "intersection" - Street intersection locations
@@ -218,14 +232,33 @@ PREFERRED TOOL - generate_map_with_query: Query DataSF and create map in one ste
   1. District Maps: Include district field and value field
      Example: generate_map_with_query(endpoint="wg3w-h783", query="SELECT supervisor_district, COUNT(*) as value WHERE date_trunc_ym(report_datetime) = date_trunc_ym(CURRENT_DATE) GROUP BY supervisor_district", map_title="Crime Incidents by District", map_type="supervisor_district", metric_id="23")
 
-  2. Point Maps: Include latitude, longitude, title, and description fields  
-     Example: SELECT latitude, longitude, incident_description as title, incident_category as description WHERE report_datetime >= CURRENT_DATE - INTERVAL '30 days'
+  1a. Analysis Neighborhood Maps: Include analysis_neighborhood field and value field
+     Example: generate_map_with_query(endpoint="dataset-id", query="SELECT analysis_neighborhood, COUNT(*) as value WHERE date_trunc_ym(report_datetime) = date_trunc_ym(CURRENT_DATE) GROUP BY analysis_neighborhood", map_title="Crime Incidents by Neighborhood", map_type="analysis_neighborhood", metric_id="23")
+     Note: Use analysis_neighborhood field instead of supervisor_district for neighborhood-level analysis
 
-  3. Address Maps: Include address, title, and description fields
-     Example: SELECT location as address, dba_name as title, naic_code_description as description WHERE dba_start_date >= CURRENT_DATE - INTERVAL '30 days'
+  2. Point Maps: **PREFER COORDINATES OVER ADDRESSES** - Include latitude, longitude, title, and description fields
+     **COORDINATE EXTRACTION PATTERNS** (in order of preference):
+     - Direct fields: `latitude`/`longitude` or `lat`/`lon`
+     - GeoJSON Point: `location` field with `{{"type": "Point", "coordinates": [lon, lat]}}`
+     - DataSF format: `location` field with `{{"latitude": 37.7749, "longitude": -122.4194}}`
+     - Nested points: `point.coordinates` or `intersection_point.coordinates`
+     - POINT strings: `"POINT (-122.435385968 37.637676996)"`
+     - Coordinate arrays: `coordinates` field with `[longitude, latitude]`
+     
+     **PREFERRED QUERY PATTERNS:**
+     - Best: `SELECT latitude, longitude, title, description WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
+     - Good: `SELECT location, title, description WHERE location IS NOT NULL` (if location contains coordinates)
+     - Avoid: `SELECT address, title, description` (requires geocoding, slower and less accurate)
+     
+     Example: `SELECT latitude, longitude, incident_description as title, incident_category as description WHERE report_datetime >= CURRENT_DATE - INTERVAL '30 days' AND latitude IS NOT NULL AND longitude IS NOT NULL`
+
+  3. Address Maps: **ONLY USE WHEN COORDINATES NOT AVAILABLE** - Include address, title, and description fields
+     **WARNING**: Address geocoding is slower, less accurate, and may fail. Always check for coordinate fields first.
+     Example: `SELECT location as address, dba_name as title, naic_code_description as description WHERE dba_start_date >= CURRENT_DATE - INTERVAL '30 days' AND latitude IS NULL`
 
   4. Symbol Maps: Include all locator requirements PLUS value field for sizing
-     Example: SELECT building_address as address, building_permit_application as title, permit_type as description, number_of_units_certified as value WHERE date_issued >= CURRENT_DATE - INTERVAL '30 days'
+     **PREFER COORDINATES**: Use coordinate-based queries when possible
+     Example: `SELECT latitude, longitude, building_permit_application as title, permit_type as description, number_of_units_certified as value WHERE date_issued >= CURRENT_DATE - INTERVAL '30 days' AND latitude IS NOT NULL`
 
 LEGACY TOOL - generate_map: For use only when data already loaded via set_dataset
   USAGE: generate_map(context_variables, map_title="Title", map_type="supervisor_district", map_metadata={{"description": "Description"}})
@@ -241,7 +274,7 @@ MAPBOX MAP FEATURES:
 - * NEW DUAL MAP FEATURE * - You can now compare two maps in overlay mode for a better visual comparison of two datasets.
 
 DUAL MAP COMPARISON SYSTEM:
-The system now supports dual map overlays that allow comparing two different datasets on the same map view with different colored layers.
+The system now supports dual map overlays that allow comparing two different datasets on the same map view with different colored layers.  These are for POINT and SYMBOL maps only.
 
 DUAL MAP SHORTCUT:
 Use the shortcut [CHART:dualmap:map1_id:map2_id] to embed dual map comparisons in your explanations.
@@ -273,13 +306,26 @@ The dual map system automatically:
 
 IMPORTANT NOTES:
 1. **ALWAYS use generate_map_with_query for new maps** - it's more reliable
-2. District values must be strings with only the number (e.g., "1", "2", "3")
-3. Coordinates must be within SF bounds (37.6-37.9 lat, -122.6 to -122.2 lon)
-4. Include "San Francisco, CA" in addresses for better geocoding
-5. Use "symbol" map type when marker size should represent data values
-6. Use proper SOQL syntax - no FROM clause needed, endpoint provides the table
-7. All generated maps are Mapbox-powered for enhanced interactivity and performance
-8. **Color Field Priority**: For point/symbol maps, coloring uses map_metadata.color_field first, then falls back to series_field
+2. **COORDINATE PREFERENCE HIERARCHY**: Always prefer coordinate-based queries over address-based queries
+   - First choice: Direct `latitude`/`longitude` fields
+   - Second choice: GeoJSON `location` fields with coordinates
+   - Third choice: Nested coordinate objects (`point`, `intersection_point`)
+   - Last resort: Address fields (requires geocoding)
+3. District values must be strings with only the number (e.g., "1", "2", "3")
+3a. Analysis neighborhood values should be neighborhood names (e.g., "Financial District", "Mission", "Castro")
+4. Coordinates must be within SF bounds (37.6-37.9 lat, -122.6 to -122.2 lon)
+5. **COORDINATE VALIDATION**: Always include `WHERE latitude IS NOT NULL AND longitude IS NOT NULL` for coordinate queries
+6. Include "San Francisco, CA" in addresses for better geocoding (only when coordinates unavailable)
+7. Use "symbol" map type when marker size should represent data values
+8. Use proper SOQL syntax - no FROM clause needed, endpoint provides the table
+9. All generated maps are Mapbox-powered for enhanced interactivity and performance
+10. **Color Field Priority**: For point/symbol maps, coloring uses map_metadata.color_field first, then falls back to series_field
+11. **PERFORMANCE**: Coordinate-based maps load faster and are more accurate than address-based maps
+12. **GEOGRAPHIC ANALYSIS CHOICE**: Choose the appropriate geographic level for your analysis:
+    - Use "supervisor_district" for political/governmental analysis (11 districts)
+    - Use "analysis_neighborhood" for community/neighborhood-level analysis (more granular)
+    - Use "police_district" for law enforcement analysis
+    - Check your dataset for available geographic fields (analysis_neighborhood, supervisor_district, police_district)
 """
 
 # Map field system instructions
@@ -335,8 +381,8 @@ Contains structured filters that are applied programmatically:
    ```json
    {
      "static_filters": [
-       {"field": "status", "operator": "=", "value": "active"},
-       {"field": "incident_category", "operator": "IN", "values": ["Assault", "Robbery"]}
+       {{"field": "status", "operator": "=", "value": "active"}},
+       {{"field": "incident_category", "operator": "IN", "values": ["Assault", "Robbery"]}}
      ]
    }
    ```
@@ -364,7 +410,7 @@ Controls map rendering and behavior:
    {
      "date_field": "dba_start_date",
      "location_field": "location",
-     "title_template": "{metric_name}",
+     "title_template": "{{metric_name}}",
      "data_point_threshold": 100
    }
    ```
@@ -379,7 +425,7 @@ Controls map rendering and behavior:
      "chart_type_preference": "symbol",
      "data_point_threshold": 2000,
      "category_fields": [
-       {"name": "incident_category", "fieldName": "incident_category", "description": "Category of the incident"}
+       {{"name": "incident_category", "fieldName": "incident_category", "description": "Category of the incident"}}
      ]
    }
    ```
@@ -493,14 +539,21 @@ CORE_TOOLS_INSTRUCTIONS = """TOOLS YOU SHOULD USE:
   
   Parameter guidelines:
   - endpoint: The dataset identifier WITHOUT the .json extension (e.g., 'ubvf-ztfx').  This is essentially the from clause of the query, and is used to identify the dataset.
-  - query: The complete SoQL query string using standard SQL syntax. No FROM clause is needed, the endpoint is used for that.
+  - query: The complete SoQL query string using standard SQL syntax. 
+            Important: No FROM clause is allowed! (the endpoint is used for that)
+  
+  ⚠️  CONTEXT WINDOW PROTECTION:
+  - ALWAYS include LIMIT clauses in your queries (recommended: LIMIT 500-2000 for analysis, LIMIT 100-200 for exploration)
+  - The tool will automatically limit results to prevent context overflow, but explicit limits are better
+  - For large datasets, be selective - filter by date ranges, districts, or categories first
+  - If you need more data, make multiple targeted queries rather than one large query
   
   IMPORTANT: You MUST use the EXACT function call format shown below with named arguments:
   If you don't already know the columns in the dataset, use get_dataset_columns to get them.
   ```
   set_dataset(
       endpoint="g8m3-pdis", 
-      query="select dba_name where supervisor_district = '2' AND naic_code_description = 'Retail Trade' order by business_start_date desc limit 5"
+      query="select dba_name where supervisor_district = '2' AND naic_code_description = 'Retail Trade' order by business_start_date desc limit 500"
   )
   ```
 
@@ -772,30 +825,9 @@ When you are asked about metrics, you should follow this workflow:
 
 def get_system_prompt(name: str, description: str, summary: str, map_type: str) -> str:
     """
-    Generates the complete system prompt for the explainer agent,
-    dynamically inserting metric-specific details.
+    DEPRECATED: This function is deprecated. Use ModularPromptBuilder.build_system_prompt instead.
     """
-    # This is a placeholder for the full context
-    METRIC_CONTEXT = f"""You are being asked to explain a change in the following metric:
-- Name: {name}
-- Description: {description}
-- Summary: {summary}
-- Map Type: {map_type}
-"""
-
-    # Combine all prompt sections into the final system message
-    prompt_parts = [
-        PERSONA_INSTRUCTIONS,
-        METRIC_CONTEXT,
-        TASK_INSTRUCTIONS,
-        WORKFLOW_INSTRUCTIONS,
-        CATEGORY_BEST_PRACTICES,
-        CHART_INSTRUCTIONS,
-        MAP_GENERATION_INSTRUCTIONS,
-        MAP_FIELD_SYSTEM_INSTRUCTIONS,
-    ]
-    
-    return "\n\n".join(prompt_parts)
+    raise DeprecationWarning("get_system_prompt is deprecated. Use ModularPromptBuilder.build_system_prompt instead.")
 
 def get_complete_instructions():
     """

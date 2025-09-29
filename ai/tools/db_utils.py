@@ -49,14 +49,14 @@ def get_connection_pool() -> Engine:
             poolclass=QueuePool,
             pool_size=10,           # Number of connections to maintain in pool
             max_overflow=20,        # Additional connections that can be created
-            pool_pre_ping=False,    # Disable pre-ping to avoid transaction conflicts
-            pool_recycle=3600,      # Recycle connections after 1 hour
+            pool_pre_ping=True,     # Enable pre-ping to validate connections before use
+            pool_recycle=1800,      # Recycle connections after 30 minutes (more conservative)
             pool_timeout=30,        # Timeout for getting connection from pool
             echo=False,             # Set to True for SQL debugging
             connect_args={
                 "sslmode": "prefer",
                 "connect_timeout": 30,
-                "keepalives_idle": 600,
+                "keepalives_idle": 300,    # Reduce to 5 minutes for faster detection
                 "keepalives_interval": 30,
                 "keepalives_count": 3
             }
@@ -84,8 +84,16 @@ def get_pooled_connection():
     try:
         # Get connection from pool
         connection = engine.raw_connection()
-        # Set autocommit to avoid transaction conflicts
-        connection.autocommit = True
+        
+        # Rollback any existing transaction before setting autocommit
+        # This handles the case where a previous transaction failed and wasn't properly cleaned up
+        try:
+            connection.rollback()
+        except Exception:
+            pass  # Ignore rollback errors if no transaction is active
+        
+        # Don't set autocommit - let transactions work normally
+        # connection.autocommit = True
         yield connection
     except Exception as e:
         if connection:
@@ -239,7 +247,7 @@ def execute_with_connection(
             with get_pooled_connection() as connection:
                 # Execute the operation
                 result = operation(connection)
-                # Explicit commit to ensure changes are persisted
+                # Commit the transaction to ensure changes are persisted
                 connection.commit()
                 
                 return {

@@ -848,6 +848,7 @@ async def list_jobs():
         "jobs": [job.to_dict() for job in jobs.values()]
     })
 
+
 @router.get("/generate_weekly_report")
 async def generate_weekly_report():
     """Generate weekly report on demand."""
@@ -5527,6 +5528,7 @@ async def get_map_chart(request: Request, id: str):
                 "time_periods": map_record.get('metadata', {}).get('time_periods'),
                 "anomaly_type": map_record.get('metadata', {}).get('anomaly_type'),
                 "anomaly_field_name": map_record.get('metadata', {}).get('anomaly_field_name'),
+                "color_field": map_record.get('metadata', {}).get('color_field'),
             }
             
             return templates.TemplateResponse("map.html", {
@@ -5566,6 +5568,7 @@ async def get_map_chart(request: Request, id: str):
                 "time_periods": map_record.get('metadata', {}).get('time_periods'),
                 "anomaly_type": map_record.get('metadata', {}).get('anomaly_type'),
                 "anomaly_field_name": map_record.get('metadata', {}).get('anomaly_field_name'),
+                "color_field": map_record.get('metadata', {}).get('color_field'),
             }
             
             return templates.TemplateResponse("map.html", {

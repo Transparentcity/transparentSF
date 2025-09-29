@@ -128,19 +128,36 @@ class BackgroundJobManager:
             
     def cleanup_old_jobs(self, max_age_hours: int = 24):
         """Remove old completed/failed jobs."""
+        # Keep jobs for at least 1 hour after completion to allow monitoring
+        min_keep_hours = 1
         cutoff_time = datetime.now().timestamp() - (max_age_hours * 3600)
+        min_keep_time = datetime.now().timestamp() - (min_keep_hours * 3600)
         
         with self._lock:
             jobs_to_remove = []
             for job_id, job in self.jobs.items():
-                if job.status in ["completed", "failed"] and job.created_at.timestamp() < cutoff_time:
+                job_age_hours = (datetime.now().timestamp() - job.created_at.timestamp()) / 3600
+                
+                # Only clean up jobs that are:
+                # 1. Completed or failed
+                # 2. Older than max_age_hours
+                # 3. AND older than min_keep_hours (to keep recent jobs visible)
+                if (job.status in ["completed", "failed"] and 
+                    job.created_at.timestamp() < cutoff_time and
+                    job.created_at.timestamp() < min_keep_time):
                     jobs_to_remove.append(job_id)
+                    logger.info(f"Marking job {job_id} for cleanup (age: {job_age_hours:.2f} hours)")
+                else:
+                    logger.info(f"Keeping job {job_id}: status={job.status}, age={job_age_hours:.2f} hours")
                     
             for job_id in jobs_to_remove:
+                logger.info(f"Cleaning up job {job_id} (status: {self.jobs[job_id].status})")
                 del self.jobs[job_id]
                 
         if jobs_to_remove:
             logger.info(f"Cleaned up {len(jobs_to_remove)} old jobs")
+        else:
+            logger.info("No jobs to clean up")
             
     async def run_job(self, job_id: str, func: Callable, *args, **kwargs):
         """Run a job in the background."""

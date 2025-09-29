@@ -10,143 +10,613 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+    
     <!-- Markdown processing -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- Dark Mode CSS -->
     <link rel="stylesheet" href="/static/darkmode.css">
+    <!-- Conversation Renderer -->
+    <link rel="stylesheet" href="/static/conversation-renderer.css">
+    <script src="/static/js/conversation-renderer.js"></script>
+    <!-- Inter and IBM Plex Sans fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --sidebar-width: 300px;
+        }
+
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
             margin: 0;
-            padding: 20px;
+            padding: 0;
             font-size: 14px;
             color: var(--text-primary);
             background-color: var(--bg-primary);
             transition: background-color 0.3s ease, color 0.3s ease;
+            overflow: hidden;
+            height: 100vh;
         }
         
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
+        .main-container {
+            display: flex;
+            height: 100vh;
+            flex-direction: column;
+        }
+        
+        /* Content Area */
+        .content-area {
+            display: flex;
+            height: 100vh;
+        }
+        
+        /* Left Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-primary);
+            border-right: 1px solid var(--border-primary);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+        
+        .sidebar-header h2 {
+            margin: 0 0 12px 0;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 18px;
+            color: var(--text-primary);
+        }
+        
+        button.secondary {
+            background-color: var(--bg-secondary);
+            color: #ad35fa;
+            border: 1px solid #ad35fa;
+        }
+        
+        button.secondary:hover {
+            background-color: var(--bg-tertiary);
+        }
+        
+        [data-theme="dark"] button.secondary {
+            background-color: var(--bg-secondary);
+            color: #c44dff;
+            border: 1px solid #c44dff;
+        }
+        
+        [data-theme="dark"] button.secondary:hover {
+            background-color: var(--bg-tertiary);
+            border-color: #d966ff;
+        }
+        
+        .new-writeup-btn {
+            width: 100%;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .sessions-list {
+            flex: 1;
+            overflow-y: auto;
             padding: 10px;
         }
         
-        .header-section {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .session-section {
             margin-bottom: 20px;
-            padding-bottom: 8px;
         }
         
-        h1 {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 24px;
+        .session-section-header {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin: 0 0 8px 12px;
         }
         
-        .section {
-            margin-bottom: 20px;
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            padding: 15px;
-        }
         
-        .section h2 {
-            margin-top: 0;
-            color: var(--text-primary);
-            font-size: 18px;
-            margin-bottom: 10px;
-        }
-        
-        .form-group {
-            margin-bottom: 10px;
+        /* Dropdown menu styles */
+        .session-menu {
+            position: relative;
             display: inline-block;
-            margin-right: 15px;
-            vertical-align: top;
         }
         
-        .form-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 15px;
-            margin-bottom: 10px;
-        }
-        
-        .form-row .form-group {
-            margin-bottom: 0;
-            margin-right: 0;
-        }
-        
-        .form-row button {
-            margin-top: 0;
-            height: 32px;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 3px;
-            font-weight: 500;
-            font-size: 13px;
-        }
-        
-        select, input, textarea {
-            width: 100%;
-            padding: 6px 10px;
-            border-radius: 4px;
-            font-size: 14px;
-            background-color: var(--bg-secondary);
+        .session-menu-btn {
+            background: var(--bg-secondary);
             color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 0;
         }
         
-        textarea {
-            min-height: 100px;
-            resize: vertical;
+        .session-menu-btn:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--bright-purple);
         }
         
-        button {
-            background-color: #ad35fa;
+        .session-menu-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-width: 160px;
+            z-index: 1000;
+            display: none;
+            overflow: hidden;
+        }
+        
+        .session-menu-dropdown.show {
+            display: block;
+        }
+        
+        .session-menu-item {
+            display: block;
+            width: 100%;
+            padding: 8px 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            text-align: left;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s ease;
+            text-decoration: none;
+        }
+        
+        .session-menu-item:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .session-menu-item.danger {
+            color: #dc3545;
+        }
+        
+        .session-menu-item.danger:hover {
+            background: #f8d7da;
+        }
+        
+        
+        .streaming-line {
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            font-style: italic;
+            opacity: 0.8;
+        }
+        
+        .pending-controls {
+            margin-top: 8px;
+            padding: 8px;
+            background: var(--bg-primary);
+            border-radius: 4px;
+            border: 1px solid var(--border-primary);
+        }
+        
+        .pending-controls select {
+            width: 100%;
+            padding: 4px 6px;
+            margin-bottom: 6px;
+            font-size: 11px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 3px;
+        }
+        
+        .pending-controls button {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 11px;
+            background: var(--bright-purple);
             color: white;
             border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
+            border-radius: 3px;
             cursor: pointer;
-            font-size: 14px;
-            margin-top: 5px;
+            transition: background-color 0.2s ease;
         }
         
-        button:hover {
-            background-color: #9d2ee8;
+        .pending-controls button:hover {
+            background: #9d2ee8;
         }
         
-        button:disabled {
-            background-color: #ccc;
+        .pending-controls button:disabled {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
             cursor: not-allowed;
         }
         
-        .secondary-button {
-            background-color: #6c757d;
+        .session-actions {
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
         }
         
-        .secondary-button:hover {
-            background-color: #5a6268;
+        .session-item:hover .session-actions {
+            opacity: 1;
         }
         
-        .danger-button {
-            background-color: #dc3545;
+        .session-links .session-actions {
+            opacity: 1;
         }
         
-        .danger-button:hover {
-            background-color: #c82333;
+        .session-action-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            background-color: var(--bg-secondary);
+            color: #ad35fa;
+            border: 1px solid #ad35fa;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
-        .success-button {
-            background-color: #28a745;
+        .session-action-btn:hover {
+            background-color: var(--bg-tertiary);
         }
         
-        .success-button:hover {
-            background-color: #218838;
+        [data-theme="dark"] .session-action-btn {
+            background-color: var(--bg-secondary);
+            color: #c44dff;
+            border: 1px solid #c44dff;
         }
+        
+        [data-theme="dark"] .session-action-btn:hover {
+            background-color: var(--bg-tertiary);
+            border-color: #d966ff;
+        }
+        
+        .session-item {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: var(--bg-secondary);
+            border: none;
+            border-radius: 6px;
+            color: var(--text-primary);
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 13px;
+            font-family: 'IBM Plex Sans', sans-serif;
+            border-left: 3px solid transparent;
+        }
+        
+        .session-item:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .session-item.active {
+            background: var(--bg-tertiary);
+            border-left-color: var(--bright-purple);
+        }
+        
+        .session-item.loading {
+            border-left-color: #ffc107;
+        }
+        
+        .session-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+        }
+        
+        .session-title-text {
+            flex: 1;
+        }
+        
+        .title-spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid var(--border-primary);
+            border-top: 2px solid var(--bright-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 4px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .session-prompt-preview {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            line-height: 1.3;
+            opacity: 0.8;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .session-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+            font-size: 10px;
+            color: var(--text-tertiary);
+        }
+        
+        .session-date {
+            font-weight: 500;
+        }
+        
+        .session-model {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 9px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: 1px solid var(--border-primary);
+        }
+        
+        .session-status {
+            font-size: 11px;
+            opacity: 0.7;
+            display: block;
+        }
+        
+        .session-progress {
+            font-size: 10px;
+            color: var(--bright-purple);
+            margin-top: 4px;
+            display: none;
+        }
+        
+        .session-item.loading .session-progress {
+            display: block;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid var(--bg-secondary);
+            border-top: 2px solid var(--bright-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 6px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        
+        /* Prompt Interface */
+        .prompt-interface {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            justify-content: flex-start;
+            padding-top: 33vh;
+        }
+        
+        .welcome-message {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+        }
+        
+        .welcome-message h3 {
+            margin: 0 0 10px 0;
+            color: var(--text-primary);
+        }
+        
+        /* Content Display */
+        .content-display {
+            height: 100%;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Tab System */
+        .tab-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .tab-header {
+            display: flex;
+            border-bottom: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+        }
+        
+        .tab-button {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .tab-button:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+        
+        .tab-button.active {
+            color: var(--bright-purple);
+            border-bottom-color: var(--bright-purple);
+            background: var(--bg-primary);
+        }
+        
+        .tab-content {
+            flex: 1;
+            display: none;
+            overflow: hidden;
+        }
+        
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tab-content iframe {
+            flex: 1;
+            border: none;
+        }
+        
+        /* Streaming Display */
+        .streaming-display {
+            height: 100%;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+        
+        .streaming-header {
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+        
+        .streaming-header h3 {
+            margin: 0 0 8px 0;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 18px;
+            color: var(--text-primary);
+        }
+        
+        .streaming-status {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        /* Input Area */
+        .input-area {
+            padding: 20px;
+            background: var(--bg-primary);
+        }
+        
+        .input-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-primary);
+            overflow: hidden;
+        }
+        
+        .model-selector {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-primary);
+            background: var(--bg-tertiary);
+        }
+        
+        .model-selector select {
+            width: 200px;
+            padding: 6px 10px;
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+        
+        .prompt-input {
+            display: flex;
+            align-items: flex-end;
+            gap: 12px;
+            padding: 16px;
+        }
+        
+        .prompt-textarea {
+            flex: 1;
+            min-height: 60px;
+            max-height: 200px;
+            padding: 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-primary);
+            font-family: 'IBM Plex Sans', sans-serif;
+            font-size: 14px;
+            resize: none;
+            outline: none;
+        }
+        
+        .prompt-textarea::placeholder {
+            color: var(--text-secondary);
+        }
+        
+        .send-button {
+            background: var(--bright-purple);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+        
+        .send-button:hover {
+            background: #9d2ee8;
+        }
+        
+        .send-button:disabled {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            cursor: not-allowed;
+        }
+        
         
         /* Chart container styling for rich content */
         .chart-container {
@@ -161,192 +631,7 @@
             border: none;
         }
         
-        /* Write-up answers and plan styling */
-        .writeup-answers {
-            margin: 15px 0;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-left: 4px solid #28a745;
-            border-radius: 4px;
-        }
-        
-        .writeup-answers h4 {
-            margin: 0 0 10px 0;
-            color: #28a745;
-            font-size: 14px;
-        }
-        
-        .answers-list {
-            margin-top: 10px;
-        }
-        
-        .answer-item {
-            margin: 8px 0;
-            padding: 8px;
-            background-color: var(--bg-primary);
-            border-radius: 3px;
-            font-size: 13px;
-            color: var(--text-primary);
-        }
-        
-        .writeup-plan {
-            margin: 15px 0;
-            padding: 15px;
-            background-color: var(--bg-tertiary);
-            border-left: 4px solid var(--bright-purple);
-            border-radius: 4px;
-        }
-        
-        .writeup-plan h4 {
-            margin: 0 0 10px 0;
-            color: var(--bright-purple);
-            font-size: 14px;
-        }
-        
-        .plan-overview {
-            margin: 10px 0;
-            padding: 10px;
-            background-color: var(--bg-primary);
-            border-radius: 3px;
-            font-size: 13px;
-            font-style: italic;
-            color: var(--text-secondary);
-        }
-        
-        .plan-steps {
-            margin-top: 10px;
-        }
-        
-        .plan-step {
-            margin: 6px 0;
-            padding: 6px;
-            background-color: var(--bg-primary);
-            border-radius: 3px;
-            font-size: 12px;
-            color: var(--text-primary);
-        }
-        
-        .writeup-item {
-            background: var(--bg-primary);
-            border-radius: 6px;
-            padding: 15px;
-            margin-bottom: 10px;
-        }
-        
-        .writeup-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 10px;
-        }
-        
-        .writeup-title {
-            font-weight: 600;
-            font-size: 16px;
-            color: var(--text-primary);
-            margin: 0;
-        }
-        
-        .writeup-status {
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-            text-transform: uppercase;
-        }
-        
-        .status-pending { background-color: #fff3cd; color: #856404; }
-        .status-clarification_needed { background-color: #d1ecf1; color: #0c5460; }
-        .status-planned { background-color: #d4edda; color: #155724; }
-        .status-executing { background-color: #f8d7da; color: #721c24; }
-        .status-completed { background-color: #d1ecf1; color: #0c5460; }
-        .status-failed { background-color: #f8d7da; color: #721c24; }
-        
-        .writeup-meta {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-        }
-        
-        .writeup-prompt {
-            font-style: italic;
-            color: var(--text-secondary);
-            margin-bottom: 10px;
-            padding: 8px;
-            background-color: var(--bg-secondary);
-            border-radius: 4px;
-        }
-        
-        .writeup-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        
-        .writeup-actions button {
-            font-size: 12px;
-            padding: 4px 8px;
-            margin-top: 0;
-        }
-        
-        .clarification-section {
-            background-color: #e7f3ff;
-            border: 1px solid #b3d9ff;
-            border-radius: 6px;
-            padding: 15px;
-            margin-top: 15px;
-        }
-        
-        .clarification-question {
-            margin-bottom: 15px;
-        }
-        
-        .clarification-question label {
-            font-weight: 600;
-            color: #0066cc;
-        }
-        
-        .clarification-question textarea {
-            min-height: 60px;
-        }
-        
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-            color: #666;
-        }
-        
-        .loading.show {
-            display: block;
-        }
-        
-        .error-message {
-            background-color: #f8d7da;
-            color: #721c24;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-            display: none;
-        }
-        
-        .error-message.show {
-            display: block;
-        }
-        
-        .success-message {
-            background-color: #d4edda;
-            color: #155724;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-            display: none;
-        }
-        
-        .success-message.show {
-            display: block;
-        }
-        
+        /* Modal styles */
         .modal {
             display: none;
             position: fixed;
@@ -362,19 +647,14 @@
             display: block;
         }
         
-        /* Ensure modals can be shown via inline styles */
-        .modal[style*="display: block"] {
-            display: block !important;
-        }
-        
         .modal-content {
             background-color: var(--bg-secondary);
             color: var(--text-primary);
             margin: 5% auto;
             padding: 20px;
             border-radius: 8px;
-            width: 80%;
-            max-width: 600px;
+            width: 90%;
+            max-width: 1000px;
             max-height: 80vh;
             overflow-y: auto;
         }
@@ -385,17 +665,13 @@
             align-items: center;
             margin-bottom: 20px;
             padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-primary);
         }
         
         .modal-title {
             font-size: 18px;
             font-weight: 600;
             margin: 0;
-            color: var(--text-primary);
-        }
-        
-        .modal-body {
-            background-color: var(--bg-primary);
             color: var(--text-primary);
         }
         
@@ -410,377 +686,1000 @@
             color: var(--text-primary);
         }
         
-        .step-item {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 10px;
-            margin-bottom: 8px;
-        }
-        
-        .step-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 5px;
-        }
-        
-        .step-number {
-            font-weight: 600;
-            color: #495057;
-        }
-        
-        .step-type {
-            font-size: 12px;
-            padding: 2px 6px;
-            border-radius: 10px;
-            background-color: #e9ecef;
-            color: #495057;
-        }
-        
-        .step-description {
-            font-size: 14px;
-            color: #6c757d;
-        }
-        
-        .step-status {
-            font-size: 12px;
-            padding: 2px 6px;
-            border-radius: 10px;
-            font-weight: 500;
-        }
-        
-        .step-pending { background-color: #fff3cd; color: #856404; }
-        .step-running { background-color: #d1ecf1; color: #0c5460; }
-        .step-completed { background-color: #d4edda; color: #155724; }
-        .step-failed { background-color: #f8d7da; color: #721c24; }
-        
+        /* Responsive design */
         @media (max-width: 768px) {
-            .container {
-                padding: 5px;
+            :root {
+                --sidebar-width: 250px;
             }
             
-            .form-row {
+            .content-area {
                 flex-direction: column;
-                align-items: stretch;
             }
             
-            .writeup-header {
-                flex-direction: column;
-                align-items: flex-start;
+            .sidebar {
+                width: 100%;
+                height: 200px;
+                border-right: none;
+                border-bottom: 1px solid var(--border-primary);
             }
             
-            .writeup-actions {
-                margin-top: 10px;
+            .sessions-list {
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding: 10px;
             }
             
-            .modal-content {
-                width: 95%;
-                margin: 2% auto;
+            .session-item {
+                min-width: 200px;
+                margin-right: 8px;
+                margin-bottom: 0;
             }
-        }
-        
-        /* Dark mode specific overrides */
-        [data-theme="dark"] .modal-content {
-            background-color: var(--bg-secondary);
-            color: var(--text-primary);
-        }
-        
-        [data-theme="dark"] .clarification-section {
-            background-color: var(--bg-tertiary);
-            border-color: var(--border-primary);
-            color: var(--text-primary);
-        }
-        
-        [data-theme="dark"] .clarification-section h4 {
-            color: var(--text-primary);
-        }
-        
-        [data-theme="dark"] .content-display {
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-        }
-        
-        [data-theme="dark"] .content-display h1,
-        [data-theme="dark"] .content-display h2,
-        [data-theme="dark"] .content-display h3,
-        [data-theme="dark"] .content-display h4,
-        [data-theme="dark"] .content-display h5,
-        [data-theme="dark"] .content-display h6,
-        [data-theme="dark"] .content-display p,
-        [data-theme="dark"] .content-display div,
-        [data-theme="dark"] .content-display span,
-        [data-theme="dark"] .content-display li {
-            color: var(--text-primary) !important;
-        }
-        
-        [data-theme="dark"] .content-display blockquote {
-            border-left-color: var(--border-primary);
-            background-color: var(--bg-secondary);
-            color: var(--text-secondary);
-        }
-        
-        [data-theme="dark"] .content-display pre,
-        [data-theme="dark"] .content-display code {
-            background-color: var(--bg-tertiary);
-            color: var(--text-primary);
-        }
-        
-        [data-theme="dark"] .content-display table {
-            border-color: var(--border-primary);
-        }
-        
-        [data-theme="dark"] .content-display th,
-        [data-theme="dark"] .content-display td {
-            border-color: var(--border-primary);
-            color: var(--text-primary);
-        }
-        
-        [data-theme="dark"] .content-display th {
-            background-color: var(--bg-secondary);
-        }
-        
-        /* Additional dark mode overrides for modal content */
-        [data-theme="dark"] .modal-body,
-        [data-theme="dark"] .modal-body * {
-            background-color: var(--bg-primary) !important;
-            color: var(--text-primary) !important;
-        }
-        
-        [data-theme="dark"] .modal-body h1,
-        [data-theme="dark"] .modal-body h2,
-        [data-theme="dark"] .modal-body h3,
-        [data-theme="dark"] .modal-body h4,
-        [data-theme="dark"] .modal-body h5,
-        [data-theme="dark"] .modal-body h6 {
-            color: var(--text-primary) !important;
-        }
-        
-        [data-theme="dark"] .share-link-section {
-            background-color: var(--bg-tertiary) !important;
-            border-color: var(--border-primary) !important;
-        }
-        
-        [data-theme="dark"] .share-link-input {
-            background-color: var(--bg-secondary) !important;
-            color: var(--text-primary) !important;
-            border-color: var(--border-primary) !important;
-        }
-        
-        /* Fix any remaining hardcoded elements */
-        [data-theme="dark"] .step-item,
-        [data-theme="dark"] .answer-item,
-        [data-theme="dark"] .plan-step,
-        [data-theme="dark"] .plan-overview {
-            background-color: var(--bg-primary) !important;
-            color: var(--text-primary) !important;
-            border-color: var(--border-primary) !important;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header-section">
-            <h1>Write-ups</h1>
-            <button class="dark-mode-toggle" title="Toggle dark mode">
-                <span class="icon">🌙</span>
-            </button>
-        </div>
-        
-        <!-- Create New Write-up Section -->
-        <div class="section">
-            <h2>Create New Write-up</h2>
-            <form id="createWriteupForm">
-                <div class="form-row">
-                    <div class="form-group" style="flex: 1;">
-                        <label for="title">Title</label>
-                        <input type="text" id="title" name="title" required placeholder="Enter a descriptive title">
+    <div class="main-container">
+        <!-- Content Area -->
+        <div class="content-area">
+            <!-- Left Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Write-ups</h2>
+                    <button id="newWriteupBtn" class="new-writeup-btn secondary">+ New Writeup</button>
+                </div>
+                <div class="sessions-list" id="sessionsList">
+                    <!-- Sessions will be populated here -->
                     </div>
-                    <div class="form-group" style="width: 150px;">
-                        <label for="output_format">Output Format</label>
-                        <select id="output_format" name="output_format">
-                            <option value="html">HTML</option>
-                            <option value="markdown">Markdown</option>
-                            <option value="email">Email</option>
-                            <option value="json">JSON</option>
+                </div>
+                
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Prompt Interface (shown when creating new writeup or no content) -->
+                <div class="prompt-interface" id="promptInterface">
+                    <div class="welcome-message">
+                        <h3>Create New Write-up</h3>
+                </div>
+                
+                    <div class="input-area">
+                        <div class="input-container">
+                            <div class="model-selector">
+                                <label for="modelSelect">Model:</label>
+                                <select id="modelSelect">
+                                    <option value="">Loading models...</option>
                         </select>
                     </div>
+                            <div class="prompt-input">
+                                <textarea id="promptTextarea" class="prompt-textarea" placeholder="Describe what you want the write-up to cover. Be as specific as possible about the topic, scope, and any particular aspects you want to focus on..." rows="3"></textarea>
+                                <button id="sendButton" class="send-button">
+                                    Generate
+                                </button>
                 </div>
-                
-                <div class="form-group" style="width: 100%;">
-                    <label for="prompt">Write-up Prompt</label>
-                    <textarea id="prompt" name="prompt" required placeholder="Describe what you want the write-up to cover. Be as specific as possible about the topic, scope, and any particular aspects you want to focus on."></textarea>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group" style="flex: 1;">
-                        <label for="output_destination">Output Destination (Optional)</label>
-                        <input type="text" id="output_destination" name="output_destination" placeholder="Email address, file path, etc.">
                     </div>
-                    <div class="form-group" style="width: 150px;">
-                        <label for="frequency">Frequency</label>
-                        <select id="frequency" name="frequency">
-                            <option value="one_time">One Time</option>
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly">Monthly</option>
-                        </select>
                     </div>
                 </div>
                 
-                <div class="form-row">
-                    <div class="form-group" style="flex: 1;">
-                        <label for="scheduled_for">Schedule For (Optional)</label>
-                        <input type="datetime-local" id="scheduled_for" name="scheduled_for">
-                    </div>
-                    <div class="form-group" style="width: 150px;">
-                        <label for="model_key">AI Model (Optional)</label>
-                        <select id="model_key" name="model_key">
-                            <option value="">Default</option>
-                            <option value="gpt-4">GPT-4</option>
-                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                            <option value="claude-3">Claude 3</option>
-                        </select>
+                <!-- Content Display (shown when viewing existing writeup) -->
+                <div class="content-display" id="contentDisplay" style="display: none;">
+                    <div class="tab-container">
+                        <div class="tab-header">
+                            <button class="tab-button active" onclick="switchTab('content')" id="contentTab">Content</button>
+                            <button class="tab-button" onclick="switchTab('session')" id="sessionTab">Session Log</button>
+                        </div>
+                        <div class="tab-content active" id="contentTabContent">
+                            <iframe id="contentFrame" style="width: 100%; height: 100%; border: none;"></iframe>
+                        </div>
+                        <div class="tab-content" id="sessionTabContent">
+                            <iframe id="sessionFrame" style="width: 100%; height: 100%; border: none;"></iframe>
+                        </div>
                     </div>
                 </div>
                 
-                <button type="submit">Create Write-up</button>
-            </form>
-        </div>
-        
-        <!-- Messages -->
-        <div id="errorMessage" class="error-message"></div>
-        <div id="successMessage" class="success-message"></div>
-        
-        <!-- Loading Indicator -->
-        <div id="loading" class="loading">
-            <p>Processing your request...</p>
-        </div>
-        
-        <!-- Write-ups List Section -->
-        <div class="section">
-            <h2>Existing Write-ups</h2>
-            <div id="writeupsList">
-                <p>Loading write-ups...</p>
+                <!-- Streaming Display (shown when executing writeup) -->
+                <div class="streaming-display" id="streamingDisplay" style="display: none;">
+                    <div class="streaming-header">
+                        <h3 id="streamingTitle">Executing Writeup</h3>
+                        <div class="streaming-status" id="streamingStatus">Initializing...</div>
+                    </div>
+                    <div id="conversationRenderer" style="flex: 1; border: 1px solid var(--border-primary); border-radius: 4px; overflow: hidden; background: var(--bg-primary);"></div>
+                </div>
             </div>
         </div>
     </div>
     
-    
-    <!-- Write-up Details Modal -->
-    <div id="detailsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Write-up Details</h3>
-                <span class="close" onclick="closeDetailsModal()">&times;</span>
-            </div>
-            <div id="detailsContent">
-                <!-- Write-up details will be loaded here -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Content Modal -->
+    <!-- Content Modal for displaying writeup results -->
     <div id="contentModal" class="modal">
-        <div class="modal-content" style="width: 90%; max-width: 1000px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h3 id="contentModalTitle" class="modal-title">Write-up Content</h3>
                 <span class="close" onclick="closeModal('contentModal')">&times;</span>
             </div>
-            <div id="contentModalContent" class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px; border-radius: 5px;">
+            <div id="contentModalContent" style="max-height: 70vh; overflow-y: auto; padding: 20px; border-radius: 5px;">
                 <!-- Content will be populated by JavaScript -->
             </div>
         </div>
     </div>
     
     <script>
-        let currentWriteupId = null;
+        // Global state
+        let sessions = new Map();
+        let currentSessionId = null;
+        let isGenerating = false;
+        let regeneratingSessionIds = new Set(); // Track which sessions are showing regeneration controls
         
-        // Process chart placeholders in content (reused from explainer agent)
-        function processChartPlaceholders(content) {
-            if (!content) return content;
-            
-            // Regular expression to match chart placeholders: [CHART:type:param1:param2:param3]
-            const chartRegex = /\[CHART:([^:]+):([^\]]+)\]/g;
-            
-            return content.replace(chartRegex, (match, chartType, params) => {
-                const paramParts = params.split(':');
-                
-                if (chartType === 'anomaly') {
-                    // For anomaly charts: [CHART:anomaly:anomaly_id]
-                    const anomalyId = paramParts[0];
-                    return `<div class="chart-container" style="margin: 4px 0;">
-                        <iframe src="/anomaly-analyzer/anomaly-chart?id=${anomalyId}" 
-                                style="width: 100%; height: 550px; border: none;" 
-                                frameborder="0" scrolling="no">
-                        </iframe>
-                    </div>`;
-                    
-                } else if (chartType === 'time_series' || chartType === 'time_series_id') {
-                    // For time series charts: [CHART:time_series:metric_id:district:period] or [CHART:time_series_id:chart_id]
-                    if (paramParts.length === 1) {
-                        // Chart ID format: [CHART:time_series_id:chart_id]
-                        const chartId = paramParts[0];
-                        return `<div class="chart-container" style="margin: 4px 0;">
-                            <iframe src="/backend/time-series-chart?chart_id=${chartId}" 
-                                    style="width: 100%; height: 500px; border: none;" 
-                                    frameborder="0" scrolling="no">
-                            </iframe>
-                        </div>`;
-                    } else {
-                        // Metric format: [CHART:time_series:metric_id:district:period]
-                        const metricId = paramParts[0];
-                        const district = paramParts[1] || '0';
-                        const period = paramParts[2] || 'month';
-                        return `<div class="chart-container" style="margin: 4px 0;">
-                            <iframe src="/backend/time-series-chart?metric_id=${metricId}&district=${district}&period_type=${period}" 
-                                    style="width: 100%; height: 500px; border: none;" 
-                                    frameborder="0" scrolling="no">
-                            </iframe>
-                        </div>`;
-                    }
-                    
-                } else if (chartType === 'map') {
-                    // For map charts: [CHART:map:map_id]
-                    const mapId = paramParts[0];
-                    return `<div class="chart-container" style="margin: 4px 0;">
-                        <iframe src="/backend/map-chart?id=${mapId}&embedded=true" 
-                                style="width: 100%; height: 800px; border: none;" 
-                                frameborder="0" scrolling="yes">
-                        </iframe>
-                    </div>`;
-                    
-                } else if (chartType === 'dualmap') {
-                    // For dual map charts: [CHART:dualmap:map1_id:map2_id]
-                    const map1Id = paramParts[0];
-                    const map2Id = paramParts[1];
-                    return `<div class="chart-container" style="margin: 4px 0;">
-                        <iframe src="/dual-map?map1_id=${map1Id}&map2_id=${map2Id}" 
-                                style="width: 100%; height: 800px; border: none;" 
-                                frameborder="0" scrolling="yes">
-                        </iframe>
-                    </div>`;
+        // Helper function to format context window size for display
+        function formatContextWindow(contextWindow) {
+            if (contextWindow >= 1000000) {
+                return `${(contextWindow / 1000000).toFixed(1)}M`;
+            } else if (contextWindow >= 1000) {
+                return `${(contextWindow / 1000).toFixed(0)}k`;
+            } else {
+                return `${contextWindow}`;
+            }
+        }
+        
+        // Helper function to format pricing for display
+        function formatPricing(inputPrice, outputPrice) {
+            const formatPrice = (price) => {
+                if (price >= 10) {
+                    return `$${price.toFixed(0)}`;
+                } else if (price >= 1) {
+                    return `$${price.toFixed(1)}`;
+                } else {
+                    return `$${price.toFixed(2)}`;
                 }
+            };
+            return `${formatPrice(inputPrice)}/${formatPrice(outputPrice)}`;
+        }
+
+        // Load available models for the dropdown
+        async function loadAvailableModels() {
+            try {
+                const response = await fetch('/backend/available-models');
+                const data = await response.json();
                 
-                // If unknown chart type, return the original placeholder
-                return match;
+                if (data.status === 'success') {
+                    const modelSelect = document.getElementById('modelSelect');
+                    
+                    // Clear existing options
+                    modelSelect.innerHTML = '';
+                    
+                    // Add default option
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = `Default (${data.default_model})`;
+                    modelSelect.appendChild(defaultOption);
+                    
+                    // Add available models grouped by provider
+                    const modelsByProvider = {};
+                    data.models.forEach(model => {
+                        if (!modelsByProvider[model.provider]) {
+                            modelsByProvider[model.provider] = [];
+                        }
+                        modelsByProvider[model.provider].push(model);
+                    });
+                    
+                    // Add models by provider
+                    Object.keys(modelsByProvider).forEach(provider => {
+                        const providerOption = document.createElement('option');
+                        providerOption.value = '';
+                        providerOption.textContent = `--- ${provider.toUpperCase()} ---`;
+                        providerOption.disabled = true;
+                        modelSelect.appendChild(providerOption);
+                        
+                        // Add models for this provider
+                        modelsByProvider[provider].forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.key;
+                            const contextWindowStr = formatContextWindow(model.context_window);
+                            const pricingStr = formatPricing(model.input_price_per_million, model.output_price_per_million);
+                            option.textContent = `${model.name} (${contextWindowStr} context, ${pricingStr}/M)`;
+                            modelSelect.appendChild(option);
+                        });
+                    });
+                } else {
+                    console.error('Failed to load models:', data.message);
+                    const modelSelect = document.getElementById('modelSelect');
+                    modelSelect.innerHTML = '<option value="">Error loading models</option>';
+                }
+            } catch (error) {
+                console.error('Error loading models:', error);
+                const modelSelect = document.getElementById('modelSelect');
+                modelSelect.innerHTML = '<option value="">Error loading models</option>';
+            }
+        }
+        
+        // Generate a unique session ID
+        function generateSessionId() {
+            return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+        
+        // Create a summary from the prompt
+        function createSessionTitle(prompt) {
+            const words = prompt.split(' ').slice(0, 8).join(' ');
+            return words.length > 50 ? words.substring(0, 47) + '...' : words;
+        }
+        
+        // Add a new session to the sidebar
+        function addSession(sessionId, title, status = 'pending', promptPreview = '') {
+            const session = {
+                id: sessionId,
+                title: title,
+                status: status,
+                messages: [],
+                progress: '',
+                promptPreview: promptPreview,
+                createdAt: new Date()
+            };
+            
+            sessions.set(sessionId, session);
+            renderSessions();
+            return session;
+        }
+        
+        // Update session status and progress
+        function updateSession(sessionId, updates) {
+            const session = sessions.get(sessionId);
+            if (session) {
+                Object.assign(session, updates);
+                renderSessions();
+                
+                // Update current session content if this is the active session
+                if (currentSessionId === sessionId) {
+                    showSessionContent();
+                }
+            }
+        }
+        
+        // Start polling for title updates
+        function startTitlePolling(writeupId, sessionId) {
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/writeups/${writeupId}/title`);
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        const newTitle = result.title;
+                        const session = sessions.get(sessionId);
+                        
+                        if (session && newTitle !== 'Generating title...' && newTitle !== session.title) {
+                            // Title has been generated, update it
+                            session.title = newTitle;
+                            renderSessions();
+                            clearInterval(pollInterval);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error polling for title update:', error);
+                }
+            }, 1000); // Poll every second
+            
+            // Stop polling after 30 seconds to avoid infinite polling
+            setTimeout(() => {
+                clearInterval(pollInterval);
+            }, 30000);
+        }
+        
+        // Wait for title generation to complete
+        async function waitForTitleGeneration(writeupId, sessionId) {
+            console.log(`Waiting for title generation for writeup ${writeupId}`);
+            return new Promise((resolve) => {
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(`/api/writeups/${writeupId}/title`);
+                        const result = await response.json();
+                        
+                        if (result.status === 'success') {
+                            const newTitle = result.title;
+                            const session = sessions.get(sessionId);
+                            
+                            console.log(`Title poll result for writeup ${writeupId}: "${newTitle}"`);
+                            
+                            if (session && newTitle !== 'Generating title...' && newTitle !== session.title) {
+                                // Title has been generated, update it
+                                console.log(`Title generated for writeup ${writeupId}: "${newTitle}"`);
+                                session.title = newTitle;
+                                renderSessions();
+                                clearInterval(pollInterval);
+                                resolve();
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error polling for title update:', error);
+                    }
+                }, 1000); // Poll every second
+                
+                // Stop polling after 30 seconds to avoid infinite waiting
+                setTimeout(() => {
+                    console.log(`Title generation timeout for writeup ${writeupId}, continuing anyway`);
+                    clearInterval(pollInterval);
+                    resolve(); // Resolve anyway to continue execution
+                }, 30000);
             });
         }
         
-        // Load write-ups on page load
+        // Format date for display
+        function formatDate(date) {
+            const now = new Date();
+            const diffMs = now - date;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffMinutes = Math.floor(diffMs / (1000 * 60));
+            
+            if (diffMinutes < 1) return 'Just now';
+            if (diffMinutes < 60) return `${diffMinutes}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+            
+            // For older dates, show formatted date
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+            });
+        }
+
+        // Format model name for display
+        function formatModelName(modelKey) {
+            if (!modelKey) return 'Claude 3.5 Sonnet';
+            
+            // Convert common model keys to readable names
+            const modelMap = {
+                'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
+                'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
+                'claude-3-opus-20240229': 'Claude 3 Opus',
+                'gpt-4o': 'GPT-4o',
+                'gpt-4o-mini': 'GPT-4o Mini',
+                'gpt-4-turbo': 'GPT-4 Turbo'
+            };
+            
+            return modelMap[modelKey] || modelKey;
+        }
+
+        // Render sessions in the sidebar
+        function renderSessions() {
+            const sessionsList = document.getElementById('sessionsList');
+            const sessionsArray = Array.from(sessions.values()).sort((a, b) => b.createdAt - a.createdAt);
+            
+            if (sessionsArray.length === 0) {
+                sessionsList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">No sessions yet. Create your first write-up!</div>';
+                return;
+            }
+            
+            // Separate into pending and completed
+            const pendingSessions = sessionsArray.filter(s => 
+                s.status === 'pending' || s.status === 'running' || s.status === 'generating'
+            );
+            const completedSessions = sessionsArray.filter(s => 
+                s.status === 'completed' || s.status === 'failed'
+            );
+            
+            let html = '';
+            
+            // Pending section
+            if (pendingSessions.length > 0) {
+                html += '<div class="session-section">';
+                html += '<div class="session-section-header">Pending</div>';
+                html += pendingSessions.map(session => {
+                    const isActive = currentSessionId === session.id;
+                    const isExecuting = session.status === 'generating' || session.status === 'running';
+                    const isPending = session.status === 'pending';
+                    
+                    let displayStatus = session.status;
+                    if (session.status === 'in_progress') displayStatus = 'running';
+                    
+                    return `
+                        <div class="session-item ${isActive ? 'active' : ''} ${isExecuting ? 'loading' : ''}" 
+                             onclick="selectSession('${session.id}')">
+                            <div class="session-title">
+                                <div class="session-title-text">
+                                    ${session.title === 'Generating title...' ? 
+                                        '<span class="title-spinner"></span> ' + session.title : 
+                                        session.title}
+                                </div>
+                                ${session.sessionId || session.writeupId ? `
+                                    <div class="session-menu" onclick="event.stopPropagation()">
+                                        <button class="session-menu-btn" onclick="toggleSessionMenu('${session.id}')" title="More actions">
+                                            ⋯
+                                        </button>
+                                        <div class="session-menu-dropdown" id="menu_${session.id}">
+                                            ${session.writeupId ? `
+                                                <button class="session-menu-item" onclick="copyWriteupUrl(${session.writeupId}, this)">
+                                                    📋 Copy URL
+                                                </button>
+                                            ` : ''}
+                                            ${session.sessionId ? `
+                                                <a href="/backend/conversation?session=${session.sessionId}" 
+                                                   target="_blank" class="session-menu-item" onclick="event.stopPropagation()">
+                                                    🔗 View Session
+                                                </a>
+                                            ` : ''}
+                                            ${session.writeupId ? `
+                                                <button class="session-menu-item" onclick="viewWriteupDetails(${session.writeupId})">
+                                                    ⓘ View Info
+                                                </button>
+                                                <button class="session-menu-item" onclick="regenerateWriteup(${session.writeupId})">
+                                                    ↻ Regenerate
+                                                </button>
+                                                <button class="session-menu-item danger" onclick="deleteWriteup(${session.writeupId})">
+                                                    × Delete
+                                                </button>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <div class="session-prompt-preview">${session.promptPreview || ''}</div>
+                            <div class="session-meta">
+                                <span class="session-date">${formatDate(session.createdAt)}</span>
+                                <span class="session-model">${session.modelKey}</span>
+                            </div>
+                            <span class="session-status">${displayStatus}</span>
+                            
+                            ${isExecuting ? `
+                                <div class="session-progress">
+                                    <span class="loading-spinner"></span>
+                                    Processing...
+                                </div>
+                                ${session.latestStreamingLine ? `
+                                    <div class="streaming-line">${session.latestStreamingLine}</div>
+                                ` : ''}
+                            ` : ''}
+                            
+                            ${(isPending || regeneratingSessionIds.has(session.id)) && session.writeupId ? `
+                                <div class="pending-controls" onclick="event.stopPropagation()">
+                                    <select id="pendingModel_${session.writeupId}">
+                                        <option value="">Default Model</option>
+                                    </select>
+                                    <button onclick="${isPending ? 'executePendingWriteupFromSidebar' : 'executeRegenerateFromSidebar'}('${session.writeupId}')">
+                                        Generate
+                                    </button>
+                                    ${regeneratingSessionIds.has(session.id) ? `
+                                        <button onclick="cancelRegenerate('${session.id}')" style="background: var(--bg-tertiary); color: var(--text-secondary); margin-left: 4px;">
+                                            Cancel
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                            
+                            <!-- Debug info -->
+                            ${session.status === 'pending' ? `
+                                <div style="font-size: 8px; color: red;">DEBUG: Pending=${isPending}, WriteupId=${session.writeupId}</div>
+                            ` : ''}
+            </div>
+                    `;
+                }).join('');
+                html += '</div>';
+            }
+            
+            // Completed section
+            if (completedSessions.length > 0) {
+                html += '<div class="session-section">';
+                html += '<div class="session-section-header">Completed</div>';
+                html += completedSessions.map(session => {
+                    const isActive = currentSessionId === session.id;
+                    
+                    return `
+                        <div class="session-item ${isActive ? 'active' : ''}" 
+                             onclick="selectSession('${session.id}')">
+                            <div class="session-title">
+                                <div class="session-title-text">
+                                    ${session.title === 'Generating title...' ? 
+                                        '<span class="title-spinner"></span> ' + session.title : 
+                                        session.title}
+                                </div>
+                                ${session.sessionId || session.writeupId ? `
+                                    <div class="session-menu" onclick="event.stopPropagation()">
+                                        <button class="session-menu-btn" onclick="toggleSessionMenu('${session.id}')" title="More actions">
+                                            ⋯
+                                        </button>
+                                        <div class="session-menu-dropdown" id="menu_${session.id}">
+                                            ${session.writeupId ? `
+                                                <button class="session-menu-item" onclick="copyWriteupUrl(${session.writeupId}, this)">
+                                                    📋 Copy URL
+                                                </button>
+                                            ` : ''}
+                                            ${session.sessionId ? `
+                                                <a href="/backend/conversation?session=${session.sessionId}" 
+                                                   target="_blank" class="session-menu-item" onclick="event.stopPropagation()">
+                                                    🔗 View Session
+                                                </a>
+                                            ` : ''}
+                                            ${session.writeupId ? `
+                                                <button class="session-menu-item" onclick="viewWriteupDetails(${session.writeupId})">
+                                                    ⓘ View Info
+                                                </button>
+                                                <button class="session-menu-item" onclick="regenerateWriteup(${session.writeupId})">
+                                                    ↻ Regenerate
+                                                </button>
+                                                <button class="session-menu-item danger" onclick="deleteWriteup(${session.writeupId})">
+                                                    × Delete
+                                                </button>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <div class="session-prompt-preview">${session.promptPreview || ''}</div>
+                            <div class="session-meta">
+                                <span class="session-date">${formatDate(session.createdAt)}</span>
+                                <span class="session-model">${session.modelKey}</span>
+                            </div>
+
+                            ${regeneratingSessionIds.has(session.id) && session.writeupId ? `
+                                <div class="pending-controls" onclick="event.stopPropagation()">
+                                    <select id="pendingModel_${session.writeupId}">
+                                        <option value="">Default Model</option>
+                                    </select>
+                                    <button onclick="executeRegenerateFromSidebar('${session.writeupId}')">
+                                        Generate
+                                    </button>
+                                    <button onclick="cancelRegenerate('${session.id}')" style="background: var(--bg-tertiary); color: var(--text-secondary); margin-left: 4px;">
+                                        Cancel
+                                    </button>
+            </div>
+                            ` : ''}
+            </div>
+                    `;
+                }).join('');
+                html += '</div>';
+            }
+            
+            sessionsList.innerHTML = html;
+            
+            // Populate model dropdowns for pending items
+            populatePendingModelDropdowns();
+        }
+        
+        // Populate model dropdowns for pending writeups
+        function populatePendingModelDropdowns() {
+            const modelSelects = document.querySelectorAll('[id^="pendingModel_"]');
+            modelSelects.forEach(select => {
+                // Copy options from main model selector
+                const mainModelSelect = document.getElementById('modelSelect');
+                select.innerHTML = mainModelSelect.innerHTML;
+            });
+        }
+        
+        // Execute pending writeup from sidebar
+        async function executePendingWriteupFromSidebar(writeupId) {
+            const modelSelect = document.getElementById(`pendingModel_${writeupId}`);
+            const modelKey = modelSelect.value;
+            
+            // Update session status to executing
+            const sessionId = `writeup_${writeupId}`;
+            updateSession(sessionId, {
+                status: 'running',
+                progress: 'Starting writeup generation...'
+            });
+            
+            // Select the session to show the streaming interface
+            selectSession(sessionId);
+            
+            try {
+                const response = await fetch(`/api/writeups/${writeupId}/execute`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model_key: modelKey
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    console.log('Writeup execution started successfully:', result);
+                    updateSession(sessionId, {
+                        status: 'running',
+                        progress: `Job started: ${result.job_id || 'unknown'}. Generating writeup...`
+                    });
+                    
+                    // Show streaming interface immediately
+                    const session = sessions.get(sessionId);
+                    if (session) {
+                        showStreamingInterface(session);
+                    }
+                    
+                    // Start monitoring the conversation if we have a session ID
+                    if (session && session.sessionId) {
+                        console.log('Starting conversation monitoring for session:', session.sessionId);
+                        startConversationMonitoring(session.sessionId);
+                    }
+                    
+                    // Reload writeups periodically to check for completion
+                    const checkInterval = setInterval(async () => {
+                        console.log('Checking writeup status...');
+                        await loadExistingWriteups();
+                        const session = sessions.get(sessionId);
+                        if (session && (session.status === 'completed' || session.status === 'failed')) {
+                            console.log('Writeup completed, stopping interval');
+                            clearInterval(checkInterval);
+                            // Switch to content view when completed
+                            showSessionContent();
+                        }
+                    }, 3000);
+                } else {
+                    updateSession(sessionId, {
+                        status: 'failed',
+                        progress: `Error: ${result.message || 'Failed to execute write-up'}`
+                    });
+                }
+            } catch (error) {
+                updateSession(sessionId, {
+                    status: 'failed',
+                    progress: `Error: ${error.message}`
+                });
+            }
+        }
+        
+        // Select a session
+        function selectSession(sessionId) {
+            currentSessionId = sessionId;
+            renderSessions();
+            showSessionContent();
+        }
+        
+        // Show content for the selected session
+        function showSessionContent() {
+            const promptInterface = document.getElementById('promptInterface');
+            const contentDisplay = document.getElementById('contentDisplay');
+            const streamingDisplay = document.getElementById('streamingDisplay');
+            const contentFrame = document.getElementById('contentFrame');
+            const sessionFrame = document.getElementById('sessionFrame');
+            
+            // Hide all displays first
+            promptInterface.style.display = 'none';
+            contentDisplay.style.display = 'none';
+            streamingDisplay.style.display = 'none';
+            
+            if (!currentSessionId) {
+                // Show prompt interface for new writeup
+                promptInterface.style.display = 'flex';
+                return;
+            }
+            
+            const session = sessions.get(currentSessionId);
+            if (!session) return;
+            
+            // If session has a completed writeup with content, show it in iframe
+            if (session.writeupId && session.status === 'completed' && session.finalContent) {
+                const permalinkUrl = `/api/writeups/permalink/${session.writeupId}`;
+                const sessionUrl = session.sessionId ? `/backend/conversation?session=${session.sessionId}` : `/api/writeups/stream/${session.writeupId}`;
+                
+                contentFrame.src = permalinkUrl;
+                sessionFrame.src = sessionUrl;
+                
+                // Set content tab as active by default
+                switchTab('content');
+                contentDisplay.style.display = 'block';
+            } else if (session.status === 'running' || session.status === 'generating') {
+                // Show streaming interface for running writeups
+                showStreamingInterface(session);
+                } else {
+                // For pending or other statuses, show welcome message
+                const welcomeMsg = promptInterface.querySelector('.welcome-message');
+                welcomeMsg.innerHTML = `
+                    <h3>Write-ups Agent</h3>
+                    <p>Select a session from the left to view existing write-ups, or create a new one with the button above.</p>
+                `;
+                promptInterface.style.display = 'flex';
+            }
+        }
+        
+        // Switch between tabs
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            if (tabName === 'content') {
+                document.getElementById('contentTab').classList.add('active');
+                document.getElementById('contentTabContent').classList.add('active');
+            } else if (tabName === 'session') {
+                document.getElementById('sessionTab').classList.add('active');
+                document.getElementById('sessionTabContent').classList.add('active');
+            }
+        }
+        
+        // Show new writeup interface
+        function showNewWriteup() {
+            currentSessionId = null;
+            renderSessions();
+            showSessionContent();
+            
+            // Reset button text and welcome message
+            const sendButton = document.getElementById('sendButton');
+            sendButton.textContent = 'Generate';
+            
+            const welcomeMsg = document.querySelector('.welcome-message');
+            welcomeMsg.innerHTML = `
+                <h3>Create New Write-up</h3>
+            `;
+        }
+        
+        // Show streaming interface for running writeups
+        function showStreamingInterface(session) {
+            const streamingDisplay = document.getElementById('streamingDisplay');
+            const streamingTitle = document.getElementById('streamingTitle');
+            const streamingStatus = document.getElementById('streamingStatus');
+            
+            streamingTitle.textContent = session.title;
+            streamingStatus.textContent = session.progress || 'Processing...';
+            
+            // Initialize conversation renderer if not already done
+            if (!window.writeupConversationRenderer) {
+                try {
+                    window.writeupConversationRenderer = new ConversationRenderer('conversationRenderer', {
+                        showTimestamps: false,
+                        enableMarkdown: true,
+                        enableToolCallDetails: true,
+                        enableChartProcessing: true,
+                        autoScroll: true
+                    });
+                } catch (error) {
+                    console.error('Error creating ConversationRenderer:', error);
+                    streamingStatus.textContent = 'Error: Failed to initialize conversation renderer';
+                return;
+                }
+            }
+            
+            // Add initial user message if not already added
+            if (session.originalPrompt && !session.conversationStarted) {
+                window.writeupConversationRenderer.addMessage(session.originalPrompt, 'user', false);
+                session.conversationStarted = true;
+            }
+            
+            // Load conversation if we have a session ID
+            if (session.sessionId) {
+                loadConversationViewer(session.sessionId);
+            }
+            
+            streamingDisplay.style.display = 'flex';
+        }
+        
+        // Load conversation viewer for a specific session
+        async function loadConversationViewer(sessionId) {
+            try {
+                const response = await fetch(`/backend/conversation?session=${sessionId}`);
+                const html = await response.text();
+                
+                // Extract the conversation content from the response
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const conversationContainer = doc.querySelector('#conversationContainer');
+                
+                if (conversationContainer) {
+                    const conversationRenderer = document.getElementById('conversationRenderer');
+                    if (conversationRenderer) {
+                        conversationRenderer.innerHTML = conversationContainer.innerHTML;
+                        
+                        // Re-initialize the conversation renderer with the loaded content
+                        if (window.writeupConversationRenderer) {
+                            window.writeupConversationRenderer.refresh();
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading conversation viewer:', error);
+                const conversationRenderer = document.getElementById('conversationRenderer');
+                if (conversationRenderer) {
+                    conversationRenderer.innerHTML = `
+                        <div class="conversation-message">
+                            <div class="message-content">Error loading conversation: ${error.message}</div>
+                        </div>
+                    `;
+                }
+            }
+        }
+        
+        // Start monitoring conversation for streaming updates
+        function startConversationMonitoring(sessionId) {
+            // Poll for conversation updates every 2 seconds
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/backend/conversation?session=${sessionId}`);
+                    const html = await response.text();
+                    
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const conversationContainer = doc.querySelector('#conversationContainer');
+                    
+                    if (conversationContainer) {
+                        const conversationRenderer = document.getElementById('conversationRenderer');
+                        if (conversationRenderer) {
+                            conversationRenderer.innerHTML = conversationContainer.innerHTML;
+                            
+                            // Re-initialize the conversation renderer with the updated content
+                            if (window.writeupConversationRenderer) {
+                                window.writeupConversationRenderer.refresh();
+                            }
+                        }
+                    }
+                    
+                    // Check if the session is still running
+                    const session = sessions.get(currentSessionId);
+                    if (session && (session.status === 'completed' || session.status === 'failed')) {
+                        clearInterval(pollInterval);
+                    }
+                } catch (error) {
+                    console.error('Error monitoring conversation:', error);
+                }
+            }, 2000);
+        }
+        
+        
+        // Load existing writeups from database
+        async function loadExistingWriteups() {
+            try {
+                const response = await fetch('/api/writeups/list');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Clear existing sessions to avoid duplicates
+                    sessions.clear();
+                    
+                    // Convert existing writeups to sessions
+                    data.writeups.forEach(writeup => {
+                        const sessionId = `writeup_${writeup.id}`;
+                        const promptPreview = writeup.original_prompt ? 
+                            (writeup.original_prompt.length > 60 ? writeup.original_prompt.substring(0, 57) + '...' : writeup.original_prompt) : '';
+                        const session = {
+                            id: sessionId,
+                            writeupId: writeup.id,
+                            sessionId: writeup.session_id, // Store the actual session ID for conversation viewer
+                            title: writeup.title,
+                            status: writeup.status === 'completed' ? 'completed' : 
+                                   writeup.status === 'failed' ? 'failed' : 
+                                   writeup.status === 'in_progress' ? 'running' :
+                                   writeup.status === 'running' ? 'running' :
+                                   writeup.status,
+                            messages: [],
+                            progress: '',
+                            promptPreview: promptPreview,
+                            createdAt: new Date(writeup.created_at),
+                            originalPrompt: writeup.original_prompt,
+                            finalContent: writeup.final_content,
+                            latestStreamingLine: '',
+                            modelKey: formatModelName(writeup.model_key)
+                        };
+                        
+                        // For actually running writeups, set streaming info
+                        if (writeup.status === 'running' || writeup.status === 'in_progress') {
+                            session.latestStreamingLine = 'Generating write-up...';
+                        }
+                        
+                        sessions.set(sessionId, session);
+                    });
+                    
+                    // Also check for active jobs to get more detailed progress
+                    await loadActiveJobs();
+                    
+                    renderSessions();
+                }
+            } catch (error) {
+                console.error('Error loading existing writeups:', error);
+            }
+        }
+        
+        // Load active jobs to get detailed progress information
+        async function loadActiveJobs() {
+            try {
+                const response = await fetch('/backend/jobs');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const activeJobs = data.jobs.filter(job => job.status === 'running' || job.status === 'pending');
+                    
+                    // Update sessions with job progress information
+                    activeJobs.forEach(job => {
+                        // Try to match job to writeup by description
+                        const description = job.description || '';
+                        const writeupMatch = description.match(/Execute writeup.*\(ID: (\d+)\)/);
+                        
+                        if (writeupMatch) {
+                            const writeupId = parseInt(writeupMatch[1]);
+                            const sessionId = `writeup_${writeupId}`;
+                            const session = sessions.get(sessionId);
+                            
+                            if (session) {
+                                // Update session with job progress
+                                session.status = job.status === 'running' ? 'running' : 'pending';
+                                session.progress = `${job.progress}% - ${job.description || 'Processing...'}`;
+                                session.latestStreamingLine = `Job ${job.job_id}: ${job.progress}% complete`;
+                                
+                                console.log(`Updated session ${sessionId} with job progress: ${job.progress}%`);
+                            }
+                        }
+                    });
+                    
+                    // Also check for writeups that are in progress but don't have jobs
+                    // This handles cases where writeups are running but not tracked by job manager
+                    const inProgressWriteups = Array.from(sessions.values()).filter(session => 
+                        session.status === 'running' || session.status === 'in_progress'
+                    );
+                    
+                    inProgressWriteups.forEach(session => {
+                        if (!session.progress || session.progress === '') {
+                            // This writeup is running but doesn't have job progress
+                            session.progress = 'Processing...';
+                            session.latestStreamingLine = 'Generating write-up...';
+                            console.log(`Updated session ${session.id} with fallback progress`);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading active jobs:', error);
+            }
+        }
+        
+        // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
-            loadWriteups();
+            loadAvailableModels();
+            loadExistingWriteups();
+            
+            // Set up event listeners
+            const sendButton = document.getElementById('sendButton');
+            const promptTextarea = document.getElementById('promptTextarea');
+            const newWriteupBtn = document.getElementById('newWriteupBtn');
+            
+            sendButton.addEventListener('click', handleSendMessage);
+            newWriteupBtn.addEventListener('click', showNewWriteup);
+            
+            promptTextarea.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                }
+            });
+            
+            // Show prompt interface by default
+            showSessionContent();
         });
         
-        // Create write-up form submission
-        document.getElementById('createWriteupForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
+        // Handle sending a new message or executing pending writeup
+        async function handleSendMessage() {
+            if (isGenerating) return;
             
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData.entries());
+            const promptTextarea = document.getElementById('promptTextarea');
+            const modelSelect = document.getElementById('modelSelect');
+            const sendButton = document.getElementById('sendButton');
+            const modelKey = modelSelect.value;
             
-            showLoading(true);
-            hideMessages();
+            isGenerating = true;
+            sendButton.disabled = true;
+            
+            if (currentSessionId) {
+                // Check if this is executing a pending writeup
+                const session = sessions.get(currentSessionId);
+                if (session && session.status === 'pending' && session.writeupId) {
+                    sendButton.textContent = 'Executing...';
+                    await executePendingWriteup(session.writeupId, modelKey);
+                    return;
+                }
+            }
+            
+            // Creating a new writeup
+            const prompt = promptTextarea.value.trim();
+            if (!prompt) {
+                isGenerating = false;
+                sendButton.disabled = false;
+                return;
+            }
+            
+            sendButton.textContent = 'Creating...';
+            
+            const sessionTitle = createSessionTitle(prompt);
+            const promptPreview = prompt.length > 60 ? prompt.substring(0, 57) + '...' : prompt;
+            
+            // Clear input immediately
+            promptTextarea.value = '';
+            
+            // Create a temporary session immediately with spinner
+            const tempSessionId = `temp_${Date.now()}`;
+            addSession(tempSessionId, 'Generating title...', 'pending', promptPreview);
+            selectSession(tempSessionId);
             
             try {
                 const response = await fetch('/api/writeups/create', {
@@ -788,112 +1687,122 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify({
+                        title: '', // Let the backend generate the title
+                        prompt: prompt,
+                        output_format: 'html',
+                        generate_title: true,
+                        model_key: modelKey
+                    })
                 });
                 
                 const result = await response.json();
                 
                 if (result.status === 'success') {
-                    showSuccess(result.message || 'Write-up created and executed successfully!');
-                    e.target.reset();
-                    loadWriteups();
+                    // Replace the temporary session with the real one
+                    const newSessionId = `writeup_${result.writeup_id}`;
+                    const generatedTitle = result.title || 'Generating title...';
                     
-                    // If there's content, show it immediately
-                    if (result.content) {
-                        showContentModal('Write-up Content', result.content, 'html', result.writeup_id);
+                    // Remove temp session and add real one
+                    sessions.delete(tempSessionId);
+                    addSession(newSessionId, generatedTitle, 'pending', promptPreview);
+                    sessions.get(newSessionId).writeupId = result.writeup_id;
+                    
+                    // Select the newly created writeup
+                    selectSession(newSessionId);
+                    
+                    // Start polling for title updates if it's still generating
+                    if (generatedTitle === 'Generating title...') {
+                        // Wait for title generation to complete before executing
+                        sendButton.textContent = 'Generating title...';
+                        await waitForTitleGeneration(result.writeup_id, newSessionId);
                     }
+                    
+                    // Automatically execute the writeup with the selected model
+                    sendButton.textContent = 'Executing...';
+                    await executePendingWriteup(result.writeup_id, modelKey);
                 } else {
-                    showError(result.message || 'Failed to create write-up');
+                    // Remove temp session on error
+                    sessions.delete(tempSessionId);
+                    renderSessions();
+                    alert(`Error: ${result.message || 'Failed to create write-up'}`);
                 }
             } catch (error) {
-                showError('Error creating write-up: ' + error.message);
+                // Remove temp session on error
+                sessions.delete(tempSessionId);
+                renderSessions();
+                alert(`Error: ${error.message}`);
             } finally {
-                showLoading(false);
+                isGenerating = false;
+                sendButton.disabled = false;
+                sendButton.textContent = 'Generate';
             }
-        });
+        }
         
-        async function loadWriteups() {
+        // Execute a pending writeup
+        async function executePendingWriteup(writeupId, modelKey) {
             try {
-                const response = await fetch('/api/writeups/list');
+                const response = await fetch(`/api/writeups/${writeupId}/execute`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model_key: modelKey
+                    })
+                });
+                
                 const result = await response.json();
                 
                 if (result.status === 'success') {
-                    displayWriteups(result.writeups);
-                } else {
-                    document.getElementById('writeupsList').innerHTML = '<p>Error loading write-ups: ' + result.message + '</p>';
-                }
-            } catch (error) {
-                document.getElementById('writeupsList').innerHTML = '<p>Error loading write-ups: ' + error.message + '</p>';
-            }
-        }
-        
-        // Store writeups data globally for access by modal functions
-        let globalWriteupsData = [];
-        
-        function displayWriteups(writeups) {
-            const container = document.getElementById('writeupsList');
-            
-            // Store writeups data globally
-            globalWriteupsData = writeups;
-            
-            if (writeups.length === 0) {
-                container.innerHTML = '<p>No write-ups found. Create your first write-up above!</p>';
-                return;
-            }
-            
-            const html = writeups.map(writeup => `
-                <div class="writeup-item">
-                    <div class="writeup-header">
-                        <h3 class="writeup-title">${escapeHtml(writeup.title)}</h3>
-                        <span class="writeup-status status-${writeup.status}">${writeup.status.replace('_', ' ')}</span>
-                    </div>
-                    <div class="writeup-meta">
-                        Created: ${new Date(writeup.created_at).toLocaleString()} | 
-                        Format: ${writeup.output_format} | 
-                        Frequency: ${writeup.frequency}
-                        ${writeup.scheduled_for ? ' | Scheduled: ' + new Date(writeup.scheduled_for).toLocaleString() : ''}
-                    </div>
-                    <div class="writeup-prompt">${escapeHtml(writeup.original_prompt)}</div>
+                    // Update session to running status
+                    const sessionId = `writeup_${writeupId}`;
+                    updateSession(sessionId, {
+                        status: 'running',
+                        progress: `Job started: ${result.job_id || 'unknown'}. Executing...`
+                    });
                     
-                    ${writeup.status === 'completed' ? 
-                        `<div class="share-link-section" style="margin: 10px 0; padding: 10px; background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 4px;">
-                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                                <span style="font-size: 12px; font-weight: 600; color: #0c5460;">🔗 Shareable Link:</span>
-                                <input type="text" value="${window.location.origin}/api/writeups/permalink/${writeup.id}" 
-                                       class="share-link-input" data-writeup-id="${writeup.id}" readonly 
-                                       style="flex: 1; padding: 4px 8px; border: 1px solid var(--border-primary); border-radius: 3px; font-size: 12px; font-family: monospace; background-color: var(--bg-secondary); color: var(--text-primary);">
-                                <button onclick="copyShareLink(${writeup.id})" class="copy-share-button" data-writeup-id="${writeup.id}"
-                                        style="padding: 4px 8px; font-size: 11px; background-color: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer;">Copy</button>
-                            </div>
-                            <div style="font-size: 11px; color: #6c757d;">Share this permanent link to give others access to this write-up</div>
-                        </div>` : 
-                        ''
+                    // Show streaming interface immediately
+                    const session = sessions.get(sessionId);
+                    if (session) {
+                        showStreamingInterface(session);
                     }
                     
-                    <div class="writeup-actions">
-                        <button onclick="viewWriteupDetails(${writeup.id})" class="secondary-button">View Details</button>
-                        ${writeup.status === 'completed' ? 
-                            `<button onclick="viewWriteupContent(${writeup.id})" class="secondary-button">View Content</button>` : 
-                            ''
+                    // Reload writeups periodically to check for completion
+                    const checkInterval = setInterval(async () => {
+                        await loadExistingWriteups();
+                        const session = sessions.get(sessionId);
+                        if (session && (session.status === 'completed' || session.status === 'failed')) {
+                            clearInterval(checkInterval);
+                            showSessionContent(); // Refresh the display
                         }
-                        ${writeup.status === 'completed' ? 
-                            `<button onclick="openPermalink(${writeup.id})" class="secondary-button" style="background-color: #17a2b8;">Open Permalink</button>` : 
-                            ''
-                        }
-                        ${writeup.status === 'in_progress' ? 
-                            `<button onclick="executeWriteup(${writeup.id})" class="success-button">Execute</button>` : 
-                            ''
-                        }
-                        <button onclick="regenerateWriteup(${writeup.id})" class="secondary-button">Regenerate</button>
-                        <button onclick="deleteWriteup(${writeup.id})" class="danger-button">Delete</button>
-                    </div>
-                </div>
-            `).join('');
-            
-            container.innerHTML = html;
+                    }, 3000);
+                } else {
+                    const sessionId = `writeup_${writeupId}`;
+                    updateSession(sessionId, {
+                        status: 'failed',
+                        progress: `Error: ${result.message || 'Failed to execute write-up'}`
+                    });
+                }
+            } catch (error) {
+                const sessionId = `writeup_${writeupId}`;
+                updateSession(sessionId, {
+                    status: 'failed',
+                    progress: `Error: ${error.message}`
+                });
+            } finally {
+                isGenerating = false;
+                document.getElementById('sendButton').disabled = false;
+                document.getElementById('sendButton').textContent = 'Execute Writeup';
+            }
         }
         
+        // Close modal function
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
         
+        // View writeup details
         async function viewWriteupDetails(writeupId) {
             try {
                 const response = await fetch(`/api/writeups/${writeupId}`);
@@ -901,110 +1810,73 @@
                 
                 if (result.status === 'success') {
                     const writeup = result.writeup;
-                    const content = document.getElementById('detailsContent');
+            const modal = document.getElementById('contentModal');
+                    const title = document.getElementById('contentModalTitle');
+                    const content = document.getElementById('contentModalContent');
                     
+                    title.textContent = 'Write-up Details';
                     content.innerHTML = `
-                        <div class="writeup-item">
-                            <h3>${escapeHtml(writeup.title)}</h3>
-                            <p><strong>Status:</strong> <span class="writeup-status status-${writeup.status}">${writeup.status.replace('_', ' ')}</span></p>
+                        <div style="line-height: 1.6;">
+                            <h3>${writeup.title}</h3>
+                            <p><strong>Status:</strong> ${writeup.status}</p>
                             <p><strong>Created:</strong> ${new Date(writeup.created_at).toLocaleString()}</p>
                             <p><strong>Updated:</strong> ${new Date(writeup.updated_at).toLocaleString()}</p>
                             <p><strong>Format:</strong> ${writeup.output_format}</p>
-                            <p><strong>Frequency:</strong> ${writeup.frequency}</p>
-                            ${writeup.scheduled_for ? `<p><strong>Scheduled:</strong> ${new Date(writeup.scheduled_for).toLocaleString()}</p>` : ''}
+                            <p><strong>Model:</strong> ${writeup.model_key || 'Default'}</p>
                             <p><strong>Prompt:</strong></p>
-                            <div class="writeup-prompt">${escapeHtml(writeup.original_prompt)}</div>
-                            
-                            ${writeup.plan ? `
-                                <h4>Execution Plan</h4>
-                                <div class="plan-section">
-                                    <p><strong>Overview:</strong> ${escapeHtml(writeup.plan.overview || '')}</p>
-                                    <p><strong>Estimated Time:</strong> ${writeup.plan.total_estimated_time || 'Unknown'}</p>
-                                    <h5>Steps:</h5>
-                                    ${(writeup.plan.steps || []).map(step => `
-                                        <div class="step-item">
-                                            <div class="step-header">
-                                                <span class="step-number">Step ${step.step_number}</span>
-                                                <span class="step-type">${step.step_type}</span>
-                                            </div>
-                                            <div class="step-description">${escapeHtml(step.description)}</div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            ` : ''}
-                            
-                            ${writeup.final_content ? `
-                                <h4>Final Content</h4>
-                                <div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-primary); padding: 10px; background-color: var(--bg-secondary); color: var(--text-primary);">
-                                    ${writeup.final_content}
-                                </div>
-                            ` : ''}
-                            
-                            ${writeup.error_message ? `
-                                <h4>Error</h4>
-                                <div class="error-message show">${escapeHtml(writeup.error_message)}</div>
-                            ` : ''}
+                            <div style="background: var(--bg-secondary); padding: 12px; border-radius: 6px; margin: 8px 0; font-style: italic;">
+                                ${writeup.original_prompt}
                         </div>
-                    `;
-                    
-                    document.getElementById('detailsModal').style.display = 'block';
-                } else {
-                    showError(result.message || 'Failed to load write-up details');
+                            ${writeup.error_message ? `
+                                <p><strong>Error:</strong></p>
+                                <div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 6px; margin: 8px 0;">
+                                    ${writeup.error_message}
+                        </div>
+                            ` : ''}
+                    </div>
+                `;
+            
+                    modal.style.display = 'block';
+            } else {
+                    alert('Error loading write-up details: ' + result.message);
                 }
             } catch (error) {
-                showError('Error loading write-up details: ' + error.message);
+                alert('Error loading write-up details: ' + error.message);
             }
         }
         
-        function closeDetailsModal() {
-            document.getElementById('detailsModal').style.display = 'none';
+        // Show regenerate interface
+        function regenerateWriteup(writeupId) {
+            const sessionId = `writeup_${writeupId}`;
+            regeneratingSessionIds.add(sessionId);
+            renderSessions();
         }
         
-        function closeModal(modalId) {
-            document.getElementById(modalId).style.display = 'none';
+        // Cancel regenerate interface
+        function cancelRegenerate(sessionId) {
+            regeneratingSessionIds.delete(sessionId);
+            renderSessions();
         }
         
-        async function executeWriteup(writeupId) {
-            if (!confirm('Are you sure you want to execute this write-up?')) {
-                return;
-            }
-            
-            showLoading(true);
-            
-            try {
-                const response = await fetch(`/api/writeups/${writeupId}/execute`, {
-                    method: 'POST'
-                });
-                
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    showSuccess(result.message || 'Write-up executed successfully!');
-                    loadWriteups();
-                    
-                    // If there's content, show it immediately
-                    if (result.content) {
-                        showContentModal('Write-up Content', result.content, 'html', writeupId);
-                    }
-                } else {
-                    showError(result.message || 'Failed to execute write-up');
-                }
-            } catch (error) {
-                showError('Error executing write-up: ' + error.message);
-            } finally {
-                showLoading(false);
-            }
-        }
-        
-        async function regenerateWriteup(writeupId) {
-            // Get the current model from the create form
-            const modelKey = document.getElementById('model_key').value;
+        // Execute regenerate from sidebar
+        async function executeRegenerateFromSidebar(writeupId) {
+            const modelSelect = document.getElementById(`pendingModel_${writeupId}`);
+            const modelKey = modelSelect.value;
+            const sessionId = `writeup_${writeupId}`;
             
             if (!confirm('Are you sure you want to regenerate this write-up?')) {
                 return;
             }
             
-            showLoading(true);
+            // Remove from regenerating set and update status
+            regeneratingSessionIds.delete(sessionId);
+            updateSession(sessionId, {
+                status: 'running',
+                progress: 'Regenerating...'
+            });
+            
+            // Select the session to show the streaming interface
+            selectSession(sessionId);
             
             try {
                 const response = await fetch(`/api/writeups/${writeupId}/regenerate`, {
@@ -1018,29 +1890,45 @@
                 const result = await response.json();
                 
                 if (result.status === 'success') {
-                    showSuccess(result.message || 'Write-up regenerated successfully!');
-                    loadWriteups();
+                    updateSession(sessionId, {
+                        status: 'running',
+                        progress: `Regeneration job started: ${result.job_id || 'unknown'}`
+                    });
                     
-                    // If there's content, show it immediately
-                    if (result.content) {
-                        showContentModal('Write-up Content', result.content, 'html', writeupId);
+                    // Show streaming interface immediately
+                    const session = sessions.get(sessionId);
+                    if (session) {
+                        showStreamingInterface(session);
                     }
+                    
+                    // Reload writeups periodically to check for completion
+                    const checkInterval = setInterval(async () => {
+                        await loadExistingWriteups();
+                        const session = sessions.get(sessionId);
+                        if (session && (session.status === 'completed' || session.status === 'failed')) {
+                            clearInterval(checkInterval);
+                            showSessionContent(); // Switch to content view when completed
+                        }
+                    }, 3000);
                 } else {
-                    showError(result.message || 'Failed to regenerate write-up');
+                    updateSession(sessionId, {
+                        status: 'failed',
+                        progress: `Error: ${result.message || 'Failed to regenerate write-up'}`
+                    });
                 }
             } catch (error) {
-                showError('Error regenerating write-up: ' + error.message);
-            } finally {
-                showLoading(false);
+                updateSession(sessionId, {
+                    status: 'failed',
+                    progress: `Error: ${error.message}`
+                });
             }
         }
         
+        // Delete writeup
         async function deleteWriteup(writeupId) {
             if (!confirm('Are you sure you want to delete this write-up? This action cannot be undone.')) {
                 return;
             }
-            
-            showLoading(true);
             
             try {
                 const response = await fetch(`/api/writeups/${writeupId}`, {
@@ -1050,217 +1938,170 @@
                 const result = await response.json();
                 
                 if (result.status === 'success') {
-                    showSuccess('Write-up deleted successfully!');
-                    loadWriteups();
+                    loadExistingWriteups();
+                    
+                    // If this was the selected session, clear selection
+                    if (currentSessionId === `writeup_${writeupId}`) {
+                        showNewWriteup();
+                    }
                 } else {
-                    showError(result.message || 'Failed to delete write-up');
+                    alert('Error: ' + (result.message || 'Failed to delete write-up'));
                 }
             } catch (error) {
-                showError('Error deleting write-up: ' + error.message);
-            } finally {
-                showLoading(false);
+                alert('Error deleting write-up: ' + error.message);
             }
         }
         
-        function viewWriteupContent(writeupId) {
-            // Fetch the content and display it in a modal
-            fetch(`/api/writeups/${writeupId}/content`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.status === 'success') {
-                        showContentModal(data.title, data.content, data.output_format, writeupId);
+        // Process chart placeholders in content (reused from explainer agent)
+        function processChartPlaceholders(content) {
+            if (!content) return content;
+            
+            // Regular expression to match chart placeholders: [CHART:type:param1:param2:param3]
+            const chartRegex = /\[CHART:([^:]+):([^\]]+)\]/g;
+            
+            return content.replace(chartRegex, (match, chartType, params) => {
+                const paramParts = params.split(':');
+                
+                if (chartType === 'anomaly') {
+                    const anomalyId = paramParts[0];
+                    return `<div class="chart-container" style="margin: 4px 0;">
+                        <iframe src="/anomaly-analyzer/anomaly-chart?id=${anomalyId}" 
+                                style="width: 100%; height: 550px; border: none;" 
+                                frameborder="0" scrolling="no">
+                        </iframe>
+                    </div>`;
+                } else if (chartType === 'time_series' || chartType === 'time_series_id') {
+                    if (paramParts.length === 1) {
+                        const chartId = paramParts[0];
+                        return `<div class="chart-container" style="margin: 4px 0;">
+                            <iframe src="/backend/time-series-chart?chart_id=${chartId}" 
+                                    style="width: 100%; height: 500px; border: none;" 
+                                    frameborder="0" scrolling="no">
+                            </iframe>
+                        </div>`;
                     } else {
-                        showError(data.message || 'Failed to load content');
+                        const metricId = paramParts[0];
+                        const district = paramParts[1] || '0';
+                        const period = paramParts[2] || 'month';
+                        return `<div class="chart-container" style="margin: 4px 0;">
+                            <iframe src="/backend/time-series-chart?metric_id=${metricId}&district=${district}&period_type=${period}" 
+                                    style="width: 100%; height: 500px; border: none;" 
+                                    frameborder="0" scrolling="no">
+                            </iframe>
+                        </div>`;
                     }
-                })
-                .catch(error => {
-                    console.error('Error fetching content:', error);
-                    showError('Failed to load write-up content');
-                });
-        }
-        
-        function showContentModal(title, content, outputFormat, writeupId = null) {
-            const modal = document.getElementById('contentModal');
-            const titleElement = document.getElementById('contentModalTitle');
-            const contentElement = document.getElementById('contentModalContent');
-            
-            titleElement.textContent = title;
-            
-            // Process chart placeholders first
-            let processedContent = processChartPlaceholders(content);
-            
-            // Add share link section at the top if writeupId is provided
-            let shareSection = '';
-            if (writeupId) {
-                const shareUrl = `${window.location.origin}/api/writeups/permalink/${writeupId}`;
-                shareSection = `
-                    <div style="margin-bottom: 20px; padding: 15px; background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 6px;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="font-size: 14px; font-weight: 600; color: #0c5460;">🔗 Shareable Link:</span>
-                            <input type="text" value="${shareUrl}" id="modalShareInput-${writeupId}" readonly 
-                                   style="flex: 1; padding: 6px 10px; border: 1px solid #b3d9ff; border-radius: 4px; font-size: 13px; font-family: monospace; background-color: white;">
-                            <button onclick="copyModalShareLink(${writeupId})" id="modalShareButton-${writeupId}"
-                                    style="padding: 6px 12px; font-size: 12px; background-color: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;">Copy Link</button>
-                        </div>
-                        <div style="display: flex; gap: 10px;">
-                            <button onclick="openPermalink(${writeupId})" 
-                                    style="padding: 6px 12px; font-size: 12px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Open in New Tab</button>
-                            <div style="font-size: 11px; color: #6c757d; align-self: center;">Share this permanent link to give others access to this write-up</div>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            if (outputFormat === 'html') {
-                // For HTML format, render directly as HTML
-                contentElement.innerHTML = shareSection + processedContent;
-            } else {
-                // For other formats, treat as markdown if marked.js is available
-                if (typeof marked !== 'undefined') {
-                    contentElement.innerHTML = shareSection + marked.parse(processedContent);
-                } else {
-                    // Convert newlines to <br> tags for plain text
-                    processedContent = processedContent.replace(/\n/g, '<br>');
-                    contentElement.innerHTML = shareSection + processedContent;
+                } else if (chartType === 'map') {
+                    const mapId = paramParts[0];
+                    return `<div class="chart-container" style="margin: 4px 0;">
+                        <iframe src="/backend/map-chart?id=${mapId}&embedded=true" 
+                                style="width: 100%; height: 800px; border: none;" 
+                                frameborder="0" scrolling="yes">
+                        </iframe>
+                    </div>`;
+                } else if (chartType === 'dualmap') {
+                    const map1Id = paramParts[0];
+                    const map2Id = paramParts[1];
+                    return `<div class="chart-container" style="margin: 4px 0;">
+                        <iframe src="/dual-map?map1_id=${map1Id}&map2_id=${map2Id}" 
+                                style="width: 100%; height: 800px; border: none;" 
+                                frameborder="0" scrolling="yes">
+                        </iframe>
+                    </div>`;
                 }
-            }
-            
-            modal.style.display = 'block';
-        }
-        
-        function showLoading(show) {
-            document.getElementById('loading').classList.toggle('show', show);
-        }
-        
-        function showError(message) {
-            const errorDiv = document.getElementById('errorMessage');
-            errorDiv.textContent = message;
-            errorDiv.classList.add('show');
-            setTimeout(() => errorDiv.classList.remove('show'), 5000);
-        }
-        
-        function showSuccess(message) {
-            const successDiv = document.getElementById('successMessage');
-            successDiv.textContent = message;
-            successDiv.classList.add('show');
-            setTimeout(() => successDiv.classList.remove('show'), 5000);
-        }
-        
-        function hideMessages() {
-            document.getElementById('errorMessage').classList.remove('show');
-            document.getElementById('successMessage').classList.remove('show');
-        }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        function copyShareLink(writeupId) {
-            const input = document.querySelector(`.share-link-input[data-writeup-id="${writeupId}"]`);
-            const button = document.querySelector(`.copy-share-button[data-writeup-id="${writeupId}"]`);
-            
-            if (input && button) {
-                input.select();
-                input.setSelectionRange(0, 99999); // For mobile devices
                 
-                try {
-                    document.execCommand('copy');
-                    button.textContent = 'Copied!';
-                    button.style.backgroundColor = '#28a745';
-                    
-                    setTimeout(() => {
-                        button.textContent = 'Copy';
-                        button.style.backgroundColor = '#17a2b8';
-                    }, 2000);
-                } catch (err) {
-                    console.error('Failed to copy: ', err);
-                    // Fallback for modern browsers
-                    navigator.clipboard.writeText(input.value).then(() => {
-                        button.textContent = 'Copied!';
-                        button.style.backgroundColor = '#28a745';
-                        
-                        setTimeout(() => {
-                            button.textContent = 'Copy';
-                            button.style.backgroundColor = '#17a2b8';
-                        }, 2000);
-                    }).catch(err => {
-                        console.error('Failed to copy: ', err);
-                    });
+                return match;
+            });
+        }
+        
+        // Dropdown menu functionality
+        function toggleSessionMenu(sessionId) {
+            // Close all other menus first
+            document.querySelectorAll('.session-menu-dropdown').forEach(menu => {
+                if (menu.id !== `menu_${sessionId}`) {
+                    menu.classList.remove('show');
                 }
+            });
+            
+            // Toggle the current menu
+            const menu = document.getElementById(`menu_${sessionId}`);
+            if (menu) {
+                menu.classList.toggle('show');
             }
         }
         
-        function openPermalink(writeupId) {
+        // Copy writeup URL to clipboard
+        async function copyWriteupUrl(writeupId, buttonElement) {
             const url = `${window.location.origin}/api/writeups/permalink/${writeupId}`;
-            window.open(url, '_blank');
-        }
-        
-        function copyModalShareLink(writeupId) {
-            const input = document.getElementById(`modalShareInput-${writeupId}`);
-            const button = document.getElementById(`modalShareButton-${writeupId}`);
             
-            if (input && button) {
-                input.select();
-                input.setSelectionRange(0, 99999); // For mobile devices
-                
-                try {
-                    document.execCommand('copy');
-                    button.textContent = 'Copied!';
-                    button.style.backgroundColor = '#28a745';
-                    
-                    setTimeout(() => {
-                        button.textContent = 'Copy Link';
-                        button.style.backgroundColor = '#17a2b8';
-                    }, 2000);
-                } catch (err) {
-                    console.error('Failed to copy: ', err);
-                    // Fallback for modern browsers
-                    navigator.clipboard.writeText(input.value).then(() => {
-                        button.textContent = 'Copied!';
-                        button.style.backgroundColor = '#28a745';
-                        
-                        setTimeout(() => {
-                            button.textContent = 'Copy Link';
-                            button.style.backgroundColor = '#17a2b8';
-                        }, 2000);
-                    }).catch(err => {
-                        console.error('Failed to copy: ', err);
-                    });
-                }
-            }
-        }
-        
-        // Close modals when clicking outside or pressing escape
-        window.onclick = function(event) {
-            const detailsModal = document.getElementById('detailsModal');
-            const contentModal = document.getElementById('contentModal');
+            // Get the button element - either passed as parameter or from event
+            const button = buttonElement || event.target;
+            const originalText = button.textContent;
             
-            if (event.target === detailsModal) {
-                closeDetailsModal();
-            }
-            if (event.target === contentModal) {
-                closeModal('contentModal');
+            try {
+                // Try modern clipboard API first
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(url);
+                    showCopySuccess(button, originalText);
+                    return;
+                }
+                
+                // Fallback for older browsers or non-secure contexts
+                const textArea = document.createElement('textarea');
+                textArea.value = url;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                if (successful) {
+                    showCopySuccess(button, originalText);
+                } else {
+                    throw new Error('execCommand failed');
+                }
+            } catch (err) {
+                console.error('Failed to copy URL:', err);
+                showCopyError(button, originalText, url);
             }
         }
         
-        // Close modals when pressing escape key
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape') {
-                const detailsModal = document.getElementById('detailsModal');
-                const contentModal = document.getElementById('contentModal');
-                
-                if (detailsModal.style.display === 'block') {
-                    closeDetailsModal();
-                } else if (contentModal.style.display === 'block') {
-                    closeModal('contentModal');
+        // Show copy success feedback
+        function showCopySuccess(button, originalText) {
+            button.textContent = '✓ Copied!';
+            button.style.color = '#28a745';
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.color = '';
+            }, 1500);
+        }
+        
+        // Show copy error feedback
+        function showCopyError(button, originalText, url) {
+            button.textContent = '❌ Failed';
+            button.style.color = '#dc3545';
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.color = '';
+            }, 2000);
+            
+            // Also show a more detailed error message
+            setTimeout(() => {
+                if (confirm('Failed to copy URL to clipboard. Would you like to see the URL?')) {
+                    prompt('Copy this URL:', url);
                 }
+            }, 100);
+        }
+        
+        // Close all dropdown menus when clicking outside
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('.session-menu')) {
+                document.querySelectorAll('.session-menu-dropdown').forEach(menu => {
+                    menu.classList.remove('show');
+                });
             }
         });
     </script>
@@ -1269,3 +2110,6 @@
     <script src="/static/js/darkmode.js"></script>
 </body>
 </html>
+
+</html>
+

@@ -366,6 +366,7 @@ async def run_specific_metric_db(metric_id: int, district_id: int = 0, period_ty
             'data_sf_url': metric_row['data_sf_url'],
             'category_fields': metric_row['category_fields'] or [],
             'location_fields': metric_row['location_fields'] or [],
+            'metadata': metric_row['metadata'],
             'query_data': {
                 'ytd_query': metric_row['ytd_query'],
                 'metric_query': metric_row['metric_query'],
@@ -570,6 +571,7 @@ async def run_specific_metric_async(request: Request):
                 'data_sf_url': metric_row['data_sf_url'],
                 'category_fields': metric_row['category_fields'] or [],
                 'location_fields': metric_row['location_fields'] or [],
+                'metadata': metric_row['metadata'],
                 'query_data': {
                     'ytd_query': metric_row['ytd_query'],
                     'metric_query': metric_row['metric_query'],

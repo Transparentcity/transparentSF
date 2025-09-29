@@ -85,12 +85,7 @@ class WriteupsScheduler:
             
             # Start the execution in the background
             asyncio.create_task(
-                job_manager.run_job(
-                    job_id,
-                    self._execute_scheduled_writeup,
-                    writeup_id,
-                    writeup_manager
-                )
+                self._execute_scheduled_writeup(writeup_id, writeup_manager)
             )
             
             # Update the next scheduled time based on frequency
@@ -99,16 +94,16 @@ class WriteupsScheduler:
         except Exception as e:
             logger.error(f"Error processing scheduled write-up {writeup.get('id', 'unknown')}: {e}")
     
-    def _execute_scheduled_writeup(self, writeup_id: int, writeup_manager):
+    async def _execute_scheduled_writeup(self, writeup_id: int, writeup_manager):
         """Execute a scheduled write-up."""
         try:
             logger.info(f"Executing scheduled write-up {writeup_id}")
             
-            # Execute the write-up
-            result = writeup_manager.execute_writeup(writeup_id)
+            # Execute the write-up using the job system
+            result = await writeup_manager.execute_writeup(writeup_id)
             
             if result.get("status") == "success":
-                logger.info(f"Successfully executed scheduled write-up {writeup_id}")
+                logger.info(f"Successfully started scheduled write-up {writeup_id} with job {result.get('job_id')}")
                 
                 # Handle output delivery if configured
                 self._deliver_writeup_output(writeup_id, result.get("content", ""))

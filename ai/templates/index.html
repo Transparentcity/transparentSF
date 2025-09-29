@@ -9,6 +9,10 @@
         <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
         <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
         <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+    
         <style>
         /* Import brand fonts */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
@@ -356,12 +360,12 @@
         <p class="tagline">Making San Francisco government data transparent and accessible</p>
         
         <div class="main-actions">
-            <a href="https://dashboard.transparentsf.com" class="action-card" target="_blank">
+            <a href="https://dashboard.transparentsf.com" class="action-card" target="_blank" onclick="trackEvent('external_link_click', {'category': 'Navigation', 'label': 'Dashboard', 'action': 'click'})">
                 <div class="action-icon">📊</div>
                 <div class="action-title">Dashboard</div>
                 <div class="action-description">Explore data insights and analytics</div>
             </a>
-            <a href="https://www.transparentsf.com" class="action-card" target="_blank">
+            <a href="https://www.transparentsf.com" class="action-card" target="_blank" onclick="trackEvent('external_link_click', {'category': 'Navigation', 'label': 'Newsletter', 'action': 'click'})">
                 <div class="action-icon">📮</div>
                 <div class="action-title">Newsletter</div>
                 <div class="action-description">Stay updated with monthly reports</div>

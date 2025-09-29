@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dual Map Comparison | TransparentSF</title>
+    <title>Map Comparison | TransparentSF</title>
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -11,6 +11,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+
     
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -49,13 +53,22 @@
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
+            align-items: center;
+            width: 100%;
         }
 
         .header-text {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
+            flex: 1;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-shrink: 0;
         }
 
         .header h1 {
@@ -89,6 +102,142 @@
 
         body.in-iframe .map-container {
             height: calc(100vh - 80px);
+        }
+
+        /* Minimal legend for embedded mode */
+        body.in-iframe .legend-container {
+            position: absolute !important;
+            top: 10px !important;
+            right: 10px !important;
+            left: auto !important;
+            margin: 0 !important;
+            max-width: 220px !important;
+            min-width: 180px !important;
+            z-index: 1000 !important;
+            background: rgba(255, 255, 255, 0.85) !important;
+            backdrop-filter: blur(8px) !important;
+            border: 1px solid rgba(0, 0, 0, 0.1) !important;
+            border-radius: 6px !important;
+            padding: 8px !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        /* Dark mode translucent background */
+        [data-theme="dark"] body.in-iframe .legend-container {
+            background: rgba(30, 30, 30, 0.85) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
+
+        /* Minimal legend items - optimized for sliders without color dots */
+        body.in-iframe .legend-item {
+            padding: 4px 0 !important;
+            margin-bottom: 4px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
+        }
+
+        body.in-iframe .legend-title {
+            font-size: 0.75rem !important;
+            margin-bottom: 8px !important;
+            font-weight: 600 !important;
+            color: var(--text-primary) !important;
+        }
+
+        body.in-iframe .legend-label {
+            font-size: 0.65rem !important;
+            color: var(--text-primary) !important;
+            font-weight: 400 !important;
+            flex-grow: 1 !important;
+            line-height: 1.2 !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+        }
+
+        /* Hide color indicators in embedded mode - use sliders instead */
+        body.in-iframe .legend-color {
+            display: none !important;
+        }
+
+        /* Toggle switches for embedded mode - use same style as full view but smaller */
+        body.in-iframe .toggle-switch {
+            position: relative !important;
+            display: inline-block !important;
+            width: 36px !important;
+            height: 18px !important;
+            margin-left: 8px !important;
+            flex-shrink: 0 !important;
+        }
+
+        body.in-iframe .toggle-switch input {
+            opacity: 0 !important;
+            width: 0 !important;
+            height: 0 !important;
+        }
+
+        body.in-iframe .toggle-switch .slider {
+            position: absolute !important;
+            cursor: pointer !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background-color: #ccc !important;
+            transition: .4s !important;
+            border-radius: 18px !important;
+        }
+
+        body.in-iframe .toggle-switch .slider:before {
+            position: absolute !important;
+            content: "" !important;
+            height: 14px !important;
+            width: 14px !important;
+            left: 2px !important;
+            bottom: 2px !important;
+            background-color: white !important;
+            transition: .4s !important;
+            border-radius: 50% !important;
+        }
+
+        body.in-iframe .toggle-switch input:checked + .slider:before {
+            transform: translateX(18px) !important;
+        }
+
+        /* Color sliders in embedded mode */
+        body.in-iframe #layer1-toggle:checked + .slider {
+            background-color: #ad35fa !important;
+        }
+
+        body.in-iframe #layer2-toggle:checked + .slider {
+            background-color: #FF6B5A !important;
+        }
+
+        /* Color sliders in full page mode */
+        #layer1-toggle:checked + .slider {
+            background-color: #ad35fa !important;
+        }
+
+        #layer2-toggle:checked + .slider {
+            background-color: #FF6B5A !important;
+        }
+
+        /* Make layer labels clickable */
+        body.in-iframe .legend-label {
+            cursor: pointer !important;
+            user-select: none !important;
+        }
+
+        body.in-iframe .legend-label:hover {
+            opacity: 0.8 !important;
+        }
+
+        /* Ensure legend is always visible and accessible */
+        body.in-iframe .legend-container {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
         }
 
         .btn {
@@ -293,13 +442,18 @@
         /* Responsive design */
         @media (max-width: 768px) {
             .header-content {
-                flex-direction: column;
-                align-items: flex-start;
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
                 gap: 1rem;
             }
 
             .header-text {
-                width: 100%;
+                flex: 1;
+            }
+
+            .header-actions {
+                flex-shrink: 0;
             }
 
             .btn {
@@ -319,10 +473,6 @@
             .map-container {
                 height: calc(100vh - 140px);
             }
-
-            .header-subtitle {
-                font-size: 0.85rem;
-            }
         }
     </style>
 </head>
@@ -330,15 +480,9 @@
     <div class="header">
         <div class="header-content">
             <div class="header-text">
-                <h1>
-                    <i class="fas fa-chart-line me-2"></i>
-                    Map Analysis
-                </h1>
-                <div id="map-comparison-subtitle" class="header-subtitle">
-                    Loading comparison...
-                </div>
+                <h1>Map Comparison</h1>
             </div>
-            <div class="d-flex align-items-center gap-3">
+            <div class="header-actions">
                 <button class="btn btn-outline-secondary" id="share-btn" onclick="shareMap()" title="Copy link to share this comparison">
                     <i class="fas fa-share-alt me-1"></i>
                     Share
@@ -354,7 +498,20 @@
         <div class="legend-container">
             <div class="legend-title">Map Layers</div>
             <div id="legend-content">
-                <!-- Legend items will be populated by JavaScript -->
+                <div class="legend-item">
+                    <div class="legend-label" onclick="toggleLayer('layer1', !document.getElementById('layer1-toggle').checked)">Loading...</div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="layer1-toggle" checked disabled>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-label" onclick="toggleLayer('layer2', !document.getElementById('layer2-toggle').checked)">Loading...</div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="layer2-toggle" checked disabled>
+                        <span class="slider"></span>
+                    </label>
+                </div>
             </div>
         </div>
     </div>
@@ -378,6 +535,7 @@
             // Check if we're in an iframe and apply appropriate styling
             if (window.parent !== window) {
                 document.body.classList.add('in-iframe');
+                console.log('Dual map loaded in embedded mode');
             }
             
             initializePage();
@@ -654,68 +812,219 @@
         function toggleLayer(layerId, visible) {
             if (!map || !map.getLayer(`${layerId}-circles`)) return;
             
+            // Toggle the checkbox state if it was triggered by label click
+            const checkbox = document.getElementById(`${layerId}-toggle`);
+            if (checkbox && checkbox.checked !== visible) {
+                checkbox.checked = visible;
+            }
+            
+            // Apply colors to sliders in embedded mode
+            if (document.body.classList.contains('in-iframe')) {
+                applySliderColors();
+            }
+            
             map.setLayoutProperty(`${layerId}-circles`, 'visibility', visible ? 'visible' : 'none');
         }
 
         function updateLegend() {
             const legendContent = document.getElementById('legend-content');
+            if (!legendContent) {
+                console.warn('Legend content element not found');
+                return;
+            }
+            
             // Get colors from CSS variables for proper theme support
             const computedStyle = getComputedStyle(document.documentElement);
             const LAYER1_COLOR = computedStyle.getPropertyValue('--bright-purple').trim() || '#ad35fa'; // Brand bright purple
             const LAYER2_COLOR = computedStyle.getPropertyValue('--warm-coral').trim() || '#FF6B5A'; // Brand warm coral
             let legendHTML = '';
+            
+            console.log('Updating legend for embedded mode:', document.body.classList.contains('in-iframe'));
 
             if (map1Data) {
-                const pointCount = map1Data.location_data ? map1Data.location_data.length : 0;
-                legendHTML += `
-                    <div class="legend-item" style="align-items: flex-start; padding: 12px 8px;">
-                        <div class="legend-color" style="background-color: ${LAYER1_COLOR}; border: 2px solid #ffffff; margin-top: 2px;"></div>
-                        <div class="legend-label" style="flex-grow: 1;" onclick="openMap('${map1Data.id}')" title="Click to view ${map1Data.title}">
-                            <strong>${map1Data.title}</strong><br>
-                            <small style="color: var(--text-secondary);">${pointCount} points • Click to view</small>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 4px;">
-                            <i class="fas fa-external-link-alt" onclick="openMap('${map1Data.id}')" style="opacity: 0.6; font-size: 0.8rem; cursor: pointer;" title="View map"></i>
+                const isEmbedded = document.body.classList.contains('in-iframe');
+                if (isEmbedded) {
+                    // Minimal version for embedded mode - no color dots, sliders show the color
+                    legendHTML += `
+                        <div class="legend-item">
+                            <div class="legend-label" onclick="toggleLayer('layer1', !document.getElementById('layer1-toggle').checked)">${map1Data.title}</div>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="layer1-toggle" checked onchange="toggleLayer('layer1', this.checked)">
                                 <span class="slider"></span>
                             </label>
                         </div>
-                    </div>
-                `;
+                    `;
+                } else {
+                    // Full version for regular mode - no color dots, use colored sliders
+                    const pointCount = map1Data.location_data ? map1Data.location_data.length : 0;
+                    legendHTML += `
+                        <div class="legend-item" style="align-items: center; padding: 12px 8px;">
+                            <div class="legend-label" style="flex-grow: 1;" onclick="openMap('${map1Data.id}')" title="Click to view ${map1Data.title}">
+                                <strong>${map1Data.title}</strong><br>
+                                <small style="color: var(--text-secondary);">${pointCount} points • Click to view</small>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-external-link-alt" onclick="openMap('${map1Data.id}')" style="opacity: 0.6; font-size: 0.8rem; cursor: pointer;" title="View map"></i>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="layer1-toggle" checked onchange="toggleLayer('layer1', this.checked)">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    `;
+                }
             }
 
             if (map2Data) {
-                const pointCount = map2Data.location_data ? map2Data.location_data.length : 0;
-                legendHTML += `
-                    <div class="legend-item" style="align-items: flex-start; padding: 12px 8px;">
-                        <div class="legend-color" style="background-color: ${LAYER2_COLOR}; border: 2px solid #ffffff; margin-top: 2px;"></div>
-                        <div class="legend-label" style="flex-grow: 1;" onclick="openMap('${map2Data.id}')" title="Click to view ${map2Data.title}">
-                            <strong>${map2Data.title}</strong><br>
-                            <small style="color: var(--text-secondary);">${pointCount} points • Click to view</small>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 4px;">
-                            <i class="fas fa-external-link-alt" onclick="openMap('${map2Data.id}')" style="opacity: 0.6; font-size: 0.8rem; cursor: pointer;" title="View map"></i>
+                const isEmbedded = document.body.classList.contains('in-iframe');
+                if (isEmbedded) {
+                    // Minimal version for embedded mode - no color dots, sliders show the color
+                    legendHTML += `
+                        <div class="legend-item">
+                            <div class="legend-label" onclick="toggleLayer('layer2', !document.getElementById('layer2-toggle').checked)">${map2Data.title}</div>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="layer2-toggle" checked onchange="toggleLayer('layer2', this.checked)">
                                 <span class="slider"></span>
                             </label>
                         </div>
-                    </div>
-                `;
+                    `;
+                } else {
+                    // Full version for regular mode - no color dots, use colored sliders
+                    const pointCount = map2Data.location_data ? map2Data.location_data.length : 0;
+                    legendHTML += `
+                        <div class="legend-item" style="align-items: center; padding: 12px 8px;">
+                            <div class="legend-label" style="flex-grow: 1;" onclick="openMap('${map2Data.id}')" title="Click to view ${map2Data.title}">
+                                <strong>${map2Data.title}</strong><br>
+                                <small style="color: var(--text-secondary);">${pointCount} points • Click to view</small>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-external-link-alt" onclick="openMap('${map2Data.id}')" style="opacity: 0.6; font-size: 0.8rem; cursor: pointer;" title="View map"></i>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="layer2-toggle" checked onchange="toggleLayer('layer2', this.checked)">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    `;
+                }
             }
 
             legendContent.innerHTML = legendHTML;
+            
+            // Ensure legend is visible in embedded mode
+            if (document.body.classList.contains('in-iframe')) {
+                const legendContainer = document.querySelector('.legend-container');
+                if (legendContainer) {
+                    legendContainer.style.display = 'block';
+                    legendContainer.style.visibility = 'visible';
+                    legendContainer.style.opacity = '1';
+                    console.log('Legend container made visible in embedded mode');
+                }
+                
+                // Force apply colors after a short delay to ensure DOM is ready
+                setTimeout(() => {
+                    applySliderColors();
+                }, 100);
+                
+                // Also apply colors when toggles change
+                const layer1Toggle = document.getElementById('layer1-toggle');
+                const layer2Toggle = document.getElementById('layer2-toggle');
+                
+                if (layer1Toggle) {
+                    layer1Toggle.addEventListener('change', applySliderColors);
+                }
+                if (layer2Toggle) {
+                    layer2Toggle.addEventListener('change', applySliderColors);
+                }
+            }
+        }
+
+        function applySliderColors() {
+            const layer1Toggle = document.getElementById('layer1-toggle');
+            const layer2Toggle = document.getElementById('layer2-toggle');
+            const isEmbedded = document.body.classList.contains('in-iframe');
+            
+            console.log('Applying slider colors...', 'embedded:', isEmbedded);
+            console.log('Layer 1 toggle:', layer1Toggle, 'checked:', layer1Toggle?.checked);
+            console.log('Layer 2 toggle:', layer2Toggle, 'checked:', layer2Toggle?.checked);
+            
+            if (layer1Toggle) {
+                const slider1 = layer1Toggle.nextElementSibling;
+                if (slider1) {
+                    if (layer1Toggle.checked) {
+                        slider1.style.setProperty('background-color', '#ad35fa', 'important');
+                        console.log('Applied purple color to layer 1 slider', slider1);
+                    } else {
+                        slider1.style.setProperty('background-color', '#ccc', 'important');
+                        console.log('Set layer 1 slider to gray (unchecked)', slider1);
+                    }
+                } else {
+                    console.warn('Layer 1 slider element not found');
+                }
+            } else {
+                console.warn('Layer 1 toggle not found');
+            }
+            
+            if (layer2Toggle) {
+                const slider2 = layer2Toggle.nextElementSibling;
+                if (slider2) {
+                    if (layer2Toggle.checked) {
+                        slider2.style.setProperty('background-color', '#FF6B5A', 'important');
+                        console.log('Applied coral color to layer 2 slider', slider2);
+                    } else {
+                        slider2.style.setProperty('background-color', '#ccc', 'important');
+                        console.log('Set layer 2 slider to gray (unchecked)', slider2);
+                    }
+                } else {
+                    console.warn('Layer 2 slider element not found');
+                }
+            } else {
+                console.warn('Layer 2 toggle not found');
+            }
+            
+            // Force a reflow to ensure styles are applied
+            if (isEmbedded) {
+                setTimeout(() => {
+                    console.log('Re-applying colors after timeout...');
+                    applySliderColors();
+                }, 200);
+            }
         }
 
         function updateSubtitle() {
-            const subtitle = document.getElementById('map-comparison-subtitle');
             if (map1Data && map2Data) {
-                const comparisonText = `Comparing ${map1Data.title} to ${map2Data.title}`;
-                subtitle.textContent = comparisonText;
-                
                 // Update the document title
-                document.title = `Dual Map - ${comparisonText} | TransparentSF`;
+                const comparisonText = `Comparing ${map1Data.title} to ${map2Data.title}`;
+                document.title = `Map Comparison - ${comparisonText} | TransparentSF`;
+                
+                // Add subtitle with map details
+                const headerText = document.querySelector('.header-text');
+                if (headerText) {
+                    // Check if subtitle already exists
+                    let subtitle = headerText.querySelector('.header-subtitle');
+                    if (!subtitle) {
+                        subtitle = document.createElement('div');
+                        subtitle.className = 'header-subtitle';
+                        headerText.appendChild(subtitle);
+                    }
+                    
+                    const map1Count = map1Data.location_data ? map1Data.location_data.length : 0;
+                    const map2Count = map2Data.location_data ? map2Data.location_data.length : 0;
+                    subtitle.textContent = `${map1Data.title}: ${map1Count} points • ${map2Data.title}: ${map2Count} points`;
+                }
+            } else if (map1Data || map2Data) {
+                // Partial data - show what we have
+                const availableMap = map1Data || map2Data;
+                const headerText = document.querySelector('.header-text');
+                if (headerText) {
+                    let subtitle = headerText.querySelector('.header-subtitle');
+                    if (!subtitle) {
+                        subtitle = document.createElement('div');
+                        subtitle.className = 'header-subtitle';
+                        headerText.appendChild(subtitle);
+                    }
+                    subtitle.textContent = `${availableMap.title} (Loading second map...)`;
+                }
             }
         }
 

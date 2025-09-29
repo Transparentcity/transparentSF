@@ -396,8 +396,9 @@ def store_anomalies_in_db(connection, results, metadata):
                     (group_value, group_field_name, period_type, comparison_mean, recent_mean, 
                      difference, std_dev, out_of_bounds, recent_date, comparison_dates, 
                      comparison_counts, recent_dates, recent_counts, metadata, field_name, 
-                     object_type, object_id, object_name, recent_data, comparison_data, district, is_active)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                     object_type, object_id, object_name, recent_data, comparison_data, district, 
+                     caption, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                 """, (
                     result['group_value'],
                     group_field_name,
@@ -419,7 +420,8 @@ def store_anomalies_in_db(connection, results, metadata):
                     object_name,
                     Json(recent_data),
                     Json(comparison_data),
-                    str(district)
+                    str(district),
+                    caption
                 ))
                 inserted_count += 1
         

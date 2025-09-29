@@ -1116,23 +1116,21 @@ async def get_top_metric_changes(
             # For annual, report date is previous year
             report_date = date(today.year - 1, 1, 1)
             
-        # Use connection pool for better performance
-        with get_pooled_connection() as conn:
-            # Create cursor with dictionary-like results
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
         # For weekly data, calculate the report date based on available data
         if period_type == 'week' and report_date is None:
             # Get the latest available week from the database, but use a more conservative approach
             # to account for the fact that not all charts may have the most recent data
-            cursor.execute("""
-                SELECT MAX(tsd.time_period) as latest_week
-                FROM time_series_data tsd
-                JOIN time_series_metadata tsm ON tsd.chart_id = tsm.chart_id
-                WHERE tsm.period_type = 'week'
-                AND tsm.is_active = TRUE
-            """)
-            latest_week_result = cursor.fetchone()
+            with get_pooled_connection() as conn:
+                cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cursor.execute("""
+                    SELECT MAX(tsd.time_period) as latest_week
+                    FROM time_series_data tsd
+                    JOIN time_series_metadata tsm ON tsd.chart_id = tsm.chart_id
+                    WHERE tsm.period_type = 'week'
+                    AND tsm.is_active = TRUE
+                """)
+                latest_week_result = cursor.fetchone()
+                
             if latest_week_result and latest_week_result['latest_week']:
                 # Use a date that's one week earlier than the absolute latest to account for 
                 # charts that may not have the most recent data
@@ -1149,7 +1147,7 @@ async def get_top_metric_changes(
                 logger.info(f"Fallback report date calculated as: {report_date}")
         else:
             logger.info(f"Report date calculated as: {report_date}")
-        
+            
         # Build query conditions based on provided parameters
         where_conditions = []
         query_params = []
@@ -1210,82 +1208,133 @@ async def get_top_metric_changes(
         """
         query_params.append(report_date)
         
-        logger.info(f"Chart query: {chart_query} with params: {query_params}")
-        cursor.execute(chart_query, query_params)
-        charts = cursor.fetchall()
+        # Execute all database operations within a single connection context
+        with get_pooled_connection() as conn:
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            
+            logger.info(f"Chart query: {chart_query} with params: {query_params}")
+            cursor.execute(chart_query, query_params)
+            charts = cursor.fetchall()
         
-        if not charts:
-            filter_desc = f"period_type={period_type}, district={district}, group_field=NULL, report_date={report_date}, show_on_dash={show_on_dash}"
-            if object_id:
-                filter_desc += f", object_id={object_id}"
+            if not charts:
+                filter_desc = f"period_type={period_type}, district={district}, group_field=NULL, report_date={report_date}, show_on_dash={show_on_dash}"
+                if object_id:
+                    filter_desc += f", object_id={object_id}"
+                    
+                logger.warning(f"No charts found matching filters: {filter_desc}")
                 
-            logger.warning(f"No charts found matching filters: {filter_desc}")
+                # Let's check if there are any charts at all, regardless of filters
+                cursor.execute("SELECT COUNT(*) AS count FROM time_series_metadata")
+                total_count = cursor.fetchone()['count']
+                logger.info(f"Total charts in time_series_metadata: {total_count}")
+                
+                # Check if any charts match just the period_type
+                cursor.execute("SELECT COUNT(*) AS count FROM time_series_metadata WHERE period_type = %s", [period_type])
+                period_count = cursor.fetchone()['count']
+                logger.info(f"Charts with period_type={period_type}: {period_count}")
+                
+                # Check if any charts have group_field IS NULL
+                cursor.execute("SELECT COUNT(*) AS count FROM time_series_metadata WHERE group_field IS NULL")
+                null_group_count = cursor.fetchone()['count']
+                logger.info(f"Charts with group_field IS NULL: {null_group_count}")
+                
+                # Check show_on_dash if filtering by it
+                if show_on_dash:
+                    cursor.execute("""
+                        SELECT COUNT(*) AS count 
+                        FROM time_series_metadata tsm 
+                        LEFT JOIN metrics m ON tsm.object_id = m.id 
+                        WHERE m.show_on_dash = TRUE
+                    """)
+                    show_on_dash_count = cursor.fetchone()['count']
+                    logger.info(f"Charts with show_on_dash=TRUE: {show_on_dash_count}")
+                
+                return JSONResponse(
+                    content={
+                        "status": "error",
+                        "message": f"No charts found for {filter_desc}"
+                    }
+                )
             
-            # Let's check if there are any charts at all, regardless of filters
-            cursor.execute("SELECT COUNT(*) AS count FROM time_series_metadata")
-            total_count = cursor.fetchone()['count']
-            logger.info(f"Total charts in time_series_metadata: {total_count}")
-            
-            # Check if any charts match just the period_type
-            cursor.execute("SELECT COUNT(*) AS count FROM time_series_metadata WHERE period_type = %s", [period_type])
-            period_count = cursor.fetchone()['count']
-            logger.info(f"Charts with period_type={period_type}: {period_count}")
-            
-            # Check if any charts have group_field IS NULL
-            cursor.execute("SELECT COUNT(*) AS count FROM time_series_metadata WHERE group_field IS NULL")
-            null_group_count = cursor.fetchone()['count']
-            logger.info(f"Charts with group_field IS NULL: {null_group_count}")
-            
-            # Check show_on_dash if filtering by it
-            if show_on_dash:
-                cursor.execute("""
-                    SELECT COUNT(*) AS count 
-                    FROM time_series_metadata tsm 
-                    LEFT JOIN metrics m ON tsm.object_id = m.id 
-                    WHERE m.show_on_dash = TRUE
-                """)
-                show_on_dash_count = cursor.fetchone()['count']
-                logger.info(f"Charts with show_on_dash=TRUE: {show_on_dash_count}")
-            
-            return JSONResponse(
-                content={
-                    "status": "error",
-                    "message": f"No charts found for {filter_desc}"
-                }
-            )
-        
         # For each chart, find the two most recent periods and compare
         all_results = []
         
         logger.info(f"Found {len(charts)} charts with null group_field and valid report date")
         
-        for chart in charts:
-            chart_id = chart['chart_id']
+        with get_pooled_connection() as conn:
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             
-            # Get the two most recent periods for this chart
-            periods_query = """
-            SELECT DISTINCT time_period
-            FROM time_series_data
-            WHERE chart_id = %s
-            ORDER BY time_period DESC
-            LIMIT 2
-            """
-            cursor.execute(periods_query, [chart_id])
-            periods = cursor.fetchall()
-            
-            if len(periods) < 2:
-                logger.info(f"Skipping chart_id {chart_id} - not enough time periods (found {len(periods)})")
-                continue
+            for chart in charts:
+                chart_id = chart['chart_id']
                 
-            latest_period = periods[0]['time_period']
-            previous_period = periods[1]['time_period']
-            
-            # Skip if latest period is before report date
-            if latest_period < report_date:
-                logger.info(f"Skipping chart_id {chart_id} - latest period {latest_period} is before report date {report_date}")
-                continue
-            
-            logger.info(f"Processing chart_id {chart_id} - comparing periods {latest_period} and {previous_period}")
+                # Calculate specific periods: 1 month ago and 2 months ago from today
+                today = date.today()
+                
+                # 1 month ago (recent period)
+                if today.month == 1:
+                    recent_month = 12
+                    recent_year = today.year - 1
+                else:
+                    recent_month = today.month - 1
+                    recent_year = today.year
+                recent_period_date = date(recent_year, recent_month, 1)
+                
+                # 2 months ago (comparison period) 
+                if recent_month == 1:
+                    comparison_month = 12
+                    comparison_year = recent_year - 1
+                else:
+                    comparison_month = recent_month - 1
+                    comparison_year = recent_year
+                comparison_period_date = date(comparison_year, comparison_month, 1)
+                
+                logger.info(f"Looking for specific periods: recent={recent_period_date}, comparison={comparison_period_date}")
+                
+                # Get data for these specific periods
+                periods_query = """
+                    SELECT DISTINCT time_period
+                    FROM time_series_data
+                    WHERE chart_id = %s 
+                    AND (time_period = %s OR time_period = %s)
+                    ORDER BY time_period DESC
+                """
+                cursor.execute(periods_query, [chart_id, recent_period_date, comparison_period_date])
+                periods = cursor.fetchall()
+                
+                logger.info(f"Found periods for chart_id {chart_id}: {[p['time_period'] for p in periods]}")
+                
+                if len(periods) < 2:
+                    logger.info(f"Could not find both specific periods (recent={recent_period_date}, comparison={comparison_period_date}) for chart_id {chart_id} - found {len(periods)} periods")
+                    
+                    # Try to find at least one of the periods, prioritizing the recent one
+                    single_period_query = """
+                        SELECT DISTINCT time_period
+                        FROM time_series_data
+                        WHERE chart_id = %s 
+                        AND time_period >= %s - INTERVAL '3 months'
+                        ORDER BY time_period DESC
+                        LIMIT 2
+                    """
+                    cursor.execute(single_period_query, [chart_id, recent_period_date])
+                    fallback_periods = cursor.fetchall()
+                    
+                    if len(fallback_periods) < 2:
+                        logger.info(f"Skipping chart_id {chart_id} - not enough time periods even with fallback (found {len(fallback_periods)})")
+                        continue
+                    else:
+                        logger.info(f"Using fallback periods for chart_id {chart_id}: {[p['time_period'] for p in fallback_periods]}")
+                        periods = fallback_periods
+                    
+                # Assign periods - the first one should be the most recent
+                latest_period = periods[0]['time_period'] if periods else recent_period_date
+                previous_period = periods[1]['time_period'] if len(periods) > 1 else comparison_period_date
+                
+                # Skip if latest period is before report date
+                if latest_period < report_date:
+                    logger.info(f"Skipping chart_id {chart_id} - latest period {latest_period} is before report date {report_date}")
+                    continue
+                
+                logger.info(f"Processing chart_id {chart_id} ({chart['object_name']}) - comparing periods {latest_period} and {previous_period}")
             
             # Check for stale data by comparing most_recent_data_date with recent_period.end
             stale_data_warning = None
@@ -1365,59 +1414,56 @@ async def get_top_metric_changes(
                                     
                 except Exception as e:
                     logger.warning(f"Error checking stale data for chart {chart_id}: {e}")
-            
-            # Get the data for both periods and join them
-            data_query = """
-            WITH latest AS (
-                SELECT group_value, numeric_value AS recent_value, time_period AS recent_period
-                FROM time_series_data
-                WHERE chart_id = %s AND time_period = %s
-                LIMIT 1
-            ),
-            previous AS (
-                SELECT group_value, numeric_value AS previous_value, time_period AS previous_period
-                FROM time_series_data
-                WHERE chart_id = %s AND time_period = %s
-                LIMIT 1
-            ),
-            combined AS (
-                SELECT
-                    (SELECT group_value FROM latest) AS group_value,
-                    (SELECT recent_value FROM latest) AS recent_value,
-                    (SELECT previous_value FROM previous) AS previous_value,
-                    (SELECT recent_period FROM latest) AS recent_period,
-                    (SELECT previous_period FROM previous) AS previous_period,
-                    ((SELECT recent_value FROM latest) - (SELECT previous_value FROM previous)) AS delta,
-                    ABS((SELECT recent_value FROM latest) - (SELECT previous_value FROM previous)) AS abs_delta
-            )
-            SELECT
-                group_value,
-                recent_value,
-                previous_value,
-                delta,
-                abs_delta,
-                recent_period,
-                previous_period
-            FROM combined
-            WHERE recent_value IS NOT NULL AND previous_value IS NOT NULL
-            """
-            
-            cursor.execute(data_query, [chart_id, latest_period, chart_id, previous_period])
-            data_results = cursor.fetchall()
-            
-            if not data_results:
-                logger.info(f"No comparison data found for chart_id {chart_id} between periods {latest_period} and {previous_period}")
-                continue
                 
-            logger.info(f"Found {len(data_results)} comparison rows for chart_id {chart_id}")
-            
-            # Add metadata to each result
-            for result in data_results:
-                result['chart_id'] = chart_id
-                result['object_id'] = chart['object_id']
-                result['object_name'] = chart['object_name']
-                result['group_field'] = chart['group_field']
-                result['report_date'] = report_date.isoformat()
+                # Get the data for both periods and join them
+                data_query = """
+                WITH latest AS (
+                    SELECT group_value, numeric_value AS recent_value, time_period AS recent_period
+                    FROM time_series_data
+                    WHERE chart_id = %s AND time_period = %s
+                    LIMIT 1
+                ),
+                previous AS (
+                    SELECT group_value, numeric_value AS previous_value, time_period AS previous_period
+                    FROM time_series_data
+                    WHERE chart_id = %s AND time_period = %s
+                    LIMIT 1
+                ),
+                combined AS (
+                    SELECT
+                        (SELECT group_value FROM latest) AS group_value,
+                        (SELECT recent_value FROM latest) AS recent_value,
+                        (SELECT previous_value FROM previous) AS previous_value,
+                        (SELECT recent_period FROM latest) AS recent_period,
+                        (SELECT previous_period FROM previous) AS previous_period,
+                        ((SELECT recent_value FROM latest) - (SELECT previous_value FROM previous)) AS delta,
+                        ABS((SELECT recent_value FROM latest) - (SELECT previous_value FROM previous)) AS abs_delta
+                )
+                SELECT
+                    group_value,
+                    recent_value,
+                    previous_value,
+                    delta,
+                    abs_delta,
+                    recent_period,
+                    previous_period
+                FROM combined
+                WHERE recent_value IS NOT NULL AND previous_value IS NOT NULL
+                """
+                
+                cursor.execute(data_query, [chart_id, latest_period, chart_id, previous_period])
+                data_results = cursor.fetchall()
+                
+                if data_results:
+                    logger.info(f"Found {len(data_results)} comparison rows for chart_id {chart_id}")
+                
+                # Add metadata to each result
+                for result in data_results:
+                    result['chart_id'] = chart_id
+                    result['object_id'] = chart['object_id']
+                    result['object_name'] = chart['object_name']
+                    result['group_field'] = chart['group_field']
+                    result['report_date'] = report_date.isoformat()
                 
                 # Log the raw data for debugging
                 logger.info(f"Raw data for {chart['object_name']}: recent={result['recent_value']} ({result['recent_period']}), previous={result['previous_value']} ({result['previous_period']}), delta={result['delta']}")
@@ -1503,6 +1549,10 @@ async def get_top_metric_changes(
                     
                 # Log the values for debugging
                 logger.info(f"Result for chart {chart_id}: {result['object_name']} - Previous: {result['previous_value']} ({result['previous_period']}), Recent: {result['recent_value']} ({result['recent_period']}), Delta: {result['delta']}, greendirection: {result['greendirection']}, citywide_changes: {citywide_changes}")
+                
+                # Debug log to show final result periods
+                logger.info(f"PERIOD DEBUG - Chart {chart_id}: recent_period={result.get('recent_period')}, previous_period={result.get('previous_period')}")
+                
                 all_results.append(result)
         
         # Sort all results by delta (descending and ascending)
@@ -1603,7 +1653,7 @@ async def get_top_metric_changes(
                 formatted.append(item)
             return formatted
             
-        # Format the results
+        # Format the results  
         positive_formatted = process_results(positive_changes)
         negative_formatted = process_results(negative_changes)
         
@@ -1612,21 +1662,57 @@ async def get_top_metric_changes(
         for result in positive_formatted + negative_formatted:
             if result.get('stale_data_warning'):
                 stale_data_count += 1
-        
-        
-        return JSONResponse(
-            content={
-                "status": "success",
-                "count": len(positive_formatted) + len(negative_formatted),
-                "period_type": period_type,
-                "object_id": object_id,
-                "district": district,
-                "report_date": report_date.isoformat(),
-                "stale_data_warnings": stale_data_count,
-                "positive_changes": positive_formatted,
-                "negative_changes": negative_formatted
-            }
-        )
+            
+            
+            # Ensure consistent periods across all results based on our target months
+            from datetime import date as dt
+            today = dt.today()
+            
+            # Calculate target periods (same logic as above)
+            if today.month == 1:
+                target_recent_month = 12
+                target_recent_year = today.year - 1
+            else:
+                target_recent_month = today.month - 1
+                target_recent_year = today.year
+            target_recent_period = dt(target_recent_year, target_recent_month, 1)
+            
+            if target_recent_month == 1:
+                target_comparison_month = 12
+                target_comparison_year = target_recent_year - 1
+            else:
+                target_comparison_month = target_recent_month - 1
+                target_comparison_year = target_recent_year
+            target_comparison_period = dt(target_comparison_year, target_comparison_month, 1)
+            
+            logger.info(f"API RESPONSE - Target periods: recent={target_recent_period}, comparison={target_comparison_period}")
+            print(f"🔍 ANOMALY DEBUG: Target periods: recent={target_recent_period}, comparison={target_comparison_period}")
+            
+            # Override periods in results to ensure consistency
+            for result in positive_formatted + negative_formatted:
+                if 'recent_period' not in result or not result['recent_period']:
+                    result['recent_period'] = target_recent_period.isoformat()
+                if 'previous_period' not in result or not result['previous_period']:
+                    result['previous_period'] = target_comparison_period.isoformat()
+                    
+            logger.info(f"API RESPONSE - First result periods: recent={positive_formatted[0]['recent_period'] if positive_formatted else 'N/A'}, previous={positive_formatted[0]['previous_period'] if positive_formatted else 'N/A'}")
+
+            return JSONResponse(
+                content={
+                    "status": "success",
+                    "count": len(positive_formatted) + len(negative_formatted),
+                    "period_type": period_type,
+                    "object_id": object_id,
+                    "district": district,
+                    "report_date": report_date.isoformat(),
+                    "stale_data_warnings": stale_data_count,
+                    "positive_changes": positive_formatted,
+                    "negative_changes": negative_formatted,
+                    # Add global period information for frontend
+                    "target_recent_period": target_recent_period.isoformat(),
+                    "target_comparison_period": target_comparison_period.isoformat()
+                }
+            )
         
     except Exception as e:
         logger.error(f"Error getting top metric changes: {str(e)}", exc_info=True)
@@ -2018,10 +2104,6 @@ async def query_anomalies_endpoint(
             # Use connection pool for better performance
             from psycopg2.extras import RealDictCursor
             
-            with get_pooled_connection() as connection:
-                # Create cursor
-                cursor = connection.cursor(cursor_factory=RealDictCursor)
-            
             # Build query with standard filters and join with metrics table to get greendirection
             query = """
                 SELECT a.*, m.greendirection 
@@ -2091,25 +2173,26 @@ async def query_anomalies_endpoint(
             logging.info(f"Executing SQL query: {query}")
             logging.info(f"With parameters: {params}")
             
-            # Execute query
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-            
-            # Convert to list of dictionaries and handle datetime objects
-            result_list = []
-            for row in results:
-                row_dict = dict(row)
-                # Format created_at for display
-                if row_dict.get('created_at') and isinstance(row_dict['created_at'], datetime):
-                    row_dict['created_at'] = row_dict['created_at'].isoformat()
-                result_list.append(row_dict)
-            
-            
-            anomalies_result = {
-                "status": "success",
-                "count": len(result_list),
-                "results": result_list
-            }
+            # Execute query with proper connection management
+            with get_pooled_connection() as connection:
+                cursor = connection.cursor(cursor_factory=RealDictCursor)
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                
+                # Convert to list of dictionaries and handle datetime objects
+                result_list = []
+                for row in results:
+                    row_dict = dict(row)
+                    # Format created_at for display
+                    if row_dict.get('created_at') and isinstance(row_dict['created_at'], datetime):
+                        row_dict['created_at'] = row_dict['created_at'].isoformat()
+                    result_list.append(row_dict)
+                
+                anomalies_result = {
+                    "status": "success",
+                    "count": len(result_list),
+                    "results": result_list
+                }
             
         except Exception as e:
             logging.error(f"Error querying anomalies: {e}")

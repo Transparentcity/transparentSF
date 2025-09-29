@@ -34,6 +34,7 @@ def generate_map_tool(context_variables: Dict[str, Any], map_title: str, map_typ
         map_type: Type of map to create. Must be one of:
             * "supervisor_district" - Map showing data by San Francisco supervisor district (1-11)
             * "police_district" - Map showing data by San Francisco police district
+            * "analysis_neighborhood" - Map showing data by San Francisco analysis neighborhood
             * "intersection" - Map showing points at specific street intersections
             * "point" - Map showing points at specific lat/long coordinates
             * "address" - Map showing points at specific addresses (will be geocoded automatically)
@@ -107,12 +108,11 @@ def generate_map_tool(context_variables: Dict[str, Any], map_title: str, map_typ
             'error': f'Failed to generate map: {str(e)}'
         }
 
-def get_map_by_id_tool(context_variables: Dict[str, Any], map_id: int) -> Dict[str, Any]:
+def get_map_by_id_tool(map_id: int) -> Dict[str, Any]:
     """
     Retrieve a previously created map by ID.
     
     Args:
-        context_variables: Context variables for the current analysis
         map_id: The ID of the map to retrieve
         
     Returns:
@@ -125,7 +125,7 @@ def get_map_by_id_tool(context_variables: Dict[str, Any], map_id: int) -> Dict[s
         # Import the function from the main tools directory
         from ai.tools.generate_map import get_map_by_id
         
-        result = get_map_by_id(context_variables, map_id)
+        result = get_map_by_id({}, map_id)
         
         if result and "map_id" in result:
             logger.info(f"Map {map_id} retrieved successfully")
@@ -147,13 +147,11 @@ def get_map_by_id_tool(context_variables: Dict[str, Any], map_id: int) -> Dict[s
             'error': f'Failed to retrieve map: {str(e)}'
         }
 
-def get_recent_maps_tool(context_variables: Dict[str, Any], limit: int = 10, 
-                         map_type: Optional[str] = None) -> Dict[str, Any]:
+def get_recent_maps_tool(limit: int = 10, map_type: Optional[str] = None) -> Dict[str, Any]:
     """
     Get a list of recently created maps.
     
     Args:
-        context_variables: Context variables for the current analysis
         limit: Maximum number of maps to return (default: 10)
         map_type: Optional filter by map type (e.g., "supervisor_district", "point")
         
@@ -168,7 +166,7 @@ def get_recent_maps_tool(context_variables: Dict[str, Any], limit: int = 10,
         # Import the function from the main tools directory
         from ai.tools.generate_map import get_recent_maps
         
-        result = get_recent_maps(context_variables, limit, map_type)
+        result = get_recent_maps({}, limit, map_type)
         
         if result and "maps" in result:
             logger.info(f"Retrieved {len(result['maps'])} recent maps")
@@ -210,6 +208,7 @@ def generate_map_with_query_tool(endpoint: str, query: str, map_title: str, map_
         map_type: Type of map to create. Must be one of:
             * "supervisor_district" - Map showing data by San Francisco supervisor district (1-11)
             * "police_district" - Map showing data by San Francisco police district
+            * "analysis_neighborhood" - Map showing data by San Francisco analysis neighborhood
             * "intersection" - Map showing points at specific street intersections
             * "point" - Map showing points at specific lat/long coordinates
             * "address" - Map showing points at specific addresses (will be geocoded automatically)
@@ -278,6 +277,24 @@ def generate_map_with_query_tool(endpoint: str, query: str, map_title: str, map_
         if not endpoint.endswith('.json'):
             endpoint = f"{endpoint}.json"
             logger.info(f"Added .json to endpoint: {endpoint}")
+        
+        # CONTEXT WINDOW PROTECTION: Add automatic LIMIT if not present for map generation
+        query_lower = query.lower()
+        if 'limit' not in query_lower:
+            # Maps can handle more data than text analysis, but still need limits
+            MAP_DEFAULT_LIMIT = 10000
+            query = f"{query} LIMIT {MAP_DEFAULT_LIMIT}"
+            logger.info(f"Added automatic LIMIT {MAP_DEFAULT_LIMIT} for map generation")
+        else:
+            # Check if existing limit is too high for context
+            import re
+            limit_match = re.search(r'limit\s+(\d+)', query_lower)
+            if limit_match:
+                existing_limit = int(limit_match.group(1))
+                MAP_MAX_SAFE_LIMIT = 10000  # Higher limit for maps
+                if existing_limit > MAP_MAX_SAFE_LIMIT:
+                    query = re.sub(r'limit\s+\d+', f'LIMIT {MAP_MAX_SAFE_LIMIT}', query, flags=re.IGNORECASE)
+                    logger.warning(f"Reduced LIMIT from {existing_limit} to {MAP_MAX_SAFE_LIMIT} for map generation")
             
         query_object = {'endpoint': endpoint, 'query': query}
         result = fetch_data_from_api(query_object)
@@ -321,6 +338,7 @@ def generate_map_with_query_tool(endpoint: str, query: str, map_title: str, map_
             metric_id=metric_id,
             series_field=series_field,
             color_palette=color_palette,
+            series_info=None,
             preview_mode=False
         )
         

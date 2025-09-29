@@ -10,7 +10,7 @@ import logging
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
-from tools.db_utils import get_postgres_connection
+from ai.tools.db_utils import get_postgres_connection
 import psycopg2
 import psycopg2.extras
 import io
@@ -710,4 +710,479 @@ async def download_session_logs():
         return JSONResponse({
             "status": "error",
             "message": str(e)
+        }, status_code=500)
+
+@router.post("/api/admin/reload-business-vacancy-table")
+async def reload_business_vacancy_table(limit: int = None):
+    """Reload the business-vacancy table with location-based business data as a background job"""
+    try:
+        from background_jobs import job_manager
+        import asyncio
+        
+        # Create a background job for the table reload
+        job_id = job_manager.create_job(
+            "location_business_reload", 
+            f"Reload location-based business data (limit: {limit or 'unlimited'})"
+        )
+        logger.info(f"Created job {job_id} for location-based business data reload")
+        
+        # Start the reload in the background
+        task = asyncio.create_task(_run_location_business_reload_job(job_id, limit))
+        
+        # Add error handling for the task
+        def task_done_callback(task):
+            try:
+                if task.exception():
+                    logger.error(f"Location business reload task failed: {task.exception()}")
+            except Exception as e:
+                logger.error(f"Error in task callback: {e}")
+        
+        task.add_done_callback(task_done_callback)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Location-based business data reload started as background job",
+            "job_id": job_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error starting location business reload job: {e}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Error starting reload job: {str(e)}"
+        }, status_code=500)
+
+async def _run_location_business_reload_job(job_id: str, limit: int = None):
+    """Run the location-based business data reload as a background job."""
+    try:
+        from background_jobs import job_manager
+        
+        logger.info(f"=== STARTING LOCATION-BASED BUSINESS DATA RELOAD JOB ===")
+        logger.info(f"Job ID: {job_id}")
+        logger.info(f"Limit: {limit or 'unlimited'}")
+        
+        # Get the job and mark it as running
+        job = job_manager.get_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found in job manager")
+            return
+            
+        job.start()
+        job.update_progress(5)
+        logger.info(f"Job {job_id} started, progress: 5%")
+        
+        # Import the new SOQL-based processor
+        from ai.tools.soql_business_processor import SOQLBusinessProcessor
+        
+        job.update_progress(10)
+        logger.info(f"Job {job_id} progress: 10% - Initializing location-based processor")
+        
+        # Create processor instance
+        processor = SOQLBusinessProcessor()
+        
+        job.update_progress(20)
+        logger.info(f"Job {job_id} progress: 20% - Starting SOQL-based data processing")
+        
+        # Process data with progress updates
+        def process_with_progress():
+            try:
+                # Use the SOQL-based approach
+                result = processor.process_all_data(clear_existing=True)
+                
+                # Get final statistics
+                job.update_progress(80)
+                logger.info(f"Job {job_id} progress: 80% - Processing complete, getting statistics")
+                
+                # Return statistics
+                stats = {
+                    'total_locations': result.get('total_locations', 0),
+                    'open_locations': result.get('open_locations', 0),
+                    'closed_locations': result.get('closed_locations', 0),
+                    'total_errors': result.get('total_errors', 0),
+                    'duration_seconds': result.get('duration_seconds', 0),
+                    'method': 'soql_based_approach'
+                }
+                
+                logger.info(f"Job {job_id} - Final stats: {stats}")
+                return stats
+                
+            except Exception as e:
+                logger.error(f"Error in SOQL-based processor: {e}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                raise
+        
+        # Run the processor in a thread pool to avoid blocking
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
+        try:
+            result = await loop.run_in_executor(None, process_with_progress)
+        except Exception as e:
+            logger.error(f"Error in executor for job {job_id}: {e}")
+            import traceback
+            logger.error(f"Executor traceback: {traceback.format_exc()}")
+            raise
+        
+        job.update_progress(95)
+        logger.info(f"Job {job_id} progress: 95% - Processing complete, finalizing")
+        
+        # Complete the job
+        job.complete(result)
+        logger.info(f"Job {job_id} completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Error in location business reload job {job_id}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Mark job as failed
+        job = job_manager.get_job(job_id)
+        if job:
+            job.fail(str(e))
+
+@router.get("/api/admin/business-vacancy-stats")
+async def get_business_vacancy_stats():
+    """Get statistics about the location_business table"""
+    try:
+        import psycopg2
+        import os
+        
+        conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+        with conn.cursor() as cur:
+            # Get total count
+            cur.execute("SELECT COUNT(*) FROM location_business")
+            total_count = cur.fetchone()[0]
+            
+            # Get count by open/closed status
+            cur.execute("""
+                SELECT is_open, COUNT(*) as count 
+                FROM location_business 
+                GROUP BY is_open 
+                ORDER BY is_open
+            """)
+            status_stats = [{"status": "Open" if row[0] else "Closed", "count": row[1]} for row in cur.fetchall()]
+            
+            # Get count by district
+            cur.execute("""
+                SELECT supervisor_district, COUNT(*) as count 
+                FROM location_business 
+                WHERE supervisor_district IS NOT NULL 
+                GROUP BY supervisor_district 
+                ORDER BY supervisor_district
+            """)
+            district_stats = [{"district": row[0], "count": row[1]} for row in cur.fetchall()]
+            
+            # Get count by corridor
+            cur.execute("""
+                SELECT business_corridor, COUNT(*) as count 
+                FROM location_business 
+                WHERE business_corridor IS NOT NULL 
+                GROUP BY business_corridor 
+                ORDER BY count DESC 
+                LIMIT 20
+            """)
+            corridor_stats = [{"corridor": row[0], "count": row[1]} for row in cur.fetchall()]
+            
+            # Get recent updates
+            cur.execute("""
+                SELECT MAX(updated_at) as last_updated, MIN(created_at) as first_created 
+                FROM location_business
+            """)
+            update_info = cur.fetchone()
+            
+        conn.close()
+        
+        return JSONResponse({
+            "status": "success",
+            "stats": {
+                "total_count": total_count,
+                "status_stats": status_stats,
+                "district_stats": district_stats,
+                "corridor_stats": corridor_stats,
+                "last_updated": update_info[0].isoformat() if update_info[0] else None,
+                "first_created": update_info[1].isoformat() if update_info[1] else None
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting business-vacancy stats: {e}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Error getting business-vacancy stats: {str(e)}"
+        }, status_code=500)
+
+@router.post("/api/admin/reload-proven-vacancy-table")
+async def reload_proven_vacancy_table(limit: int = None):
+    """Reload the proven vacancy table using the proven logic from working real-time code"""
+    try:
+        from background_jobs import job_manager
+        import asyncio
+        
+        # Create a background job for the table reload
+        job_id = job_manager.create_job(
+            "proven_vacancy_reload", 
+            f"Reload proven vacancy data using working logic (limit: {limit or 'unlimited'})"
+        )
+        logger.info(f"Created job {job_id} for proven vacancy data reload")
+        
+        # Start the reload in the background
+        task = asyncio.create_task(_run_proven_vacancy_reload_job(job_id, limit))
+        
+        # Add error handling for the task
+        def task_done_callback(task):
+            try:
+                if task.exception():
+                    logger.error(f"Proven vacancy reload task failed: {task.exception()}")
+            except Exception as e:
+                logger.error(f"Error in task callback: {e}")
+        
+        task.add_done_callback(task_done_callback)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Proven vacancy data reload started as background job",
+            "job_id": job_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error starting proven vacancy reload job: {e}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Error starting proven vacancy reload job: {str(e)}"
+        }, status_code=500)
+
+async def _run_proven_vacancy_reload_job(job_id: str, limit: int = None):
+    """Run the proven vacancy data reload as a background job."""
+    try:
+        from background_jobs import job_manager
+        
+        logger.info(f"=== STARTING PROVEN VACANCY DATA RELOAD JOB ===")
+        logger.info(f"Job ID: {job_id}")
+        logger.info(f"Limit: {limit or 'unlimited'}")
+        
+        # Get the job and mark it as running
+        job = job_manager.get_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found in job manager")
+            return
+            
+        job.start()
+        job.update_progress(5)
+        logger.info(f"Job {job_id} started, progress: 5%")
+        
+        # Import the proven processor
+        from ai.tools.proven_vacancy_processor import ProvenVacancyProcessor
+        
+        job.update_progress(10)
+        logger.info(f"Job {job_id} progress: 10% - Initializing proven processor")
+        
+        # Create processor instance
+        processor = ProvenVacancyProcessor()
+        
+        job.update_progress(20)
+        logger.info(f"Job {job_id} progress: 20% - Starting proven data processing")
+        
+        # Process data with progress updates
+        def process_with_progress():
+            try:
+                # Use the proven approach
+                result = processor.process_all_data(limit=limit, clear_existing=True)
+                
+                # Get final statistics
+                job.update_progress(80)
+                logger.info(f"Job {job_id} progress: 80% - Processing complete, getting statistics")
+                
+                # Return statistics
+                stats = {
+                    'total_locations': result.get('total_locations', 0),
+                    'open_locations': result.get('open_locations', 0),
+                    'closed_locations': result.get('closed_locations', 0),
+                    'total_errors': result.get('total_errors', 0),
+                    'duration_seconds': result.get('duration_seconds', 0),
+                    'method': 'proven_approach'
+                }
+                
+                logger.info(f"Job {job_id} - Final stats: {stats}")
+                return stats
+                
+            except Exception as e:
+                logger.error(f"Error in proven processor: {e}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                raise
+        
+        # Run the processor in a thread pool to avoid blocking
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
+        try:
+            result = await loop.run_in_executor(None, process_with_progress)
+        except Exception as e:
+            logger.error(f"Error in executor for job {job_id}: {e}")
+            import traceback
+            logger.error(f"Executor traceback: {traceback.format_exc()}")
+            raise
+        
+        job.update_progress(95)
+        logger.info(f"Job {job_id} progress: 95% - Processing complete, finalizing")
+        
+        # Complete the job
+        job.complete(result)
+        logger.info(f"Job {job_id} completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Error in proven vacancy reload job {job_id}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Mark job as failed
+        job = job_manager.get_job(job_id)
+        if job:
+            job.fail(str(e))
+
+@router.get("/api/admin/proven-vacancy-stats")
+async def get_proven_vacancy_stats():
+    """Get statistics about the proven_vacancy table"""
+    try:
+        import psycopg2
+        import os
+        
+        conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+        with conn.cursor() as cur:
+            # Get total count
+            cur.execute("SELECT COUNT(*) FROM proven_vacancy")
+            total_count = cur.fetchone()[0]
+            
+            # Get status counts
+            cur.execute("SELECT status, COUNT(*) FROM proven_vacancy GROUP BY status")
+            status_counts = dict(cur.fetchall())
+            
+            # Get district counts
+            cur.execute("""
+                SELECT supervisor_district, COUNT(*) 
+                FROM proven_vacancy 
+                WHERE supervisor_district IS NOT NULL 
+                GROUP BY supervisor_district 
+                ORDER BY COUNT(*) DESC 
+                LIMIT 10
+            """)
+            district_counts = dict(cur.fetchall())
+            
+            # Get corridor counts
+            cur.execute("""
+                SELECT business_corridor, COUNT(*) 
+                FROM proven_vacancy 
+                WHERE business_corridor IS NOT NULL AND business_corridor != ''
+                GROUP BY business_corridor 
+                ORDER BY COUNT(*) DESC 
+                LIMIT 10
+            """)
+            corridor_counts = dict(cur.fetchall())
+            
+            # Get update info
+            cur.execute("""
+                SELECT 
+                    MIN(created_at) as first_created,
+                    MAX(updated_at) as last_updated
+                FROM proven_vacancy
+            """)
+            update_info = cur.fetchone()
+        
+        conn.close()
+        
+        return JSONResponse({
+            "status": "success",
+            "stats": {
+                "total_locations": total_count,
+                "status_breakdown": status_counts,
+                "top_districts": district_counts,
+                "top_corridors": corridor_counts,
+                "last_updated": update_info[0].isoformat() if update_info[0] else None,
+                "first_created": update_info[1].isoformat() if update_info[1] else None
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting proven vacancy stats: {e}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Error getting proven vacancy stats: {str(e)}"
+        }, status_code=500)
+
+@router.post("/api/admin/reload-exact-realtime-vacancy-table")
+async def reload_exact_realtime_vacancy_table(limit: int = None):
+    """Reload the exact real-time vacancy table using the exact same logic as true real-time analysis"""
+    try:
+        from background_jobs import job_manager
+        import asyncio
+        
+        # Create a background job
+        job_id = job_manager.create_job(
+            "exact_realtime_vacancy_reload", 
+            f"Reload exact real-time vacancy table{' (limit: ' + str(limit) + ')' if limit else ''}"
+        )
+        
+        async def process_job():
+            try:
+                from ai.tools.exact_realtime_processor import ExactRealtimeProcessor
+                
+                processor = ExactRealtimeProcessor()
+                
+                # Create table
+                processor.create_table()
+                
+                # Process data
+                result = processor.process_data(limit=limit)
+                
+                # Get the job and mark it as complete
+                job = job_manager.get_job(job_id)
+                if job:
+                    job.complete({
+                        "message": "Exact real-time vacancy data reload completed successfully",
+                        "result": result
+                    })
+                
+            except Exception as e:
+                logger.error(f"Error in exact real-time vacancy reload job: {e}")
+                # Mark job as failed
+                job = job_manager.get_job(job_id)
+                if job:
+                    job.fail(str(e))
+        
+        # Start the job
+        asyncio.create_task(process_job())
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Exact real-time vacancy data reload started as background job",
+            "job_id": job_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error starting exact real-time vacancy reload job: {e}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Error starting exact real-time vacancy reload job: {str(e)}"
+        }, status_code=500)
+
+@router.get("/api/admin/exact-realtime-vacancy-stats")
+async def get_exact_realtime_vacancy_stats():
+    """Get statistics about the exact_realtime_vacancy table"""
+    try:
+        from ai.tools.exact_realtime_processor import ExactRealtimeProcessor
+        
+        processor = ExactRealtimeProcessor()
+        stats = processor.get_stats()
+        
+        return JSONResponse({
+            "status": "success",
+            "stats": stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting exact real-time vacancy stats: {e}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Error getting exact real-time vacancy stats: {str(e)}"
         }, status_code=500)
