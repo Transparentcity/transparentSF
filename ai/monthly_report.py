@@ -6114,6 +6114,348 @@ def regenerate_explanations_for_report(filename, model_key=None):
         return {"status": "error", "message": error_msg}
 
 
+def re_explain_deltas_for_report(filename, model_key=None):
+    """
+    Re-explain deltas for an existing newsletter's monthly_reporting items.
+    This function finds the report by filename and regenerates explanations and perplexity context for all its items.
+    Does NOT generate newsletter text - use re_generate_newsletter_text_for_report for that.
+    
+    Args:
+        filename: The newsletter filename (e.g., "monthly_report_0_2024_01.html")
+        model_key: Model to use for the LangChain agent (defaults to gpt-5)
+        
+    Returns:
+        Status dictionary with success/error information
+    """
+    logger.warning(f"🔧 DEBUG: re_explain_deltas_for_report STARTED with filename='{filename}', model_key='{model_key}'")
+    logger.info(f"Re-explaining deltas for newsletter: {filename}")
+    
+    try:
+        # Step 1: Find the existing report and get its monthly_reporting items
+        def find_report_items_operation(connection):
+            cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            
+            # Find the report by original filename
+            cursor.execute("""
+                SELECT r.id as report_id, mr.id as item_id
+                FROM reports r
+                JOIN monthly_reporting mr ON r.id = mr.report_id
+                WHERE r.original_filename = %s
+                ORDER BY r.created_at DESC, mr.priority ASC
+            """, (filename,))
+            
+            results = cursor.fetchall()
+            cursor.close()
+            
+            if not results:
+                return None
+                
+            report_id = results[0]['report_id']
+            item_ids = [row['item_id'] for row in results]
+            
+            logger.info(f"Found report {report_id} with {len(item_ids)} items to explain")
+            return {
+                "report_id": report_id,
+                "item_ids": item_ids
+            }
+        
+        # Execute the find operation
+        result = execute_with_connection(
+            operation=find_report_items_operation,
+            db_host=DB_HOST,
+            db_port=DB_PORT,
+            db_name=DB_NAME,
+            db_user=DB_USER,
+            db_password=DB_PASSWORD
+        )
+        
+        if result["status"] != "success" or not result["result"]:
+            return {"status": "error", "message": f"Newsletter with filename '{filename}' not found or has no items"}
+        
+        report_info = result["result"]
+        item_ids = report_info["item_ids"]
+        
+        # Step 2: Generate explanations for all items
+        logger.info(f"Generating explanations for {len(item_ids)} items")
+        explanation_result = generate_explanations(item_ids, model_key=model_key)
+        
+        if explanation_result.get("status") != "success":
+            return {"status": "error", "message": f"Failed to generate explanations: {explanation_result.get('message')}"}
+        
+        # Step 3: Get perplexity context for all items
+        logger.info(f"Getting perplexity context for {len(item_ids)} items")
+        
+        def get_items_for_context_operation(connection):
+            cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            
+            # Get all items with their data for perplexity context
+            cursor.execute("""
+                SELECT * FROM monthly_reporting WHERE id = ANY(%s)
+                ORDER BY priority
+            """, (item_ids,))
+            
+            items = cursor.fetchall()
+            cursor.close()
+            
+            # Convert to list of dictionaries for perplexity context function
+            report_items = []
+            for item in items:
+                report_items.append({
+                    "id": item["id"],  # Include the database ID
+                    "metric": item["metric_name"],
+                    "group": item["group_value"],
+                    "recent_mean": item["recent_mean"],
+                    "comparison_mean": item["comparison_mean"],
+                    "percent_change": item["percent_change"],
+                    "explanation": item["explanation"],
+                    "report_text": item.get("report_text", "")
+                })
+            
+            return report_items
+        
+        # Execute the get items operation
+        items_result = execute_with_connection(
+            operation=get_items_for_context_operation,
+            db_host=DB_HOST,
+            db_port=DB_PORT,
+            db_name=DB_NAME,
+            db_user=DB_USER,
+            db_password=DB_PASSWORD
+        )
+        
+        if items_result["status"] != "success":
+            logger.warning(f"Failed to get items for perplexity context: {items_result.get('message')}")
+        else:
+            # Get perplexity context
+            context_result = get_perplexity_context(items_result["result"])
+            
+            if context_result.get("status") == "success":
+                # Update items with perplexity context
+                logger.info("Updating items with perplexity context")
+                
+                def update_items_with_context_operation(connection):
+                    cursor = connection.cursor()
+                    updated_count = 0
+                    
+                    for item in context_result["report_items"]:
+                        item_id = item.get("id")
+                        metric_name = item["metric"]
+                        group_value = item["group"]
+                        
+                        logger.info(f"Processing item: ID={item_id}, metric={metric_name}, group={group_value}")
+                        logger.info(f"Item keys: {list(item.keys())}")
+                        logger.info(f"Metadata keys: {list(item.get('metadata', {}).keys())}")
+                        
+                        if not item_id:
+                            logger.warning(f"No item ID found for {metric_name} - {group_value}, skipping update")
+                            continue
+                        
+                        # Get current metadata from database
+                        cursor.execute("""
+                            SELECT metadata FROM monthly_reporting 
+                            WHERE id = %s
+                        """, (item_id,))
+                        
+                        result = cursor.fetchone()
+                        if not result:
+                            logger.warning(f"Database item not found for ID {item_id}, skipping update")
+                            continue
+                            
+                        current_metadata = result[0]
+                        logger.info(f"Found database item: ID={item_id}")
+                        
+                        # Parse existing metadata
+                        if current_metadata:
+                            if isinstance(current_metadata, str):
+                                try:
+                                    metadata = json.loads(current_metadata)
+                                except:
+                                    metadata = {}
+                            else:
+                                metadata = current_metadata
+                        else:
+                            metadata = {}
+                        
+                        # Add perplexity context
+                        if "perplexity_context" in item.get("metadata", {}):
+                            metadata["perplexity_context"] = item["metadata"]["perplexity_context"]
+                            logger.info(f"Added perplexity_context for item ID {item_id} (length: {len(item['metadata']['perplexity_context'])})")
+                        
+                        # Add perplexity response data
+                        if "perplexity_response" in item.get("metadata", {}):
+                            metadata["perplexity_response"] = item["metadata"]["perplexity_response"]
+                            logger.info(f"Added perplexity_response for item ID {item_id}: {json.dumps(item['metadata']['perplexity_response'])[:100]}...")
+                        
+                        # Update the database
+                        cursor.execute("""
+                            UPDATE monthly_reporting 
+                            SET metadata = %s 
+                            WHERE id = %s
+                        """, (json.dumps(metadata), item_id))
+                        
+                        updated_count += 1
+                        logger.info(f"Updated item ID {item_id} with perplexity context")
+                    
+                    connection.commit()
+                    cursor.close()
+                    return updated_count
+                
+                # Execute the update operation
+                update_result = execute_with_connection(
+                    operation=update_items_with_context_operation,
+                    db_host=DB_HOST,
+                    db_port=DB_PORT,
+                    db_name=DB_NAME,
+                    db_user=DB_USER,
+                    db_password=DB_PASSWORD
+                )
+                
+                if update_result["status"] == "success":
+                    logger.info(f"Successfully updated {update_result['result']} items with perplexity context")
+                else:
+                    logger.warning(f"Failed to update items with perplexity context: {update_result.get('message')}")
+            else:
+                logger.warning(f"Failed to get perplexity context: {context_result.get('message')}")
+        
+        logger.info(f"Successfully re-explained deltas for newsletter {filename}")
+        return {
+            "status": "success",
+            "message": f"Successfully re-explained deltas and enriched context for {len(item_ids)} items in newsletter {filename}",
+            "report_id": report_info["report_id"],
+            "explained_items_count": len(item_ids),
+            "explanations_generated": explanation_result.get("status") == "success",
+            "context_enriched": context_result.get("status") == "success" if 'context_result' in locals() else False
+        }
+        
+    except Exception as e:
+        error_msg = f"Error in re_explain_deltas_for_report: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {"status": "error", "message": error_msg}
+
+
+def re_generate_newsletter_text_for_report(filename, model_key=None):
+    """
+    Re-generate newsletter text for an existing newsletter's monthly_reporting items.
+    This function finds the report by filename and generates newsletter text for all its items.
+    Does NOT generate explanations or perplexity context - use re_explain_deltas_for_report for that.
+    
+    Args:
+        filename: The newsletter filename (e.g., "monthly_report_0_2024_01.html")
+        model_key: Model to use for the LangChain agent (defaults to gpt-5)
+        
+    Returns:
+        Status dictionary with success/error information
+    """
+    logger.warning(f"🔧 DEBUG: re_generate_newsletter_text_for_report STARTED with filename='{filename}', model_key='{model_key}'")
+    logger.info(f"Re-generating newsletter text for newsletter: {filename}")
+    
+    try:
+        # Step 1: Find the existing report and get its monthly_reporting items
+        def find_report_items_operation(connection):
+            cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            
+            # Find the report by original filename
+            cursor.execute("""
+                SELECT r.id as report_id, mr.id as item_id
+                FROM reports r
+                JOIN monthly_reporting mr ON r.id = mr.report_id
+                WHERE r.original_filename = %s
+                ORDER BY r.created_at DESC, mr.priority ASC
+            """, (filename,))
+            
+            results = cursor.fetchall()
+            cursor.close()
+            
+            if not results:
+                return None
+                
+            report_id = results[0]['report_id']
+            item_ids = [row['item_id'] for row in results]
+            
+            logger.info(f"Found report {report_id} with {len(item_ids)} items to generate text for")
+            return {
+                "report_id": report_id,
+                "item_ids": item_ids
+            }
+        
+        # Execute the find operation
+        result = execute_with_connection(
+            operation=find_report_items_operation,
+            db_host=DB_HOST,
+            db_port=DB_PORT,
+            db_name=DB_NAME,
+            db_user=DB_USER,
+            db_password=DB_PASSWORD
+        )
+        
+        if result["status"] != "success" or not result["result"]:
+            return {"status": "error", "message": f"Newsletter with filename '{filename}' not found or has no items"}
+        
+        report_info = result["result"]
+        item_ids = report_info["item_ids"]
+        
+        # Step 2: Generate newsletter text for all items
+        logger.info(f"Generating newsletter text for {len(item_ids)} items")
+        
+        # Import the generate_report_text function and create LangChain agent
+        from tools.generate_report_text import generate_report_text
+        from agents.langchain_agent.explainer_agent import create_explainer_agent
+        from agents.langchain_agent.config.tool_config import ToolGroup
+        from agents.config.models import get_model_config
+        
+        # Use selected model or default to gpt-5
+        if model_key:
+            try:
+                model_config = get_model_config(model_key)
+                AGENT_MODEL = model_key  # Use the key, not the model_name
+                logger.info(f"Using selected model for report text generation: {AGENT_MODEL}")
+            except Exception as e:
+                logger.warning(f"Error getting model config for {model_key}: {e}. Using default.")
+                AGENT_MODEL = get_default_model()
+        else:
+            AGENT_MODEL = get_default_model()
+        
+        # Create LangChain agent for session logging
+        langchain_agent = create_explainer_agent(
+            model_key=AGENT_MODEL,
+            tool_groups=[ToolGroup.CORE, ToolGroup.ANALYSIS, ToolGroup.METRICS, ToolGroup.VISUALIZATION],
+            enable_session_logging=True
+        )
+        logger.info("Created LangChain agent for newsletter text generation with session logging")
+        
+        logger.info(f"About to call generate_report_text with {len(item_ids)} item IDs: {item_ids}")
+        text_result = generate_report_text(
+            item_ids, 
+            execute_with_connection, 
+            load_prompts, 
+            AGENT_MODEL, 
+            langchain_agent=langchain_agent, 
+            logger=logger
+        )
+        
+        logger.info(f"generate_report_text returned: {text_result}")
+        
+        if text_result.get("status") != "success":
+            logger.warning(f"Failed to generate newsletter text: {text_result.get('message')}")
+            return {"status": "error", "message": f"Failed to generate newsletter text: {text_result.get('message')}"}
+        else:
+            logger.info(f"Successfully generated newsletter text: {text_result.get('message')}")
+        
+        logger.info(f"Successfully re-generated newsletter text for newsletter {filename}")
+        return {
+            "status": "success",
+            "message": f"Successfully re-generated newsletter text for {len(item_ids)} items in newsletter {filename}",
+            "report_id": report_info["report_id"],
+            "text_items_count": len(item_ids),
+            "newsletter_text_generated": text_result.get("status") == "success"
+        }
+        
+    except Exception as e:
+        error_msg = f"Error in re_generate_newsletter_text_for_report: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {"status": "error", "message": error_msg}
+
+
 def regenerate_newsletter_for_report(filename, model_key=None):
     """
     Regenerate only the final newsletter HTML file for an existing report.

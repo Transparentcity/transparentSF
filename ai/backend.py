@@ -3933,6 +3933,164 @@ async def regenerate_explanations_endpoint(request: Request):
             status_code=400
         )
 
+@router.post("/re_explain_deltas")
+async def re_explain_deltas_endpoint(request: Request):
+    """
+    Re-explain deltas for an existing newsletter's monthly_reporting items.
+    This endpoint only handles explaining deltas and getting perplexity context.
+    """
+    try:
+        # Get request data
+        data = await request.json()
+        filename = data.get("filename")
+        model_key = data.get("model_key")  # Get the selected model key
+        
+        # Debug logging to see if endpoint is being called
+        logger.info(f"🔧 DEBUG: re_explain_deltas_endpoint called with filename='{filename}', model_key='{model_key}'")
+        
+        if not filename:
+            logger.error("🔧 DEBUG: No filename provided to re_explain_deltas_endpoint")
+            return JSONResponse(
+                content={"status": "error", "message": "Filename is required"},
+                status_code=400
+            )
+        
+        # Import here to avoid circular imports
+        from ai.monthly_report import re_explain_deltas_for_report
+        
+        # Run the explanation generation in a background task with timeout
+        import asyncio
+        
+        try:
+            logger.info(f"🔧 DEBUG: About to call re_explain_deltas_for_report(filename='{filename}', model_key='{model_key}')")
+            
+            # Add a timeout to prevent hanging (10 minutes max for explanations)
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    re_explain_deltas_for_report,
+                    filename=filename,
+                    model_key=model_key
+                ),
+                timeout=600.0  # 10 minutes
+            )
+            
+            logger.info(f"🔧 DEBUG: re_explain_deltas_for_report returned: {result}")
+            
+            if result.get("status") == "success":
+                return JSONResponse(content=result)
+            else:
+                return JSONResponse(
+                    content=result,
+                    status_code=500
+                )
+                
+        except asyncio.TimeoutError:
+            return JSONResponse(
+                content={
+                    "status": "error",
+                    "message": "Delta explanation timed out after 10 minutes. The process may still be running in the background."
+                },
+                status_code=408
+            )
+        except Exception as e:
+            logger.error(f"Error in re_explain_deltas_endpoint: {str(e)}", exc_info=True)
+            return JSONResponse(
+                content={
+                    "status": "error",
+                    "message": f"Error re-explaining deltas: {str(e)}"
+                },
+                status_code=500
+            )
+            
+    except Exception as e:
+        logger.error(f"Error parsing request in re_explain_deltas_endpoint: {str(e)}", exc_info=True)
+        return JSONResponse(
+            content={
+                "status": "error",
+                "message": f"Error processing request: {str(e)}"
+            },
+            status_code=400
+        )
+
+@router.post("/re_generate_newsletter_text")
+async def re_generate_newsletter_text_endpoint(request: Request):
+    """
+    Re-generate newsletter text for an existing newsletter's monthly_reporting items.
+    This endpoint only handles generating newsletter text.
+    """
+    try:
+        # Get request data
+        data = await request.json()
+        filename = data.get("filename")
+        model_key = data.get("model_key")  # Get the selected model key
+        
+        # Debug logging to see if endpoint is being called
+        logger.info(f"🔧 DEBUG: re_generate_newsletter_text_endpoint called with filename='{filename}', model_key='{model_key}'")
+        
+        if not filename:
+            logger.error("🔧 DEBUG: No filename provided to re_generate_newsletter_text_endpoint")
+            return JSONResponse(
+                content={"status": "error", "message": "Filename is required"},
+                status_code=400
+            )
+        
+        # Import here to avoid circular imports
+        from ai.monthly_report import re_generate_newsletter_text_for_report
+        
+        # Run the text generation in a background task with timeout
+        import asyncio
+        
+        try:
+            logger.info(f"🔧 DEBUG: About to call re_generate_newsletter_text_for_report(filename='{filename}', model_key='{model_key}')")
+            
+            # Add a timeout to prevent hanging (10 minutes max for text generation)
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    re_generate_newsletter_text_for_report,
+                    filename=filename,
+                    model_key=model_key
+                ),
+                timeout=600.0  # 10 minutes
+            )
+            
+            logger.info(f"🔧 DEBUG: re_generate_newsletter_text_for_report returned: {result}")
+            
+            if result.get("status") == "success":
+                return JSONResponse(content=result)
+            else:
+                return JSONResponse(
+                    content=result,
+                    status_code=500
+                )
+                
+        except asyncio.TimeoutError:
+            return JSONResponse(
+                content={
+                    "status": "error",
+                    "message": "Newsletter text generation timed out after 10 minutes. The process may still be running in the background."
+                },
+                status_code=408
+            )
+        except Exception as e:
+            logger.error(f"Error in re_generate_newsletter_text_endpoint: {str(e)}", exc_info=True)
+            return JSONResponse(
+                content={
+                    "status": "error",
+                    "message": f"Error re-generating newsletter text: {str(e)}"
+                },
+                status_code=500
+            )
+            
+    except Exception as e:
+        logger.error(f"Error parsing request in re_generate_newsletter_text_endpoint: {str(e)}", exc_info=True)
+        return JSONResponse(
+            content={
+                "status": "error",
+                "message": f"Error processing request: {str(e)}"
+            },
+            status_code=400
+        )
+
 @router.post("/update-chart-groups/{chart_id}")
 async def update_chart_groups(chart_id: int, request: Request):
     """

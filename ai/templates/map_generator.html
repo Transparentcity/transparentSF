@@ -906,6 +906,14 @@
                         </label>
                     </div>
                 </div>
+                
+                <div class="control-group">
+                    <label for="view-mode-select">View Mode</label>
+                    <select id="view-mode-select" class="form-select">
+                        <option value="dots" selected>Dot View</option>
+                        <option value="hexbin">Hexbin View</option>
+                    </select>
+                </div>
             </div>
             
             <div style="text-align: center;">
@@ -1080,6 +1088,7 @@
         let currentColorField = 'date';
         let colorScale = null;
         let currentQueryUrl = null;
+        let currentViewMode = 'dots';
 
         // Function to calculate and display date range subtitle for preview
         function updatePreviewDateRangeSubtitle() {
@@ -1193,6 +1202,7 @@
         const recentMapsGrid = document.getElementById('recent-maps-grid');
         const colorFieldGroup = document.getElementById('color-field-group');
         const colorFieldSelect = document.getElementById('color-field-select');
+        const viewModeSelect = document.getElementById('view-mode-select');
         const mapInfoOverlay = document.getElementById('map-info-overlay');
         const pointCountSpan = document.getElementById('point-count');
         const queryUrlLink = document.getElementById('query-url-link');
@@ -1304,6 +1314,20 @@
                 if (previewData && previewData.location_data) {
                     console.log('Updating map colors with existing data');
                     updateMapColors(previewData);
+                } else {
+                    console.log('No existing data, updating live preview');
+                    updateLivePreview();
+                }
+            });
+            
+            // View mode selection
+            viewModeSelect.addEventListener('change', function() {
+                console.log('View mode changed to:', this.value);
+                currentViewMode = this.value;
+                // If we have existing data, update the map view without reloading
+                if (previewData && previewData.location_data) {
+                    console.log('Updating map view with existing data');
+                    updateMapView(previewData);
                 } else {
                     console.log('No existing data, updating live preview');
                     updateLivePreview();
@@ -2187,32 +2211,15 @@
                 }
                 
                 try {
-                    const geojsonData = {
-                        type: 'FeatureCollection',
-                        features: features
-                    };
-                    console.log('GeoJSON data being sent to Mapbox:', JSON.stringify(geojsonData.features[0], null, 2));
+                    // Use the new view mode system instead of directly adding layers
+                    console.log('Adding data using view mode:', currentViewMode);
                     
-                    liveMap.addSource('preview-points', {
-                        type: 'geojson',
-                        data: geojsonData
-                    });
-                    console.log('Added map source successfully');
+                    if (currentViewMode === 'dots') {
+                        addDotLayer(data);
+                    } else if (currentViewMode === 'hexbin') {
+                        addHexbinLayer(data);
+                    }
                     
-                    liveMap.addLayer({
-                        id: 'preview-points',
-                        type: 'circle',
-                        source: 'preview-points',
-                        paint: {
-                            'circle-radius': ['*', ['get', 'scale'], 15],  // Scale the radius based on the scale property
-                            'circle-color': ['get', 'color'],
-                            'circle-stroke-width': 1,
-                            'circle-stroke-color': ['get', 'strokeColor']
-                        }
-                    });
-                    
-                    // Store the layer reference for potential updates
-                    window.previewPointsLayer = liveMap.getLayer('preview-points');
                     console.log('Added map layer successfully');
                     
                     // Paint is already bound to feature properties
@@ -2224,62 +2231,8 @@
                         mapContainer.style.height = '100%';
                     }
                     
-                    // Add popup for tooltips
-                    previewMapPopup = new mapboxgl.Popup({
-                        closeButton: false,
-                        closeOnClick: false
-                    });
-                    
-                    // Add mouse events for tooltips
-                    liveMap.on('mouseenter', 'preview-points', (e) => {
-                        liveMap.getCanvas().style.cursor = 'pointer';
-                        
-                        const coordinates = e.features[0].geometry.coordinates.slice();
-                        const properties = e.features[0].properties;
-                        
-                        // Create compact tooltip content
-                        let tooltipContent = `<div class="tsf-tooltip">`;
-                        tooltipContent += `<div class="tsf-tooltip-title">${properties.title}</div>`;
-                        
-                        // Add count information if this is an aggregated point
-                        if (properties.count && properties.count > 1) {
-                            tooltipContent += `<div class="tsf-tooltip-row">
-                                <div class="tsf-tooltip-key">Count:</div>
-                                <div class="tsf-tooltip-val">${properties.count} points</div>
-                            </div>`;
-                        }
-                        
-                        // Add all available properties as tooltip content (excluding location fields)
-                        const locationFields = new Set(['lat','lon','long','latitude','longitude','coordinates','point','point_geom','intersection','address','street','city','state','zip']);
-                        Object.keys(properties).forEach(key => {
-                            if (key === 'title' || key === 'color' || key === 'strokeColor' || key === 'tooltip_fields') return;
-                            if (locationFields.has(key)) return;
-                            // Extra safety: skip any field name that looks like location
-                            if (/(^|_)(lat|lon|long|coord|address|street|city|state|zip|point|geom)(_|$)/i.test(key)) return;
-                            const value = properties[key];
-                            if (value && value !== '') {
-                                const displayKey = key.split('_').map(word => 
-                                    word.charAt(0).toUpperCase() + word.slice(1)
-                                ).join(' ');
-                                tooltipContent += `
-                                    <div class="tsf-tooltip-row">
-                                        <div class="tsf-tooltip-key">${displayKey}:</div>
-                                        <div class="tsf-tooltip-val">${value}</div>
-                                    </div>`;
-                            }
-                        });
-                        tooltipContent += `</div>`;
-                        
-                        previewMapPopup.setLngLat(coordinates).setHTML(tooltipContent).addTo(liveMap);
-                    });
-                    
-                    liveMap.on('mouseleave', 'preview-points', () => {
-                        liveMap.getCanvas().style.cursor = '';
-                        previewMapPopup.remove();
-                    });
-                    
                     // Update info overlay and legend
-                    updateInfoOverlay(features.length);
+                    updateInfoOverlay(data.location_data.length);
                     updateLegend(colorScale, currentColorField, data.metadata);
                     
                     // Don't force color update on initial load - colors should already be set correctly
@@ -2293,10 +2246,20 @@
                 
                 // Fit map to data bounds
                 const bounds = new mapboxgl.LngLatBounds();
-                features.forEach(feature => {
-                    const coords = feature.geometry.coordinates;
-                    if (coords && coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
-                        bounds.extend(coords);
+                data.location_data.forEach(item => {
+                    let lon, lat;
+                    if (item.lon !== undefined && item.lat !== undefined) {
+                        lon = parseFloat(item.lon);
+                        lat = parseFloat(item.lat);
+                    } else if (item.coordinates && Array.isArray(item.coordinates) && item.coordinates.length >= 2) {
+                        lon = parseFloat(item.coordinates[0]);
+                        lat = parseFloat(item.coordinates[1]);
+                    } else {
+                        return;
+                    }
+                    
+                    if (!isNaN(lon) && !isNaN(lat)) {
+                        bounds.extend([lon, lat]);
                     }
                 });
                 
@@ -2990,6 +2953,326 @@
             
             // Update legend
             updateLegend(colorScale, currentColorField, data.metadata);
+        }
+
+        function updateMapView(data) {
+            if (!liveMap || !data.location_data || data.location_data.length === 0) {
+                return;
+            }
+            
+            console.log('Updating map view to:', currentViewMode);
+            
+            // Remove existing layers
+            if (liveMap.getLayer('preview-points')) {
+                liveMap.removeLayer('preview-points');
+            }
+            if (liveMap.getLayer('preview-hexbin')) {
+                liveMap.removeLayer('preview-hexbin');
+            }
+            
+            // Remove existing sources
+            if (liveMap.getSource('preview-points')) {
+                liveMap.removeSource('preview-points');
+            }
+            if (liveMap.getSource('preview-hexbin')) {
+                liveMap.removeSource('preview-hexbin');
+            }
+            
+            if (currentViewMode === 'dots') {
+                addDotLayer(data);
+            } else if (currentViewMode === 'hexbin') {
+                addHexbinLayer(data);
+            }
+        }
+
+        function addDotLayer(data) {
+            console.log('Adding dot layer');
+            
+            // Create features for dot view (same as current implementation)
+            const features = data.location_data.map(item => {
+                let lon, lat;
+                if (item.lon !== undefined && item.lat !== undefined) {
+                    lon = parseFloat(item.lon);
+                    lat = parseFloat(item.lat);
+                } else if (item.coordinates && Array.isArray(item.coordinates) && item.coordinates.length >= 2) {
+                    lon = parseFloat(item.coordinates[0]);
+                    lat = parseFloat(item.coordinates[1]);
+                } else {
+                    return null;
+                }
+                
+                if (isNaN(lon) || isNaN(lat)) {
+                    return null;
+                }
+                
+                // Determine color for this point
+                let pointColor = '#ad35fa'; // default purple
+                let strokeColor = '#ffffff'; // default white stroke
+                
+                if (colorScale && Object.keys(colorScale).length > 0) {
+                    let colorKey;
+                    if (currentColorField === 'date') {
+                        colorKey = item.date || item.dba_start_date || item.dba_end_date || 
+                                 item.location_start_date || item.location_end_date || 
+                                 item.business_start_date || item.business_end_date ||
+                                 item.report_datetime || item.incident_datetime ||
+                                 item.date_issued || item.date_filed ||
+                                 new Date().toISOString().split('T')[0];
+                    } else {
+                        const value = item[currentColorField];
+                        if (value === null || value === undefined || value === '') {
+                            colorKey = 'Unknown';
+                        } else {
+                            colorKey = String(value).trim();
+                        }
+                    }
+                    
+                    if (colorScale[colorKey]) {
+                        pointColor = colorScale[colorKey];
+                        strokeColor = pointColor === '#ffffff' || pointColor === 'rgb(255, 255, 255)' ? '#ad35fa' : '#ffffff';
+                    }
+                }
+                
+                const properties = {
+                    title: item.title || 'Point',
+                    description: item.description || '',
+                    value: item.value || 1,
+                    color: pointColor,
+                    strokeColor: strokeColor,
+                    scale: item.scale || 0.4
+                };
+                
+                // Normalize colors
+                if (properties.color && properties.color.startsWith('rgb(')) {
+                    const rgbMatch = properties.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                    if (rgbMatch) {
+                        const r = parseInt(rgbMatch[1]);
+                        const g = parseInt(rgbMatch[2]);
+                        const b = parseInt(rgbMatch[3]);
+                        properties.color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                    }
+                }
+                
+                return {
+                    type: 'Feature',
+                    properties: properties,
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [lon, lat]
+                    }
+                };
+            }).filter(feature => feature !== null);
+            
+            // Add source and layer for dots
+            liveMap.addSource('preview-points', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: features
+                }
+            });
+            
+            liveMap.addLayer({
+                id: 'preview-points',
+                type: 'circle',
+                source: 'preview-points',
+                paint: {
+                    'circle-radius': ['*', ['get', 'scale'], 15],
+                    'circle-color': ['get', 'color'],
+                    'circle-stroke-width': 1,
+                    'circle-stroke-color': ['get', 'strokeColor'],
+                    'circle-opacity': 0.8
+                }
+            });
+            
+            // Add click handler for dots
+            liveMap.on('click', 'preview-points', function(e) {
+                const coordinates = e.features[0].geometry.coordinates.slice();
+                const properties = e.features[0].properties;
+                
+                let tooltipContent = `<div class="tsf-tooltip">`;
+                tooltipContent += `<div class="tsf-tooltip-title">${properties.title}</div>`;
+                
+                if (properties.count && properties.count > 1) {
+                    tooltipContent += `<div class="tsf-tooltip-row">
+                        <span class="tsf-tooltip-label">Count:</span>
+                        <span class="tsf-tooltip-value">${properties.count}</span>
+                    </div>`;
+                }
+                
+                if (properties.description) {
+                    tooltipContent += `<div class="tsf-tooltip-row">
+                        <span class="tsf-tooltip-label">Description:</span>
+                        <span class="tsf-tooltip-value">${properties.description}</span>
+                    </div>`;
+                }
+                
+                tooltipContent += `</div>`;
+                
+                if (previewMapPopup) {
+                    previewMapPopup.remove();
+                }
+                
+                previewMapPopup = new mapboxgl.Popup()
+                    .setLngLat(coordinates)
+                    .setHTML(tooltipContent)
+                    .addTo(liveMap);
+            });
+            
+            liveMap.on('mouseenter', 'preview-points', function() {
+                liveMap.getCanvas().style.cursor = 'pointer';
+            });
+            
+            liveMap.on('mouseleave', 'preview-points', function() {
+                liveMap.getCanvas().style.cursor = '';
+            });
+        }
+
+        function addHexbinLayer(data) {
+            console.log('Adding hexbin layer');
+            
+            // Create features for hexbin view
+            const features = data.location_data.map(item => {
+                let lon, lat;
+                if (item.lon !== undefined && item.lat !== undefined) {
+                    lon = parseFloat(item.lon);
+                    lat = parseFloat(item.lat);
+                } else if (item.coordinates && Array.isArray(item.coordinates) && item.coordinates.length >= 2) {
+                    lon = parseFloat(item.coordinates[0]);
+                    lat = parseFloat(item.coordinates[1]);
+                } else {
+                    return null;
+                }
+                
+                if (isNaN(lon) || isNaN(lat)) {
+                    return null;
+                }
+                
+                return {
+                    type: 'Feature',
+                    properties: {
+                        count: item.value || 1,
+                        title: item.title || 'Point',
+                        description: item.description || ''
+                    },
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [lon, lat]
+                    }
+                };
+            }).filter(feature => feature !== null);
+            
+            // Add source for hexbin
+            liveMap.addSource('preview-hexbin', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: features
+                }
+            });
+            
+            // Add heatmap layer for hexbin effect
+            liveMap.addLayer({
+                id: 'preview-hexbin',
+                type: 'heatmap',
+                source: 'preview-hexbin',
+                paint: {
+                    'heatmap-weight': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'count'],
+                        0, 0,
+                        1, 1
+                    ],
+                    'heatmap-intensity': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        0, 1,
+                        15, 3
+                    ],
+                    'heatmap-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['heatmap-density'],
+                        0, 'rgba(173, 53, 250, 0)',
+                        0.1, 'rgba(173, 53, 250, 0.1)',
+                        0.3, 'rgba(173, 53, 250, 0.3)',
+                        0.5, 'rgba(173, 53, 250, 0.5)',
+                        0.7, 'rgba(173, 53, 250, 0.7)',
+                        1, 'rgba(173, 53, 250, 1)'
+                    ],
+                    'heatmap-radius': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        0, 2,
+                        15, 20
+                    ],
+                    'heatmap-opacity': 0.8
+                }
+            });
+            
+            // Add click handler for hexbin
+            liveMap.on('click', 'preview-hexbin', function(e) {
+                const coordinates = e.lngLat;
+                
+                // Count points in the clicked area
+                const clickedFeatures = liveMap.queryRenderedFeatures(e.point, {
+                    layers: ['preview-hexbin']
+                });
+                
+                let totalCount = 0;
+                let titles = [];
+                
+                features.forEach(feature => {
+                    const distance = Math.sqrt(
+                        Math.pow(feature.geometry.coordinates[0] - coordinates.lng, 2) +
+                        Math.pow(feature.geometry.coordinates[1] - coordinates.lat, 2)
+                    );
+                    
+                    // If within reasonable distance (roughly the hexbin radius)
+                    if (distance < 0.01) { // Adjust this threshold as needed
+                        totalCount += feature.properties.count;
+                        if (feature.properties.title && !titles.includes(feature.properties.title)) {
+                            titles.push(feature.properties.title);
+                        }
+                    }
+                });
+                
+                let tooltipContent = `<div class="tsf-tooltip">`;
+                tooltipContent += `<div class="tsf-tooltip-title">Hexbin Area</div>`;
+                tooltipContent += `<div class="tsf-tooltip-row">
+                    <span class="tsf-tooltip-label">Total Count:</span>
+                    <span class="tsf-tooltip-value">${totalCount}</span>
+                </div>`;
+                
+                if (titles.length > 0) {
+                    tooltipContent += `<div class="tsf-tooltip-row">
+                        <span class="tsf-tooltip-label">Locations:</span>
+                        <span class="tsf-tooltip-value">${titles.slice(0, 5).join(', ')}${titles.length > 5 ? '...' : ''}</span>
+                    </div>`;
+                }
+                
+                tooltipContent += `</div>`;
+                
+                if (previewMapPopup) {
+                    previewMapPopup.remove();
+                }
+                
+                previewMapPopup = new mapboxgl.Popup()
+                    .setLngLat(coordinates)
+                    .setHTML(tooltipContent)
+                    .addTo(liveMap);
+            });
+            
+            liveMap.on('mouseenter', 'preview-hexbin', function() {
+                liveMap.getCanvas().style.cursor = 'pointer';
+            });
+            
+            liveMap.on('mouseleave', 'preview-hexbin', function() {
+                liveMap.getCanvas().style.cursor = '';
+            });
         }
 
         // Animation System for Map Generator

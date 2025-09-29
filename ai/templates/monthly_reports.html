@@ -967,7 +967,10 @@
                         Re-prioritize deltas
                     </button>
                     <button id="reexplain-deltas-btn" class="action-btn primary-btn">
-                        Re-explain deltas & generate newsletter text
+                        Re-explain deltas
+                    </button>
+                    <button id="regenerate-newsletter-text-btn" class="action-btn primary-btn">
+                        Re-generate newsletter text
                     </button>
                     <button id="rerunReportBtn" class="action-btn primary-btn">
                         Re-write newsletter
@@ -1787,6 +1790,15 @@
                         reexplainDeltasBtn.onclick = () => {
                             console.log("Re-explaining deltas for:", selectedReport);
                             reexplainDeltas(selectedReport);
+                        };
+                    }
+
+                    // Set up the re-generate newsletter text button
+                    const regenerateNewsletterTextBtn = document.getElementById('regenerate-newsletter-text-btn');
+                    if (regenerateNewsletterTextBtn) {
+                        regenerateNewsletterTextBtn.onclick = () => {
+                            console.log("Re-generating newsletter text for:", selectedReport);
+                            regenerateNewsletterText(selectedReport);
                         };
                     }
                 } else {
@@ -3190,20 +3202,20 @@
                     return;
                 }
 
-                if (!confirm('Are you sure you want to regenerate explanations, get perplexity context, and generate newsletter text for this newsletter? This will replace all existing explanations with new AI-generated ones and add additional context.')) {
+                if (!confirm('Are you sure you want to regenerate explanations and get perplexity context for this newsletter? This will replace all existing explanations with new AI-generated ones and add additional context.')) {
                     return;
                 }
 
                 try {
                     const reexplainBtn = document.getElementById('reexplain-deltas-btn');
                     reexplainBtn.disabled = true;
-                    reexplainBtn.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Re-explaining & generating...</div>';
+                    reexplainBtn.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Re-explaining deltas...</div>';
 
                     // Get the selected model from the dropdown
                     const modelSelect = document.getElementById('model-select');
                     const selectedModel = modelSelect.value;
 
-                    const response = await fetch('/backend/regenerate_explanations', {
+                    const response = await fetch('/backend/re_explain_deltas', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -3224,7 +3236,6 @@
                             successMessage += `\n\nDetailed Status:`;
                             successMessage += `\n• Explanations: ${result.explanations_generated ? '✅ Generated' : '❌ Failed'}`;
                             successMessage += `\n• Perplexity Context: ${result.context_enriched ? '✅ Enriched' : '❌ Failed'}`;
-                            successMessage += `\n• Newsletter Text: ${result.newsletter_text_generated ? '✅ Generated' : '❌ Failed'}`;
                         }
                         
                         alert(successMessage);
@@ -3244,7 +3255,70 @@
                 } finally {
                     const reexplainBtn = document.getElementById('reexplain-deltas-btn');
                     reexplainBtn.disabled = false;
-                    reexplainBtn.textContent = 'Re-explain deltas & generate newsletter text';
+                    reexplainBtn.textContent = 'Re-explain deltas';
+                }
+            }
+
+            // Function to re-generate newsletter text for a newsletter
+            async function regenerateNewsletterText(filename) {
+                if (!filename) {
+                    alert('No newsletter selected');
+                    return;
+                }
+
+                if (!confirm('Are you sure you want to regenerate newsletter text for this newsletter? This will replace all existing newsletter text with new AI-generated content.')) {
+                    return;
+                }
+
+                try {
+                    const regenerateTextBtn = document.getElementById('regenerate-newsletter-text-btn');
+                    regenerateTextBtn.disabled = true;
+                    regenerateTextBtn.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Re-generating newsletter text...</div>';
+
+                    // Get the selected model from the dropdown
+                    const modelSelect = document.getElementById('model-select');
+                    const selectedModel = modelSelect.value;
+
+                    const response = await fetch('/backend/re_generate_newsletter_text', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            filename: filename,
+                            model_key: selectedModel
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.status === 'success') {
+                        let successMessage = `Success! ${result.message}`;
+                        
+                        // Add detailed status information if available
+                        if (result.newsletter_text_generated !== undefined) {
+                            successMessage += `\n\nDetailed Status:`;
+                            successMessage += `\n• Newsletter Text: ${result.newsletter_text_generated ? '✅ Generated' : '❌ Failed'}`;
+                        }
+                        
+                        alert(successMessage);
+                        // Reload the reports list while preserving selection
+                        loadReports(true);
+                        // Update button states after completion
+                        setTimeout(() => updateButtonStates(filename), 1000);
+                        // Optionally refresh the newsletter details
+                        loadReportDetails(filename);
+                    } else {
+                        alert(`Error: ${result.message || 'Unknown error occurred'}`);
+                    }
+
+                } catch (error) {
+                    console.error('Error re-generating newsletter text:', error);
+                    alert(`Error re-generating newsletter text: ${error.message}`);
+                } finally {
+                    const regenerateTextBtn = document.getElementById('regenerate-newsletter-text-btn');
+                    regenerateTextBtn.disabled = false;
+                    regenerateTextBtn.textContent = 'Re-generate newsletter text';
                 }
             }
 
