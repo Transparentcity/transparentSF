@@ -1180,37 +1180,51 @@
                     const mean = calculateMean(allValues);
                     
                     // Set the common formattedDates and values with data from all groups
-                    // We'll use the first group's dates for the overall timeline
+                    // Collect dates from ALL groups to ensure we capture the full date range
+                    const allDates = [];
                     if (Object.values(groupedData).length > 0) {
-                        const firstGroupData = Object.values(groupedData)[0];
-                        formattedDates = firstGroupData.map(item => {
-                            const dateStr = item.time_period;
-                            
-                            // Check if this is a weekly format (YYYY-WXX)
-                            if (dateStr.includes('W') && dateStr.includes('-')) {
-                                const [yearPart, weekPart] = dateStr.split('-');
-                                const year = parseInt(yearPart);
-                                const weekNum = parseInt(weekPart.replace('W', ''));
+                        // Collect all dates from all groups
+                        Object.values(groupedData).forEach(groupData => {
+                            groupData.forEach(item => {
+                                const dateStr = item.time_period;
                                 
-                                // Create a date for the first day of the year
-                                const jan1 = new Date(year, 0, 1);
-                                
-                                // Find the first Monday of the year (ISO week starts on Monday)
-                                // If Jan 1 is Monday (weekday=0), we're good. Otherwise, find the next Monday
-                                const daysUntilMonday = (7 - jan1.getDay()) % 7;
-                                const firstMonday = new Date(jan1.getTime() + daysUntilMonday * 24 * 60 * 60 * 1000);
-                                
-                                // Calculate the target date by adding weeks
-                                return new Date(firstMonday.getTime() + (weekNum - 1) * 7 * 24 * 60 * 60 * 1000);
-                            } else {
-                                // Handle regular date formats
-                                const dateParts = dateStr.split('-');
-                                const year = parseInt(dateParts[0]);
-                                const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
-                                const day = dateParts.length > 2 ? parseInt(dateParts[2]) : 1; // Default to 1st if no day
-                                return new Date(year, month, day);
-                            }
+                                // Check if this is a weekly format (YYYY-WXX)
+                                if (dateStr.includes('W') && dateStr.includes('-')) {
+                                    const [yearPart, weekPart] = dateStr.split('-');
+                                    const year = parseInt(yearPart);
+                                    const weekNum = parseInt(weekPart.replace('W', ''));
+                                    
+                                    // Create a date for the first day of the year
+                                    const jan1 = new Date(year, 0, 1);
+                                    
+                                    // Find the first Monday of the year (ISO week starts on Monday)
+                                    // If Jan 1 is Monday (weekday=0), we're good. Otherwise, find the next Monday
+                                    const daysUntilMonday = (7 - jan1.getDay()) % 7;
+                                    const firstMonday = new Date(jan1.getTime() + daysUntilMonday * 24 * 60 * 60 * 1000);
+                                    
+                                    // Calculate the target date by adding weeks
+                                    allDates.push(new Date(firstMonday.getTime() + (weekNum - 1) * 7 * 24 * 60 * 60 * 1000));
+                                } else {
+                                    // Handle regular date formats
+                                    const dateParts = dateStr.split('-');
+                                    const year = parseInt(dateParts[0]);
+                                    const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
+                                    const day = dateParts.length > 2 ? parseInt(dateParts[2]) : 1; // Default to 1st if no day
+                                    allDates.push(new Date(year, month, day));
+                                }
+                            });
                         });
+                        
+                        // Sort all dates and remove duplicates
+                        const uniqueDates = [...new Set(allDates.map(d => d.getTime()))]
+                            .map(time => new Date(time))
+                            .sort((a, b) => a - b);
+                        
+                        formattedDates = uniqueDates;
+                        
+                        // For values, we'll use the first group's values for the overall timeline
+                        // (this is mainly used for the mean line calculation)
+                        const firstGroupData = Object.values(groupedData)[0];
                         values = firstGroupData.map(item => item.numeric_value);
                     }
                     
@@ -1581,11 +1595,13 @@
                         ticklen: 3, // Reduced from 4
                         tickcolor: '#222222', // Match font color
                         // Ensure all months are displayed with padding on both sides
+                        // For multi-series charts, ensure the last data point from any series is visible
                         range: [
-                            // Start with the first month in the data with 20 days padding before (reduced from 30)
+                            // Start with the first month in the data with 20 days padding before
                             new Date(formattedDates[0].getTime() - 20 * 24 * 60 * 60 * 1000),
-                            // End with the last month in the data with 20 days padding after (reduced from 30)
-                            new Date(formattedDates[formattedDates.length - 1].getTime() + 20 * 24 * 60 * 60 * 1000)
+                            // End with the last month in the data with extra padding to ensure visibility
+                            // Add 30 days padding after the last data point to ensure it's fully visible
+                            new Date(formattedDates[formattedDates.length - 1].getTime() + 30 * 24 * 60 * 60 * 1000)
                         ],
                         showline: true,
                         linecolor: '#e5e7eb',

@@ -1,104 +1,1140 @@
-# Cursor Rules for TransparentSF Repository
+# TransparentSF v2.0 Project - Cursor Rules **MIGRATION COMPLETE**
 
-## Repository Organization Structure
+## Project Overview
+TransparentSF v2.0 is a modern, modular data analysis platform for San Francisco public datasets featuring:
+- AI agents for data analysis and anomaly detection
+- Vector database for document search and context retrieval
+- Interactive dashboards and automated reporting
+- Time series analysis and chart generation
+- PostgreSQL for persistent data storage with connection pooling
+- Redis session management with in-memory fallback
+- FastAPI with production-ready middleware and monitoring
 
-### AI Module Structure (`ai/`)
-- **Main AI files**: Keep core AI functionality at the `ai/` level (e.g., `main.py`, `backend.py`, `anomalyAnalyzer.py`)
-- **Agents**: All agent-related code goes in `ai/agents/`
-  - Agent configurations in `ai/agents/config/`
-  - LangChain agents in `ai/agents/langchain_agent/`
-  - Agent-specific tools in `ai/agents/langchain_agent/tools/`
-  - Agent prompts in `ai/agents/langchain_agent/prompts/`
-- **Routes**: All Flask routes in `ai/routes/`
-  - Each route type gets its own file (e.g., `metrics.py`, `chat.py`, `anomaly.py`)
-- **Tools**: Utility functions and tools in `ai/tools/`
-  - Analysis tools in `ai/tools/analysis/`
-  - Database utilities in `ai/tools/`
-  - Unused/legacy code in `ai/tools/unused/`
-- **Templates**: HTML templates in `ai/templates/`
-- **Static**: Static assets in `ai/static/`
-- **Data**: Data files and configurations in `ai/data/`
 
-### Configuration Files
-- **Environment variables**: `.env` files should be at the appropriate level (ai/ for AI-specific, root for global)
-- **Database migrations**: SQL files at root level or in dedicated migration folders
-- **Configuration JSON**: Keep in `ai/data/` or appropriate subdirectories
+1. **✅ Modular Design**: Each module has single, clear responsibility
+2. **✅ Dependency Injection**: Dependencies passed explicitly, no global state
+3. **✅ Interface Segregation**: Abstract base classes for agents and tools
+4. **✅ Session Management**: Redis with in-memory fallback, not in-memory dicts
+5. **✅ Configuration**: Centralized in `core/config.py` using Pydantic
+6. **✅ Clean Code**: Auto-remove unused imports, consistent style enforced
 
-### File Naming Conventions
-- **Python files**: Use snake_case (e.g., `anomaly_analyzer.py`, `metrics_manager.py`)
-- **Configuration files**: Use descriptive names with appropriate extensions
-- **SQL files**: Use descriptive names with `.sql` extension
-- **Documentation**: Use `README_*.md` for specific documentation
+## Code Style Guidelines
 
-### Code Organization Principles
-1. **Separation of Concerns**: Keep routes, agents, tools, and data separate
-2. **Modular Design**: Use config folders for configuration management
-3. **Clear Hierarchy**: Maintain the established folder structure
-4. **Consistent Imports**: Use relative imports within modules, absolute imports for cross-module dependencies
+### Python Style Standards
+- **Line Length**: Maximum 88 characters (Black formatter)
+- **Naming Conventions**:
+  - `snake_case` for files, functions, and variables
+  - `PascalCase` for classes
+  - `UPPER_SNAKE_CASE` for constants
+  - `_private_method` for private methods/attributes
+- **Type Hints**: Required for all function signatures and class attributes
+- **Docstrings**: Required for all public functions, classes, and modules
 
-### Specific Rules
-- **New agents**: Add to `ai/agents/` with appropriate subdirectories
-- **New routes**: Add to `ai/routes/` as separate files
-- **New tools**: Add to `ai/tools/` or appropriate subdirectory
-- **Configuration**: Use `config/` folders within modules for module-specific config
-- **Database operations**: Keep SQL files organized and use `ai/tools/` for database utilities
-- **Analysis code**: Place in `ai/tools/analysis/` with appropriate subdirectories
+### Automatic Code Formatting Configuration
 
-### Import Patterns
-- Use `from ai.agents import ...` for agent imports
-- Use `from ai.routes import ...` for route imports  
-- Use `from ai.tools import ...` for tool imports
-- Use `from ai.data import ...` for data imports
+#### Pre-commit Hooks Setup
+```yaml:.pre-commit-config.yaml
+repos:
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: ['--line-length', '88']
+  
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--profile', 'black']
+  
+  - repo: https://github.com/pycqa/autoflake
+    rev: v2.2.1
+    hooks:
+      - id: autoflake
+        args:
+          - --remove-all-unused-imports
+          - --remove-unused-variables
+          - --remove-duplicate-keys
+          - --in-place
+          - --recursive
+  
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        args: ['--max-line-length', '88', '--extend-ignore', 'E203,W503']
+  
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-requests, types-redis, types-setuptools]
+        args: ['--ignore-missing-imports']
+```
 
-### Documentation
-- Keep README files in appropriate directories
-- Use consistent documentation patterns
-- Document configuration options in config files
+#### Development Dependencies
+```txt:requirements-dev.txt
+# Code formatting and linting
+black==23.12.1
+isort==5.13.2
+autoflake==2.2.1
+flake8==7.0.0
+mypy==1.8.0
 
-### Testing
-- Place test files near the code they test
-- Use `test_` prefix for test files
-- Keep test utilities in appropriate test directories
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.2
+pytest-cov==4.1.0
+pytest-mock==3.12.0
 
-### Data Management
-- Raw data files in `ai/data/`
-- Processed data in appropriate subdirectories
-- Database backups in `backup_history/`
-- Logs in `logs/` directories
+# Pre-commit hooks
+pre-commit==3.6.0
+```
 
-### Security
-- Keep sensitive configuration in `.env` files
-- Don't commit `.env` files to version control
-- Use appropriate file permissions for sensitive data
+#### Main Dependencies (Production Ready)
+```txt:requirements.txt
+# Production Dependencies - IMPLEMENTED ✅
+# Dependencies added incrementally through 7-phase migration
 
-### Performance
-- Keep large files organized in appropriate directories
-- Use efficient import patterns
-- Maintain clear separation between heavy computational tasks and lightweight utilities
+# FastAPI ecosystem - Phase 2 ✅
+fastapi==0.115.12
+uvicorn==0.34.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
 
-### Logging Configuration
-- **Main logging setup**: Configure comprehensive logging in `ai/main.py` with Uvicorn logging config
-- **Log levels**: Use environment variable `LOG_LEVEL` to control logging verbosity
-- **Log directories**: Create and use `ai/logs/` directory for log files
-- **Module-specific logging**: Configure specific loggers for each module (routes, agents, tools)
-- **File handlers**: Use dedicated file handlers for specific modules (e.g., weekly analysis)
-- **Third-party logging**: Set appropriate levels for external libraries to reduce noise
-- **Logger naming**: Use `__name__` for logger instances to maintain module hierarchy
+# Configuration management - Phase 1 ✅
+python-dotenv==1.1.0
 
-### FastAPI Application Structure
-- **Main app**: Use `ai/main.py` as the primary FastAPI application entry point
-- **Router imports**: Import routers from their respective modules at the top of main.py
-- **Router inclusion**: Use `app.include_router()` with appropriate prefixes and tags
-- **Template sharing**: Pass templates to routers using setter functions (e.g., `set_templates()`)
-- **Static file mounting**: Mount static directories using `app.mount()` with proper paths
-- **CORS configuration**: Configure CORS middleware with appropriate origins and settings
-- **Directory structure**: Create necessary directories (logs, output, static) if they don't exist
+# HTTP client - Phase 2 ✅
+httpx==0.25.0
 
-### Route Module Pattern
-- **Router creation**: Each route module should create an `APIRouter()` instance
-- **Template handling**: Include a `set_templates()` function to receive templates from main app
-- **Environment loading**: Load environment variables at the top of route modules
-- **Error handling**: Use proper HTTP exceptions and logging for error cases
-- **Response types**: Use appropriate FastAPI response classes (JSONResponse, HTMLResponse, etc.)
-- **Async functions**: Use async/await pattern for route handlers
-- **Import organization**: Group imports logically (standard library, third-party, local modules) 
+# Phase 7: Final Integration & Production Readiness ✅
+psutil==5.9.8                    # System and process monitoring
+python-json-logger==3.3.0       # JSON structured logging
+
+# Phase 6: Database & Session Management ✅
+redis==4.5.4                     # Redis client for session storage and caching
+psycopg2-binary==2.9.9           # PostgreSQL adapter
+psycopg2-pool==1.1              # PostgreSQL connection pooling
+asyncpg==0.29.0                  # Async PostgreSQL driver (optional)
+```
+
+#### Additional Dependencies (Available When Needed)
+```txt
+# Phase 3-5: Services & Tools - Add when extending features
+pandas==2.2.3                    # Data processing
+numpy==1.26.4                    # Numerical computing
+openai==1.71.0                   # OpenAI API
+tiktoken==0.9.0                  # Tokenization
+plotly==6.0.1                    # Charts 
+kaleido==0.2.1                   # Chart export
+selenium==4.31.0                 # Web scraping
+beautifulsoup4==4.13.3           # HTML parsing
+webdriver-manager==4.0.2         # Browser automation
+qdrant-client==1.13.3            # Vector DB
+markdown2==2.5.3                 # Markdown processing
+html2markdown==0.1.7             # HTML to markdown
+jinja2==3.1.2                    # Template engine
+tabulate==0.9.0                  # Table formatting
+schedule==1.2.2                  # Task scheduling
+python-multipart==0.0.20         # File uploads
+chardet==5.2.0                   # Character encoding
+Pillow==10.2.0                   # Image processing
+```
+
+#### Test Configuration (pytest.ini)
+```ini:pytest.ini
+[tool:pytest]
+minversion = 6.0
+addopts = 
+    -ra -q 
+    --strict-markers 
+    --strict-config 
+    --cov=ai 
+    --cov-report=term-missing 
+    --cov-report=html
+    --cov-fail-under=80
+testpaths = ai/tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+markers =
+    unit: Unit tests
+    integration: Integration tests
+    slow: Slow running tests
+    external: Tests requiring external services
+```
+
+#### Environment Configuration (.env.example)
+```env:.env.example
+# Application Settings
+APP_NAME=TransparentSF
+DEBUG=false
+LOG_LEVEL=INFO
+
+# Database Configuration
+POSTGRES_URL=postgresql://username:password@localhost:5432/transparentsf
+REDIS_URL=redis://localhost:6379
+
+# API Keys
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Data Processing Settings
+MAX_DATAFRAME_SIZE_MB=100
+ANOMALY_THRESHOLD=2.0
+
+# CORS Settings
+ALLOWED_ORIGINS=["http://localhost:8081"]
+```
+
+### Import Organization (Auto-managed)
+```python
+# Standard library imports (sorted alphabetically)
+import asyncio
+import json
+import os
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+# Third-party imports (sorted alphabetically)
+import pandas as pd
+import uvicorn
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+# Local imports (sorted by depth, then alphabetically)
+from ..core.config import settings
+from ..core.exceptions import CustomException
+from ..models.session import SessionModel
+from .base import BaseAgent
+```
+
+### VS Code Settings
+```json:.vscode/settings.json
+{
+  "python.formatting.provider": "black",
+  "python.formatting.blackArgs": ["--line-length", "88"],
+  "python.sortImports.args": ["--profile", "black"],
+  "python.linting.enabled": true,
+  "python.linting.flake8Enabled": true,
+  "python.linting.flake8Args": ["--max-line-length", "88", "--extend-ignore", "E203,W503"],
+  "python.linting.mypyEnabled": true,
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": true,
+    "source.fixAll": true
+  },
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.extraPaths": ["./ai"],
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true
+  }
+}
+```
+
+### File Structure Standards
+
+#### File Naming
+- Use `snake_case`: `anomaly_analyzer.py` not `anomalyAnalyzer.py`
+- Use descriptive names: `generate_time_series_chart.py` not `genChart.py`
+- Group related functionality: `api/routes/chat.py`, `api/routes/analysis.py`
+- Test files: `test_anomaly_analyzer.py`
+
+#### Module Organization
+```python
+# File: ai/services/anomaly_service.py
+
+"""
+Anomaly detection service for time series data analysis.
+
+This module provides statistical anomaly detection capabilities
+for San Francisco public dataset analysis.
+"""
+
+from __future__ import annotations  # Enable forward references
+
+import logging
+from typing import Dict, List, Optional, Tuple
+
+import pandas as pd
+from pydantic import BaseModel, Field
+
+from ..core.config import settings
+from ..core.exceptions import AnomalyDetectionError
+from ..models.data import TimeSeriesData
+from .base import BaseService
+
+logger = logging.getLogger(__name__)
+
+
+class AnomalyResult(BaseModel):
+    """Result model for anomaly detection."""
+    
+    is_anomaly: bool = Field(..., description="Whether data point is anomalous")
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence score")
+    threshold: float = Field(..., description="Detection threshold used")
+
+
+class AnomalyService(BaseService):
+    """Service for detecting anomalies in time series data."""
+    
+    def __init__(self, threshold: float = 2.0) -> None:
+        """Initialize anomaly detection service."""
+        self.threshold = threshold
+        logger.info(f"Initialized AnomalyService with threshold={threshold}")
+    
+    async def detect_anomalies(
+        self, 
+        data: TimeSeriesData,
+        method: str = "zscore"
+    ) -> List[AnomalyResult]:
+        """
+        Detect anomalies in time series data.
+        
+        Args:
+            data: Time series data to analyze
+            method: Detection method ('zscore', 'iqr', 'isolation_forest')
+            
+        Returns:
+            List of anomaly detection results
+            
+        Raises:
+            AnomalyDetectionError: If detection fails
+        """
+        try:
+            # Implementation here
+            pass
+        except Exception as e:
+            logger.error(f"Anomaly detection failed: {e}")
+            raise AnomalyDetectionError(f"Detection failed: {e}") from e
+```
+
+## Coding Standards
+
+### Error Handling
+```python
+# Custom exceptions in core/exceptions.py
+class TransparentSFError(Exception):
+    """Base exception for TransparentSF application."""
+    pass
+
+class ValidationError(TransparentSFError):
+    """Raised when data validation fails."""
+    pass
+
+class AnomalyDetectionError(TransparentSFError):
+    """Raised when anomaly detection fails."""
+    pass
+
+# Usage in modules
+try:
+    result = await process_data(data)
+except ValidationError as e:
+    logger.error(f"Data validation failed: {e}", extra={"data_shape": data.shape})
+    raise HTTPException(status_code=400, detail=str(e))
+except Exception as e:
+    logger.exception("Unexpected error in data processing")
+    raise HTTPException(status_code=500, detail="Internal server error")
+```
+
+### Function and Class Documentation
+```python
+def calculate_anomaly_score(
+    data: pd.DataFrame, 
+    method: str = "zscore",
+    threshold: float = 2.0
+) -> Tuple[pd.Series, Dict[str, Any]]:
+    """
+    Calculate anomaly scores for time series data.
+    
+    Uses statistical methods to identify data points that deviate
+    significantly from expected patterns.
+    
+    Args:
+        data: Input DataFrame with time series data
+        method: Statistical method to use ('zscore', 'iqr', 'isolation_forest')
+        threshold: Threshold for anomaly classification
+        
+    Returns:
+        Tuple containing:
+        - Series of boolean anomaly flags
+        - Dictionary with detection metadata
+        
+    Raises:
+        ValidationError: If data format is invalid
+        AnomalyDetectionError: If calculation fails
+        
+    Example:
+        >>> df = pd.DataFrame({'value': [1, 2, 100, 3, 4]})
+        >>> anomalies, metadata = calculate_anomaly_score(df)
+        >>> print(anomalies.sum())  # Number of anomalies detected
+        1
+    """
+    # Implementation here
+    pass
+```
+
+### Configuration Management
+
+#### Core Configuration
+```python
+# ai/core/config.py
+from functools import lru_cache
+from typing import List, Optional
+
+from pydantic import BaseSettings, Field, validator
+
+
+class Settings(BaseSettings):
+    """Application settings with environment variable support."""
+    
+    # Application
+    app_name: str = "TransparentSF"
+    debug: bool = Field(False, env="DEBUG")
+    log_level: str = Field("INFO", env="LOG_LEVEL")
+    
+    # Database
+    postgres_url: str = Field(..., env="POSTGRES_URL")
+    redis_url: str = Field("redis://localhost:6379", env="REDIS_URL")
+    
+    # API Keys
+    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
+    
+    # Data Processing
+    max_dataframe_size_mb: int = Field(100, env="MAX_DATAFRAME_SIZE_MB")
+    anomaly_detection_threshold: float = Field(2.0, env="ANOMALY_THRESHOLD")
+    
+    # CORS
+    allowed_origins: List[str] = Field(
+        default=["http://localhost:8081"],
+        env="ALLOWED_ORIGINS"
+    )
+    
+    @validator("log_level")
+    def validate_log_level(cls, v):
+        """Validate log level is supported."""
+        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if v.upper() not in valid_levels:
+            raise ValueError(f"Log level must be one of: {valid_levels}")
+        return v.upper()
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    """Get cached application settings."""
+    return Settings()
+
+
+# Usage
+settings = get_settings()
+```
+
+## API Design Patterns
+
+### FastAPI Route Structure
+```python
+# ai/api/routes/analytics.py
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
+
+from ...core.config import get_settings
+from ...core.exceptions import ValidationError
+from ...models.api import AnalysisRequest, AnalysisResponse
+from ...services.analytics_service import AnalyticsService
+from ..dependencies import get_analytics_service, get_session_manager
+
+router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
+
+@router.post(
+    "/analyze",
+    response_model=AnalysisResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Perform data analysis",
+    description="Analyze SF public datasets for trends and anomalies"
+)
+async def create_analysis(
+    request: AnalysisRequest,
+    analytics_service: AnalyticsService = Depends(get_analytics_service),
+    session_manager = Depends(get_session_manager)
+) -> AnalysisResponse:
+    """Create new data analysis."""
+    try:
+        result = await analytics_service.analyze(
+            dataset=request.dataset,
+            parameters=request.parameters,
+            session_id=session_manager.session_id
+        )
+        return AnalysisResponse(
+            analysis_id=result.id,
+            status="completed",
+            results=result.data
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "validation_failed", "message": str(e)}
+        )
+    except Exception as e:
+        logger.exception("Analysis creation failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "internal_error", "message": "Analysis failed"}
+        )
+```
+
+### Pydantic Models
+```python
+# ai/models/api.py
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, validator
+
+
+class BaseAPIModel(BaseModel):
+    """Base model for API requests/responses."""
+    
+    class Config:
+        extra = "forbid"  # Reject unknown fields
+        validate_assignment = True
+
+
+class AnalysisRequest(BaseAPIModel):
+    """Request model for analysis creation."""
+    
+    dataset: str = Field(..., description="Dataset identifier", min_length=1)
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    district: Optional[int] = Field(None, ge=0, le=11, description="SF District")
+    date_range: Optional[Dict[str, str]] = Field(None)
+    
+    @validator("dataset")
+    def validate_dataset(cls, v):
+        """Validate dataset identifier."""
+        allowed_datasets = [
+            "police_incidents", "fire_incidents", "building_permits", 
+            "311_calls", "budget_data"
+        ]
+        if v not in allowed_datasets:
+            raise ValueError(f"Dataset must be one of: {allowed_datasets}")
+        return v
+
+
+class AnalysisResponse(BaseAPIModel):
+    """Response model for analysis results."""
+    
+    analysis_id: str = Field(..., description="Unique analysis identifier")
+    status: str = Field(..., description="Analysis status")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    results: Optional[Dict[str, Any]] = Field(None)
+    error_message: Optional[str] = Field(None)
+```
+
+## AI Agents Pattern
+
+### Base Agent Interface
+```python
+# ai/agents/base.py
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List
+
+from ..core.logging import get_logger
+from ..models.session import SessionContext
+
+logger = get_logger(__name__)
+
+
+class BaseAgent(ABC):
+    """Abstract base class for all AI agents."""
+    
+    def __init__(self, name: str, tools: List[str] = None) -> None:
+        """Initialize agent with name and available tools."""
+        self.name = name
+        self.tools = tools or []
+        logger.info(f"Initialized {self.__class__.__name__} agent: {name}")
+    
+    @abstractmethod
+    async def process_message(
+        self, 
+        message: Dict[str, Any], 
+        context: SessionContext
+    ) -> Dict[str, Any]:
+        """
+        Process incoming message and return response.
+        
+        Args:
+            message: User message with content and metadata
+            context: Session context with history and state
+            
+        Returns:
+            Agent response with content and actions
+        """
+        pass
+    
+    @abstractmethod
+    def get_available_tools(self) -> List[str]:
+        """Get list of tools available to this agent."""
+        pass
+    
+    async def validate_input(self, message: Dict[str, Any]) -> bool:
+        """Validate input message format."""
+        required_fields = ["content", "user_id", "timestamp"]
+        return all(field in message for field in required_fields)
+```
+
+### Tool Registry Pattern
+```python
+# ai/tools/registry.py
+from typing import Dict, Type
+
+from .base import BaseTool
+
+
+class ToolRegistry:
+    """Registry for discovering and managing tools."""
+    
+    def __init__(self) -> None:
+        self._tools: Dict[str, Type[BaseTool]] = {}
+    
+    def register(self, tool_class: Type[BaseTool]) -> None:
+        """Register a tool class."""
+        self._tools[tool_class.name] = tool_class
+    
+    def get_tool(self, name: str) -> Type[BaseTool]:
+        """Get tool class by name."""
+        if name not in self._tools:
+            raise ValueError(f"Tool '{name}' not registered")
+        return self._tools[name]
+    
+    def list_tools(self) -> List[str]:
+        """List all registered tool names."""
+        return list(self._tools.keys())
+
+
+# Global registry instance
+tool_registry = ToolRegistry()
+
+
+# Decorator for auto-registration
+def register_tool(tool_class: Type[BaseTool]) -> Type[BaseTool]:
+    """Decorator to auto-register tools."""
+    tool_registry.register(tool_class)
+    return tool_class
+```
+
+## Testing Standards
+
+### Test Structure
+```python
+# tests/test_services/test_anomaly_service.py
+import pytest
+import pandas as pd
+from unittest.mock import AsyncMock, patch
+
+from ai.services.anomaly_service import AnomalyService
+from ai.core.exceptions import AnomalyDetectionError
+from ai.models.data import TimeSeriesData
+
+
+class TestAnomalyService:
+    """Test suite for AnomalyService."""
+    
+    @pytest.fixture
+    def sample_data(self) -> pd.DataFrame:
+        """Create sample time series data for testing."""
+        return pd.DataFrame({
+            'timestamp': pd.date_range('2024-01-01', periods=100, freq='D'),
+            'value': range(100)
+        })
+    
+    @pytest.fixture
+    def anomaly_service(self) -> AnomalyService:
+        """Create AnomalyService instance for testing."""
+        return AnomalyService(threshold=2.0)
+    
+    @pytest.mark.asyncio
+    async def test_detect_anomalies_success(
+        self, 
+        anomaly_service: AnomalyService,
+        sample_data: pd.DataFrame
+    ):
+        """Test successful anomaly detection."""
+        # Arrange
+        data = TimeSeriesData(data=sample_data)
+        
+        # Act
+        results = await anomaly_service.detect_anomalies(data)
+        
+        # Assert
+        assert isinstance(results, list)
+        assert len(results) == len(sample_data)
+        assert all(hasattr(r, 'is_anomaly') for r in results)
+    
+    @pytest.mark.asyncio
+    async def test_detect_anomalies_invalid_method(
+        self,
+        anomaly_service: AnomalyService,
+        sample_data: pd.DataFrame
+    ):
+        """Test anomaly detection with invalid method."""
+        # Arrange
+        data = TimeSeriesData(data=sample_data)
+        
+        # Act & Assert
+        with pytest.raises(AnomalyDetectionError):
+            await anomaly_service.detect_anomalies(data, method="invalid")
+```
+
+### Test Configuration
+```ini:pytest.ini
+[tool:pytest]
+minversion = 6.0
+addopts = 
+    -ra -q 
+    --strict-markers 
+    --strict-config 
+    --cov=ai 
+    --cov-report=term-missing 
+    --cov-report=html
+    --cov-fail-under=80
+testpaths = ai/tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+markers =
+    unit: Unit tests
+    integration: Integration tests
+    slow: Slow running tests
+    external: Tests requiring external services
+```
+
+## Migration File Map **COMPLETE** ✅
+
+### ✅ **Completed: Core Infrastructure**
+| Current File | New Location | Migration Status |
+|--------------|--------------|------------------|
+| ✅ | `ai/core/config.py` | **COMPLETE** - Centralized settings |
+| ✅ | `ai/core/logging.py` | **COMPLETE** - Structured logging |
+| ✅ | `ai/core/exceptions.py` | **COMPLETE** - Custom exceptions |
+| ✅ | `ai/models/` | **COMPLETE** - Pydantic models |
+
+### ✅ **Completed: API Layer**
+| Current File | New Location | Migration Status |
+|--------------|--------------|------------------|
+| `main.py` (984 lines) | `ai/api/main.py` | **COMPLETE** - Business logic extracted |
+| `webChat.py` (2,453 lines) | `ai/api/routes/chat.py` | **COMPLETE** - Routes extracted |
+| `backend.py` (6,191 lines) | Multiple route files | **COMPLETE** - Split by domain |
+| `metrics_manager.py` | `ai/api/routes/metrics.py` | **COMPLETE** - Routes extracted |
+
+### ✅ **Completed: Services Layer**
+| Current Logic Source | New Location | Migration Status |
+|---------------------|--------------|------------------|
+| `backend.py` | `ai/services/analytics_service.py` | **COMPLETE** - Business logic extracted |
+| `anomalyAnalyzer.py` | `ai/services/anomaly_service.py` | **COMPLETE** - Core logic extracted |
+| `webChat.py` | `ai/services/chat_service.py` | **COMPLETE** - Chat logic extracted |
+| Chart generation | `ai/services/chart_service.py` | **COMPLETE** - Tools consolidated |
+
+### ✅ **Completed: Tools Reorganization**
+| Current Tools | New Location | Migration Status |
+|---------------|--------------|------------------|
+| `tools/genChart*.py` | `ai/tools/visualization/` | **COMPLETE** - Chart tools organized |
+| `tools/data_*.py` | `ai/tools/data/` | **COMPLETE** - Data tools organized |
+| `tools/db_*.py` | `ai/tools/database/` | **COMPLETE** - DB tools organized |
+| `tools/anomaly_*.py` | `ai/tools/analysis/` | **COMPLETE** - Analysis tools organized |
+
+## Complete Route Migration Map
+
+**Total ACTIVE Routes to Migrate: 89** (reduced from 159)
+- Based on analysis of templates, JavaScript, and internal API calls
+- Only includes routes actively called by frontend or services
+
+### ✅ 1. Core API Routes (`ai/api/routes/core.py`)
+**Source: `main.py`** (12 active routes)
+```python
+# Core routes actively used by frontend
+GET  /                                    # Home page (multiple templates)
+GET  /api/metrics/{filename}              # Called by metric_control.html
+GET  /api/metric-id-mapping               # Used for metric mappings
+GET  /api/metric/{metric_id}              # Called by metric_control.html
+GET  /api/district/{district_id}/metric/{metric_id}  # District-specific metrics
+GET  /api/district/{district_id}/metrics  # List district metrics
+GET  /api/districts                       # List all districts
+
+# Chart access endpoints
+GET  /api/chart-by-metric                 # Called by time_series_chart.html
+GET  /api/chart/{chart_id}                # Called by time_series_chart.html
+
+# District data
+GET  /api/district-shapes/{district_type} # District shape data
+GET  /api/district-ids/{district_type}    # District ID listings
+
+# Static file serving
+GET  /output/monthly/{district}/{metric_id}.md  # Monthly file serving
+```
+
+### ✅ 2. Analytics & Data Routes (`ai/api/routes/analytics.py`)
+**Source: `backend.py`** (18 active routes)
+```python
+# Data analysis - heavily used by query.html and dashboard.html
+GET  /backend/api/datasets-count          # Called by dashboard.html
+GET  /backend/api/list-datasets-for-typeahead  # Called by query.html
+GET  /backend/api/time-series-count       # Called by dashboard.html
+GET  /backend/api/time-series-data-count  # Called by dashboard.html
+GET  /backend/api/total-metrics-count     # Called by dashboard.html
+GET  /backend/api/anomalies-count-by-status  # Called by dashboard.html
+GET  /backend/api/postgres-size           # Called by dashboard.html
+GET  /backend/api/vectordb-size           # Called by dashboard.html
+GET  /backend/api/system-status           # Called by dashboard.html
+GET  /backend/disk-space                  # Called by dashboard.html
+GET  /backend/api/postgres-tables         # Called by query.html
+
+# Query execution - used by query.html
+POST /backend/execute-query               # Query interface
+POST /backend/execute-postgres-query      # Postgres queries
+POST /backend/execute-qdrant-query        # Vector DB queries
+DELETE /backend/delete-collection/{collection_name}  # Collection management
+
+# Enhanced queries - used by metric_control.html
+GET  /api/enhanced-queries                # Enhanced query definitions
+GET  /backend/get-endpoint-columns/{endpoint}  # Get endpoint columns
+GET  /backend/get-selected-columns/{endpoint}  # Get selected columns
+POST /backend/update-selected-columns     # Update column selection
+```
+
+### ✅ 3. Charts & Visualization Routes (`ai/api/routes/charts.py`)
+**Source: `backend.py` + `routes/dw_charts.py`** (15 active routes)
+```python
+# Chart generation - actively called by multiple templates
+GET  /backend/api/active-charts           # Called by metric_control.html
+GET  /backend/api/chart-by-metric         # Called by genChartdw.py tool
+GET  /backend/api/chart-metadata/{chart_id}  # Called by metric_control.html
+GET  /backend/time-series-chart           # Called by chart_processor.py
+GET  /backend/map-chart                   # Called by chart_processor.py, monthly_report.py
+
+# District maps - called by metric_control.html
+GET  /api/district-maps                   # District map data
+GET  /backend/api/district-maps           # Backend district maps
+
+# Data warehouse charts - used by metric_control.html
+POST /backend/generate-dw-time-series     # Generate time series charts
+POST /backend/generate-dw-anomaly         # Generate anomaly charts
+POST /backend/update-chart-metadata       # Update chart metadata
+POST /backend/update-anomaly-metadata     # Update anomaly metadata
+GET  /api/chart-metadata/{chart_id}       # Get chart metadata
+GET  /api/anomaly-metadata/{anomaly_id}   # Get anomaly metadata
+
+# Internal tool calls
+GET  /backend/api/chart/{chart_id}        # Internal API access
+GET  /backend/api/chart-by-metric         # Internal API access
+```
+
+### ✅ 4. Metrics Management Routes (`ai/api/routes/metrics.py`)
+**Source: `metrics_manager.py`** (12 active routes)
+```python
+# Metrics CRUD - actively used by metric_control.html
+GET  /api/metrics                         # List all metrics
+POST /api/metrics                         # Create new metric
+PUT  /api/metrics/{metric_id}             # Update metric
+DELETE /api/metrics/{metric_id}           # Delete metric
+GET  /api/metric/{metric_identifier}      # Get specific metric
+
+# Metrics control - used by metric_control.html
+GET  /backend/run_specific_metric         # Run specific metric
+POST /api/restore-metrics-from-backup     # Restore from backup
+
+# Metrics by category
+GET  /api/metrics/by-endpoint/{endpoint}  # Metrics by endpoint
+GET  /api/metrics/categories              # Metric categories
+GET  /api/metrics/overview                # Metrics overview
+
+# Enable/disable functionality
+POST /api/metrics/{metric_identifier}/disable  # Disable metric
+POST /api/metrics/{metric_identifier}/enable   # Enable metric
+```
+
+### ✅ 5. Reports & Documentation Routes (`ai/api/routes/reports.py`)
+**Source: `backend.py`** (8 active routes)
+```python
+# Report generation - used by monthly_reports.html
+GET  /backend/get_monthly_reports         # Get monthly reports data
+POST /backend/generate_monthly_report     # Generate monthly report
+POST /backend/rerun_monthly_report_generation  # Regenerate report
+GET  /backend/monthly-report/{report_id}  # Get specific report
+
+# Prompts management - used by monthly_reports.html
+GET  /backend/get_prompts                 # Get prompts
+POST /backend/update_prompt               # Update prompt
+
+# Report access
+GET  /backend/monthly-report/file/{filename}  # Get report file
+DELETE /backend/delete_monthly_report/{report_id}  # Delete report
+```
+
+### ✅ 6. Chat & AI Agent Routes (`ai/api/routes/chat.py`)
+**Source: `webChat.py`** (4 active routes)
+```python
+# Chat interface - used by index.html
+POST /chat/api/chat                       # Process chat message
+POST /chat/api/reset                      # Reset chat session
+POST /chat/api/switch-agent               # Switch AI agent
+
+# Notes and context
+GET  /backend/get-notes                   # Get session notes
+```
+
+### ✅ 7. Anomaly Detection Routes (`ai/api/routes/anomalies.py`)
+**Source: `anomalyAnalyzer.py`** (6 active routes)
+```python
+# Anomaly data - called by metric_control.html and internal tools
+GET  /anomaly-analyzer/api/top-metric-changes     # Called by monthly_report.py
+GET  /anomaly-analyzer/api/query-anomalies        # Called by metric_control.html
+GET  /anomaly-analyzer/api/anomaly-details/{anomaly_id}  # Called by gen_anomaly_chart_dw.py
+POST /anomaly-analyzer/api/explain-metric-change  # Explain metric changes
+
+# Anomaly chat interface
+POST /anomaly-analyzer/api/anomaly-chat           # Anomaly chat processing
+POST /anomaly-analyzer/api/reset-anomaly-chat     # Reset anomaly chat
+```
+
+### ✅ 8. Evaluation & Testing Routes (`ai/api/routes/evals.py`)
+**Source: `evals_routes.py` + `backend.py`** (5 active routes)
+```python
+# Evaluation interface - used by evals.html
+GET  /backend/run-evals                   # Run single evaluation
+GET  /backend/run-all-evals               # Run all evaluations
+GET  /backend/list-eval-logs              # List evaluation logs
+GET  /backend/eval-log/{filename}         # Get evaluation log
+GET  /backend/get-latest-eval-summary     # Latest eval summary
+```
+
+### ✅ 9. Dashboard & UI Routes (`ai/api/routes/dashboard.py`)
+**Source: `backend.py`** (3 active routes)
+```python
+# Dashboard interfaces - used by multiple templates
+GET  /backend/dashboard                   # Main dashboard
+GET  /backend/get-notes                   # Get notes
+
+# Template serving
+GET  /backend/                            # Backend interface home
+```
+
+### ✅ 10. System & Administration Routes (`ai/api/routes/admin.py`)
+**Source: `backend.py`** (6 active routes)
+```python
+# File serving - used for generated content
+GET  /output/dashboard/{district}/{metric}.json   # Dashboard files
+GET  /output/annual/{district}/{metric}.md        # Annual reports
+GET  /output/monthly/{district}/{metric}.md       # Monthly reports
+GET  /output/weekly/{district}/{metric}.md        # Weekly reports
+
+# Subscriber management - called by main.py forwarding
+POST /api/add_subscriber                  # Newsletter signup
+POST /backend/api/add_subscriber          # Backend subscriber
+```
+
+## ❌ Routes NOT Being Used (70 routes removed)
+
+### Unused Routes Analysis:
+- **Data Management**: No templates call clear-postgres-data, clear-all-output, etc.
+- **Advanced Analytics**: Many statistical endpoints not used by frontend
+- **Legacy Admin**: Many admin endpoints have no frontend interface
+- **Development Tools**: Some debug/development routes not in production use
+- **Redundant Endpoints**: Multiple similar endpoints with no calls
+
+## Route Migration Priority
+
+### 🚨 Phase 1: Critical Routes (Frontend Dependencies)
+1. **Chat routes** - Core user interface
+2. **Chart routes** - Data visualization
+3. **Metrics routes** - Core data management
+4. **Dashboard routes** - System overview
+
+### 📊 Phase 2: Data Routes (Backend Dependencies)  
+5. **Analytics routes** - Data processing
+6. **Anomaly routes** - Analysis features
+7. **Reports routes** - Content generation
+
+### 🔧 Phase 3: Support Routes (Admin/Tools)
+8. **Evaluation routes** - Testing infrastructure
+9. **Admin routes** - File serving and management
+10. **Core routes** - Static and utility endpoints
+
+This focused migration plan reduces the scope from **159 to 89 routes**, ensuring we only migrate functionality that's actually being used while maintaining all active features.
+
+## 🚀 **Current Application Status - PRODUCTION READY**
+
+### ✅ **Working Components**
+- FastAPI application with lifecycle management
+- Service registry and dependency injection
+- All 89 routes implemented and functional
+- Tool loading and registration (18+ tools)
+- Agent system architecture
+- JSON structured logging system
+- Graceful startup/shutdown handling
+- Error handling and monitoring
+- Production-ready middleware stack
+
+### ⚠️ **External Dependencies** (Optional for development)
+- **PostgreSQL**: Database for persistent storage (graceful fallback)
+- **Redis**: Session storage (falls back to in-memory)
+- **API Keys**: Optional for enhanced features (DATAWRAPPER, etc.)
+
+### 🎯 **Application Starts Successfully**
+- The app gracefully handles missing external dependencies
+- Fails fast with clear error messages when critical services unavailable
+- Uses in-memory alternatives for development without PostgreSQL/Redis
+- All logging, monitoring, and error handling working correctly
+
+## 🗺️ **Production Roadmap & Next Steps**
+
+### 🎯 **Immediate (v2.1) - Production Deployment**
+- [ ] **Docker Configuration**: Create production Docker images
+- [ ] **Database Setup**: PostgreSQL initialization scripts  
+- [ ] **Redis Configuration**: Session storage clustering
+- [ ] **Environment Management**: Production environment configs
+- [ ] **CI/CD Pipeline**: Automated testing and deployment
+- [ ] **Monitoring**: Application metrics and alerting
+
+### 🚀 **Short Term (v2.2-2.3) - Feature Enhancement**
+- [ ] **Performance Optimization**: Caching strategies, query optimization
+- [ ] **Security Hardening**: Authentication, authorization, rate limiting
+- [ ] **API Documentation**: Auto-generated OpenAPI docs
+- [ ] **Real-time Features**: WebSocket support for live updates
+- [ ] **Data Pipeline**: Enhanced ETL for SF datasets
+- [ ] **Mobile Responsiveness**: Progressive Web App features
+
+### 🌟 **Medium Term (v2.4-2.6) - Advanced Features**
+- [ ] **Machine Learning**: Predictive analytics and forecasting
+- [ ] **Advanced Visualizations**: Interactive maps and charts
+- [ ] **Report Automation**: Scheduled report generation
+- [ ] **Data Export**: CSV, PDF, Excel export capabilities
+- [ ] **User Management**: Multi-tenant support
+- [ ] **Plugin System**: Extensible tool architecture
+
+### 🏗️ **Long Term (v3.0) - Platform Evolution**
+- [ ] **Microservices**: Break into smaller, focused services
+- [ ] **Real-time Streaming**: Live data processing pipeline
+- [ ] **Advanced AI**: GPT-4 integration, custom models
+- [ ] **Multi-city Support**: Expand beyond San Francisco
+- [ ] **Open Source**: Community contributions and plugins
+- [ ] **Enterprise Features**: Advanced analytics, white-labeling
+
+## Performance Guidelines
+
+### Memory Management
+- Use generators for large data processing
+- Implement proper cleanup in finally blocks
+- Monitor memory usage in long-running processes
+- Set DataFrame size limits (100MB default)
+- Use connection pooling for databases
+
+### Caching Strategy
+- Cache expensive computations (anomaly detection, chart generation)
+- Use Redis for distributed caching
+- Implement cache invalidation strategies
+- Cache API responses when appropriate
+
+## Security Guidelines
+
+### Input Validation
+- Validate all user inputs using Pydantic models
+- Sanitize file paths to prevent directory traversal
+- Use parameterized SQL queries only
+- Implement rate limiting on API endpoints
+- Never log sensitive data (API keys, passwords)
+
+### Session Management
+```python
+# Use Redis for session storage in production
+# Implement session expiration (default: 1 hour)
+# Generate secure session IDs
+# Clear sensitive data from sessions on logout
+```
+
+## Development Workflow Commands
+
+### Setup Commands
+```bash
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Setup pre-commit hooks
+pre-commit install
+
+# Run all formatting and linting
+pre-commit run --all-files
+
+# Run tests with coverage
+pytest --cov=ai --cov-report=html
+
+# Type checking
+mypy ai/
+```
+
+### Daily Development
+```bash
+# Auto-format code (runs on save in VS Code)
+black ai/ tests/
+isort ai/ tests/
+autoflake --remove-all-unused-imports --in-place --recursive ai/ tests/
+
+# Run specific test types
+pytest -m unit
+pytest -m integration
+pytest -m "not slow"
+```
+
+## San Francisco Data Context
+
+### Dataset Characteristics
+- Large time series datasets (police incidents, 311 calls, permits)
+- Geographic data with supervisor districts (0-11)
+- Multiple data sources with different schemas
+- Real-time and historical data
+- Public datasets with privacy considerations
+
+### Domain-Specific Patterns
+- Always filter by supervisor district when relevant
+- Handle date ranges properly (fiscal vs calendar years)
+- Use appropriate aggregation methods for different metrics
+- Consider seasonality in trend analysis
+- Validate geographic boundaries
+
+### Anomaly Detection Patterns
+- Use statistical methods appropriate for the data type
+- Consider external factors (holidays, events, weather)
+- Provide explanations for detected anomalies
+- Set appropriate thresholds for different metrics
+- Track anomaly detection accuracy over time
+
+## Anti-Patterns to Avoid
+
+❌ **Don't Do This:**
+- Global variables for state management
+- Monolithic files >500 lines
+- Manual import management
+- Unused imports or variables
+- Missing type hints
+- Hardcoded configuration values
+- Blocking operations in async functions
+- Unvalidated user input
+
+✅ **Do This Instead:**
+- Dependency injection for state
+- Modular files with single responsibilities
+- Auto-managed imports with pre-commit hooks
+- Comprehensive type hints
+- Environment-based configuration
+- Async operations for I/O
+- Pydantic validation for all inputs
+- Automated code quality checks
+
+Remember: This is a data analysis platform for civic transparency. Code should be reliable, well-documented, maintainable, and automatically formatted for long-term use.
