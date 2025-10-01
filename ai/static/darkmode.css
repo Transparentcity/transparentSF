@@ -9,10 +9,10 @@
     --soft-sand: #F6F1EA;
     --sky-tint: #B8D8E3;
     
-    /* Light Theme Backgrounds (Default) */
-    --bg-primary: #ffffff;
-    --bg-secondary: #f8f9fa;
-    --bg-tertiary: #ffffff;
+    /* Light Theme Backgrounds (Purple-leaning) */
+    --bg-primary: #faf5ff;   /* purple-50 */
+    --bg-secondary: #f3e8ff; /* purple-100 */
+    --bg-tertiary: #e9d5ff;  /* purple-200 */
     
     /* Light Theme Text (Default) */
     --text-primary: #222222;
@@ -40,10 +40,10 @@
     --soft-sand: #1a1a1a;
     --sky-tint: #1e3a47;
     
-    /* Dark Theme Backgrounds */
-    --bg-primary: #121212;
-    --bg-secondary: #1e1e1e;
-    --bg-tertiary: #2a2a2a;
+    /* Dark Theme Backgrounds (Purple-leaning) */
+    --bg-primary: #0f0a1f;   /* very dark purple */
+    --bg-secondary: #15102b; /* dark indigo */
+    --bg-tertiary: #1f1740;  /* deep violet */
     
     /* Dark Theme Text */
     --text-primary: #ffffff;
