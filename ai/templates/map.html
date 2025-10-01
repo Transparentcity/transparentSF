@@ -1247,7 +1247,7 @@
         function loadMapData() {
             try {
                 console.log('Loading map data for type:', mapData.type);
-                if (mapData.type === 'supervisor_district') {
+                if (mapData.type === 'supervisor_district' || mapData.type === 'analysis_neighborhood') {
                     loadDistrictMap();
                 } else if (mapData.type === 'point' || mapData.type === 'symbol' || mapData.type === 'address') {
                     loadPointMap();
@@ -1274,12 +1274,19 @@
                 return;
             }
 
-            // Create a lookup table for district values
+            // Determine the field name and GeoJSON file based on map type
+            const isNeighborhoodMap = mapData.type === 'analysis_neighborhood';
+            const fieldName = isNeighborhoodMap ? 'neighborhood' : 'district';
+            const geoJsonFile = isNeighborhoodMap ? '/static/data/sf_analysis_neighborhoods.geojson' : '/static/data/sf_supervisorial_districts.geojson';
+            const geoJsonIdField = isNeighborhoodMap ? 'nhood' : 'district';
+
+            // Create a lookup table for district/neighborhood values
             const districtValues = {};
             mapData.locationData.forEach(item => {
-                districtValues[item.district] = {
+                const key = item[fieldName];
+                districtValues[key] = {
                     value: item.value,
-                    title: item.title || `District ${item.district}`,
+                    title: item.title || `${isNeighborhoodMap ? 'Neighborhood' : 'District'} ${key}`,
                     color: item.color,
                     current_value: item.current_value,
                     previous_value: item.previous_value,
@@ -1305,24 +1312,29 @@
             console.log('Is delta map:', isDeltaMap);
             console.log('Min value:', minValue, 'Max value:', maxValue);
 
-            // Load district boundaries from GeoJSON file
-            fetch('/static/data/sf_supervisorial_districts.geojson')
-                .then(response => response.json())
+            // Load district/neighborhood boundaries from GeoJSON file
+            fetch(geoJsonFile)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Failed to load GeoJSON: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(geojsonData => {
-                    // Merge district data with boundaries
+                    // Merge district/neighborhood data with boundaries
                     const features = geojsonData.features.map(feature => {
-                        const districtId = feature.properties.district;
-                        const districtData = districtValues[districtId];
+                        const areaId = feature.properties[geoJsonIdField];
+                        const areaData = districtValues[areaId];
                         
-                        if (districtData) {
-                            // Calculate the exact color for this district
-                            const ratio = (districtData.value - minValue) / (maxValue - minValue);
+                        if (areaData) {
+                            // Calculate the exact color for this area
+                            const ratio = (areaData.value - minValue) / (maxValue - minValue);
                             let calculatedColor;
                             
                             if (isDeltaMap) {
                                 // Delta map: color based on actual percent change value
                                 // 0% = white, negative = green, positive = red
-                                const percentChange = districtData.percent_change || 0;
+                                const percentChange = areaData.percent_change || 0;
                                 
                                 if (percentChange === 0) {
                                     // Exactly 0% change = white
@@ -1351,40 +1363,48 @@
                                     calculatedColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
                                 }
                             } else {
-                                // Density map: purple + white mixing
-                                const purple = [173, 53, 250]; // RGB for #ad35fa
-                                const white = [255, 255, 255]; // RGB for #ffffff
+                                // Density map: purple to white gradient (90% of the way to white)
+                                const purple = [173, 53, 250]; // RGB for #ad35fa (bright purple)
+                                const white = [255, 255, 255]; // RGB for #ffffff (pure white)
                                 
-                                const r = Math.round(purple[0] + (white[0] - purple[0]) * (1 - ratio));
-                                const g = Math.round(purple[1] + (white[1] - purple[1]) * (1 - ratio));
-                                const b = Math.round(purple[2] + (white[2] - purple[2]) * (1 - ratio));
+                                // Calculate 90% of the way to white (10% purple remaining)
+                                const lightPurple = [
+                                    Math.round(purple[0] + (white[0] - purple[0]) * 0.9),
+                                    Math.round(purple[1] + (white[1] - purple[1]) * 0.9),
+                                    Math.round(purple[2] + (white[2] - purple[2]) * 0.9)
+                                ];
+                                
+                                const r = Math.round(purple[0] + (lightPurple[0] - purple[0]) * (1 - ratio));
+                                const g = Math.round(purple[1] + (lightPurple[1] - purple[1]) * (1 - ratio));
+                                const b = Math.round(purple[2] + (lightPurple[2] - purple[2]) * (1 - ratio));
                                 
                                 calculatedColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
                             }
                             
-                            console.log(`District ${districtId}: applying color ${calculatedColor} for value ${districtData.value}`);
                             
                             return {
                                 ...feature,
                                 properties: {
                                     ...feature.properties,
-                                    value: districtData.value,
-                                    title: districtData.title,
+                                    [fieldName]: areaId,
+                                    value: areaData.value,
+                                    title: areaData.title,
                                     color: calculatedColor,
-                                    current_value: districtData.current_value,
-                                    previous_value: districtData.previous_value,
-                                    delta: districtData.delta,
-                                    percent_change: districtData.percent_change
+                                    current_value: areaData.current_value,
+                                    previous_value: areaData.previous_value,
+                                    delta: areaData.delta,
+                                    percent_change: areaData.percent_change
                                 }
                             };
                         } else {
-                            // District with no data - show with default styling
+                            // Area with no data - show with default styling
                             return {
                                 ...feature,
                                 properties: {
                                     ...feature.properties,
+                                    [fieldName]: areaId,
                                     value: 0,
-                                    title: `District ${districtId}`,
+                                    title: `${isNeighborhoodMap ? 'Neighborhood' : 'District'} ${areaId}`,
                                     color: '#f0f0f0',
                                     current_value: 0,
                                     previous_value: 0,
@@ -1406,30 +1426,32 @@
 
                     // Debug: Log the color stops for density maps
                     if (!isDeltaMap) {
-                        const colorStops = [
-                            minValue, '#f2f0f7',
-                            minValue + (maxValue - minValue) * 0.2, '#e1d5f0',
-                            minValue + (maxValue - minValue) * 0.4, '#c7b3e3',
-                            minValue + (maxValue - minValue) * 0.6, '#b894d9',
-                            minValue + (maxValue - minValue) * 0.8, '#a375cc',
-                            maxValue, '#ad35fa'
+                        // Calculate the 90% gradient colors
+                        const purple = [173, 53, 250]; // RGB for #ad35fa
+                        const white = [255, 255, 255]; // RGB for #ffffff
+                        const lightPurple = [
+                            Math.round(purple[0] + (white[0] - purple[0]) * 0.9),
+                            Math.round(purple[1] + (white[1] - purple[1]) * 0.9),
+                            Math.round(purple[2] + (white[2] - purple[2]) * 0.9)
                         ];
-                        console.log('Density map color stops:', colorStops);
+                        const lightPurpleHex = `#${lightPurple[0].toString(16).padStart(2, '0')}${lightPurple[1].toString(16).padStart(2, '0')}${lightPurple[2].toString(16).padStart(2, '0')}`;
                         
-                        // Debug: Log what color each district should get
-                        mapData.locationData.forEach(item => {
-                            const ratio = (item.value - minValue) / (maxValue - minValue);
-                            // Calculate color using purple + white mixing
-                            const purple = [173, 53, 250]; // RGB for #ad35fa
-                            const white = [255, 255, 255]; // RGB for #ffffff
-                            
-                            const r = Math.round(purple[0] + (white[0] - purple[0]) * (1 - ratio));
-                            const g = Math.round(purple[1] + (white[1] - purple[1]) * (1 - ratio));
-                            const b = Math.round(purple[2] + (white[2] - purple[2]) * (1 - ratio));
-                            
-                            const expectedColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                            console.log(`District ${item.district}: value=${item.value}, ratio=${ratio.toFixed(2)}, expected color=${expectedColor}`);
-                        });
+                        // Calculate intermediate colors for smooth gradient
+                        const getGradientColor = (ratio) => {
+                            const r = Math.round(purple[0] + (lightPurple[0] - purple[0]) * ratio);
+                            const g = Math.round(purple[1] + (lightPurple[1] - purple[1]) * ratio);
+                            const b = Math.round(purple[2] + (lightPurple[2] - purple[2]) * ratio);
+                            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                        };
+                        
+                        const colorStops = [
+                            minValue, lightPurpleHex, // 90% of the way to white (10% purple remaining)
+                            minValue + (maxValue - minValue) * 0.2, getGradientColor(0.8),
+                            minValue + (maxValue - minValue) * 0.4, getGradientColor(0.6),
+                            minValue + (maxValue - minValue) * 0.6, getGradientColor(0.4),
+                            minValue + (maxValue - minValue) * 0.8, getGradientColor(0.2),
+                            maxValue, '#ad35fa' // Bright purple for highest values
+                        ];
                     }
                     
                     // Add fill layer for districts
@@ -1443,7 +1465,19 @@
                         }
                     });
 
-                    // Add hover effect
+                    // Add stroke layer for district outlines
+                    map.addLayer({
+                        id: 'districts-stroke',
+                        type: 'line',
+                        source: 'districts',
+                        paint: {
+                            'line-color': '#666666',
+                            'line-width': 0.5,
+                            'line-opacity': 0.8
+                        }
+                    });
+
+                    // Add hover effect for both fill and stroke layers
                     map.on('mouseenter', 'districts-fill', function() {
                         map.getCanvas().style.cursor = 'pointer';
                     });
@@ -1452,8 +1486,35 @@
                         map.getCanvas().style.cursor = '';
                     });
 
+                    map.on('mouseenter', 'districts-stroke', function() {
+                        map.getCanvas().style.cursor = 'pointer';
+                    });
+
+                    map.on('mouseleave', 'districts-stroke', function() {
+                        map.getCanvas().style.cursor = '';
+                    });
+
                     // Add click handler with enhanced tooltip for delta maps
                     map.on('click', 'districts-fill', function(e) {
+                        const properties = e.features[0].properties;
+                        let popupContent = `<div style="font-size: 12px; line-height: 1.4; padding: 8px;"><strong>${properties.title || 'District ' + properties.district}</strong>`;
+                        
+                        // Check if this is a delta map (has current_value, previous_value, etc.)
+                        if (properties.current_value !== undefined && properties.previous_value !== undefined) {
+                            popupContent += `<br>Current: ${properties.current_value}<br>Previous: ${properties.previous_value}<br>Change: ${properties.delta || 0}<br>Percent: ${(properties.percent_change * 100).toFixed(1)}%`;
+                        } else {
+                            popupContent += `<br>Value: ${properties.value}`;
+                        }
+                        popupContent += `</div>`;
+                        
+                        new mapboxgl.Popup()
+                            .setLngLat(e.lngLat)
+                            .setHTML(popupContent)
+                            .addTo(map);
+                    });
+
+                    // Add click handler for stroke layer as well
+                    map.on('click', 'districts-stroke', function(e) {
                         const properties = e.features[0].properties;
                         let popupContent = `<div style="font-size: 12px; line-height: 1.4; padding: 8px;"><strong>${properties.title || 'District ' + properties.district}</strong>`;
                         

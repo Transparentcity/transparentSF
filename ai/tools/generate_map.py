@@ -2708,19 +2708,51 @@ def process_dataset_for_map(dataset, map_type, series_field=None, color_palette=
                                 item[column] = value
                         location_data.append(item)
                         break
+        
+        # Handle district maps (supervisor_district, analysis_neighborhood) - moved outside elif to ensure it always runs
+        if map_type in ["supervisor_district", "analysis_neighborhood"]:
             # For district maps, expect district/neighborhood and value fields
             key_field = "neighborhood" if map_type == "analysis_neighborhood" else "district"
-            if key_field in row and 'value' in row:
+            district_field = "analysis_neighborhood" if map_type == "analysis_neighborhood" else "supervisor_district"
+            
+            # Check for both the original field name and the aliased field name
+            has_district_data = False
+            if district_field in row and 'value' in row:
+                has_district_data = True
+                actual_district_field = district_field
+            elif key_field in row and 'value' in row:
+                # Handle case where field is aliased (e.g., "analysis_neighborhood as district")
+                has_district_data = True
+                actual_district_field = key_field
+            elif 'district' in row and 'value' in row:
+                # Handle case where field is aliased to 'district' (e.g., "analysis_neighborhood as district")
+                has_district_data = True
+                actual_district_field = 'district'
+            
+            if has_district_data:
+                district_value = row[actual_district_field]
+                value = row['value']
+                
+                # Skip rows with null/empty district values
+                if pd.isna(district_value) or str(district_value).strip() == '' or str(district_value).strip() == 'nan':
+                    continue
+                
+                # Convert district value to string and clean it
+                district_str = str(district_value).strip()
+                if '.' in district_str and district_str.replace('.', '').isdigit():
+                    # Remove decimal point for integer districts (e.g., "8.0" -> "8")
+                    district_str = str(int(float(district_str)))
+                
                 item = {
-                    key_field: str(row[key_field]),
-                    "value": float(row['value']),
-                    "title": f"{key_field.title()} {row[key_field]}",
-                    "description": f"Value: {row['value']}"
+                    key_field: district_str,
+                    "value": float(value) if not pd.isna(value) else 0,
+                    "title": f"District {district_str}",
+                    "description": f"Value: {value}"
                 }
                 # Add all original data fields for coloring options
-                for column, value in row.items():
-                    if column not in ['district', 'neighborhood', 'value', 'title', 'description']:
-                        item[column] = value
+                for column, col_value in row.items():
+                    if column not in ['district', 'neighborhood', 'value', 'title', 'description'] and not pd.isna(col_value):
+                        item[column] = col_value
                 location_data.append(item)
         
         # Add series information if available
@@ -3106,11 +3138,59 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
                 logger.info(f"Converted dataset to {len(location_data)} symbol map locations")
                 
             elif map_type in ["supervisor_district", "police_district", "analysis_neighborhood"]:
-                # For district maps, we'd need aggregation logic here
-                # This is more complex and might need the original district aggregation approach
-                logger.warning("District maps from context dataset not yet implemented - falling back to original location_data")
+                # For district maps, process the dataset to create district-based location data
+                logger.info(f"Processing dataset for {map_type} map with {len(dataset)} rows")
+                
+                # Determine the district field name based on map type
+                district_field = "supervisor_district" if map_type == "supervisor_district" else \
+                               "police_district" if map_type == "police_district" else \
+                               "analysis_neighborhood"
+                
+                # Check if the required fields exist
+                if district_field not in dataset.columns:
+                    logger.error(f"Required field '{district_field}' not found in dataset columns: {dataset.columns.tolist()}")
+                    return {"error": f"Required field '{district_field}' not found in dataset"}
+                
+                if 'value' not in dataset.columns:
+                    logger.error(f"Required field 'value' not found in dataset columns: {dataset.columns.tolist()}")
+                    return {"error": "Required field 'value' not found in dataset"}
+                
+                # Process each row to create district location data
+                for idx, row in dataset.iterrows():
+                    district_value = row[district_field]
+                    value = row['value']
+                    
+                    # Skip rows with null/empty district values
+                    if pd.isna(district_value) or str(district_value).strip() == '' or str(district_value).strip() == 'nan':
+                        logger.warning(f"Skipping row {idx} with invalid district value: {district_value}")
+                        continue
+                    
+                    # Convert district value to string and clean it
+                    district_str = str(district_value).strip()
+                    if '.' in district_str and district_str.replace('.', '').isdigit():
+                        # Remove decimal point for integer districts (e.g., "8.0" -> "8")
+                        district_str = str(int(float(district_str)))
+                    
+                    # Create district item
+                    item = {
+                        "district": district_str,
+                        "value": float(value) if not pd.isna(value) else 0,
+                        "title": f"District {district_str}",
+                        "description": f"Value: {value}"
+                    }
+                    
+                    # Add all other columns as additional properties
+                    for column, col_value in row.items():
+                        if column not in ['district', 'value', 'title', 'description'] and not pd.isna(col_value):
+                            item[column] = col_value
+                    
+                    location_data.append(item)
+                    logger.info(f"Added district item: {item}")
+                
+                logger.info(f"Converted dataset to {len(location_data)} district map locations")
+                
                 if not location_data:
-                    return {"error": "District maps require aggregated location_data or manual data input"}
+                    return {"error": f"No valid district data found in dataset (missing or empty {district_field} values)"}
         else:
             logger.warning("No dataset found in context_variables or dataset is empty")
             if not location_data:

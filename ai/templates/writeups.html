@@ -25,7 +25,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --sidebar-width: 300px;
+            --sidebar-width: 400px;
         }
 
         body { 
@@ -109,7 +109,9 @@
         .sessions-list {
             flex: 1;
             overflow-y: auto;
+            overflow-x: hidden;
             padding: 10px;
+            min-height: 0; /* Allow flex item to shrink */
         }
         
         .session-section {
@@ -298,11 +300,11 @@
         .session-item {
             display: block;
             width: 100%;
-            padding: 12px;
-            margin-bottom: 8px;
+            padding: 14px;
+            margin-bottom: 10px;
             background: var(--bg-secondary);
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             color: var(--text-primary);
             text-align: left;
             cursor: pointer;
@@ -310,6 +312,7 @@
             font-size: 13px;
             font-family: 'IBM Plex Sans', sans-serif;
             border-left: 3px solid transparent;
+            box-sizing: border-box;
         }
         
         .session-item:hover {
@@ -327,10 +330,11 @@
         
         .session-title {
             font-weight: 600;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
+            line-height: 1.3;
         }
         
         .session-title-text {
@@ -356,12 +360,13 @@
         .session-prompt-preview {
             font-size: 11px;
             color: var(--text-secondary);
-            margin-top: 4px;
-            line-height: 1.3;
+            margin-top: 6px;
+            line-height: 1.4;
             opacity: 0.8;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            max-width: 100%;
         }
         
         .session-meta {
@@ -428,6 +433,8 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-width: 0; /* Allow flex item to shrink */
+            min-width: 400px; /* Ensure minimum usable width */
         }
         
         
@@ -457,6 +464,7 @@
             width: 100%;
             display: flex;
             flex-direction: column;
+            min-width: 0; /* Allow flex item to shrink */
         }
         
         /* Tab System */
@@ -499,6 +507,7 @@
             flex: 1;
             display: none;
             overflow: hidden;
+            min-width: 0; /* Allow flex item to shrink */
         }
         
         .tab-content.active {
@@ -687,9 +696,15 @@
         }
         
         /* Responsive design */
+        @media (max-width: 1024px) {
+            :root {
+                --sidebar-width: 350px;
+            }
+        }
+        
         @media (max-width: 768px) {
             :root {
-                --sidebar-width: 250px;
+                --sidebar-width: 300px;
             }
             
             .content-area {
@@ -714,6 +729,21 @@
                 min-width: 200px;
                 margin-right: 8px;
                 margin-bottom: 0;
+            }
+            
+            .main-content {
+                min-width: 300px; /* Reduce minimum width on mobile */
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .main-content {
+                min-width: 250px; /* Further reduce for very small screens */
+            }
+            
+            .session-item {
+                min-width: 180px;
+                padding: 10px;
             }
         }
     </style>
