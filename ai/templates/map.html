@@ -237,6 +237,26 @@
             color: var(--text-primary);
         }
 
+        .tsf-media-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 4px;
+        }
+        .tsf-media-thumb {
+            width: 64px;
+            height: 64px;
+            object-fit: cover;
+            border-radius: 3px;
+            border: 1px solid var(--border-primary);
+        }
+        .tsf-media-link {
+            font-size: 11px;
+            color: var(--accent-color);
+            text-decoration: none;
+            margin-right: 6px;
+        }
+
         .navigation-header {
             padding: 15px 20px;
             border-bottom: 1px solid var(--border-primary);
@@ -1090,6 +1110,55 @@
                     // Skip if we already included via tooltip_fields
                     if (tooltipFields && Object.prototype.hasOwnProperty.call(tooltipFields, key)) continue;
                     addRow(key, properties[key]);
+                }
+
+                // Media URLs handling (images and links)
+                try {
+                    const mediaKeys = ['media_url','media_urls','image_url','photo_url','attachment','attachments','photo','image','images'];
+                    const mediaCandidates = [];
+                    const collectMediaFromValue = (val) => {
+                        if (!val) return;
+                        if (typeof val === 'string') {
+                            const trimmed = val.trim();
+                            let parsed = null;
+                            if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+                                try { parsed = JSON.parse(trimmed); } catch (e) {}
+                            }
+                            if (parsed) {
+                                if (Array.isArray(parsed)) mediaCandidates.push(...parsed);
+                                else if (parsed.url) mediaCandidates.push(parsed.url);
+                            } else {
+                                trimmed.split(/[\s,;]+/).forEach(u => mediaCandidates.push(u));
+                            }
+                        } else if (Array.isArray(val)) {
+                            mediaCandidates.push(...val);
+                        } else if (typeof val === 'object' && val.url) {
+                            mediaCandidates.push(val.url);
+                        }
+                    };
+                    for (const k of mediaKeys) {
+                        if (properties[k]) collectMediaFromValue(properties[k]);
+                        if (tooltipFields && tooltipFields[k]) collectMediaFromValue(tooltipFields[k]);
+                    }
+                    if (tooltipFields && typeof tooltipFields === 'object') {
+                        for (const [k, v] of Object.entries(tooltipFields)) {
+                            if (/(media|image|photo|attachment)/i.test(k)) collectMediaFromValue(v);
+                        }
+                    }
+                    const uniqueUrls = Array.from(new Set(mediaCandidates.map(x => String(x).trim()).filter(Boolean)))
+                        .filter(u => /^https?:\/\//i.test(u));
+                    if (uniqueUrls.length > 0) {
+                        tooltipContent += `<div class="tsf-tooltip-title" style="margin-top:4px;">Media</div>`;
+                        tooltipContent += `<div class="tsf-media-grid">` + uniqueUrls.slice(0, 6).map(u => {
+                            if (/\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(u)) {
+                                return `<a href="${u}" target="_blank" rel="noopener"><img class="tsf-media-thumb" src="${u}" alt="media"></a>`;
+                            } else {
+                                return `<a class="tsf-media-link" href="${u}" target="_blank" rel="noopener">Open</a>`;
+                            }
+                        }).join('') + `</div>`;
+                    }
+                } catch (err) {
+                    console.warn('Media parse failed:', err);
                 }
 
                 tooltipContent += `</div>`;
