@@ -1661,6 +1661,9 @@
                     <button class="action-button" onclick="analyzeMetricFromRow('${rowId}')">
                         Analyze
                     </button>
+                    <div class="last-analysis-link" id="last-analysis-${rowId}" style="margin-top: 5px; font-size: 0.8em;">
+                        <span class="loading-text" style="color: #666;">Checking...</span>
+                    </div>
                 </td>
             `;
             
@@ -1682,6 +1685,9 @@
             });
             
             metricsTbody.appendChild(row);
+            
+            // Fetch and display last analysis for this metric
+            fetchLastAnalysis(metric.object_id || metric.id, metric.district, rowId);
         }
         
         // Helper function to analyze metric from row data
@@ -1801,6 +1807,9 @@
                     }).replace(/"/g, '&quot;')})">
                         Analyze
                     </button>
+                    <div class="last-analysis-link" id="last-analysis-anomaly-${anomaly.id}" style="margin-top: 5px; font-size: 0.8em;">
+                        <span class="loading-text" style="color: #666;">Checking...</span>
+                    </div>
                 </td>
             `;
             
@@ -1838,6 +1847,9 @@
             });
             
             metricsTbody.appendChild(row);
+            
+            // Fetch and display last analysis for this anomaly
+            fetchLastAnalysis(anomaly.object_id || anomaly.id, anomaly.district, `anomaly-${anomaly.id}`);
         }
         
         // Helper function to format values
@@ -1850,6 +1862,54 @@
         function formatPercentChange(value) {
             if (value === null || value === undefined || isNaN(value)) return '-';
             return `${parseFloat(value).toFixed(2)}%`;
+        }
+        
+        // Function to fetch and display last analysis for a metric
+        async function fetchLastAnalysis(metricId, district, rowId) {
+            if (!metricId) return;
+            
+            const lastAnalysisDiv = document.getElementById(`last-analysis-${rowId}`);
+            if (!lastAnalysisDiv) return;
+            
+            try {
+                // Build the API URL
+                let apiUrl = `/api/last-analysis/${encodeURIComponent(metricId)}`;
+                if (district && district !== '0') {
+                    apiUrl += `?district=${encodeURIComponent(district)}`;
+                }
+                
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.last_analysis) {
+                    const analysis = data.last_analysis;
+                    const timestamp = new Date(analysis.timestamp);
+                    const formattedDate = timestamp.toLocaleDateString();
+                    const formattedTime = timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    
+                    // Create the link to view the conversation
+                    const conversationUrl = `/conversation?session_id=${analysis.session_id}`;
+                    
+                    lastAnalysisDiv.innerHTML = `
+                        <a href="${conversationUrl}" target="_blank" style="color: #007bff; text-decoration: none; font-size: 0.8em;">
+                            📊 Last Analysis: ${formattedDate} ${formattedTime}
+                        </a>
+                        <div style="font-size: 0.7em; color: #666; margin-top: 2px;">
+                            ${analysis.success ? '✅' : '❌'} ${analysis.tool_calls_count || 0} tools used
+                        </div>
+                    `;
+                } else {
+                    // No previous analysis found
+                    lastAnalysisDiv.innerHTML = `
+                        <span style="color: #999; font-size: 0.8em;">No previous analysis</span>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error fetching last analysis:', error);
+                lastAnalysisDiv.innerHTML = `
+                    <span style="color: #999; font-size: 0.8em;">Error loading</span>
+                `;
+            }
         }
         
         // Function to show metric details modal
