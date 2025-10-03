@@ -10,7 +10,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 import json
 import logging
 import uuid
-from typing import Dict, Any
+import os
+import glob
+from datetime import datetime
+from typing import Dict, Any, Optional
 
 # Import the LangChain explainer agent
 from agents.langchain_agent.explainer_agent import create_explainer_agent
@@ -1011,5 +1014,120 @@ async def test_session_logging():
                 "status": "error",
                 "message": f"Test failed: {str(e)}",
                 "error_type": type(e).__name__
+            }
+        )
+
+
+@router.get("/api/last-analysis/{metric_id}")
+async def get_last_analysis_for_metric(metric_id: str, district: Optional[str] = None):
+    """Get the last analysis/conversation for a specific metric."""
+    try:
+        # Define the logs directory path
+        logs_dir = os.path.join(os.path.dirname(__file__), '..', 'logs', 'sessions')
+        
+        if not os.path.exists(logs_dir):
+            return JSONResponse(content={
+                "status": "success",
+                "last_analysis": None,
+                "message": "No session logs directory found"
+            })
+        
+        # Get all session files
+        session_files = glob.glob(os.path.join(logs_dir, '*.json'))
+        
+        if not session_files:
+            return JSONResponse(content={
+                "status": "success", 
+                "last_analysis": None,
+                "message": "No session logs found"
+            })
+        
+        # Search through session files for the most recent analysis of this metric
+        last_analysis = None
+        last_timestamp = None
+        
+        for session_file in session_files:
+            try:
+                with open(session_file, 'r') as f:
+                    session_data = json.load(f)
+                
+                # Check if this session contains analysis for our metric
+                user_input = session_data.get('user_input', '').lower()
+                conversation = session_data.get('conversation', [])
+                
+                # Look for metric ID in user input or conversation
+                metric_found = False
+                if metric_id.lower() in user_input:
+                    metric_found = True
+                else:
+                    # Check conversation history for metric references
+                    for message in conversation:
+                        content = message.get('content', '').lower()
+                        if metric_id.lower() in content:
+                            metric_found = True
+                            break
+                
+                # If district is specified, also check for district match
+                if metric_found and district:
+                    district_found = False
+                    district_terms = [f"district {district}", f"district{district}", district]
+                    
+                    for term in district_terms:
+                        if term.lower() in user_input:
+                            district_found = True
+                            break
+                    
+                    if not district_found:
+                        for message in conversation:
+                            content = message.get('content', '').lower()
+                            for term in district_terms:
+                                if term.lower() in content:
+                                    district_found = True
+                                    break
+                            if district_found:
+                                break
+                    
+                    metric_found = district_found
+                
+                if metric_found:
+                    # Parse timestamp
+                    timestamp_str = session_data.get('timestamp')
+                    if timestamp_str:
+                        try:
+                            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                            if last_timestamp is None or timestamp > last_timestamp:
+                                last_timestamp = timestamp
+                                last_analysis = {
+                                    'session_id': session_data.get('session_id'),
+                                    'timestamp': timestamp_str,
+                                    'user_input': session_data.get('user_input'),
+                                    'success': session_data.get('success', False),
+                                    'total_execution_time_ms': session_data.get('total_execution_time_ms'),
+                                    'conversation_length': len(conversation),
+                                    'tool_calls_count': len(session_data.get('tool_calls', [])),
+                                    'final_response_preview': session_data.get('final_response', '')[:200] + '...' if session_data.get('final_response', '') else None
+                                }
+                        except ValueError:
+                            # Skip sessions with invalid timestamps
+                            continue
+                            
+            except (json.JSONDecodeError, KeyError) as e:
+                # Skip invalid session files
+                logger.warning(f"Skipping invalid session file {session_file}: {e}")
+                continue
+        
+        return JSONResponse(content={
+            "status": "success",
+            "last_analysis": last_analysis,
+            "message": "Found last analysis" if last_analysis else "No analysis found for this metric"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting last analysis for metric {metric_id}: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Error retrieving last analysis: {str(e)}"
             }
         )
