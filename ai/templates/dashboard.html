@@ -278,6 +278,38 @@
             background-color: var(--text-primary);
             transition: width 0.3s ease;
         }
+        
+        /* Lazy Loading Styles */
+        .lazy-metric {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .lazy-metric:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .lazy-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 16px;
+            opacity: 0.6;
+        }
+        
+        .lazy-metric.loading .lazy-indicator {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        .lazy-metric.loaded .lazy-indicator {
+            display: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -287,6 +319,7 @@
     </div>
     
     <div class="metrics-container">
+        <!-- Core Metrics (Load Immediately) -->
         <div class="metric-box">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
@@ -308,7 +341,7 @@
             <div class="metric-value">--</div>
         </div>
         
-        <div class="metric-box" id="total-metrics">
+        <div class="metric-box" id="total-metrics" style="cursor: pointer;" onclick="window.location.href='/backend/metric-control'">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">📈</div>
@@ -316,56 +349,89 @@
             <div class="metric-value">--</div>
         </div>
         
-        <div class="metric-box" id="time-series-metadata">
+        <!-- New Agent Sessions Metric -->
+        <div class="metric-box" id="agent-sessions" style="cursor: pointer;" onclick="window.location.href='/backend/evals-interface'">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">🤖</div>
+            <div class="metric-title">Agent Sessions</div>
+            <div class="metric-value">--</div>
+            <div class="metric-subvalues">
+                <div class="metric-subvalue success-rate">Success Rate: --</div>
+                <div class="metric-subvalue avg-time">Avg Time: --</div>
+            </div>
+        </div>
+        
+        <!-- New Writeups Metric -->
+        <div class="metric-box" id="writeups-count" style="cursor: pointer;" onclick="window.location.href='/api/writeups'">
+            <div class="metric-box-top-right"></div>
+            <div class="metric-box-bottom-left"></div>
+            <div class="metric-icon">📝</div>
+            <div class="metric-title">Write-ups</div>
+            <div class="metric-value">--</div>
+            <div class="metric-subvalues">
+                <div class="metric-subvalue recent">Recent: --</div>
+                <div class="metric-subvalue completed">Completed: --</div>
+            </div>
+        </div>
+        
+        <!-- Lazy Load Metrics (Click to Load) -->
+        <div class="metric-box lazy-metric" id="time-series-metadata" onclick="loadLazyMetric('time-series-metadata')">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">📝</div>
             <div class="metric-title">Time Series Metadata</div>
-            <div class="metric-value">--</div>
+            <div class="metric-value">Click to load</div>
+            <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box" id="anomalies">
+        <div class="metric-box lazy-metric" id="anomalies" onclick="loadLazyMetric('anomalies')">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">⚠️</div>
             <div class="metric-title">Anomalies</div>
-            <div class="metric-value">--</div>
+            <div class="metric-value">Click to load</div>
             <div class="metric-subvalues">
                 <div class="metric-subvalue out-of-bounds">Out of bounds: --</div>
                 <div class="metric-subvalue in-bounds">In bounds: --</div>
             </div>
+            <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box" id="maps-count" style="cursor: pointer;" onclick="openMapsWithRecentExpanded()">
+        <div class="metric-box lazy-metric" id="maps-count" onclick="loadLazyMetric('maps-count')">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">🗺️</div>
             <div class="metric-title">Generated Maps</div>
-            <div class="metric-value">--</div>
+            <div class="metric-value">Click to load</div>
+            <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box" id="postgres-size">
+        <div class="metric-box lazy-metric" id="postgres-size" onclick="loadLazyMetric('postgres-size')">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">🗄️</div>
             <div class="metric-title">PostgreSQL Size</div>
-            <div class="metric-value">--</div>
+            <div class="metric-value">Click to load</div>
+            <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box" id="vectordb-size">
+        <div class="metric-box lazy-metric" id="vectordb-size" onclick="loadLazyMetric('vectordb-size')">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">📈</div>
             <div class="metric-title">Vector DB Size</div>
-            <div class="metric-value">--</div>
+            <div class="metric-value">Click to load</div>
+            <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box" id="time-series-data">
+        <div class="metric-box lazy-metric" id="time-series-data" onclick="loadLazyMetric('time-series-data')">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">📊</div>
             <div class="metric-title">Time Series Data</div>
-            <div class="metric-value">--</div>
+            <div class="metric-value">Click to load</div>
+            <div class="lazy-indicator">⏳</div>
         </div>
     </div>
     
@@ -403,8 +469,8 @@
                 return num.toString();
             }
             
-            // Initial load of dashboard data
-            loadDashboardData();
+            // Initial load of core dashboard data
+            loadCoreDashboardData();
             
             // Set up refresh button
             document.getElementById('refresh-btn').addEventListener('click', function() {
@@ -416,7 +482,7 @@
                     box.classList.add('loading');
                 });
                 
-                loadDashboardData().finally(() => {
+                loadCoreDashboardData().finally(() => {
                     this.disabled = false;
                     this.innerHTML = '<span class="refresh-icon">↻</span> Refresh Data';
                     
@@ -427,36 +493,86 @@
                 });
             });
             
-            // Function to load all dashboard data
-            async function loadDashboardData() {
+            // Function to load core dashboard data (immediate load)
+            async function loadCoreDashboardData() {
                 try {
-                    // Load all metrics
-                    const [datasetsData, timeSeriesData, anomaliesData, postgresData, vectordbData, timeSeriesDataCount, totalMetricsData, mapsData] = await Promise.all([
+                    // Load only core metrics immediately
+                    const [datasetsData, totalMetricsData, sessionsData, writeupsData] = await Promise.all([
                         fetchDatasetsCount(),
-                        fetchTimeSeriesCount(),
-                        fetchAnomaliesCount(),
-                        fetchPostgresSize(),
-                        fetchVectorDBSize(),
-                        fetchTimeSeriesDataCount(),
                         fetchTotalMetricsCount(),
-                        fetchMapsCount()
+                        fetchSessionsSummary(),
+                        fetchWriteupsSummary()
                     ]);
                     
-                    // Update UI with the data
+                    // Update UI with the core data
                     updateDatasetMetric(datasetsData);
-                    updateTimeSeriesMetric(timeSeriesData);
-                    updateAnomaliesMetric(anomaliesData);
-                    updatePostgresMetric(postgresData);
-                    updateVectorDBMetric(vectordbData);
-                    updateTimeSeriesDataMetric(timeSeriesDataCount);
                     updateTotalMetricsMetric(totalMetricsData);
-                    updateMapsMetric(mapsData);
+                    updateSessionsMetric(sessionsData);
+                    updateWriteupsMetric(writeupsData);
                     
                     // Load system status
                     await loadSystemStatus();
                     
                 } catch (error) {
-                    console.error('Error loading dashboard data:', error);
+                    console.error('Error loading core dashboard data:', error);
+                }
+            }
+            
+            // Function to load lazy metric data
+            async function loadLazyMetric(metricId) {
+                const box = document.getElementById(metricId);
+                if (box.classList.contains('loaded') || box.classList.contains('loading')) {
+                    return; // Already loaded or loading
+                }
+                
+                box.classList.add('loading');
+                const indicator = box.querySelector('.lazy-indicator');
+                if (indicator) {
+                    indicator.textContent = '⏳';
+                }
+                
+                try {
+                    let data;
+                    switch (metricId) {
+                        case 'time-series-metadata':
+                            data = await fetchTimeSeriesCount();
+                            updateTimeSeriesMetric(data);
+                            break;
+                        case 'anomalies':
+                            data = await fetchAnomaliesCount();
+                            updateAnomaliesMetric(data);
+                            break;
+                        case 'maps-count':
+                            data = await fetchMapsCount();
+                            updateMapsMetric(data);
+                            break;
+                        case 'postgres-size':
+                            data = await fetchPostgresSize();
+                            updatePostgresMetric(data);
+                            break;
+                        case 'vectordb-size':
+                            data = await fetchVectorDBSize();
+                            updateVectorDBMetric(data);
+                            break;
+                        case 'time-series-data':
+                            data = await fetchTimeSeriesDataCount();
+                            updateTimeSeriesDataMetric(data);
+                            break;
+                    }
+                    
+                    box.classList.remove('loading');
+                    box.classList.add('loaded');
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                    }
+                    
+                } catch (error) {
+                    console.error(`Error loading ${metricId}:`, error);
+                    box.classList.remove('loading');
+                    const valueEl = box.querySelector('.metric-value');
+                    if (valueEl) {
+                        valueEl.textContent = 'Error';
+                    }
                 }
             }
             
@@ -667,6 +783,87 @@
                 }
             }
             
+            // Function to fetch sessions summary
+            async function fetchSessionsSummary() {
+                try {
+                    const response = await fetch('/backend/api/sessions-summary');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch sessions summary');
+                    }
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        const summary = data.summary;
+                        const totalSessions = summary.total_sessions || 0;
+                        
+                        // Calculate success rate
+                        let successRate = 0;
+                        if (summary.model_success_rates && Object.keys(summary.model_success_rates).length > 0) {
+                            const rates = Object.values(summary.model_success_rates);
+                            successRate = rates.reduce((a, b) => a + b, 0) / rates.length;
+                        }
+                        
+                        // Calculate average time (simplified - using first session if available)
+                        let avgTime = 'N/A';
+                        if (summary.sessions && summary.sessions.length > 0) {
+                            const session = summary.sessions[0];
+                            if (session.execution_time_seconds) {
+                                avgTime = `${session.execution_time_seconds.toFixed(1)}s`;
+                            }
+                        }
+                        
+                        return {
+                            total: totalSessions,
+                            success_rate: successRate.toFixed(1),
+                            avg_time: avgTime
+                        };
+                    }
+                    
+                    return { total: 'Error', success_rate: 'Error', avg_time: 'Error' };
+                } catch (error) {
+                    console.error('Error fetching sessions summary:', error);
+                    return { total: 'Error', success_rate: 'Error', avg_time: 'Error' };
+                }
+            }
+            
+            // Function to fetch writeups summary
+            async function fetchWriteupsSummary() {
+                try {
+                    const response = await fetch('/api/writeups/list');
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch writeups summary');
+                    }
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        const writeups = data.writeups || [];
+                        const total = writeups.length;
+                        
+                        // Count completed writeups
+                        const completed = writeups.filter(w => w.status === 'completed').length;
+                        
+                        // Count recent writeups (last 7 days)
+                        const recent = writeups.filter(w => {
+                            const createdAt = new Date(w.created_at);
+                            const weekAgo = new Date();
+                            weekAgo.setDate(weekAgo.getDate() - 7);
+                            return createdAt > weekAgo;
+                        }).length;
+                        
+                        return {
+                            total: total,
+                            completed: completed,
+                            recent: recent
+                        };
+                    }
+                    
+                    return { total: 'Error', completed: 'Error', recent: 'Error' };
+                } catch (error) {
+                    console.error('Error fetching writeups summary:', error);
+                    return { total: 'Error', completed: 'Error', recent: 'Error' };
+                }
+            }
+            
             // Function to update total metrics metric
             function updateTotalMetricsMetric(data) {
                 const box = document.getElementById('total-metrics');
@@ -684,6 +881,30 @@
                 const valueEl = box.querySelector('.metric-value');
                 
                 valueEl.textContent = typeof data.count === 'number' ? formatNumber(data.count) : data.count;
+            }
+            
+            // Function to update sessions metric
+            function updateSessionsMetric(data) {
+                const box = document.getElementById('agent-sessions');
+                const valueEl = box.querySelector('.metric-value');
+                const successRateEl = box.querySelector('.metric-subvalue.success-rate');
+                const avgTimeEl = box.querySelector('.metric-subvalue.avg-time');
+                
+                valueEl.textContent = typeof data.total === 'number' ? formatNumber(data.total) : data.total;
+                successRateEl.textContent = `Success Rate: ${data.success_rate}%`;
+                avgTimeEl.textContent = `Avg Time: ${data.avg_time}`;
+            }
+            
+            // Function to update writeups metric
+            function updateWriteupsMetric(data) {
+                const box = document.getElementById('writeups-count');
+                const valueEl = box.querySelector('.metric-value');
+                const recentEl = box.querySelector('.metric-subvalue.recent');
+                const completedEl = box.querySelector('.metric-subvalue.completed');
+                
+                valueEl.textContent = typeof data.total === 'number' ? formatNumber(data.total) : data.total;
+                recentEl.textContent = `Recent: ${typeof data.recent === 'number' ? formatNumber(data.recent) : data.recent}`;
+                completedEl.textContent = `Completed: ${typeof data.completed === 'number' ? formatNumber(data.completed) : data.completed}`;
             }
             
             // Function to open map generator with recent maps expanded

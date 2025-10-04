@@ -209,10 +209,24 @@ def store_time_series_in_db(connection, chart_data, metadata):
         inserted_count = 0
         with connection.cursor() as cursor:
             for point in chart_data:
-                # Convert time_period to proper date format for database storage
+                # Convert time_period to proper format for database storage
                 time_period = point['time_period']
-                if isinstance(time_period, str) and 'W' in time_period and '-' in time_period:
-                    # This is likely an ISO week string, convert to date
+                
+                # Check if this is weekly data by looking at the metadata
+                is_weekly = False
+                if 'period_type' in metadata and metadata['period_type'] == 'week':
+                    is_weekly = True
+                
+                if isinstance(time_period, str) and 'W' in time_period and '-' in time_period and is_weekly:
+                    # For weekly data, convert ISO week to the Monday of that week for consistent date storage
+                    try:
+                        db_date = convert_iso_week_to_date(time_period)
+                        logging.info(f"Converting weekly ISO week {time_period} to Monday date: {db_date}")
+                    except Exception as e:
+                        logging.error(f"Failed to convert weekly ISO week '{time_period}' to date: {e}")
+                        continue
+                elif isinstance(time_period, str) and 'W' in time_period and '-' in time_period and not is_weekly:
+                    # This is likely an ISO week string for non-weekly data, convert to date
                     try:
                         db_date = convert_iso_week_to_date(time_period)
                     except Exception as e:

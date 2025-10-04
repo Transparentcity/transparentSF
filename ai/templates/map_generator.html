@@ -3087,8 +3087,10 @@
             
             // Add click handler for dots
             liveMap.on('click', 'preview-points', function(e) {
+                console.log('🖱️ Map generator point clicked!', e.features[0]);
                 const coordinates = e.features[0].geometry.coordinates.slice();
                 const properties = e.features[0].properties;
+                console.log('Map generator properties:', properties);
                 
                 let tooltipContent = `<div class="tsf-tooltip">`;
                 tooltipContent += `<div class="tsf-tooltip-title">${properties.title}</div>`;
@@ -3105,6 +3107,95 @@
                         <span class="tsf-tooltip-label">Description:</span>
                         <span class="tsf-tooltip-value">${properties.description}</span>
                     </div>`;
+                }
+                
+                // Add additional tooltip fields including media URLs
+                console.log('Map generator tooltip_fields:', properties.tooltip_fields);
+                if (properties.tooltip_fields) {
+                    let tooltipFields = properties.tooltip_fields;
+                    console.log('Raw tooltip_fields:', tooltipFields, typeof tooltipFields);
+                    if (typeof tooltipFields === 'string') {
+                        try { 
+                            tooltipFields = JSON.parse(tooltipFields); 
+                            console.log('Parsed tooltip_fields:', tooltipFields);
+                        } catch (err) { 
+                            console.log('Failed to parse tooltip_fields:', err);
+                            tooltipFields = {}; 
+                        }
+                    }
+                    
+                    for (const [field, value] of Object.entries(tooltipFields)) {
+                        console.log(`Map generator processing field: ${field}, value:`, value, `type: ${typeof value}`);
+                        if (field === 'title' || field === 'description' || field === 'value' || field === 'count' || field === 'scale') continue;
+                        if (!value || value === '') continue;
+                        
+                        const displayKey = field.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                        
+                        // Check if this is a media URL field
+                        if (field.toLowerCase().includes('media_url') || field.toLowerCase().includes('mediaurl')) {
+                            console.log(`Map generator found media URL field: ${field}`, value);
+                        }
+                        
+                        // Special handling for media URLs
+                        if (field.toLowerCase().includes('media_url') || field.toLowerCase().includes('mediaurl')) {
+                            console.log(`🖼️ Map generator processing media URL field: ${field}`, value);
+                            // Extract URL from nested object or use direct string
+                            let mediaUrl = value;
+                            try {
+                                // Handle stringified JSON objects like "{'url': 'https://...'}"
+                                if (typeof value === 'string' && value.includes("'url':")) {
+                                    console.log('Map generator parsing stringified JSON with single quotes');
+                                    const urlMatch = value.match(/'url':\s*'([^']+)'/);
+                                    if (urlMatch) {
+                                        mediaUrl = urlMatch[1];
+                                        console.log('Map generator extracted URL from single quotes:', mediaUrl);
+                                    }
+                                }
+                                // Handle actual JSON objects
+                                else if (typeof value === 'object' && value.url) {
+                                    console.log('Map generator extracting URL from object');
+                                    mediaUrl = value.url;
+                                    console.log('Map generator extracted URL from object:', mediaUrl);
+                                }
+                                // Handle JSON string objects
+                                else if (typeof value === 'string' && value.startsWith('{')) {
+                                    console.log('Map generator parsing JSON string');
+                                    const parsed = JSON.parse(value.replace(/'/g, '"'));
+                                    if (parsed.url) {
+                                        mediaUrl = parsed.url;
+                                        console.log('Map generator extracted URL from JSON string:', mediaUrl);
+                                    }
+                                }
+                            } catch (e) {
+                                console.log('❌ Map generator failed to parse media URL:', value, e);
+                            }
+                            
+                            console.log(`Map generator final mediaUrl: ${mediaUrl}, valid: ${mediaUrl && mediaUrl.startsWith('http')}`);
+                            
+                            // Only show media if we have a valid URL
+                            if (mediaUrl && mediaUrl.startsWith('http')) {
+                                console.log('✅ Map generator adding media thumbnail to tooltip');
+                                tooltipContent += `<div class="tsf-tooltip-row">
+                                    <span class="tsf-tooltip-label">${displayKey}:</span>
+                                    <div class="tsf-tooltip-value">
+                                        <a href="${mediaUrl}" target="_blank" class="media-link">
+                                            <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
+                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                                 onmouseover="showImagePreview(event, '${mediaUrl}')"
+                                                 onmouseout="hideImagePreview()"
+                                                 style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer; margin-top: 5px;">
+                                            <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
+                                        </a>
+                                    </div>
+                                </div>`;
+                            }
+                        } else {
+                            tooltipContent += `<div class="tsf-tooltip-row">
+                                <span class="tsf-tooltip-label">${displayKey}:</span>
+                                <span class="tsf-tooltip-value">${value}</span>
+                            </div>`;
+                        }
+                    }
                 }
                 
                 tooltipContent += `</div>`;
@@ -3838,6 +3929,42 @@
                 slider.addEventListener('input', onTimelineSliderChange);
             }
         });
+
+        // Image preview functionality
+        let imagePreview = null;
+
+        function showImagePreview(event, imageUrl) {
+            // Remove any existing preview
+            hideImagePreview();
+            
+            // Create preview element
+            imagePreview = document.createElement('div');
+            imagePreview.className = 'image-preview-overlay';
+            imagePreview.innerHTML = `
+                <div class="image-preview-container">
+                    <img src="${imageUrl}" alt="Image Preview" class="image-preview" 
+                         onerror="this.parentElement.innerHTML='<div class=\\'preview-error\\'>Failed to load image</div>'">
+                </div>
+            `;
+            
+            // Position near the mouse cursor
+            const rect = event.target.getBoundingClientRect();
+            imagePreview.style.position = 'fixed';
+            imagePreview.style.left = (rect.right + 10) + 'px';
+            imagePreview.style.top = rect.top + 'px';
+            imagePreview.style.zIndex = '10000';
+            imagePreview.style.pointerEvents = 'none';
+            
+            document.body.appendChild(imagePreview);
+        }
+
+        function hideImagePreview() {
+            if (imagePreview) {
+                imagePreview.remove();
+                imagePreview = null;
+            }
+        }
+
     </script>
 </body>
 </html>

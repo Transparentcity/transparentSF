@@ -30,6 +30,21 @@ from tools.structured_query_parser import (
 
 logger = logging.getLogger(__name__)
 
+def get_period_field_name(period_type: str) -> str:
+    """
+    Get the field name used for the time period in structured queries.
+    
+    Args:
+        period_type: 'month' or 'year'
+        
+    Returns:
+        Field name used in the query (e.g., 'month_period', 'year_period')
+    """
+    if period_type == 'year':
+        return 'year_period'
+    else:  # month or default
+        return 'month_period'
+
 def get_time_ranges(period_type: str, is_fiscal_year: bool = False) -> Tuple[Dict[str, date], Dict[str, date]]:
     """
     Calculate recent and comparison periods based on period type.
@@ -161,8 +176,8 @@ def process_metric_analysis_structured(metric_info: Dict[str, Any], period_type:
     
     # Set up filter conditions for date filtering
     # Use the actual field names from the query, not abstract field names
-    # For structured queries, the period field is typically 'date' or matches the query output
-    actual_period_field = 'date'  # Structured queries typically use 'date' as the period field
+    # For structured queries, match the field name created by the query transformation
+    actual_period_field = get_period_field_name(period_type)
     
     filter_conditions = []
     if period_type == 'year':
@@ -250,8 +265,8 @@ def process_metric_analysis_structured(metric_info: Dict[str, Any], period_type:
         from generate_metric_analysis import process_single_analysis, save_analysis_files
         
         # Determine period_field and value_field based on period_type
-        # For structured queries, the period field is typically 'date' as returned by the query
-        period_field = 'date'  # Structured queries return 'date' field
+        # For structured queries, match the field name created by the query transformation
+        period_field = get_period_field_name(period_type)
         value_field = 'value'
         
         # Determine if this uses averaging
@@ -507,12 +522,11 @@ def transform_query_for_period_structured(
     # Handle YTD query transformation
     if is_ytd_query:
         # Generate appropriate date_trunc based on period_type
+        period_field = get_period_field_name(period_type)
         if period_type == 'year':
             date_trunc = f"date_trunc_y({date_field})"
-            period_field = "year_period"
         else:  # month
             date_trunc = f"date_trunc_ym({date_field})"
-            period_field = "month_period"
         
         # Build category fields part
         category_select = ""
@@ -599,12 +613,11 @@ def transform_query_for_period_structured(
     aggregation_function = query_info['aggregation_function']
     
     # Build date truncation based on period type
+    period_field = get_period_field_name(period_type)
     if period_type == 'year':
         date_trunc = f"date_trunc_y({date_field})"
-        period_field = 'year_period'
     else:  # month
         date_trunc = f"date_trunc_ym({date_field})"
-        period_field = 'month_period'
     
     # Build category fields for SELECT and GROUP BY
     category_select = ""

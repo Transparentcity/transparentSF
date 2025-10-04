@@ -1361,9 +1361,16 @@ def process_single_analysis(context_variables, category_fields, period_type, per
             continue
         
         # Skip supervisor_district if we're doing district-specific analysis (but not for citywide)
-        if district is not None and district > 0 and category_field_name == 'supervisor_district':
-            logging.info(f"Skipping supervisor_district category for district-specific analysis (district {district})")
-            continue
+        if district is not None:
+            # Convert district to int for comparison if it's a string
+            try:
+                district_num = int(float(district)) if isinstance(district, str) else int(district)
+                if district_num > 0 and category_field_name == 'supervisor_district':
+                    logging.info(f"Skipping supervisor_district category for district-specific analysis (district {district})")
+                    continue
+            except (ValueError, TypeError):
+                # If conversion fails, treat as non-numeric and don't skip
+                pass
         
         logging.info(f"Processing category field: {category_field_name} for {query_name}")
         

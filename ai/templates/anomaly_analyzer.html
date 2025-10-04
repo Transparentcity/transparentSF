@@ -157,6 +157,16 @@
             gap: 6px;
         }
         
+        .month-selectors {
+            display: flex;
+            gap: 16px;
+            align-items: end;
+        }
+        
+        .month-selectors .control-group {
+            flex: 1;
+        }
+        
         label {
             font-size: 13px;
             font-weight: 500;
@@ -956,6 +966,24 @@
                 </select>
             </div>
             
+            <div class="month-selectors">
+                <div class="control-group">
+                    <label for="recent-month" id="recent-period-label">Recent Month</label>
+                    <select id="recent-month">
+                        <option value="">Auto-detect</option>
+                        <!-- Dynamically populated based on period type -->
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="comparison-month" id="comparison-period-label">Comparison Month</label>
+                    <select id="comparison-month">
+                        <option value="">Auto-detect</option>
+                        <!-- Dynamically populated based on period type -->
+                    </select>
+                </div>
+            </div>
+            
             <div class="button-group">
                 <button id="refresh-button">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1100,6 +1128,8 @@
         const limitSelect = document.getElementById('limit-select');
         const objectIdInput = document.getElementById('object-id');
         const districtSelect = document.getElementById('district');
+        const recentMonthSelect = document.getElementById('recent-month');
+        const comparisonMonthSelect = document.getElementById('comparison-month');
         const refreshButton = document.getElementById('refresh-button');
         const clearFiltersButton = document.getElementById('clear-filters');
         const loader = document.getElementById('loader');
@@ -1110,6 +1140,96 @@
         const errorText = document.getElementById('error-text');
         const retryButton = document.getElementById('retry-button');
 
+        // Populate period dropdowns based on period type
+        function populatePeriodDropdowns(periodType = 'month') {
+            const today = new Date();
+            const periods = [];
+            const recentPeriodLabel = document.getElementById('recent-period-label');
+            const comparisonPeriodLabel = document.getElementById('comparison-period-label');
+            
+            // Clear existing options except the first one (Auto-detect)
+            while (recentMonthSelect.options.length > 1) {
+                recentMonthSelect.remove(1);
+            }
+            while (comparisonMonthSelect.options.length > 1) {
+                comparisonMonthSelect.remove(1);
+            }
+            
+            // Reset selected values to Auto-detect
+            recentMonthSelect.value = '';
+            comparisonMonthSelect.value = '';
+            
+            if (periodType === 'week') {
+                // Update labels for weeks
+                recentPeriodLabel.textContent = 'Recent Week';
+                comparisonPeriodLabel.textContent = 'Comparison Week';
+                
+                // Generate last 24 weeks
+                for (let i = 0; i < 24; i++) {
+                    const date = new Date(today);
+                    date.setDate(date.getDate() - (i * 7));
+                    
+                    // Get Monday of that week
+                    const dayOfWeek = date.getDay();
+                    const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+                    const monday = new Date(date.setDate(diff));
+                    
+                    // Format value as YYYY-MM-DD (Monday of the week)
+                    const year = monday.getFullYear();
+                    const month = (monday.getMonth() + 1).toString().padStart(2, '0');
+                    const day = monday.getDate().toString().padStart(2, '0');
+                    const value = `${year}-${month}-${day}`;
+                    
+                    // Calculate week number
+                    const startOfYear = new Date(monday.getFullYear(), 0, 1);
+                    const days = Math.floor((monday - startOfYear) / (24 * 60 * 60 * 1000));
+                    const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+                    
+                    // Format label as "Week X, YYYY (Mon, Month Day)"
+                    const label = `Week ${weekNumber}, ${year} (${monday.toLocaleDateString('en-US', { 
+                        weekday: 'short',
+                        month: 'short', 
+                        day: 'numeric'
+                    })})`;
+                    
+                    periods.push({ value, label });
+                }
+            } else {
+                // Update labels for months (default)
+                recentPeriodLabel.textContent = 'Recent Month';
+                comparisonPeriodLabel.textContent = 'Comparison Month';
+                
+                // Generate last 24 months
+                for (let i = 0; i < 24; i++) {
+                    const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                    const year = date.getFullYear();
+                    const month = date.getMonth() + 1;
+                    const monthStr = month.toString().padStart(2, '0');
+                    const value = `${year}-${monthStr}`;
+                    const label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    periods.push({ value, label });
+                }
+            }
+            
+            // Populate recent period dropdown
+            periods.forEach(period => {
+                const option = document.createElement('option');
+                option.value = period.value;
+                option.textContent = period.label;
+                recentMonthSelect.appendChild(option);
+            });
+            
+            // Populate comparison period dropdown
+            periods.forEach(period => {
+                const option = document.createElement('option');
+                option.value = period.value;
+                option.textContent = period.label;
+                comparisonMonthSelect.appendChild(option);
+            });
+        }
+        
+        // Initialize period dropdowns on page load (default to month)
+        populatePeriodDropdowns('month');
         
         // Modal elements (kept for compatibility but not used)
         const analysisModal = document.getElementById('analysis-modal');
@@ -1140,6 +1260,8 @@
         // Event listeners
         refreshButton.addEventListener('click', fetchAllData);
         periodSelect.addEventListener('change', function() {
+            // Update the period dropdowns when period type changes
+            populatePeriodDropdowns(periodSelect.value);
             fetchAllData();
             // Also update headers if we have stored data
             if (lastMetricData) {
@@ -1215,6 +1337,8 @@
             const limit = limitSelect.value;
             const objectId = objectIdInput.value.trim();
             const district = districtSelect.value;
+            const recentMonth = recentMonthSelect.value;
+            const comparisonMonth = comparisonMonthSelect.value;
             
             // Update header based on district
             const panelTitle = document.getElementById('panel-title');
@@ -1232,8 +1356,8 @@
             
             // Fetch both metric changes and anomalies
             Promise.all([
-                fetchTopMetricChanges(periodType, limit, objectId, district),
-                fetchAnomalies(periodType, limit, objectId, district)
+                fetchTopMetricChanges(periodType, limit, objectId, district, recentMonth, comparisonMonth),
+                fetchAnomalies(periodType, limit, objectId, district, recentMonth, comparisonMonth)
             ]).then(([metricData, anomalyData]) => {
                 // Hide loader
                 loader.style.display = 'none';
@@ -1250,7 +1374,7 @@
         }
         
         // Function to fetch top metric changes
-        function fetchTopMetricChanges(periodType, limit, objectId, district) {
+        function fetchTopMetricChanges(periodType, limit, objectId, district, recentMonth, comparisonMonth) {
             // Build query parameters
             const params = new URLSearchParams({
                 period_type: periodType,
@@ -1260,6 +1384,14 @@
             
             if (objectId && objectId.trim() !== '') {
                 params.append('object_id', objectId.trim());
+            }
+            
+            if (recentMonth && recentMonth.trim() !== '') {
+                params.append('recent_month', recentMonth.trim());
+            }
+            
+            if (comparisonMonth && comparisonMonth.trim() !== '') {
+                params.append('comparison_month', comparisonMonth.trim());
             }
             
             // Make API call and return promise
@@ -1278,7 +1410,8 @@
                             target_recent_period: data.target_recent_period,
                             target_comparison_period: data.target_comparison_period,
                             positive_changes_length: data.positive_changes ? data.positive_changes.length : 0,
-                            negative_changes_length: data.negative_changes ? data.negative_changes.length : 0
+                            negative_changes_length: data.negative_changes ? data.negative_changes.length : 0,
+                            no_change_length: data.no_change ? data.no_change.length : 0
                         });
                         
                         if (data.target_recent_period && data.target_comparison_period) {
@@ -1292,13 +1425,15 @@
                             // Fallback to individual result periods
                             periods = data.positive_changes && data.positive_changes.length > 0 ? 
                                 data.positive_changes[0] : 
-                                (data.negative_changes && data.negative_changes.length > 0 ? data.negative_changes[0] : null);
+                                (data.negative_changes && data.negative_changes.length > 0 ? data.negative_changes[0] : 
+                                (data.no_change && data.no_change.length > 0 ? data.no_change[0] : null));
                             console.log('🔍 FRONTEND DEBUG: Using fallback periods:', periods);
                         }
                         
                         return {
                             positive_changes: data.positive_changes || [],
                             negative_changes: data.negative_changes || [],
+                            no_change: data.no_change || [],
                             stale_data_warnings: data.stale_data_warnings || 0,
                             periods: periods
                         };
@@ -1335,7 +1470,8 @@
             
             // Check if we have any data at all
             const hasMetricData = (metricData.positive_changes && metricData.positive_changes.length > 0) || 
-                                 (metricData.negative_changes && metricData.negative_changes.length > 0);
+                                 (metricData.negative_changes && metricData.negative_changes.length > 0) ||
+                                 (metricData.no_change && metricData.no_change.length > 0);
             const hasAnomalyData = (anomalyData.positive_anomalies && anomalyData.positive_anomalies.length > 0) || 
                                   (anomalyData.negative_anomalies && anomalyData.negative_anomalies.length > 0);
             
@@ -1378,6 +1514,17 @@
                 metricData.negative_changes.forEach(metric => appendMetricRow(metric));
             }
             
+            // Display No Change section
+            if (metricData.no_change && metricData.no_change.length > 0) {
+                // Add section header for no change metrics
+                const noChangeHeader = document.createElement('tr');
+                noChangeHeader.className = 'section-header';
+                noChangeHeader.innerHTML = `<td colspan="8">📊 No Change (Stable Metrics)</td>`;
+                metricsTbody.appendChild(noChangeHeader);
+                
+                metricData.no_change.forEach(metric => appendMetricRow(metric));
+            }
+            
             // Display Negative Anomalies section
             if (anomalyData.negative_anomalies && anomalyData.negative_anomalies.length > 0) {
                 // Add section header for negative anomalies
@@ -1391,7 +1538,7 @@
         }
         
         // Function to fetch anomalies
-        function fetchAnomalies(periodType, limit, objectId, district) {
+        function fetchAnomalies(periodType, limit, objectId, district, recentMonth, comparisonMonth) {
             // Build API URL
             let apiUrl = `/anomaly-analyzer/api/query-anomalies?period_type=${periodType}&limit=${limit}&only_active=true&query_type=by_anomaly_severity`;
             
@@ -1401,6 +1548,14 @@
             
             if (district && district !== 'all') {
                 apiUrl += `&district=${encodeURIComponent(district)}`;
+            }
+            
+            if (recentMonth && recentMonth.trim() !== '') {
+                apiUrl += `&recent_month=${encodeURIComponent(recentMonth)}`;
+            }
+            
+            if (comparisonMonth && comparisonMonth.trim() !== '') {
+                apiUrl += `&comparison_month=${encodeURIComponent(comparisonMonth)}`;
             }
             
             // Fetch data and return promise
@@ -1442,6 +1597,8 @@
             // Default values
             let previousText = 'Previous';
             let recentText = 'Recent';
+            let previousTooltip = '';
+            let recentTooltip = '';
             
             // Use provided metricData or fall back to stored data
             const dataToUse = metricData || lastMetricData;
@@ -1455,23 +1612,44 @@
             // If we have period data from metrics, use it
             if (dataToUse && dataToUse.periods) {
                 if (dataToUse.periods.previous_period) {
-                    previousText = formatPeriodLabel(dataToUse.periods.previous_period, periodType);
+                    const formattedData = formatPeriodLabel(dataToUse.periods.previous_period, periodType, true);
+                    previousText = formattedData.label;
+                    previousTooltip = formattedData.tooltip;
                 }
                 if (dataToUse.periods.recent_period) {
-                    recentText = formatPeriodLabel(dataToUse.periods.recent_period, periodType);
+                    const formattedData = formatPeriodLabel(dataToUse.periods.recent_period, periodType, true);
+                    recentText = formattedData.label;
+                    recentTooltip = formattedData.tooltip;
                 }
             }
             
             previousHeader.textContent = previousText;
             recentHeader.textContent = recentText;
+            
+            // Set tooltips for weekly periods
+            if (previousTooltip) {
+                previousHeader.title = previousTooltip;
+            } else {
+                previousHeader.removeAttribute('title');
+            }
+            
+            if (recentTooltip) {
+                recentHeader.title = recentTooltip;
+            } else {
+                recentHeader.removeAttribute('title');
+            }
         }
         
         // Function to format period labels
-        function formatPeriodLabel(periodValue, periodType) {
-            if (!periodValue) return 'Previous';
+        // If returnObject is true, returns {label, tooltip}, otherwise just returns the label string
+        function formatPeriodLabel(periodValue, periodType, returnObject = false) {
+            if (!periodValue) {
+                return returnObject ? { label: 'Previous', tooltip: '' } : 'Previous';
+            }
             
             // Try to parse the period value
             let label = periodValue;
+            let tooltip = '';
             
             // For different period types, format appropriately
             switch (periodType) {
@@ -1504,13 +1682,21 @@
                     } else {
                         // Try to format as date
                         try {
-                            const date = new Date(periodValue);
+                            const date = new Date(periodValue + 'T00:00:00');
                             if (!isNaN(date.getTime())) {
                                 // Get the week number
                                 const startOfYear = new Date(date.getFullYear(), 0, 1);
                                 const days = Math.floor((date - startOfYear) / (24 * 60 * 60 * 1000));
                                 const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
                                 label = `Week ${weekNumber}, ${date.getFullYear()}`;
+                                
+                                // Create tooltip with the actual date (first day of the week)
+                                tooltip = `Week starts: ${date.toLocaleDateString('en-US', { 
+                                    weekday: 'long',
+                                    month: 'long', 
+                                    day: 'numeric', 
+                                    year: 'numeric' 
+                                })}`;
                             }
                         } catch (e) {
                             label = periodValue;
@@ -1570,7 +1756,8 @@
                     label = periodValue;
             }
             
-            return label;
+            // Return appropriate format based on returnObject parameter
+            return returnObject ? { label: label, tooltip: tooltip } : label;
         }
         
         // Function to append a metric row
@@ -1658,9 +1845,14 @@
                 <td class="${changeClass}">${formatValue(metric.delta)}</td>
                 <td class="${changeClass}">${formatPercentChange(metric.percent_change)}</td>
                 <td>
-                    <button class="action-button" onclick="analyzeMetricFromRow('${rowId}')">
-                        Analyze
-                    </button>
+                    ${metric.analysis_session_id ? 
+                        `<button class="action-button" onclick="reviewAnalysis('${metric.analysis_session_id}', 'metric', '${metric.chart_id}')" title="Analysis completed on ${new Date(metric.analysis_date).toLocaleDateString()}">
+                            <i class="fas fa-eye"></i> Review Analysis
+                        </button>` :
+                        `<button class="action-button" onclick="analyzeMetricFromRow('${rowId}')">
+                            <i class="fas fa-chart-line"></i> Analyze
+                        </button>`
+                    }
                 </td>
             `;
             
@@ -1784,7 +1976,11 @@
                 <td class="${changeClass}">${formatValue(anomaly.difference || (anomaly.recent_mean - anomaly.comparison_mean))}</td>
                 <td class="${changeClass}">${formatPercentChange(anomaly.percent_change)}</td>
                 <td>
-                    <button class="action-button" onclick="analyzeMetricChange(${JSON.stringify({
+                    ${anomaly.analysis_session_id ? 
+                        `<button class="action-button" onclick="reviewAnalysis('${anomaly.analysis_session_id}', 'anomaly', '${anomaly.id}')" title="Analysis completed on ${new Date(anomaly.analysis_date).toLocaleDateString()}">
+                            <i class="fas fa-eye"></i> Review Analysis
+                        </button>` :
+                        `<button class="action-button" onclick="analyzeMetricChange(${JSON.stringify({
                         id: anomaly.id,
                         object_name: anomaly.metric_name,
                         group_name: anomaly.group_field_name,
@@ -1799,8 +1995,9 @@
                         recent_period: anomaly.period_date,
                         period_type: anomaly.period_type
                     }).replace(/"/g, '&quot;')})">
-                        Analyze
-                    </button>
+                            <i class="fas fa-chart-line"></i> Analyze
+                        </button>`
+                    }
                 </td>
             `;
             
@@ -2401,86 +2598,14 @@ Can you help me understand:
             }
             
             if (embedMode) {
-                // In embed mode, we'll skip the modal and display the webchat directly
-                const analysisContainer = document.getElementById('metrics-results');
-                if (analysisContainer) {
-                    // Clear existing content
-                    analysisContainer.innerHTML = '';
-                    
-                    // Create a container for the webchat
-                    const webchatContainer = document.createElement('div');
-                    webchatContainer.style.width = '100%';
-                    webchatContainer.style.height = '600px';
-                    webchatContainer.style.border = '1px solid var(--neutral-gray-light)';
-                    webchatContainer.style.borderRadius = '8px';
-                    webchatContainer.style.overflow = 'hidden';
-                    webchatContainer.style.marginTop = '20px';
-                    
-                    // Create and append the webchat iframe
-                    const webchatIframe = document.createElement('iframe');
-                    webchatIframe.style.width = '100%';
-                    webchatIframe.style.height = '100%';
-                    webchatIframe.style.border = 'none';
-                    webchatIframe.style.display = 'block';
-                    
-                    // Build query parameters with structured data
-                    const params = new URLSearchParams({
-                        initialize: 'true',
-                        analyze: 'true',
-                        metric_id: metricData.id || '',
-                        metric_name: metricData.name,
-                        district: metricData.district,
-                        previous_value: metricData.previousValue,
-                        recent_value: metricData.recentValue,
-                        delta: metricData.delta,
-                        previous_period: metricData.previousPeriod,
-                        recent_period: metricData.recentPeriod,
-                        direction: metricData.direction,
-                        percent_change: metricData.percentChange,
-                        magnitude: metricData.magnitude,
-                        prompt: promptMessage
-                    });
-
-                    // Add anomaly-specific parameters if this is an anomaly
-                    if (metric.anomaly_id) {
-                        params.append('anomaly_id', metric.anomaly_id);
-                        params.append('group_name', metric.group_name);
-                        params.append('group_value', metric.group_value);
-                    }
-                    
-                    // Log the parameters being sent
-                    console.log('WebChat parameters:', params.toString());
-                    
-                    // Set chat initialization parameters
-                    webchatIframe.src = `/webchat?${params.toString()}`;
-                    
-                    // Append iframe to container
-                    webchatContainer.appendChild(webchatIframe);
-                    analysisContainer.appendChild(webchatContainer);
-                    
-                    // Hide other UI elements
-                    const metricsTable = document.getElementById('metrics-table');
-                    if (metricsTable) {
-                        metricsTable.style.display = 'none';
-                    }
-                    
-                    // Add a back button
-                    const backButton = document.createElement('button');
-                    backButton.className = 'action-button';
-                    backButton.style.marginTop = '10px';
-                    backButton.innerHTML = '<i class="fas fa-arrow-left"></i> Back to metrics';
-                    backButton.onclick = function() {
-                        // Show the metrics table again
-                        if (metricsTable) {
-                            metricsTable.style.display = 'table';
-                        }
-                        // Remove the webchat container
-                        webchatContainer.remove();
-                        backButton.remove();
-                    };
-                    
-                    analysisContainer.appendChild(backButton);
-                }
+                // In embed mode, we'll use the explainer chat system
+                // The explainer chat is handled by the parent window (backend.html)
+                // We just need to send the message to the parent
+                const message = {
+                    type: 'ANALYZE_METRIC_CHANGE',
+                    metric: metric
+                };
+                window.parent.postMessage(message, '*');
                 return;
             }
             
@@ -2523,18 +2648,31 @@ Can you help me understand:
                 };
                 mainContainer.appendChild(backButton);
                 
-                // Create container for the webchat
-                const webchatContainer = document.createElement('div');
-                webchatContainer.style.cssText = 'width: 100%; height: 600px; border: 1px solid var(--neutral-gray-light); border-radius: 8px; overflow: hidden;';
+                // Create a message container explaining the redirect
+                const messageContainer = document.createElement('div');
+                messageContainer.style.cssText = 'width: 100%; height: 400px; border: 1px solid var(--neutral-gray-light); border-radius: 8px; padding: 40px; text-align: center; background: var(--background);';
+                messageContainer.innerHTML = `
+                    <div style="margin-bottom: 20px;">
+                        <i class="fas fa-robot" style="font-size: 48px; color: var(--primary); margin-bottom: 20px;"></i>
+                    </div>
+                    <h3 style="margin-bottom: 15px; color: var(--text-primary);">Analysis Ready</h3>
+                    <p style="margin-bottom: 20px; color: var(--text-secondary);">
+                        The analysis for "${metricData.name}" is ready to begin. 
+                        Click the button below to open the AI analysis interface.
+                    </p>
+                    <button id="open-analysis-btn" class="action-button" style="padding: 12px 24px; font-size: 16px;">
+                        <i class="fas fa-comments"></i> Start AI Analysis
+                    </button>
+                `;
                 
-                // Create and append the webchat iframe
-                const webchatIframe = document.createElement('iframe');
-                webchatIframe.style.cssText = 'width: 100%; height: 100%; border: none; display: block;';
+                mainContainer.appendChild(messageContainer);
                 
-                // Build query parameters with structured data
+                // Add click handler for the analysis button
+                document.getElementById('open-analysis-btn').onclick = function() {
+                    // Redirect to backend with the analysis parameters
                 const params = new URLSearchParams({
-                    initialize: 'true',
                     analyze: 'true',
+                    chart_id: metric.chart_id || metricData.id || '',
                     metric_id: metricData.id || '',
                     metric_name: metricData.name,
                     district: metricData.district,
@@ -2556,19 +2694,8 @@ Can you help me understand:
                     params.append('group_value', metric.group_value);
                 }
                 
-                // Log the parameters being sent
-                console.log('WebChat parameters:', params.toString());
-                
-                // Set chat initialization parameters
-                webchatIframe.src = `/webchat?${params.toString()}`;
-                
-                // Append iframe to container
-                webchatContainer.appendChild(webchatIframe);
-                mainContainer.appendChild(webchatContainer);
-                
-                // Handle iframe load errors
-                webchatIframe.onerror = function() {
-                    webchatContainer.innerHTML = '<div class="error-message">Failed to load analysis. Please try again.</div>';
+                    // Redirect to backend with analysis parameters
+                    window.location.href = `/backend/?${params.toString()}`;
                 };
             }
             
@@ -2584,6 +2711,178 @@ Can you help me understand:
 
             
 
+        }
+        
+        // Function to store analysis session data
+        async function storeAnalysisSession(itemId, itemType, sessionId, responseText) {
+            try {
+                console.log(`Storing analysis session: ${sessionId} for ${itemType} ${itemId}`);
+                
+                const response = await fetch('/anomaly-analyzer/api/store-analysis-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        item_id: itemId,
+                        item_type: itemType,
+                        session_id: sessionId,
+                        response_text: responseText,
+                        status: 'completed'
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('Analysis session stored successfully');
+                    // Refresh the table to show updated analysis status
+                    refreshData();
+                } else {
+                    console.error('Failed to store analysis session:', await response.text());
+                }
+            } catch (error) {
+                console.error('Error storing analysis session:', error);
+            }
+        }
+        
+        // Function to review existing analysis
+        async function reviewAnalysis(sessionId, itemType, itemId) {
+            try {
+                console.log(`Reviewing analysis session: ${sessionId} for ${itemType} ${itemId}`);
+                
+                // Get the analysis session data
+                const response = await fetch(`/anomaly-analyzer/api/analysis-session/${itemType}/${itemId}`);
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.session_data) {
+                    // Create a modal or popup to show the analysis
+                    showAnalysisModal(data.session_data);
+                } else {
+                    console.error('Failed to retrieve analysis session:', data.message);
+                    alert('Failed to retrieve analysis session. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error reviewing analysis:', error);
+                alert('Error retrieving analysis. Please try again.');
+            }
+        }
+        
+        // Listen for messages from parent window (backend.html) about session completion
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'ANALYSIS_SESSION_STORED') {
+                console.log('Received analysis session stored message:', event.data);
+                // Refresh the data to show updated analysis status
+                refreshData();
+            }
+        });
+        
+        // Function to show analysis in a modal
+        function showAnalysisModal(sessionData) {
+            // Create modal overlay
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 10000;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            `;
+            
+            // Create modal content
+            const modalContent = document.createElement('div');
+            modalContent.style.cssText = `
+                background: var(--background);
+                border-radius: 8px;
+                padding: 20px;
+                max-width: 80%;
+                max-height: 80%;
+                overflow-y: auto;
+                box-shadow: var(--shadow);
+                position: relative;
+            `;
+            
+            // Create close button
+            const closeButton = document.createElement('button');
+            closeButton.innerHTML = '×';
+            closeButton.style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 15px;
+                background: none;
+                border: none;
+                font-size: 24px;
+                cursor: pointer;
+                color: var(--text-primary);
+            `;
+            closeButton.onclick = () => document.body.removeChild(modal);
+            
+            // Create modal header with session link
+            const header = document.createElement('div');
+            header.style.cssText = 'margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;';
+            
+            const headerTitle = document.createElement('h2');
+            headerTitle.style.cssText = 'margin: 0; color: var(--text-primary);';
+            headerTitle.textContent = 'Analysis Review';
+            
+            const sessionLink = document.createElement('a');
+            sessionLink.href = `/backend/conversation?session=${sessionData.session_id}`;
+            sessionLink.target = '_blank';
+            sessionLink.style.cssText = 'font-size: 14px; color: var(--primary); text-decoration: none; padding: 5px 10px; border: 1px solid var(--primary); border-radius: 4px;';
+            sessionLink.innerHTML = '<i class="fas fa-external-link-alt"></i> Full Session';
+            
+            header.appendChild(headerTitle);
+            header.appendChild(sessionLink);
+            
+            // Create analysis date
+            const dateInfo = document.createElement('p');
+            dateInfo.style.cssText = 'margin-bottom: 15px; color: var(--text-secondary); font-size: 14px;';
+            dateInfo.textContent = `Analysis completed on: ${new Date(sessionData.analysis_date).toLocaleString()}`;
+            
+            // Create analysis content
+            const content = document.createElement('div');
+            content.style.cssText = 'margin-bottom: 20px; line-height: 1.6; color: var(--text-primary);';
+            
+            if (sessionData.analysis_response_text && sessionData.analysis_response_text.trim()) {
+                content.innerHTML = sessionData.analysis_response_text;
+            } else {
+                // No content available, show link to full session
+                content.innerHTML = `
+                    <div style="text-align: center; padding: 20px; background: var(--neutral-gray-light); border-radius: 8px; margin: 20px 0;">
+                        <p style="margin-bottom: 15px; color: var(--text-secondary);">
+                            Analysis content is not available in the summary.
+                        </p>
+                        <a href="/backend/conversation?session=${sessionData.session_id}" 
+                           target="_blank" 
+                           style="display: inline-block; padding: 10px 20px; background: var(--primary); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">
+                            <i class="fas fa-external-link-alt"></i> View Full Session
+                        </a>
+                        <p style="margin-top: 10px; font-size: 12px; color: var(--text-secondary);">
+                            Session ID: ${sessionData.session_id.substring(0, 8)}...
+                        </p>
+                    </div>
+                `;
+            }
+            
+            // Assemble modal
+            modalContent.appendChild(closeButton);
+            modalContent.appendChild(header);
+            modalContent.appendChild(dateInfo);
+            modalContent.appendChild(content);
+            modal.appendChild(modalContent);
+            
+            // Add to page
+            document.body.appendChild(modal);
+            
+            // Close on overlay click
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            };
         }
         
         // Function to add/remove items from monthly report
@@ -2953,7 +3252,7 @@ Can you help me understand:
                         if (lastMetricData) {
                             // Fetch anomaly data to display alongside metrics
                             try {
-                                const anomalyResponse = await fetch(`/anomaly-analyzer/api/query-anomalies?period_type=${periodSelect.value || 'month'}&limit=${limitSelect.value || 10}&only_active=true&query_type=by_anomaly_severity&district=${districtSelect.value || '0'}`);
+                                const anomalyResponse = await fetch(`/anomaly-analyzer/api/query-anomalies?period_type=${periodSelect.value || 'month'}&limit=${limitSelect.value || 10}&only_active=true&query_type=by_anomaly_severity&district=${districtSelect.value || '0'}&recent_month=${recentMonthSelect.value || ''}&comparison_month=${comparisonMonthSelect.value || ''}`);
                                 const anomalyData = await anomalyResponse.json();
                                 
                                 if (anomalyData.status === 'success') {
@@ -2996,7 +3295,7 @@ Can you help me understand:
                 if (lastMetricData) {
                     // Fetch anomaly data to display alongside metrics
                     try {
-                        const anomalyResponse = await fetch(`/anomaly-analyzer/api/query-anomalies?period_type=${periodSelect.value || 'month'}&limit=${limitSelect.value || 10}&only_active=true&query_type=by_anomaly_severity&district=${districtSelect.value || '0'}`);
+                        const anomalyResponse = await fetch(`/anomaly-analyzer/api/query-anomalies?period_type=${periodSelect.value || 'month'}&limit=${limitSelect.value || 10}&only_active=true&query_type=by_anomaly_severity&district=${districtSelect.value || '0'}&recent_month=${recentMonthSelect.value || ''}&comparison_month=${comparisonMonthSelect.value || ''}`);
                         const anomalyData = await anomalyResponse.json();
                         
                         if (anomalyData.status === 'success') {

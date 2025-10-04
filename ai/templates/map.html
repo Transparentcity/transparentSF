@@ -1507,10 +1507,18 @@
                         }
                         popupContent += `</div>`;
                         
-                        new mapboxgl.Popup()
+                        const popup = new mapboxgl.Popup()
                             .setLngLat(e.lngLat)
                             .setHTML(popupContent)
                             .addTo(map);
+                        
+                        // Fix accessibility issue with popup close button
+                        setTimeout(() => {
+                            const closeButton = document.querySelector('.mapboxgl-popup-close-button');
+                            if (closeButton && closeButton.hasAttribute('aria-hidden')) {
+                                closeButton.removeAttribute('aria-hidden');
+                            }
+                        }, 10);
                     });
 
                     // Add click handler for stroke layer as well
@@ -1526,10 +1534,18 @@
                         }
                         popupContent += `</div>`;
                         
-                        new mapboxgl.Popup()
+                        const popup = new mapboxgl.Popup()
                             .setLngLat(e.lngLat)
                             .setHTML(popupContent)
                             .addTo(map);
+                        
+                        // Fix accessibility issue with popup close button
+                        setTimeout(() => {
+                            const closeButton = document.querySelector('.mapboxgl-popup-close-button');
+                            if (closeButton && closeButton.hasAttribute('aria-hidden')) {
+                                closeButton.removeAttribute('aria-hidden');
+                            }
+                        }, 10);
                     });
 
                     // Create legend for choropleth maps
@@ -1656,11 +1672,80 @@
                 const addRow = (key, val) => {
                     if (!val || val === '') return;
                     const displayKey = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    tooltipContent += `
-                        <div class="tsf-tooltip-row">
-                            <div class="tsf-tooltip-key">${displayKey}:</div>
-                            <div class="tsf-tooltip-val">${val}</div>
-                        </div>`;
+                    
+                    // Special handling for media URLs
+                    if (key.toLowerCase().includes('media_url') || key.toLowerCase().includes('mediaurl')) {
+                        // Extract URL from nested object or use direct string
+                        let mediaUrl = val;
+                        try {
+                            // Handle stringified JSON objects like "{'url': 'https://...'}"
+                            if (typeof val === 'string' && val.includes("'url':")) {
+                                const urlMatch = val.match(/'url':\s*'([^']+)'/);
+                                if (urlMatch) {
+                                    mediaUrl = urlMatch[1];
+                                }
+                            }
+                            // Handle actual JSON objects
+                            else if (typeof val === 'object' && val.url) {
+                                mediaUrl = val.url;
+                            }
+                            // Handle JSON string objects
+                            else if (typeof val === 'string' && val.startsWith('{')) {
+                                const parsed = JSON.parse(val.replace(/'/g, '"'));
+                                if (parsed.url) {
+                                    mediaUrl = parsed.url;
+                                }
+                            }
+                        } catch (e) {
+                            // If parsing fails, use original value
+                        }
+                        
+                        if (mediaUrl && mediaUrl.startsWith('http')) {
+                            // Check if this is a Verint attachment (blocked by ORB)
+                            const isVerintAttachment = mediaUrl.includes('form.us.empro.verintcloudservices.com') || 
+                                                      mediaUrl.includes('download_attachments');
+                            
+                            if (isVerintAttachment) {
+                                // For Verint attachments, use iframe with cropping to show image area
+                                tooltipContent += `
+                                    <div class="tsf-tooltip-row">
+                                        <div class="tsf-tooltip-key">${displayKey}:</div>
+                                        <div class="tsf-tooltip-val">
+                                            <div class="verint-iframe-container" style="width: 150px; height: 100px; border: 2px solid #6B46C1; border-radius: 4px; overflow: hidden; position: relative;">
+                                                <iframe src="${mediaUrl}" 
+                                                        style="width: 400px; height: 300px; border: none; position: absolute; top: -50px; left: -50px; transform: scale(0.5); transform-origin: 0 0;"
+                                                        sandbox="allow-same-origin allow-scripts allow-forms"
+                                                        onload="console.log('Verint iframe loaded')">
+                                                </iframe>
+                                                <div style="position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.7); color: white; font-size: 10px; padding: 2px 4px; border-radius: 2px;">
+                                                    <a href="${mediaUrl}" target="_blank" style="color: white; text-decoration: none;">🔗</a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>`;
+                            } else {
+                                // For direct image URLs (like Cloudinary)
+                                tooltipContent += `
+                                    <div class="tsf-tooltip-row">
+                                        <div class="tsf-tooltip-key">${displayKey}:</div>
+                                        <div class="tsf-tooltip-val">
+                                            <a href="${mediaUrl}" target="_blank" class="media-link">
+                                                <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                                     style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer;">
+                                                <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
+                                            </a>
+                                        </div>
+                                    </div>`;
+                            }
+                        }
+                    } else {
+                        tooltipContent += `
+                            <div class="tsf-tooltip-row">
+                                <div class="tsf-tooltip-key">${displayKey}:</div>
+                                <div class="tsf-tooltip-val">${val}</div>
+                            </div>`;
+                    }
                 };
 
                 // Core fields first
@@ -1677,7 +1762,7 @@
 
                 // Add remaining non-location properties (avoid duplicates)
                 for (const key of Object.keys(properties)) {
-                    if (['title','description','value','color','strokeColor','tooltip_fields'].includes(key)) continue;
+                    if (['title','description','value','color','strokeColor','tooltip_fields','scale'].includes(key)) continue;
                     if (locationFields.has(key)) continue;
                     if (/(^|_)(lat|lon|long|coord|address|street|city|state|zip|point|geom)(_|$)/i.test(key)) continue;
                     // Skip if we already included via tooltip_fields
@@ -1687,10 +1772,19 @@
 
                 tooltipContent += `</div>`;
 
-                new mapboxgl.Popup()
+                const popup = new mapboxgl.Popup()
                     .setLngLat(e.lngLat)
                     .setHTML(tooltipContent)
                     .addTo(map);
+                
+                // Fix accessibility issue with popup close button
+                setTimeout(() => {
+                    const closeButton = document.querySelector('.mapboxgl-popup-close-button');
+                    if (closeButton && closeButton.hasAttribute('aria-hidden')) {
+                        closeButton.removeAttribute('aria-hidden');
+                    }
+                }, 10);
+                
             });
 
             // Fit map to the bounds of all points with some padding
@@ -1774,17 +1868,84 @@
                 if (Object.keys(tooltipFields).length > 0) {
                     tooltipContent += '<hr><h5>Additional Details:</h5>';
                     for (const [field, value] of Object.entries(tooltipFields)) {
-                        if (field !== 'title' && field !== 'description' && field !== 'value') {
+                        if (field !== 'title' && field !== 'description' && field !== 'value' && field !== 'scale') {
                             const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                            tooltipContent += `<p><strong>${fieldLabel}:</strong> ${value}</p>`;
+                            
+                            // Special handling for media URLs
+                            if (field.toLowerCase().includes('media_url') || field.toLowerCase().includes('mediaurl')) {
+                                // Extract URL from nested object or use direct string
+                                let mediaUrl = value;
+                                try {
+                                    if (typeof value === 'string' && value.includes("'url':")) {
+                                        const urlMatch = value.match(/'url':\s*'([^']+)'/);
+                                        if (urlMatch) {
+                                            mediaUrl = urlMatch[1];
+                                        }
+                                    }
+                                    else if (typeof value === 'object' && value.url) {
+                                        mediaUrl = value.url;
+                                    }
+                                    else if (typeof value === 'string' && value.startsWith('{')) {
+                                        const parsed = JSON.parse(value.replace(/'/g, '"'));
+                                        if (parsed.url) {
+                                            mediaUrl = parsed.url;
+                                        }
+                                    }
+                                } catch (e) {
+                                    // If parsing fails, use original value
+                                }
+                                
+                                if (mediaUrl && mediaUrl.startsWith('http')) {
+                                    // Check if this is a Verint attachment (blocked by ORB)
+                                    const isVerintAttachment = mediaUrl.includes('form.us.empro.verintcloudservices.com') || 
+                                                              mediaUrl.includes('download_attachments');
+                                    
+                                    if (isVerintAttachment) {
+                                        // For Verint attachments, use iframe with cropping to show image area
+                                        tooltipContent += `<p><strong>${fieldLabel}:</strong><br>
+                                            <div class="verint-iframe-container" style="width: 150px; height: 100px; border: 2px solid #6B46C1; border-radius: 4px; overflow: hidden; position: relative; margin-top: 5px;">
+                                                <iframe src="${mediaUrl}" 
+                                                        style="width: 400px; height: 300px; border: none; position: absolute; top: -50px; left: -50px; transform: scale(0.5); transform-origin: 0 0;"
+                                                        sandbox="allow-same-origin allow-scripts allow-forms"
+                                                        onload="console.log('Verint iframe loaded')">
+                                                </iframe>
+                                                <div style="position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.7); color: white; font-size: 10px; padding: 2px 4px; border-radius: 2px;">
+                                                    <a href="${mediaUrl}" target="_blank" style="color: white; text-decoration: none;">🔗</a>
+                                                </div>
+                                            </div>
+                                        </p>`;
+                                    } else {
+                                        // For direct image URLs (like Cloudinary)
+                                        tooltipContent += `<p><strong>${fieldLabel}:</strong><br>
+                                            <a href="${mediaUrl}" target="_blank" class="media-link">
+                                                <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                                     style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer; margin-top: 5px;">
+                                                <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
+                                            </a>
+                                        </p>`;
+                                    }
+                                }
+                            } else {
+                                tooltipContent += `<p><strong>${fieldLabel}:</strong> ${value}</p>`;
+                            }
                         }
                     }
                 }
                 
-                new mapboxgl.Popup()
+                const popup = new mapboxgl.Popup()
                     .setLngLat(e.lngLat)
                     .setHTML(tooltipContent)
                     .addTo(map);
+                
+                // Fix accessibility issue with popup close button
+                setTimeout(() => {
+                    const closeButton = document.querySelector('.mapboxgl-popup-close-button');
+                    if (closeButton && closeButton.hasAttribute('aria-hidden')) {
+                        closeButton.removeAttribute('aria-hidden');
+                    }
+                }, 10);
+                
             });
 
             hideLoading();
@@ -2786,6 +2947,72 @@
 
 
 
+
+        // Function to extract image from Verint attachment page
+        async function extractVerintImage(verintUrl, containerId) {
+            try {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+                
+                // Try to fetch the Verint page and extract image URL
+                const response = await fetch(verintUrl, {
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch Verint page');
+                }
+                
+                const html = await response.text();
+                
+                // Look for image patterns in the HTML
+                const imgMatches = html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi);
+                let imageUrl = null;
+                
+                if (imgMatches) {
+                    for (const imgTag of imgMatches) {
+                        const srcMatch = imgTag.match(/src=["']([^"']+)["']/i);
+                        if (srcMatch && srcMatch[1]) {
+                            const src = srcMatch[1];
+                            // Skip small icons, logos, etc. - look for actual content images
+                            if (!src.includes('icon') && !src.includes('logo') && !src.includes('button')) {
+                                imageUrl = src.startsWith('http') ? src : 
+                                          src.startsWith('/') ? new URL(src, verintUrl).href : 
+                                          new URL(src, verintUrl).href;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (imageUrl) {
+                    // Replace loading div with actual image
+                    container.innerHTML = `
+                        <a href="${verintUrl}" target="_blank" class="media-link">
+                            <img src="${imageUrl}" alt="Attachment" class="media-thumbnail" 
+                                 style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer;"
+                                 onerror="this.parentElement.parentElement.innerHTML='<a href=\\'${verintUrl}\\' target=\\'_blank\\' style=\\'color: #6B46C1; text-decoration: underline;\\'>📎 View Attachment</a>'">
+                        </a>`;
+                } else {
+                    // Fallback to link if no image found
+                    container.innerHTML = `
+                        <a href="${verintUrl}" target="_blank" style="color: #6B46C1; text-decoration: underline;">
+                            📎 View Attachment
+                        </a>`;
+                }
+                
+            } catch (error) {
+                console.log('Could not extract image from Verint page:', error);
+                const container = document.getElementById(containerId);
+                if (container) {
+                    container.innerHTML = `
+                        <a href="${verintUrl}" target="_blank" style="color: #6B46C1; text-decoration: underline;">
+                            📎 View Attachment
+                        </a>`;
+                }
+            }
+        }
 
     </script>
 </body>

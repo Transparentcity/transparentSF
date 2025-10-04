@@ -112,3 +112,5 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     success = ensure_neighborhoods_geojson_exists()
     print(f"Neighborhoods GeoJSON setup: {'SUCCESS' if success else 'FAILED'}")
+
+

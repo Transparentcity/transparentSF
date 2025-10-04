@@ -544,6 +544,7 @@ def generate_time_series_chart(
                     "chart_title": context_variables.get("chart_title", "Time Series Chart"),
                     "y_axis_label": context_variables.get("y_axis_label", numeric_fields[0]),
                     "aggregation_period": aggregation_period,
+                    "period_type": aggregation_period,  # Add period_type for weekly data detection
                     "filter_conditions": filter_conditions or [],
                     "object_type": object_type or context_variables.get("object_type", "unknown"),
                     "object_id": object_id or context_variables.get("object_id", "unknown"),
@@ -553,8 +554,7 @@ def generate_time_series_chart(
                     "group_field": group_field,
                     "field_name": group_field or numeric_fields[0] if numeric_fields else "unknown",
                     "executed_query_url": context_variables.get("executed_query_url"),
-                    "caption": caption,
-                    "period_type": aggregation_period  # Add the period_type to metadata
+                    "caption": caption
                 }
                 
                 # Prepare data points in the correct format for database storage

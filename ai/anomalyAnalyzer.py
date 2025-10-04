@@ -830,14 +830,14 @@ Timestamp: {datetime.datetime.now().isoformat()}
     truncated_messages = truncate_messages(messages)
 
     try:
-        # Run the agent
-        response_generator = swarm_client.run(
-            agent=agent,
-            messages=truncated_messages,
-            context_variables=context_variables,
-            stream=True,
-            debug=debug_mode,
-        )
+        # Note: Swarm client has been removed - providing fallback response
+        error_message = {
+            "type": "error",
+            "sender": "System",
+            "error": "AI agent functionality is currently unavailable. The swarm client has been removed."
+        }
+        yield json.dumps(error_message) + "\n"
+        return
         
         # Initialize assistant message
         assistant_message = {"role": "assistant", "content": "", "sender": agent.name}
@@ -1093,58 +1093,68 @@ async def get_top_metric_changes(
         logger.info(f"get_top_metric_changes called with: period_type={period_type}, limit={limit}, object_id={object_id}, district={district}, show_on_dash={show_on_dash}")
         
         # Calculate report date based on period_type
+        # Instead of using today's date, we'll get the actual latest data from the database
         today = date.today()
-        if period_type == 'week':
-            # For weekly, we need to find the most recent week that has data available
-            # First, let's get the latest available week from the database
-            # We'll calculate this after connecting to the database
-            report_date = None  # Will be calculated after DB connection
-        elif period_type == 'month':
-            # For monthly, report date is previous month
-            if today.month == 1:
-                report_date = date(today.year - 1, 12, 1)
-            else:
-                report_date = date(today.year, today.month - 1, 1)
-        elif period_type == 'quarter':
-            # For quarterly, report date is previous quarter
-            current_quarter = (today.month - 1) // 3 + 1
-            if current_quarter == 1:
-                report_date = date(today.year - 1, 10, 1)  # Q4 of previous year
-            else:
-                report_date = date(today.year, (current_quarter - 1) * 3 - 2, 1)
-        else:  # year
-            # For annual, report date is previous year
-            report_date = date(today.year - 1, 1, 1)
+        
+        # For all period types, let's determine the report_date from actual data
+        # This will be calculated after DB connection below
+        report_date = None
             
-        # For weekly data, calculate the report date based on available data
-        if period_type == 'week' and report_date is None:
+        # Calculate the report date based on available data for all period types
+        if report_date is None:
             # Get the latest available week from the database, but use a more conservative approach
             # to account for the fact that not all charts may have the most recent data
             with get_pooled_connection() as conn:
                 cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
                 cursor.execute("""
-                    SELECT MAX(tsd.time_period) as latest_week
+                    SELECT MAX(tsd.time_period) as latest_period
                     FROM time_series_data tsd
                     JOIN time_series_metadata tsm ON tsd.chart_id = tsm.chart_id
-                    WHERE tsm.period_type = 'week'
+                    WHERE tsm.period_type = %s
                     AND tsm.is_active = TRUE
-                """)
+                """, [period_type])
                 latest_week_result = cursor.fetchone()
                 
-            if latest_week_result and latest_week_result['latest_week']:
-                # Use a date that's one week earlier than the absolute latest to account for 
-                # charts that may not have the most recent data
-                latest_available = latest_week_result['latest_week']
-                report_date = latest_available - timedelta(days=7)
-                logger.info(f"Latest available week: {latest_available}, using conservative report date: {report_date}")
-            else:
-                # Fallback to calculating previous week
-                days_since_monday = today.weekday()
-                if days_since_monday == 0:  # Today is Monday
-                    report_date = today - timedelta(days=7)
+            if latest_week_result and latest_week_result['latest_period']:
+                # Use the latest available period for the specified period type
+                latest_available = latest_week_result['latest_period']
+                
+                # For monthly data, use the latest available month directly
+                # For other periods, apply conservative offsets as needed
+                if period_type == 'month':
+                    report_date = latest_available
+                elif period_type == 'week':
+                    # Use a date that's one week earlier than the absolute latest to account for 
+                    # charts that may not have the most recent data
+                    report_date = latest_available - timedelta(days=7)
                 else:
-                    report_date = today - timedelta(days=days_since_monday + 7)
-                logger.info(f"Fallback report date calculated as: {report_date}")
+                    # For quarter and year, use the latest available
+                    report_date = latest_available
+                    
+                logger.info(f"Latest available {period_type}: {latest_available}, using report date: {report_date}")
+            else:
+                # Fallback to calculating based on today's date
+                if period_type == 'week':
+                    days_since_monday = today.weekday()
+                    if days_since_monday == 0:  # Today is Monday
+                        report_date = today - timedelta(days=7)
+                    else:
+                        report_date = today - timedelta(days=days_since_monday + 7)
+                elif period_type == 'month':
+                    if today.month == 1:
+                        report_date = date(today.year - 1, 12, 1)
+                    else:
+                        report_date = date(today.year, today.month - 1, 1)
+                elif period_type == 'quarter':
+                    current_quarter = (today.month - 1) // 3 + 1
+                    if current_quarter == 1:
+                        report_date = date(today.year - 1, 10, 1)
+                    else:
+                        report_date = date(today.year, (current_quarter - 1) * 3 - 2, 1)
+                else:  # year
+                    report_date = date(today.year - 1, 1, 1)
+                    
+                logger.info(f"Fallback {period_type} report date calculated as: {report_date}")
         else:
             logger.info(f"Report date calculated as: {report_date}")
             
@@ -1267,30 +1277,29 @@ async def get_top_metric_changes(
             for chart in charts:
                 chart_id = chart['chart_id']
                 
-                # Calculate specific periods: 1 month ago and 2 months ago from today
-                today = date.today()
+                # Instead of hardcoding periods, find the most recent available data
+                # Get the two most recent periods that have data for this chart
+                available_periods_query = """
+                    SELECT DISTINCT time_period
+                    FROM time_series_data
+                    WHERE chart_id = %s 
+                    ORDER BY time_period DESC
+                    LIMIT 2
+                """
+                cursor.execute(available_periods_query, [chart_id])
+                available_periods = cursor.fetchall()
                 
-                # 1 month ago (recent period)
-                if today.month == 1:
-                    recent_month = 12
-                    recent_year = today.year - 1
-                else:
-                    recent_month = today.month - 1
-                    recent_year = today.year
-                recent_period_date = date(recent_year, recent_month, 1)
+                if len(available_periods) < 2:
+                    logger.info(f"Skipping chart_id {chart_id} - only {len(available_periods)} periods available")
+                    continue
                 
-                # 2 months ago (comparison period) 
-                if recent_month == 1:
-                    comparison_month = 12
-                    comparison_year = recent_year - 1
-                else:
-                    comparison_month = recent_month - 1
-                    comparison_year = recent_year
-                comparison_period_date = date(comparison_year, comparison_month, 1)
+                # Use the most recent available periods
+                recent_period_date = available_periods[0]['time_period']
+                comparison_period_date = available_periods[1]['time_period']
                 
-                logger.info(f"Looking for specific periods: recent={recent_period_date}, comparison={comparison_period_date}")
+                logger.info(f"Using available periods for chart {chart_id}: recent={recent_period_date}, comparison={comparison_period_date}")
                 
-                # Get data for these specific periods
+                # Verify we have data for both periods
                 periods_query = """
                     SELECT DISTINCT time_period
                     FROM time_series_data
@@ -1301,119 +1310,108 @@ async def get_top_metric_changes(
                 cursor.execute(periods_query, [chart_id, recent_period_date, comparison_period_date])
                 periods = cursor.fetchall()
                 
-                logger.info(f"Found periods for chart_id {chart_id}: {[p['time_period'] for p in periods]}")
+                logger.info(f"Found periods for chart_id {chart_id} ({chart['object_name']}): {[p['time_period'] for p in periods]}")
                 
                 if len(periods) < 2:
-                    logger.info(f"Could not find both specific periods (recent={recent_period_date}, comparison={comparison_period_date}) for chart_id {chart_id} - found {len(periods)} periods")
-                    
-                    # Try to find at least one of the periods, prioritizing the recent one
-                    single_period_query = """
-                        SELECT DISTINCT time_period
-                        FROM time_series_data
-                        WHERE chart_id = %s 
-                        AND time_period >= %s - INTERVAL '3 months'
-                        ORDER BY time_period DESC
-                        LIMIT 2
-                    """
-                    cursor.execute(single_period_query, [chart_id, recent_period_date])
-                    fallback_periods = cursor.fetchall()
-                    
-                    if len(fallback_periods) < 2:
-                        logger.info(f"Skipping chart_id {chart_id} - not enough time periods even with fallback (found {len(fallback_periods)})")
-                        continue
-                    else:
-                        logger.info(f"Using fallback periods for chart_id {chart_id}: {[p['time_period'] for p in fallback_periods]}")
-                        periods = fallback_periods
+                    # This should rarely happen since we already checked for 2 available periods
+                    logger.info(f"Data consistency issue for chart_id {chart_id} - expected 2 periods but query returned {len(periods)}")
+                    continue
                     
                 # Assign periods - the first one should be the most recent
-                latest_period = periods[0]['time_period'] if periods else recent_period_date
-                previous_period = periods[1]['time_period'] if len(periods) > 1 else comparison_period_date
-                
-                # Skip if latest period is before report date
-                if latest_period < report_date:
-                    logger.info(f"Skipping chart_id {chart_id} - latest period {latest_period} is before report date {report_date}")
-                    continue
+                latest_period = recent_period_date
+                previous_period = comparison_period_date
                 
                 logger.info(f"Processing chart_id {chart_id} ({chart['object_name']}) - comparing periods {latest_period} and {previous_period}")
-            
-            # Check for stale data by comparing most_recent_data_date with recent_period.end
-            stale_data_warning = None
-            if chart['object_id'] and chart['object_id'] != 'unknown':
-                try:
-                    # Get the most_recent_data_date from metrics table
-                    cursor.execute("""
-                        SELECT most_recent_data_date 
-                        FROM metrics 
-                        WHERE id = %s
-                        LIMIT 1
-                    """, [chart['object_id']])
-                    metric_result = cursor.fetchone()
-                    
-                    if metric_result and metric_result['most_recent_data_date']:
-                        # Get the recent_period.end from time_series_metadata metadata column
-                        cursor.execute("""
-                            SELECT metadata 
-                            FROM time_series_metadata 
-                            WHERE chart_id = %s
-                            LIMIT 1
-                        """, [chart_id])
-                        metadata_result = cursor.fetchone()
+                
+                # Check for stale data by comparing most_recent_data_date with recent_period.end
+                stale_data_warning = None
+                if chart['object_id'] and chart['object_id'] != 'unknown':
+                    try:
+                        # Validate that object_id is a valid integer before querying
+                        try:
+                            object_id_int = int(chart['object_id'])
+                        except (ValueError, TypeError):
+                            logger.debug(f"Skipping stale data check for non-integer object_id: {chart['object_id']}")
+                            object_id_int = None
                         
-                        if metadata_result and metadata_result['metadata']:
-                            metadata = metadata_result['metadata']
-                            if isinstance(metadata, str):
-                                import json
-                                try:
-                                    metadata = json.loads(metadata)
-                                except json.JSONDecodeError:
-                                    metadata = {}
+                        if object_id_int is None:
+                            # Skip stale data check for non-integer object_ids
+                            pass
+                        else:
+                            # Get the most_recent_data_date from metrics table
+                            cursor.execute("""
+                                SELECT most_recent_data_date 
+                                FROM metrics 
+                                WHERE id = %s
+                                LIMIT 1
+                            """, [object_id_int])
+                            metric_result = cursor.fetchone()
                             
-                            # Look for the end date in filter_conditions (the condition with operator "<=")
-                            filter_conditions = metadata.get('filter_conditions', [])
-                            expected_end_date = None
-                            
-                            for condition in filter_conditions:
-                                if condition.get('operator') == '<=' and condition.get('is_date', False):
-                                    end_date_str = condition.get('value')
-                                    if end_date_str:
+                            if metric_result and metric_result['most_recent_data_date']:
+                                # Get the recent_period.end from time_series_metadata metadata column
+                                cursor.execute("""
+                                    SELECT metadata 
+                                    FROM time_series_metadata 
+                                    WHERE chart_id = %s
+                                    LIMIT 1
+                                """, [chart_id])
+                                metadata_result = cursor.fetchone()
+                                
+                                if metadata_result and metadata_result['metadata']:
+                                    metadata = metadata_result['metadata']
+                                    if isinstance(metadata, str):
+                                        import json
                                         try:
-                                            if 'T' in end_date_str:
-                                                start_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00')).date()
-                                            else:
-                                                start_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-                                            
-                                            # Calculate the last day of the month from the start date
-                                            if start_date.day == 1:  # If it's the first day of the month
-                                                # Get the last day of the month
-                                                if start_date.month == 12:
-                                                    next_month = start_date.replace(year=start_date.year + 1, month=1, day=1)
-                                                else:
-                                                    next_month = start_date.replace(month=start_date.month + 1, day=1)
-                                                expected_end_date = next_month - timedelta(days=1)
-                                            else:
-                                                expected_end_date = start_date
-                                            break
-                                        except ValueError:
-                                            try:
-                                                start_date = datetime.strptime(end_date_str, '%Y-%m').date()
-                                                # Calculate the last day of the month
-                                                if start_date.month == 12:
-                                                    next_month = start_date.replace(year=start_date.year + 1, month=1, day=1)
-                                                else:
-                                                    next_month = start_date.replace(month=start_date.month + 1, day=1)
-                                                expected_end_date = next_month - timedelta(days=1)
-                                                break
-                                            except ValueError:
-                                                continue
-                            
-                            # Compare dates
-                            if expected_end_date and metric_result['most_recent_data_date'] < expected_end_date:
-                                days_stale = (expected_end_date - metric_result['most_recent_data_date']).days
-                                stale_data_warning = f"Data is {days_stale} days stale (most recent: {metric_result['most_recent_data_date']}, expected: {expected_end_date})"
-                                logger.warning(f"Stale data detected for chart {chart_id} ({chart['object_name']}): {stale_data_warning}")
+                                            metadata = json.loads(metadata)
+                                        except json.JSONDecodeError:
+                                            metadata = {}
                                     
-                except Exception as e:
-                    logger.warning(f"Error checking stale data for chart {chart_id}: {e}")
+                                    # Look for the end date in filter_conditions (the condition with operator "<=")
+                                    filter_conditions = metadata.get('filter_conditions', [])
+                                    expected_end_date = None
+                                    
+                                    for condition in filter_conditions:
+                                        if condition.get('operator') == '<=' and condition.get('is_date', False):
+                                            end_date_str = condition.get('value')
+                                            if end_date_str:
+                                                try:
+                                                    if 'T' in end_date_str:
+                                                        start_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00')).date()
+                                                    else:
+                                                        start_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                                                    
+                                                    # Calculate the last day of the month from the start date
+                                                    if start_date.day == 1:  # If it's the first day of the month
+                                                        # Get the last day of the month
+                                                        if start_date.month == 12:
+                                                            next_month = start_date.replace(year=start_date.year + 1, month=1, day=1)
+                                                        else:
+                                                            next_month = start_date.replace(month=start_date.month + 1, day=1)
+                                                        expected_end_date = next_month - timedelta(days=1)
+                                                    else:
+                                                        expected_end_date = start_date
+                                                    break
+                                                except ValueError:
+                                                    try:
+                                                        start_date = datetime.strptime(end_date_str, '%Y-%m').date()
+                                                        # Calculate the last day of the month
+                                                        if start_date.month == 12:
+                                                            next_month = start_date.replace(year=start_date.year + 1, month=1, day=1)
+                                                        else:
+                                                            next_month = start_date.replace(month=start_date.month + 1, day=1)
+                                                        expected_end_date = next_month - timedelta(days=1)
+                                                        break
+                                                    except ValueError:
+                                                        continue
+                                    
+                                    # Compare dates
+                                    if expected_end_date and metric_result['most_recent_data_date'] < expected_end_date:
+                                        days_stale = (expected_end_date - metric_result['most_recent_data_date']).days
+                                        stale_data_warning = f"Data is {days_stale} days stale (most recent: {metric_result['most_recent_data_date']}, expected: {expected_end_date})"
+                                        logger.warning(f"Stale data detected for chart {chart_id} ({chart['object_name']}): {stale_data_warning}")
+                                        
+                    except Exception as e:
+                        logger.warning(f"Error checking stale data for chart {chart_id}: {e}")
                 
                 # Get the data for both periods and join them
                 data_query = """
@@ -1456,6 +1454,13 @@ async def get_top_metric_changes(
                 
                 if data_results:
                     logger.info(f"Found {len(data_results)} comparison rows for chart_id {chart_id}")
+                else:
+                    logger.warning(f"No comparison data found for chart_id {chart_id} ({chart['object_name']}) - periods: {latest_period} vs {previous_period}")
+                    # Debug: Check if data exists at all
+                    cursor.execute("SELECT time_period, numeric_value FROM time_series_data WHERE chart_id = %s ORDER BY time_period DESC LIMIT 5", [chart_id])
+                    debug_data = cursor.fetchall()
+                    logger.warning(f"  Available data for chart {chart_id}: {debug_data}")
+                    continue  # Skip this chart if no comparison data
                 
                 # Add metadata to each result
                 for result in data_results:
@@ -1464,96 +1469,121 @@ async def get_top_metric_changes(
                     result['object_name'] = chart['object_name']
                     result['group_field'] = chart['group_field']
                     result['report_date'] = report_date.isoformat()
-                
-                # Log the raw data for debugging
-                logger.info(f"Raw data for {chart['object_name']}: recent={result['recent_value']} ({result['recent_period']}), previous={result['previous_value']} ({result['previous_period']}), delta={result['delta']}")
-                
-                # Use the district from the data if available, otherwise use the selected district
-                if 'district' in result and result['district'] is not None:
-                    # District is already set in the result
-                    pass
-                elif district == 'all':
-                    # If showing all districts, get the district from the metadata if available
-                    cursor.execute("SELECT district FROM time_series_metadata WHERE chart_id = %s", [chart_id])
-                    chart_district = cursor.fetchone()
-                    if chart_district and chart_district['district'] is not None:
-                        result['district'] = chart_district['district']
-                    else:
-                        result['district'] = 'N/A'
-                else:
-                    # Use the selected district
-                    result['district'] = district
-                
-                # Calculate percent change
-                if result['previous_value'] and float(result['previous_value']) != 0:
-                    result['percent_change'] = (float(result['delta']) / float(result['previous_value'])) * 100
-                else:
-                    result['percent_change'] = None
-                
-                # Get greendirection from metrics table based on object_id
-                result['greendirection'] = None
-                if chart['object_id'] and chart['object_id'] != 'unknown':
-                    try:
-                        # Try to convert to integer to validate
-                        object_id_int = int(chart['object_id'])
-                        greendirection_query = """
-                        SELECT greendirection 
-                        FROM metrics 
-                        WHERE id = %s
-                        LIMIT 1
-                        """
-                        cursor.execute(greendirection_query, [object_id_int])
-                        greendirection_result = cursor.fetchone()
-                        
-                        if greendirection_result:
-                            result['greendirection'] = greendirection_result['greendirection']
-                        else:
-                            logger.warning(f"No greendirection found for object_id {chart['object_id']}")
-                    except (ValueError, TypeError):
-                        logger.warning(f"Invalid object_id format: {chart['object_id']}, skipping greendirection query")
-                else:
-                    logger.warning(f"Skipping greendirection query for object_id: {chart['object_id']}")
-                
-                # Get citywide changes data if available
-                citywide_changes = ""
-                if chart['object_id'] and chart['object_id'] != 'unknown':
-                    try:
-                        # Convert to integer for validation, but pass as string to match column type
-                        object_id_int = int(chart['object_id'])
-                        cursor.execute(
-                            "SELECT location_data FROM maps WHERE active = true AND metric_id = %s AND metadata->>'has_change_data' = 'true'",
-                            [chart['object_id']]  # Pass as string, not integer
-                        )
-                        map_data = cursor.fetchone()
-                        if map_data and map_data["location_data"]:
-                            location_data = map_data["location_data"]
-                            if location_data.get("type") == "csv" and location_data.get("csv_data"):
-                                # Parse CSV data into a more readable format
-                                csv_data = location_data["csv_data"]
-                                csv_reader = csv.DictReader(io.StringIO(csv_data))
-                                district_changes = []
-                                for row in csv_reader:
-                                    district_changes.append(
-                                        f"District {row['district']}: {row['current_value']} (change: {row['delta']}, {float(row['percent_change'])*100:.1f}%)"
-                                    )
-                                citywide_changes = "\n".join(district_changes)
-                                logger.info(f"Found district data for metric_id {chart['object_id']}:\n{citywide_changes}")
-                    except (ValueError, TypeError) as e:
-                        logger.error(f"Error processing citywide changes data: {e}")
-                result['citywide_changes'] = citywide_changes
-                
-                # Add stale data warning if detected
-                if stale_data_warning:
-                    result['stale_data_warning'] = stale_data_warning
-                    logger.warning(f"Adding stale data warning to result: {stale_data_warning}")
                     
-                # Log the values for debugging
-                logger.info(f"Result for chart {chart_id}: {result['object_name']} - Previous: {result['previous_value']} ({result['previous_period']}), Recent: {result['recent_value']} ({result['recent_period']}), Delta: {result['delta']}, greendirection: {result['greendirection']}, citywide_changes: {citywide_changes}")
-                
-                # Debug log to show final result periods
-                logger.info(f"PERIOD DEBUG - Chart {chart_id}: recent_period={result.get('recent_period')}, previous_period={result.get('previous_period')}")
-                
-                all_results.append(result)
+                    # Add analysis session data
+                    cursor.execute("""
+                        SELECT analysis_session_id, analysis_date, analysis_status, metadata
+                        FROM time_series_metadata 
+                        WHERE chart_id = %s
+                    """, [chart_id])
+                    analysis_data = cursor.fetchone()
+                    
+                    if analysis_data:
+                        result['analysis_session_id'] = analysis_data['analysis_session_id']
+                        result['analysis_date'] = analysis_data['analysis_date'].isoformat() if analysis_data['analysis_date'] else None
+                        result['analysis_status'] = analysis_data['analysis_status']
+                        
+                        # Extract response text from metadata
+                        if analysis_data['metadata']:
+                            metadata = analysis_data['metadata'] if isinstance(analysis_data['metadata'], dict) else json.loads(analysis_data['metadata'])
+                            result['analysis_response_text'] = metadata.get('analysis_response_text')
+                        else:
+                            result['analysis_response_text'] = None
+                    else:
+                        result['analysis_session_id'] = None
+                        result['analysis_date'] = None
+                        result['analysis_status'] = None
+                        result['analysis_response_text'] = None
+                    
+                    # Log the raw data for debugging
+                    logger.info(f"Raw data for {chart['object_name']}: recent={result['recent_value']} ({result['recent_period']}), previous={result['previous_value']} ({result['previous_period']}), delta={result['delta']}")
+                    
+                    # Use the district from the data if available, otherwise use the selected district
+                    if 'district' in result and result['district'] is not None:
+                        # District is already set in the result
+                        pass
+                    elif district == 'all':
+                        # If showing all districts, get the district from the metadata if available
+                        cursor.execute("SELECT district FROM time_series_metadata WHERE chart_id = %s", [chart_id])
+                        chart_district = cursor.fetchone()
+                        if chart_district and chart_district['district'] is not None:
+                            result['district'] = chart_district['district']
+                        else:
+                            result['district'] = 'N/A'
+                    else:
+                        # Use the selected district
+                        result['district'] = district
+                    
+                    # Calculate percent change
+                    if result['previous_value'] and float(result['previous_value']) != 0:
+                        result['percent_change'] = (float(result['delta']) / float(result['previous_value'])) * 100
+                    else:
+                        result['percent_change'] = None
+                    
+                    # Get greendirection from metrics table based on object_id
+                    result['greendirection'] = None
+                    if chart['object_id'] and chart['object_id'] != 'unknown':
+                        try:
+                            # Try to convert to integer to validate
+                            object_id_int = int(chart['object_id'])
+                            greendirection_query = """
+                            SELECT greendirection 
+                            FROM metrics 
+                            WHERE id = %s
+                            LIMIT 1
+                            """
+                            cursor.execute(greendirection_query, [object_id_int])
+                            greendirection_result = cursor.fetchone()
+                            
+                            if greendirection_result:
+                                result['greendirection'] = greendirection_result['greendirection']
+                            else:
+                                logger.warning(f"No greendirection found for object_id {chart['object_id']}")
+                        except (ValueError, TypeError):
+                            logger.warning(f"Invalid object_id format: {chart['object_id']}, skipping greendirection query")
+                    else:
+                        logger.warning(f"Skipping greendirection query for object_id: {chart['object_id']}")
+                    
+                    # Get citywide changes data if available
+                    citywide_changes = ""
+                    if chart['object_id'] and chart['object_id'] != 'unknown':
+                        try:
+                            # Convert to integer for validation, but pass as string to match column type
+                            object_id_int = int(chart['object_id'])
+                            cursor.execute(
+                                "SELECT location_data FROM maps WHERE active = true AND metric_id = %s AND metadata->>'has_change_data' = 'true'",
+                                [chart['object_id']]  # Pass as string, not integer
+                            )
+                            map_data = cursor.fetchone()
+                            if map_data and map_data["location_data"]:
+                                location_data = map_data["location_data"]
+                                if location_data.get("type") == "csv" and location_data.get("csv_data"):
+                                    # Parse CSV data into a more readable format
+                                    csv_data = location_data["csv_data"]
+                                    csv_reader = csv.DictReader(io.StringIO(csv_data))
+                                    district_changes = []
+                                    for row in csv_reader:
+                                        district_changes.append(
+                                            f"District {row['district']}: {row['current_value']} (change: {row['delta']}, {float(row['percent_change'])*100:.1f}%)"
+                                        )
+                                    citywide_changes = "\n".join(district_changes)
+                                    logger.info(f"Found district data for metric_id {chart['object_id']}:\n{citywide_changes}")
+                        except (ValueError, TypeError) as e:
+                            logger.error(f"Error processing citywide changes data: {e}")
+                    result['citywide_changes'] = citywide_changes
+                    
+                    # Add stale data warning if detected
+                    if stale_data_warning:
+                        result['stale_data_warning'] = stale_data_warning
+                        logger.warning(f"Adding stale data warning to result: {stale_data_warning}")
+                        
+                    # Log the values for debugging
+                    logger.info(f"Result for chart {chart_id}: {result['object_name']} - Previous: {result['previous_value']} ({result['previous_period']}), Recent: {result['recent_value']} ({result['recent_period']}), Delta: {result['delta']}, greendirection: {result['greendirection']}, citywide_changes: {citywide_changes}")
+                    
+                    # Debug log to show final result periods
+                    logger.info(f"PERIOD DEBUG - Chart {chart_id}: recent_period={result.get('recent_period')}, previous_period={result.get('previous_period')}")
+                    
+                    all_results.append(result)
         
         # Sort all results by delta (descending and ascending)
         all_results = [r for r in all_results if r['delta'] is not None]
@@ -1583,6 +1613,7 @@ async def get_top_metric_changes(
         # Categorize changes based on greendirection and percent_change
         positive_changes = []
         negative_changes = []
+        no_change = []  # Track metrics with no change
         
         for r in all_results:
             if r['percent_change'] is None or r['greendirection'] is None:
@@ -1590,6 +1621,11 @@ async def get_top_metric_changes(
                 
             percent_change = float(r['percent_change'])
             greendirection = r['greendirection'].lower() if r['greendirection'] else None
+            
+            # Handle zero change - add to no_change list
+            if percent_change == 0:
+                no_change.append(r)
+                continue
             
             # Determine if this is a positive or negative change based on greendirection
             if greendirection == 'up':
@@ -1611,7 +1647,7 @@ async def get_top_metric_changes(
                 elif percent_change < 0:
                     negative_changes.append(r)
         
-        logger.info(f"Split results: {len(positive_changes)} positive changes, {len(negative_changes)} negative changes")
+        logger.info(f"Split results: {len(positive_changes)} positive changes, {len(negative_changes)} negative changes, {len(no_change)} no change")
         
         # Sort by absolute percent change (highest impact first)
         positive_changes = sorted(positive_changes, 
@@ -1622,6 +1658,12 @@ async def get_top_metric_changes(
                                 key=lambda x: abs(float(x['percent_change'])), 
                                 reverse=True)[:limit]
         
+        # For items with no change, sort by recent_value (descending) to show most significant metrics first
+        # Then take up to the limit, but prioritize metrics with larger absolute values
+        no_change = sorted(no_change, 
+                          key=lambda x: abs(float(x['recent_value']) if x['recent_value'] else 0), 
+                          reverse=True)[:limit]
+        
         # Log positive/negative results to verify categorization
         logger.info("Positive changes after categorization:")
         for i, r in enumerate(positive_changes[:3]):
@@ -1631,7 +1673,7 @@ async def get_top_metric_changes(
         for i, r in enumerate(negative_changes[:3]):
             logger.info(f"Negative {i}: {r.get('object_name')} - Percent Change: {r.get('percent_change')}%, greendirection: {r.get('greendirection')}")
         
-        logger.info(f"Found {len(positive_changes)} positive changes and {len(negative_changes)} negative changes")
+        logger.info(f"Found {len(positive_changes)} positive changes, {len(negative_changes)} negative changes, and {len(no_change)} no changes")
         
         # Process results to ensure JSON compliance
         def process_results(results):
@@ -1656,63 +1698,82 @@ async def get_top_metric_changes(
         # Format the results  
         positive_formatted = process_results(positive_changes)
         negative_formatted = process_results(negative_changes)
+        no_change_formatted = process_results(no_change)
         
         # Count stale data warnings
         stale_data_count = 0
-        for result in positive_formatted + negative_formatted:
+        for result in positive_formatted + negative_formatted + no_change_formatted:
             if result.get('stale_data_warning'):
                 stale_data_count += 1
             
             
-            # Ensure consistent periods across all results based on our target months
-            from datetime import date as dt
-            today = dt.today()
+            # Determine the most common periods from actual data
+            # Collect all periods from results to find the most common ones
+            recent_periods = []
+            comparison_periods = []
             
-            # Calculate target periods (same logic as above)
-            if today.month == 1:
-                target_recent_month = 12
-                target_recent_year = today.year - 1
+            for result in all_results:
+                if 'recent_period' in result and result['recent_period']:
+                    recent_periods.append(result['recent_period'])
+                if 'previous_period' in result and result['previous_period']:
+                    comparison_periods.append(result['previous_period'])
+            
+            # Find the most common periods (mode)
+            from collections import Counter
+            
+            target_recent_period = None
+            target_comparison_period = None
+            
+            if recent_periods:
+                recent_counter = Counter(recent_periods)
+                most_common_recent = recent_counter.most_common(1)[0][0]
+                target_recent_period = most_common_recent
+                logger.info(f"Most common recent period from data: {target_recent_period}")
+            
+            if comparison_periods:
+                comparison_counter = Counter(comparison_periods)
+                most_common_comparison = comparison_counter.most_common(1)[0][0]
+                target_comparison_period = most_common_comparison
+                logger.info(f"Most common comparison period from data: {target_comparison_period}")
+            
+            # If we couldn't determine periods from data, don't override
+            if not target_recent_period or not target_comparison_period:
+                logger.warning("Could not determine common periods from data, using individual metric periods")
             else:
-                target_recent_month = today.month - 1
-                target_recent_year = today.year
-            target_recent_period = dt(target_recent_year, target_recent_month, 1)
-            
-            if target_recent_month == 1:
-                target_comparison_month = 12
-                target_comparison_year = target_recent_year - 1
-            else:
-                target_comparison_month = target_recent_month - 1
-                target_comparison_year = target_recent_year
-            target_comparison_period = dt(target_comparison_year, target_comparison_month, 1)
-            
-            logger.info(f"API RESPONSE - Target periods: recent={target_recent_period}, comparison={target_comparison_period}")
-            print(f"🔍 ANOMALY DEBUG: Target periods: recent={target_recent_period}, comparison={target_comparison_period}")
-            
-            # Override periods in results to ensure consistency
-            for result in positive_formatted + negative_formatted:
-                if 'recent_period' not in result or not result['recent_period']:
-                    result['recent_period'] = target_recent_period.isoformat()
-                if 'previous_period' not in result or not result['previous_period']:
-                    result['previous_period'] = target_comparison_period.isoformat()
+                logger.info(f"API RESPONSE - Target periods from data: recent={target_recent_period}, comparison={target_comparison_period}")
+                print(f"🔍 ANOMALY DEBUG: Target periods from data: recent={target_recent_period}, comparison={target_comparison_period}")
                     
             logger.info(f"API RESPONSE - First result periods: recent={positive_formatted[0]['recent_period'] if positive_formatted else 'N/A'}, previous={positive_formatted[0]['previous_period'] if positive_formatted else 'N/A'}")
 
-            return JSONResponse(
-                content={
-                    "status": "success",
-                    "count": len(positive_formatted) + len(negative_formatted),
-                    "period_type": period_type,
-                    "object_id": object_id,
-                    "district": district,
-                    "report_date": report_date.isoformat(),
-                    "stale_data_warnings": stale_data_count,
-                    "positive_changes": positive_formatted,
-                    "negative_changes": negative_formatted,
-                    # Add global period information for frontend
-                    "target_recent_period": target_recent_period.isoformat(),
-                    "target_comparison_period": target_comparison_period.isoformat()
-                }
-            )
+            response_content = {
+                "status": "success",
+                "count": len(positive_formatted) + len(negative_formatted) + len(no_change_formatted),
+                "period_type": period_type,
+                "object_id": object_id,
+                "district": district,
+                "report_date": report_date.isoformat(),
+                "stale_data_warnings": stale_data_count,
+                "positive_changes": positive_formatted,
+                "negative_changes": negative_formatted,
+                "no_change": no_change_formatted
+            }
+            
+            # Add global period information for frontend if available
+            if target_recent_period:
+                # If it's already a string (ISO format), use it as is
+                if isinstance(target_recent_period, str):
+                    response_content["target_recent_period"] = target_recent_period
+                else:
+                    response_content["target_recent_period"] = target_recent_period.isoformat()
+            
+            if target_comparison_period:
+                # If it's already a string (ISO format), use it as is
+                if isinstance(target_comparison_period, str):
+                    response_content["target_comparison_period"] = target_comparison_period
+                else:
+                    response_content["target_comparison_period"] = target_comparison_period.isoformat()
+            
+            return JSONResponse(content=response_content)
         
     except Exception as e:
         logger.error(f"Error getting top metric changes: {str(e)}", exc_info=True)
@@ -1848,170 +1909,21 @@ IMPORTANT: You MUST use the tools in the order specified before providing your e
         logger.info(f"Agent functions available: {[func.__name__ for func in agent.functions]}")
         
         # Process with the agent
-        logger.info("Starting swarm_client.run for explanation")
-        response_generator = swarm_client.run(
-            agent=agent,
-            messages=session_data["messages"],
-            context_variables=session_data["context_variables"],
-            stream=True,
-            debug=debug_mode,
+        logger.info("Swarm client has been removed - returning error response")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error", 
+                "message": "AI agent functionality is currently unavailable. The swarm client has been removed."
+            }
         )
-        
-        # Process and format the response
-        full_response = ""
-        current_function_name = None
-        incomplete_tool_call = None
-        tool_calls_made = []
-        
-        try:
-            logger.info("Processing agent response stream")
-            for chunk in response_generator:
-                logger.debug(f"Received chunk: {str(chunk)[:200]}...")
-                
-                # Handle tool calls
-                if "tool_calls" in chunk and chunk["tool_calls"] is not None:
-                    for tool_call in chunk["tool_calls"]:
-                        function_info = tool_call.get("function")
-                        if not function_info:
-                            logger.warning("Received empty function info in tool call")
-                            continue
-                        
-                        if function_info.get("name"):
-                            current_function_name = function_info["name"]
-                            logger.info(f"Receiving tool call: {current_function_name}")
-                        
-                        if not current_function_name:
-                            logger.warning("Function name is empty or missing")
-                            continue
-                        
-                        arguments_fragment = function_info.get("arguments", "")
-                        logger.debug(f"Received arguments fragment: {arguments_fragment[:100]}...")
-                        
-                        if incomplete_tool_call is None or incomplete_tool_call["function_name"] != current_function_name:
-                            incomplete_tool_call = {
-                                "type": "tool_call",
-                                "sender": "System",
-                                "function_name": current_function_name,
-                                "arguments": ""
-                            }
-                            logger.info(f"Started new tool call: {current_function_name}")
-                        
-                        incomplete_tool_call["arguments"] += arguments_fragment
-                        
-                        try:
-                            full_args = incomplete_tool_call["arguments"]
-                            arguments_json = json.loads(full_args)
-                            logger.info(f"""
-=== Tool Call ===
-Function: {current_function_name}
-Arguments: {json.dumps(arguments_json, indent=2)}
-""")
-
-                            incomplete_tool_call["arguments"] = arguments_json
-                            message = json.dumps(incomplete_tool_call) + "\n"
-                            yield message
-
-                            # Process the function call
-                            function_to_call = function_mapping.get(current_function_name)
-                            if function_to_call:
-                                try:
-                                    # Call the function with the context variables and arguments
-                                    logger.info(f"Executing tool: {current_function_name}")
-                                    result = function_to_call(session_data["context_variables"], **arguments_json)
-                                    
-                                    logger.info(f"""
-=== Tool Result ===
-Function: {current_function_name}
-Result: {str(result)[:500]}{'...' if len(str(result)) > 500 else ''}
-""")
-                                    
-                                    # Format the result for display
-                                    if isinstance(result, dict):
-                                        result_message = {
-                                            "type": "tool_result",
-                                            "sender": "System",
-                                            "function_name": current_function_name,
-                                            "result": result
-                                        }
-                                    else:
-                                        result_message = {
-                                            "type": "tool_result",
-                                            "sender": "System",
-                                            "function_name": current_function_name,
-                                            "result": str(result)
-                                        }
-                                    
-                                    yield json.dumps(result_message) + "\n"
-                                except Exception as e:
-                                    logger.error(f"""
-=== Tool Error ===
-Function: {current_function_name}
-Error: {str(e)}
-""")
-                                    error_message = {
-                                        "type": "error",
-                                        "sender": "System",
-                                        "function_name": current_function_name,
-                                        "error": str(e)
-                                    }
-                                    yield json.dumps(error_message) + "\n"
-
-                            incomplete_tool_call = None
-                            current_function_name = None
-                        except json.JSONDecodeError:
-                            # Still accumulating arguments
-                            pass
-                
-                # Handle content
-                if "content" in chunk and chunk["content"] is not None:
-                    content_piece = chunk["content"]
-                    full_response += content_piece
-                    logger.debug(f"Adding content to response: {content_piece[:50]}...")
-        
-            logger.info(f"Response generation complete. Tool calls made: {len(tool_calls_made)}")
-            for i, call in enumerate(tool_calls_made):
-                logger.info(f"Tool call {i+1}: {call['name']}")
-            
-        except Exception as e:
-            err_msg = f"Error running agent: {str(e)}"
-            logger.error(err_msg, exc_info=True)
-            
-            # Log all the information we have
-            logger.error(f"Current function name: {current_function_name}")
-            if incomplete_tool_call:
-                logger.error(f"Incomplete tool call: {incomplete_tool_call['function_name']}")
-                logger.error(f"Arguments accumulated so far: {incomplete_tool_call['arguments'][:200]}")
-            
-            logger.error(f"Most recent tool calls: {tool_calls_made[-3:] if tool_calls_made else 'None'}")
-            logger.error(f"Available functions: {list(function_mapping.keys())}")
-            
-            full_response += f"\n\n**ERROR: I encountered an error while processing your request: {str(e)}**"
-        
-        # Check if no tool calls were made and add a special message
-        if len(tool_calls_made) == 0:
-            warning_message = """
-### Warning: Analysis Incomplete
-
-The system could not analyze this metric properly because no data tools were used. 
-
-Please try again. If the problem persists, contact support.
-"""
-            full_response = warning_message + full_response
-        
-        # Log the final response length
-        logger.info(f"Final response length: {len(full_response)}")
-        logger.debug(f"Final response first 500 chars: {full_response[:500]}")
-        
-        # Add assistant response to history
-        session_data["messages"].append({"role": "assistant", "content": full_response})
-        
-        # Yield the final content
-        yield full_response
     
     except Exception as e:
         logger.error(f"Error in explain_metric_change_endpoint: {str(e)}", exc_info=True)
-        error_message = {"error": f"Internal server error: {str(e)}"}
-        yield json.dumps(error_message) + "\n"
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Internal server error: {str(e)}"}
+        )
 
 @router.get("/api/query-anomalies")
 async def query_anomalies_endpoint(
@@ -2025,7 +1937,9 @@ async def query_anomalies_endpoint(
     object_id: str = None,
     period_type: str = None,
     district: str = None,
-    only_active: bool = True
+    only_active: bool = True,
+    recent_month: str = None,     # Add recent_month parameter (format: YYYY-MM)
+    comparison_month: str = None  # Add comparison_month parameter (format: YYYY-MM)
 ):
     """
     API endpoint to query anomalies for a specific metric.
@@ -2051,7 +1965,7 @@ async def query_anomalies_endpoint(
         context_variables = {}
         
         # Log the request parameters
-        logging.info(f"Query anomalies request: metric_name={metric_name}, object_id={object_id}, district={district}, period_type={period_type}, only_active={only_active}")
+        logging.info(f"Query anomalies request: metric_name={metric_name}, object_id={object_id}, district={district}, period_type={period_type}, only_active={only_active}, recent_month={recent_month}, comparison_month={comparison_month}")
         
         # Import the function here to make sure it's available
         try:
@@ -2106,7 +2020,8 @@ async def query_anomalies_endpoint(
             
             # Build query with standard filters and join with metrics table to get greendirection
             query = """
-                SELECT a.*, m.greendirection 
+                SELECT a.*, m.greendirection, 
+                       a.analysis_session_id, a.analysis_date, a.analysis_status, a.metadata
                 FROM anomalies a
                 LEFT JOIN metrics m ON a.object_id = m.id::text
                 WHERE 1=1 
@@ -2152,6 +2067,66 @@ async def query_anomalies_endpoint(
             if period_type:
                 query += "AND a.period_type = %s "
                 params.append(period_type)
+            
+            # Calculate the correct recent period based on current date and period_type
+            # This ensures we show anomalies for the most recent complete period
+            if not recent_month and period_type:
+                today = date.today()
+                
+                if period_type == 'month':
+                    # For month: use the previous month (month before current)
+                    recent_period_start = (today.replace(day=1) - relativedelta(months=1))
+                    recent_period_end = today.replace(day=1) - relativedelta(days=1)
+                elif period_type == 'year':
+                    # For year: use the previous year
+                    recent_period_start = date(today.year - 1, 1, 1)
+                    recent_period_end = date(today.year - 1, 12, 31)
+                elif period_type == 'week':
+                    # For week: use the previous week
+                    days_since_monday = today.weekday()
+                    recent_period_end = today - relativedelta(days=days_since_monday + 1)
+                    recent_period_start = recent_period_end - relativedelta(days=6)
+                elif period_type == 'quarter':
+                    # For quarter: use the previous quarter
+                    current_quarter = (today.month - 1) // 3 + 1
+                    if current_quarter == 1:
+                        recent_period_start = date(today.year - 1, 10, 1)
+                        recent_period_end = date(today.year - 1, 12, 31)
+                    else:
+                        prev_quarter_month = (current_quarter - 2) * 3 + 1
+                        recent_period_start = date(today.year, prev_quarter_month, 1)
+                        recent_period_end = date(today.year, prev_quarter_month + 2, 1) + relativedelta(months=1) - relativedelta(days=1)
+                else:
+                    recent_period_start = None
+                    recent_period_end = None
+                
+                if recent_period_start and recent_period_end:
+                    # Filter by recent_date field to match the calculated period
+                    query += "AND a.recent_date >= %s AND a.recent_date <= %s "
+                    params.extend([recent_period_start, recent_period_end])
+                    logging.info(f"Filtering by calculated {period_type} period: {recent_period_start} to {recent_period_end}")
+            
+            # Add month filtering if explicitly provided - filter by recent_date
+            elif recent_month and comparison_month:
+                try:
+                    # Convert YYYY-MM format to date objects for filtering
+                    recent_date_obj = datetime.strptime(recent_month, '%Y-%m').date()
+                    
+                    # Calculate the start and end of the recent month
+                    month_start = recent_date_obj.replace(day=1)
+                    if recent_date_obj.month == 12:
+                        month_end = recent_date_obj.replace(year=recent_date_obj.year + 1, month=1, day=1) - relativedelta(days=1)
+                    else:
+                        next_month = recent_date_obj.replace(month=recent_date_obj.month + 1, day=1)
+                        month_end = next_month - relativedelta(days=1)
+                    
+                    # Filter by recent_date field to match the selected month
+                    query += "AND a.recent_date >= %s AND a.recent_date <= %s "
+                    params.extend([month_start, month_end])
+                    logging.info(f"Filtering by explicit month: recent_date between {month_start} and {month_end}")
+                except ValueError as e:
+                    logging.error(f"Invalid month format: {e}")
+                    # Continue without month filtering if format is invalid
             
             # Order based on query_type
             if query_type == 'recent':
@@ -2262,8 +2237,18 @@ async def query_anomalies_endpoint(
                         "period_type": item_period_type,
                         "explanation": item.get("explanation", ""),
                         "is_active": item.get("is_active", True),
-                        "greendirection": item.get("greendirection")  # Include greendirection from metrics table
+                        "greendirection": item.get("greendirection"),  # Include greendirection from metrics table
+                        # Add analysis session data
+                        "analysis_session_id": item.get("analysis_session_id"),
+                        "analysis_date": item.get("analysis_date").isoformat() if item.get("analysis_date") else None,
+                        "analysis_status": item.get("analysis_status"),
+                        "analysis_response_text": None
                     }
+                    
+                    # Extract response text from metadata
+                    if item.get("metadata"):
+                        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else json.loads(item.get("metadata"))
+                        anomaly_data["analysis_response_text"] = metadata.get('analysis_response_text')
                     
                     # Debug logging to see what fields are available
                     logger.info(f"Processing anomaly item: {item.get('id')}")
@@ -4088,6 +4073,263 @@ async def create_new_report(request: Request):
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": f"Failed to create new report: {str(e)}"}
+        )
+
+# Session tracking functions for analysis history
+def store_analysis_session(item_id, item_type, session_id, response_text, status='completed'):
+    """
+    Store analysis session data in the database.
+    
+    Args:
+        item_id: The ID of the metric or anomaly being analyzed
+        item_type: 'metric' for time_series_metadata or 'anomaly' for anomalies
+        session_id: The session ID from the chat interface
+        response_text: The final analysis response text
+        status: Analysis status ('pending', 'completed', 'failed')
+    """
+    try:
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cursor:
+                table_name = 'time_series_metadata' if item_type == 'metric' else 'anomalies'
+                id_column = 'chart_id' if item_type == 'metric' else 'id'
+                
+                # Update the record with session information
+                cursor.execute(f"""
+                    UPDATE {table_name} 
+                    SET analysis_session_id = %s,
+                        analysis_date = CURRENT_TIMESTAMP,
+                        analysis_status = %s,
+                        metadata = COALESCE(metadata, '{{}}'::jsonb) || %s::jsonb
+                    WHERE {id_column} = %s
+                """, [
+                    session_id,
+                    status,
+                    json.dumps({"analysis_response_text": response_text}),
+                    item_id
+                ])
+                
+                conn.commit()
+                logger.info(f"Stored analysis session {session_id} for {item_type} {item_id}")
+                return True
+                
+    except Exception as e:
+        logger.error(f"Error storing analysis session: {str(e)}")
+        return False
+
+def get_analysis_session(item_id, item_type):
+    """
+    Retrieve analysis session data from the database.
+    
+    Args:
+        item_id: The ID of the metric or anomaly
+        item_type: 'metric' for time_series_metadata or 'anomaly' for anomalies
+        
+    Returns:
+        Dict with session data or None if not found
+    """
+    try:
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cursor:
+                table_name = 'time_series_metadata' if item_type == 'metric' else 'anomalies'
+                id_column = 'chart_id' if item_type == 'metric' else 'id'
+                
+                cursor.execute(f"""
+                    SELECT analysis_session_id, analysis_date, analysis_status, metadata
+                    FROM {table_name}
+                    WHERE {id_column} = %s
+                    AND analysis_session_id IS NOT NULL
+                """, [item_id])
+                
+                result = cursor.fetchone()
+                if result:
+                    # Convert datetime to ISO format string for JSON serialization
+                    analysis_date = result[1]
+                    if analysis_date:
+                        analysis_date = analysis_date.isoformat()
+                    
+                    session_data = {
+                        'session_id': result[0],
+                        'analysis_date': analysis_date,
+                        'status': result[2],
+                        'response_text': None
+                    }
+                    
+                    # Extract response text from metadata
+                    if result[3]:
+                        metadata = result[3] if isinstance(result[3], dict) else json.loads(result[3])
+                        session_data['response_text'] = metadata.get('analysis_response_text')
+                    
+                    return session_data
+                
+                return None
+                
+    except Exception as e:
+        logger.error(f"Error retrieving analysis session: {str(e)}")
+        return None
+
+def get_items_with_analysis_sessions(item_type, limit=50):
+    """
+    Get items that have been analyzed, ordered by analysis date.
+    
+    Args:
+        item_type: 'metric' for time_series_metadata or 'anomaly' for anomalies
+        limit: Maximum number of items to return
+        
+    Returns:
+        List of items with analysis session data
+    """
+    try:
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cursor:
+                table_name = 'time_series_metadata' if item_type == 'metric' else 'anomalies'
+                id_column = 'chart_id' if item_type == 'metric' else 'id'
+                name_column = 'object_name' if item_type == 'metric' else 'object_name'
+                
+                cursor.execute(f"""
+                    SELECT {id_column}, {name_column}, analysis_session_id, 
+                           analysis_date, analysis_status, district
+                    FROM {table_name}
+                    WHERE analysis_session_id IS NOT NULL
+                    ORDER BY analysis_date DESC
+                    LIMIT %s
+                """, [limit])
+                
+                results = cursor.fetchall()
+                items = []
+                
+                for row in results:
+                    # Convert datetime to ISO format string for JSON serialization
+                    analysis_date = row[3]
+                    if analysis_date:
+                        analysis_date = analysis_date.isoformat()
+                    
+                    item = {
+                        'id': row[0],
+                        'name': row[1],
+                        'session_id': row[2],
+                        'analysis_date': analysis_date,
+                        'status': row[4],
+                        'district': row[5]
+                    }
+                    items.append(item)
+                
+                return items
+                
+    except Exception as e:
+        logger.error(f"Error retrieving items with analysis sessions: {str(e)}")
+        return []
+
+# API endpoint to get analysis session data
+@router.get("/api/analysis-session/{item_type}/{item_id}")
+async def get_analysis_session_endpoint(item_type: str, item_id: int):
+    """Get analysis session data for a specific item."""
+    try:
+        if item_type not in ['metric', 'anomaly']:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid item_type. Must be 'metric' or 'anomaly'"}
+            )
+        
+        session_data = get_analysis_session(item_id, item_type)
+        
+        if session_data:
+            return JSONResponse(content={
+                "status": "success",
+                "session_data": session_data
+            })
+        else:
+            return JSONResponse(
+                status_code=404,
+                content={"status": "not_found", "message": "No analysis session found"}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in get_analysis_session_endpoint: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+
+# API endpoint to get all analyzed items
+@router.get("/api/analyzed-items/{item_type}")
+async def get_analyzed_items_endpoint(item_type: str, limit: int = 50):
+    """Get all items that have been analyzed."""
+    try:
+        if item_type not in ['metric', 'anomaly']:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid item_type. Must be 'metric' or 'anomaly'"}
+            )
+        
+        items = get_items_with_analysis_sessions(item_type, limit)
+        
+        return JSONResponse(content={
+            "status": "success",
+            "items": items,
+            "count": len(items)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_analyzed_items_endpoint: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+
+# API endpoint to store analysis session data
+@router.post("/api/store-analysis-session")
+async def store_analysis_session_endpoint(request: Request):
+    """Store analysis session data in the database."""
+    try:
+        data = await request.json()
+        logger.info(f"Received store analysis session request: {data}")
+        
+        # Validate required fields
+        required_fields = ['item_id', 'item_type', 'session_id', 'response_text']
+        for field in required_fields:
+            if field not in data:
+                logger.error(f"Missing required field: {field}")
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": f"Missing required field: {field}"}
+                )
+        
+        # Validate item_type
+        if data['item_type'] not in ['metric', 'anomaly']:
+            logger.error(f"Invalid item_type: {data['item_type']}")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid item_type. Must be 'metric' or 'anomaly'"}
+            )
+        
+        # Store the session data
+        logger.info(f"Storing analysis session: {data['session_id']} for {data['item_type']} {data['item_id']}")
+        success = store_analysis_session(
+            item_id=data['item_id'],
+            item_type=data['item_type'],
+            session_id=data['session_id'],
+            response_text=data['response_text'],
+            status=data.get('status', 'completed')
+        )
+        
+        if success:
+            logger.info(f"Successfully stored analysis session: {data['session_id']}")
+            return JSONResponse(content={
+                "status": "success",
+                "message": "Analysis session stored successfully"
+            })
+        else:
+            logger.error(f"Failed to store analysis session: {data['session_id']}")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": "Failed to store analysis session"}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in store_analysis_session_endpoint: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
         )
 
 # Run the application

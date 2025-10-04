@@ -390,8 +390,7 @@ async def langchain_explainer_streaming_api(request: Request):
                         # The agent already yields properly formatted SSE data, so pass it through directly
                         yield chunk
                 
-                # Send completion signal
-                yield f"data: {json.dumps({'completed': True})}\n\n"
+                # Don't send manual completion signal - the agent handles this with session_id
                 
             except Exception as e:
                 logger.error(f"Error in LangChain streaming generation: {str(e)}")

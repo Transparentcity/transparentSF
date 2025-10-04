@@ -98,6 +98,9 @@ ai/data/climate/
 ai/data/datasets/old/
 ai/data/policeHistory/
 
+# Production and deployment files
+production/
+
 # Application specific
 app_debug.logai/gcp_env_example.env
 database_access_summary.md

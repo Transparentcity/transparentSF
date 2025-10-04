@@ -2157,10 +2157,20 @@ def extract_tooltip_fields(row, location_fields=None):
     
     # Extract all non-location fields
     for column, value in row.items():
+        # Debug logging for media URL fields
+        if 'media' in column.lower():
+            logger.info(f"Processing media field {column}: value={value}, type={type(value)}, is_none={value is None}, str_strip={str(value).strip() if value is not None else 'None'}")
+        
         if column not in location_field_names and value is not None and str(value).strip():
             # Skip empty values and common metadata fields
             if column not in ['index', 'level_0', 'Unnamed: 0']:
+                # Special handling for media URLs - don't skip if it's 'nan' string
+                if 'media' in column.lower() and str(value).lower() == 'nan':
+                    logger.info(f"Skipping media field {column} with 'nan' value")
+                    continue
                 tooltip_fields[column] = str(value)
+                if 'media' in column.lower():
+                    logger.info(f"Added media field {column} to tooltip_fields: {str(value)}")
     
     return tooltip_fields
 
@@ -2318,6 +2328,12 @@ def process_dataset_for_map(dataset, map_type, series_field=None, color_palette=
                     if coords and len(coords) >= 2:
                         title, description = generate_point_title_and_description(row, idx)
                         tooltip_fields = extract_tooltip_fields(row, location_fields)
+                        
+                        # Debug logging for tooltip fields
+                        if idx < 3:  # Only log first 3 rows
+                            logger.info(f"Row {idx} - tooltip_fields result: {tooltip_fields}")
+                            logger.info(f"Row {idx} - raw row data: {dict(row)}")
+                        
                         item = {
                             "lat": coords[1],
                             "lon": coords[0],

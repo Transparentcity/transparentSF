@@ -786,15 +786,61 @@
                 // Add additional tooltip fields
                 const locationFields = new Set(['lat','lon','long','latitude','longitude','coordinates','point','point_geom','intersection','address','street','city','state','zip']);
                 for (const [field, value] of Object.entries(tooltipFields)) {
-                    if (field === 'title' || field === 'description' || field === 'value') continue;
+                    if (field === 'title' || field === 'description' || field === 'value' || field === 'scale') continue;
                     if (locationFields.has(field)) continue;
                     if (/(^|_)(lat|lon|long|coord|address|street|city|state|zip|point|geom)(_|$)/i.test(field)) continue;
                     
                     const displayKey = field.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    tooltipContent += `<div class="tsf-tooltip-row">
-                        <div class="tsf-tooltip-key">${displayKey}:</div>
-                        <div class="tsf-tooltip-val">${value}</div>
-                    </div>`;
+                    
+                    // Special handling for media URLs
+                    if (field.toLowerCase().includes('media_url') || field.toLowerCase().includes('mediaurl')) {
+                        // Extract URL from nested object or use direct string
+                        let mediaUrl = value;
+                        try {
+                            // Handle stringified JSON objects like "{'url': 'https://...'}"
+                            if (typeof value === 'string' && value.includes("'url':")) {
+                                const urlMatch = value.match(/'url':\s*'([^']+)'/);
+                                if (urlMatch) {
+                                    mediaUrl = urlMatch[1];
+                                }
+                            }
+                            // Handle actual JSON objects
+                            else if (typeof value === 'object' && value.url) {
+                                mediaUrl = value.url;
+                            }
+                            // Handle JSON string objects
+                            else if (typeof value === 'string' && value.startsWith('{')) {
+                                const parsed = JSON.parse(value.replace(/'/g, '"'));
+                                if (parsed.url) {
+                                    mediaUrl = parsed.url;
+                                }
+                            }
+                        } catch (e) {
+                            console.log('Failed to parse media URL:', value);
+                        }
+                        
+                        // Only show media if we have a valid URL
+                        if (mediaUrl && mediaUrl.startsWith('http')) {
+                            tooltipContent += `<div class="tsf-tooltip-row">
+                                <div class="tsf-tooltip-key">${displayKey}:</div>
+                                <div class="tsf-tooltip-val">
+                                    <a href="${mediaUrl}" target="_blank" class="media-link">
+                                        <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                             onmouseover="showImagePreview(event, '${mediaUrl}')"
+                                             onmouseout="hideImagePreview()"
+                                             style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer;">
+                                        <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
+                                    </a>
+                                </div>
+                            </div>`;
+                        }
+                    } else {
+                        tooltipContent += `<div class="tsf-tooltip-row">
+                            <div class="tsf-tooltip-key">${displayKey}:</div>
+                            <div class="tsf-tooltip-val">${value}</div>
+                        </div>`;
+                    }
                 }
 
                 tooltipContent += `</div>`;
@@ -1127,6 +1173,42 @@
                 const urlDialog = prompt('Copy this URL to share:', window.location.href);
             }
         }
+
+        // Image preview functionality
+        let imagePreview = null;
+
+        function showImagePreview(event, imageUrl) {
+            // Remove any existing preview
+            hideImagePreview();
+            
+            // Create preview element
+            imagePreview = document.createElement('div');
+            imagePreview.className = 'image-preview-overlay';
+            imagePreview.innerHTML = `
+                <div class="image-preview-container">
+                    <img src="${imageUrl}" alt="Image Preview" class="image-preview" 
+                         onerror="this.parentElement.innerHTML='<div class=\\'preview-error\\'>Failed to load image</div>'">
+                </div>
+            `;
+            
+            // Position near the mouse cursor
+            const rect = event.target.getBoundingClientRect();
+            imagePreview.style.position = 'fixed';
+            imagePreview.style.left = (rect.right + 10) + 'px';
+            imagePreview.style.top = rect.top + 'px';
+            imagePreview.style.zIndex = '10000';
+            imagePreview.style.pointerEvents = 'none';
+            
+            document.body.appendChild(imagePreview);
+        }
+
+        function hideImagePreview() {
+            if (imagePreview) {
+                imagePreview.remove();
+                imagePreview = null;
+            }
+        }
+
     </script>
 </body>
 </html>

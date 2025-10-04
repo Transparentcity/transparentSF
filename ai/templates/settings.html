@@ -253,17 +253,17 @@
             try {
                 show(s, 'Starting metadata reload (Step 1 of 3)...');
                 
-                // Step 1: Fetch dataset URLs
-                const step1 = await fetchJSON('/api/fetch-dataset-urls', { method: 'POST' });
-                show(s, 'Step 1 complete: ' + (step1.urls_found || 'Unknown') + ' URLs found. Starting Step 2...');
+                // Step 1: Refresh dataset URLs
+                const step1 = await fetchJSON('/backend/refresh_dataset_urls', { method: 'GET' });
+                show(s, 'Step 1 complete: Dataset URLs refreshed. Starting Step 2...');
                 
                 // Step 2: Fetch metadata
-                const step2 = await fetchJSON('/api/fetch-metadata', { method: 'POST' });
-                show(s, 'Step 2 complete. Starting Step 3...');
+                const step2 = await fetchJSON('/backend/fetch_metadata', { method: 'GET' });
+                show(s, 'Step 2 complete: Metadata fetched and stored. Starting Step 3...');
                 
-                // Step 3: Direct import
-                const step3 = await fetchJSON('/api/direct-import', { method: 'POST' });
-                show(s, 'All steps complete! Metadata successfully reloaded.');
+                // Step 3: Reload SF Public data into vector database
+                const step3 = await fetchJSON('/backend/reload_sfpublic', { method: 'GET' });
+                show(s, 'All steps complete! SF Public metadata successfully reloaded into vector database.');
             } catch (e) {
                 show(s, 'Failed to reload metadata: ' + e.message, false);
             } finally {

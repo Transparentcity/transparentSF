@@ -17,7 +17,6 @@ import time
 # Import from our modular components
 from tools.analysis.weekly import (
     # Data processing
-    load_json_file,
     find_metric_in_queries,
     extract_date_field_from_query,
     transform_query_for_weekly,
@@ -34,8 +33,7 @@ from tools.analysis.weekly import (
     save_weekly_analysis,
     # generate_weekly_newsletter,
     
-    # Scheduling
-    scheduled_weekly_task
+    # Scheduling - removed
 )
 
 # Get script directory and ensure logs directory exists
@@ -77,7 +75,7 @@ def main():
         logger.info("Setting up scheduled task for weekly analysis (Thursdays at 11am)")
         
         # Schedule the job to run every Thursday at 11am
-        schedule.every().thursday.at("11:00").do(scheduled_weekly_task)
+        schedule.every().thursday.at("11:00").do(run_weekly_analysis)
         
         # Keep the script running
         logger.info("Scheduler is running, press Ctrl+C to exit")
