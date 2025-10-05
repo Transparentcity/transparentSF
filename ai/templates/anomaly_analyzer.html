@@ -2734,13 +2734,70 @@ Can you help me understand:
                 
                 if (response.ok) {
                     console.log('Analysis session stored successfully');
-                    // Refresh the table to show updated analysis status
-                    refreshData();
+                    // Immediately update the action button in-place without full refresh
+                    updateActionButtonForItem(itemType, itemId, sessionId);
                 } else {
                     console.error('Failed to store analysis session:', await response.text());
                 }
             } catch (error) {
                 console.error('Error storing analysis session:', error);
+            }
+        }
+        
+        // Update the action button for a specific item to "Review Analysis"
+        function updateActionButtonForItem(itemType, itemId, sessionId) {
+            try {
+                const rows = document.querySelectorAll('#metrics-results tr');
+                rows.forEach(row => {
+                    if (row.hasAttribute('data-metric') && itemType === 'metric') {
+                        try {
+                            const metricData = JSON.parse(row.getAttribute('data-metric'));
+                            const chartId = metricData.chart_id || metricData.id || metricData.object_id;
+                            const matches = String(chartId) === String(itemId) || String(metricData.object_id) === String(itemId);
+                            if (matches) {
+                                const actionCell = row.querySelector('td:last-child');
+                                if (actionCell) {
+                                    const reviewTitle = `Analysis completed on ${new Date().toLocaleDateString()}`;
+                                    const reviewId = chartId || itemId || '';
+                                    actionCell.innerHTML = `
+                                        <button class="action-button" onclick="reviewAnalysis('${sessionId}', 'metric', '${reviewId}')" title="${reviewTitle}">
+                                            <i class="fas fa-eye"></i> Review Analysis
+                                        </button>
+                                    `;
+                                }
+                                // Persist state in row data
+                                metricData.analysis_session_id = sessionId;
+                                metricData.analysis_date = new Date().toISOString();
+                                row.setAttribute('data-metric', JSON.stringify(metricData));
+                            }
+                        } catch (e) {
+                            console.warn('Failed parsing metric row data for update:', e);
+                        }
+                    } else if (row.hasAttribute('data-anomaly') && itemType === 'anomaly') {
+                        try {
+                            const anomalyData = JSON.parse(row.getAttribute('data-anomaly'));
+                            if (String(anomalyData.id) === String(itemId)) {
+                                const actionCell = row.querySelector('td:last-child');
+                                if (actionCell) {
+                                    const reviewTitle = `Analysis completed on ${new Date().toLocaleDateString()}`;
+                                    actionCell.innerHTML = `
+                                        <button class="action-button" onclick="reviewAnalysis('${sessionId}', 'anomaly', '${anomalyData.id}')" title="${reviewTitle}">
+                                            <i class="fas fa-eye"></i> Review Analysis
+                                        </button>
+                                    `;
+                                }
+                                // Persist state in row data
+                                anomalyData.analysis_session_id = sessionId;
+                                anomalyData.analysis_date = new Date().toISOString();
+                                row.setAttribute('data-anomaly', JSON.stringify(anomalyData));
+                            }
+                        } catch (e) {
+                            console.warn('Failed parsing anomaly row data for update:', e);
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Error updating action button:', e);
             }
         }
         
@@ -2770,8 +2827,8 @@ Can you help me understand:
         window.addEventListener('message', function(event) {
             if (event.data && event.data.type === 'ANALYSIS_SESSION_STORED') {
                 console.log('Received analysis session stored message:', event.data);
-                // Refresh the data to show updated analysis status
-                refreshData();
+                // Update the specific row action button immediately
+                updateActionButtonForItem(event.data.item_type, event.data.item_id, event.data.session_id);
             }
         });
         

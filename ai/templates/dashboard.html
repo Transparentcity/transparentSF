@@ -376,7 +376,7 @@
         </div>
         
         <!-- Lazy Load Metrics (Click to Load) -->
-        <div class="metric-box lazy-metric" id="time-series-metadata" onclick="loadLazyMetric('time-series-metadata')">
+        <div class="metric-box lazy-metric" id="time-series-metadata">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">📝</div>
@@ -385,7 +385,7 @@
             <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box lazy-metric" id="anomalies" onclick="loadLazyMetric('anomalies')">
+        <div class="metric-box lazy-metric" id="anomalies">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">⚠️</div>
@@ -398,7 +398,7 @@
             <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box lazy-metric" id="maps-count" onclick="loadLazyMetric('maps-count')">
+        <div class="metric-box lazy-metric" id="maps-count">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">🗺️</div>
@@ -407,7 +407,7 @@
             <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box lazy-metric" id="postgres-size" onclick="loadLazyMetric('postgres-size')">
+        <div class="metric-box lazy-metric" id="postgres-size">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">🗄️</div>
@@ -416,7 +416,7 @@
             <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box lazy-metric" id="vectordb-size" onclick="loadLazyMetric('vectordb-size')">
+        <div class="metric-box lazy-metric" id="vectordb-size">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">📈</div>
@@ -425,7 +425,7 @@
             <div class="lazy-indicator">⏳</div>
         </div>
         
-        <div class="metric-box lazy-metric" id="time-series-data" onclick="loadLazyMetric('time-series-data')">
+        <div class="metric-box lazy-metric" id="time-series-data">
             <div class="metric-box-top-right"></div>
             <div class="metric-box-bottom-left"></div>
             <div class="metric-icon">📊</div>
@@ -471,6 +471,14 @@
             
             // Initial load of core dashboard data
             loadCoreDashboardData();
+            
+            // Set up lazy loading event listeners
+            document.querySelectorAll('.lazy-metric').forEach(box => {
+                box.addEventListener('click', function() {
+                    const metricId = this.id;
+                    window.loadLazyMetric(metricId);
+                });
+            });
             
             // Set up refresh button
             document.getElementById('refresh-btn').addEventListener('click', function() {
@@ -518,8 +526,8 @@
                 }
             }
             
-            // Function to load lazy metric data
-            async function loadLazyMetric(metricId) {
+            // Function to load lazy metric data (make it globally accessible)
+            window.loadLazyMetric = async function(metricId) {
                 const box = document.getElementById(metricId);
                 if (box.classList.contains('loaded') || box.classList.contains('loading')) {
                     return; // Already loaded or loading
@@ -881,6 +889,10 @@
                 const valueEl = box.querySelector('.metric-value');
                 
                 valueEl.textContent = typeof data.count === 'number' ? formatNumber(data.count) : data.count;
+                
+                // Add link to map generator
+                box.style.cursor = 'pointer';
+                box.onclick = () => window.openMapsWithRecentExpanded();
             }
             
             // Function to update sessions metric

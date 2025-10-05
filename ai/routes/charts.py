@@ -480,11 +480,11 @@ async def get_active_charts_legacy(metric_id: str, district: str = "0", period_t
                 district,
                 period_type,
                 is_active
-            FROM time_series_metadata
-            WHERE object_id = %s 
-            AND district = %s 
-            AND period_type = %s
-            AND is_active = TRUE
+        FROM time_series_metadata
+        WHERE object_id = %s 
+        AND district::TEXT = %s 
+        AND period_type = %s
+        AND is_active = TRUE
             ORDER BY 
                 CASE WHEN group_field IS NULL THEN 0 ELSE 1 END,
                 group_field ASC
@@ -618,7 +618,7 @@ async def get_chart_by_metric_legacy(
                     caption,
                     metadata
                 FROM time_series_metadata 
-                WHERE object_id = %s AND district = %s 
+                WHERE object_id = %s AND district::TEXT = %s 
                 AND period_type = %s {group_field_condition}
                 AND is_active = TRUE
             """

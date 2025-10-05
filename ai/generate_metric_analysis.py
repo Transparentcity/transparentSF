@@ -530,33 +530,59 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
         
         if category_field_names:
             # Add category fields to SELECT clause for all query types
-            select_parts = transformed_query.split('SELECT ')[1].split(' WHERE')[0].strip()
+            # Handle both uppercase and lowercase SELECT
+            upper_query = transformed_query.upper()
+            if ' SELECT ' in upper_query:
+                select_index = upper_query.find(' SELECT ') + 8  # +8 for ' SELECT '
+            elif upper_query.startswith('SELECT '):
+                select_index = 7  # +7 for 'SELECT '
+            else:
+                logging.warning(f"Query SELECT split resulted in insufficient parts: Could not find SELECT in query: {transformed_query[:100]}...")
+                select_index = -1
             
-            # Check if query has aggregation functions (SUM, COUNT, AVG, etc.)
-            has_aggregation = any(func in select_parts.upper() for func in ['SUM(', 'COUNT(', 'AVG(', 'MAX(', 'MIN('])
-            
-            if has_aggregation:
-                # Insert category fields after the date field but before the aggregation
-                parts = select_parts.split(',')
-                if len(parts) >= 2:
-                    # Add category fields after the date field
-                    category_select = ', '.join(category_field_names)
-                    new_select = f"{parts[0]}, {category_select}, {parts[1]}"
-                    transformed_query = transformed_query.replace(select_parts, new_select)
-                    
-                    # Add category fields to GROUP BY
-                    if 'GROUP BY' in transformed_query:
-                        group_by_part = transformed_query.split('GROUP BY ')[1].split(' ORDER BY')[0].strip()
-                        new_group_by = f"{group_by_part}, {category_select}"
-                        transformed_query = transformed_query.replace(f"GROUP BY {group_by_part}", f"GROUP BY {new_group_by}")
-                    else:
-                        # Add GROUP BY if it doesn't exist
-                        if 'ORDER BY' in transformed_query:
-                            order_by_part = transformed_query.split('ORDER BY')[0].strip()
-                            order_by_clause = transformed_query.split('ORDER BY ')[1]
-                            transformed_query = f"{order_by_part} GROUP BY {category_select} ORDER BY {order_by_clause}"
+            if select_index > 0:
+                # Find WHERE clause (case insensitive)
+                where_index = upper_query.find(' WHERE')
+                if where_index == -1:
+                    where_index = len(transformed_query)
+                
+                select_parts = transformed_query[select_index:where_index].strip()
+                
+                # Check if query has aggregation functions (SUM, COUNT, AVG, etc.)
+                has_aggregation = any(func in select_parts.upper() for func in ['SUM(', 'COUNT(', 'AVG(', 'MAX(', 'MIN('])
+                
+                if has_aggregation:
+                    # Insert category fields after the date field but before the aggregation
+                    parts = select_parts.split(',')
+                    if len(parts) >= 2:
+                        # Add category fields after the date field
+                        category_select = ', '.join(category_field_names)
+                        new_select = f"{parts[0]}, {category_select}, {parts[1]}"
+                        transformed_query = transformed_query.replace(select_parts, new_select)
+                        
+                        # Add category fields to GROUP BY (case insensitive)
+                        upper_query = transformed_query.upper()
+                        if ' GROUP BY ' in upper_query:
+                            # Find GROUP BY position in original query
+                            group_by_index = upper_query.find(' GROUP BY ') + 10  # +10 for ' GROUP BY '
+                            order_by_index = upper_query.find(' ORDER BY')
+                            if order_by_index == -1:
+                                order_by_index = len(transformed_query)
+                            
+                            group_by_part = transformed_query[group_by_index:order_by_index].strip()
+                            new_group_by = f"{group_by_part}, {category_select}"
+                            transformed_query = transformed_query[:group_by_index] + new_group_by + transformed_query[order_by_index:]
                         else:
-                            transformed_query = f"{transformed_query} GROUP BY {category_select}"
+                            # Add GROUP BY if it doesn't exist
+                            upper_query = transformed_query.upper()
+                            order_by_index = upper_query.find(' ORDER BY')
+                            if order_by_index != -1:
+                                order_by_clause = transformed_query[order_by_index:]
+                                transformed_query = transformed_query[:order_by_index] + f" GROUP BY {category_select}" + order_by_clause
+                            else:
+                                transformed_query = f"{transformed_query} GROUP BY {category_select}"
+            else:
+                logging.warning(f"Could not parse SELECT clause to add category fields for query: {transformed_query[:100]}...")
     
     logging.info(f"Transformed query: {transformed_query}")
     

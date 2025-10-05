@@ -44,7 +44,7 @@ def generate_report_text(report_ids, execute_with_connection, load_prompts, AGEN
         logger.info(f"Creating LangChain agent for report text generation with session logging using model: {AGENT_MODEL if AGENT_MODEL else default_model}")
         langchain_agent = create_explainer_agent(
             model_key=AGENT_MODEL if AGENT_MODEL else default_model,
-            tool_groups=[ToolGroup.CORE, ToolGroup.ANALYSIS, ToolGroup.METRICS, ToolGroup.VISUALIZATION],
+            tool_groups=[],  # No tools for report text generation
             enable_session_logging=True
         )
     

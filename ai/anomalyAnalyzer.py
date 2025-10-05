@@ -2054,9 +2054,10 @@ async def query_anomalies_endpoint(
                 params.append(f"%{metric_name}%")
             
             if district:
-                # Filter by district
-                query += "AND a.district = %s "
-                params.append(district)
+                # Filter by district - handle both TEXT and INTEGER column types
+                # Cast both sides to TEXT to ensure proper comparison regardless of column type
+                query += "AND a.district::TEXT = %s "
+                params.append(str(district))
                 
             # Add object_id filter - this is our key addition
             if object_id:

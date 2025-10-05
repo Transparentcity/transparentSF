@@ -5002,7 +5002,7 @@ async def get_active_charts(metric_id: str, district: str = "0", period_type: st
             is_active
         FROM time_series_metadata
         WHERE object_id = %s 
-        AND district = %s 
+        AND district::TEXT = %s 
         AND period_type = %s
         AND is_active = TRUE
         ORDER BY 
@@ -5110,9 +5110,9 @@ async def expand_chart_placeholders(request: Request):
                 # This gets time series data for the metric
                 cursor.execute("""
                     SELECT * FROM time_series_data 
-                    WHERE metric_id = %s AND district = %s AND period_type = %s
+                    WHERE metric_id = %s AND district::TEXT = %s AND period_type = %s
                     ORDER BY date
-                """, (metric_id, district, period_type))
+                """, (metric_id, str(district), period_type))
                 
                 data_points = []
                 rows = cursor.fetchall()

@@ -185,11 +185,11 @@ def get_charts_for_review(
                 if district_filter is not None:
                     # Handle special case where "citywide" should be district "0"
                     if district_filter.lower() == "citywide":
-                        time_series_query += " AND district = %s"
+                        time_series_query += " AND district::TEXT = %s"
                         params.append("0")
                     else:
-                        time_series_query += " AND district = %s"
-                        params.append(district_filter)
+                        time_series_query += " AND district::TEXT = %s"
+                        params.append(str(district_filter))
                 
                 if metric_filter is not None:
                     time_series_query += " AND object_name ILIKE %s"
@@ -314,11 +314,11 @@ def get_charts_for_review(
                 if district_filter is not None:
                     # Handle special case where "citywide" should be district "0"
                     if district_filter.lower() == "citywide":
-                        anomaly_query += " AND district = %s"
+                        anomaly_query += " AND district::TEXT = %s"
                         params.append("0")
                     else:
-                        anomaly_query += " AND district = %s"
-                        params.append(district_filter)
+                        anomaly_query += " AND district::TEXT = %s"
+                        params.append(str(district_filter))
                 
                 if metric_filter is not None:
                     anomaly_query += " AND object_name ILIKE %s"

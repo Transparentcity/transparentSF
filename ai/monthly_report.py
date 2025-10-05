@@ -2104,7 +2104,7 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
     from agents.langchain_agent.explainer_agent import create_explainer_agent
     langchain_agent = create_explainer_agent(
         model_key=AGENT_MODEL,
-        tool_groups=[ToolGroup.CORE, ToolGroup.ANALYSIS, ToolGroup.METRICS, ToolGroup.VISUALIZATION],
+        tool_groups=[],  # No tools for newsletter generation
         enable_session_logging=True
     )
     logger.info("Created LangChain agent for main newsletter generation with session logging")
@@ -2781,8 +2781,6 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
     """
     from openai import OpenAI
     from agents.config.models import get_model_config
-    from agents.langchain_agent.explainer_agent import LangChainExplainerAgent
-    from agents.langchain_agent.config.tool_config import ToolGroup
     client = OpenAI()
     
     # Use selected model or default to gpt-5
@@ -2799,13 +2797,7 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
         AGENT_MODEL = get_default_model()
         logger.info(f"No model specified, using default: {AGENT_MODEL}")
     
-    # Create LangChain agent for session logging
-    langchain_agent = LangChainExplainerAgent(
-        model_key=AGENT_MODEL,
-        tool_groups=[ToolGroup.CORE, ToolGroup.ANALYSIS, ToolGroup.METRICS, ToolGroup.VISUALIZATION],
-        enable_session_logging=True
-    )
-    logger.info("Created LangChain agent for proofreading with session logging")
+    # No need for LangChain agent - using direct LLM call for proofreading
     
     logger.info(f"Proofreading and revising newsletter at {report_path}")
     
@@ -2849,25 +2841,24 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
 
         # JSON format instructions are now included in the prompt template
 
-        # Use LangChain agent instead of direct OpenAI call for session logging
-        logger.info("Using LangChain agent for proofreading")
-        full_prompt = f"SYSTEM: {system_message}\n\nUSER: {prompt}"
+        # Use direct LLM call for proofreading since we don't need tools
+        logger.info("Using direct LLM call for proofreading")
         
-        agent_result = langchain_agent.explain_change_sync(
-            prompt=full_prompt,
-            metric_details={
-                "report_path": str(report_path),
-                "task": "proofread_and_revise_newsletter"
-            }
-        )
+        # Get the LLM instance directly
+        from agents.config.models import create_langchain_llm
+        llm = create_langchain_llm(AGENT_MODEL)
         
-        if not agent_result.get("success"):
-            logger.error(f"LangChain agent failed to proofread newsletter: {agent_result.get('error')}")
-            return {"status": "error", "message": f"Error during proofreading: {agent_result.get('error')}"}
+        # Create messages for the LLM
+        from langchain_core.messages import SystemMessage, HumanMessage
+        messages = [
+            SystemMessage(content=system_message),
+            HumanMessage(content=prompt)
+        ]
         
-        response_content = agent_result.get("explanation", "")
-        session_id = agent_result.get("session_id")
-        logger.info(f"Successfully generated proofreading response using LangChain agent (session: {session_id})")
+        # Call the LLM directly
+        response = llm.invoke(messages)
+        response_content = response.content
+        logger.info("Successfully generated proofreading response using direct LLM call")
         
         revised_content = response_content
         
@@ -6075,7 +6066,7 @@ def regenerate_explanations_for_report(filename, model_key=None):
         # Create LangChain agent for session logging
         langchain_agent = create_explainer_agent(
             model_key=AGENT_MODEL,
-            tool_groups=[ToolGroup.CORE, ToolGroup.ANALYSIS, ToolGroup.METRICS, ToolGroup.VISUALIZATION],
+            tool_groups=[],  # No tools for newsletter text generation
             enable_session_logging=True
         )
         logger.info("Created LangChain agent for newsletter text generation with session logging")
@@ -6418,7 +6409,7 @@ def re_generate_newsletter_text_for_report(filename, model_key=None):
         # Create LangChain agent for session logging
         langchain_agent = create_explainer_agent(
             model_key=AGENT_MODEL,
-            tool_groups=[ToolGroup.CORE, ToolGroup.ANALYSIS, ToolGroup.METRICS, ToolGroup.VISUALIZATION],
+            tool_groups=[],  # No tools for newsletter text generation
             enable_session_logging=True
         )
         logger.info("Created LangChain agent for newsletter text generation with session logging")

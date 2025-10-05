@@ -3031,12 +3031,13 @@
             }
             
             console.log('Starting periodic context window updates');
+            // Poll more frequently while processing (1s) to keep the pie fresh
             contextUpdateInterval = setInterval(() => {
                 if (explainerSessionId && isExplainerProcessing) {
                     console.log('Periodic context update check');
                     fetchContextWindowStatus();
                 }
-            }, 3000); // Update every 3 seconds during active conversation
+            }, 1000); // Update every 1 second during active conversation
         }
         
         // Stop periodic context window updates
@@ -3045,6 +3046,10 @@
                 console.log('Stopping periodic context window updates');
                 clearInterval(contextUpdateInterval);
                 contextUpdateInterval = null;
+            }
+            // One final fetch to reflect post-processing state
+            if (typeof fetchContextWindowStatus === 'function') {
+                fetchContextWindowStatus();
             }
         }
         
@@ -3108,6 +3113,7 @@
                 
                 const response = await fetch('/backend/api/explainer/context-status', {
                     method: 'POST',
+                    cache: 'no-store',
                     headers: {
                         'Content-Type': 'application/json',
                     },
@@ -3274,6 +3280,10 @@
                                     // Reset the current assistant bubble so that any content that streams
                                     // after the tool-call placeholder starts will appear *after* the
                                     // placeholder, even if it arrives before the tool finishes.
+                                    // Update context window immediately on tool start
+                                    if (typeof fetchContextWindowStatus === 'function') {
+                                        fetchContextWindowStatus();
+                                    }
                                     assistantMessage = null;
                                     currentContent = '';
                                     continue; // Don't process as content
@@ -3283,6 +3293,10 @@
                                 if (data.tool_call_args) {
                                     console.log('Tool call arguments:', data.tool_call_args, data.arguments);
                                     updateToolCallArguments(data.tool_id, data.arguments);
+                                    // Update context window when arguments arrive (keeps UI fresh during long tools)
+                                    if (typeof fetchContextWindowStatus === 'function') {
+                                        fetchContextWindowStatus();
+                                    }
                                     continue; // Don't process as content
                                 }
                                 
@@ -3599,12 +3613,18 @@
                                     window.activeToolCalls.set(data.tool_call_start, data.tool_id);
                                     assistantMessage = null;
                                     currentContent = '';
+                                    if (typeof fetchContextWindowStatus === 'function') {
+                                        fetchContextWindowStatus();
+                                    }
                                     continue;
                                 }
                                 
                                 // Handle tool call arguments
                                 if (data.tool_call_args) {
                                     updateToolCallArguments(data.tool_id, data.arguments);
+                                    if (typeof fetchContextWindowStatus === 'function') {
+                                        fetchContextWindowStatus();
+                                    }
                                     continue;
                                 }
                                 

@@ -140,8 +140,8 @@ async def get_anomalies_for_metric(metric_id: str, district: str = None, period_
             
             # Add district filter if specified and not "0" (citywide)
             if district and district != "0":
-                query += " AND district = %s"
-                params.append(district)
+                query += " AND district::TEXT = %s"
+                params.append(str(district))
             
             # Add period type filter if specified
             if period_type:
