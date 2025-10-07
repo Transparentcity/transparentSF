@@ -112,6 +112,36 @@
             overflow-x: hidden;
             padding: 10px;
             min-height: 0; /* Allow flex item to shrink */
+            position: relative;
+        }
+        
+        .sessions-list-loading {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+        }
+        
+        .sessions-list-loading.active {
+            display: block;
+        }
+        
+        .sessions-list-loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--bg-tertiary);
+            border-top: 4px solid var(--bright-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+        
+        .sessions-list-loading-text {
+            color: var(--text-secondary);
+            font-size: 13px;
         }
         
         .session-section {
@@ -713,37 +743,49 @@
             
             .sidebar {
                 width: 100%;
-                height: 200px;
+                height: auto;
+                max-height: 60vh;
                 border-right: none;
                 border-bottom: 1px solid var(--border-primary);
             }
             
             .sessions-list {
-                flex-direction: row;
-                overflow-x: auto;
-                overflow-y: hidden;
                 padding: 10px;
             }
             
             .session-item {
-                min-width: 200px;
-                margin-right: 8px;
-                margin-bottom: 0;
+                margin-bottom: 8px;
             }
             
+            /* Hide main content area on mobile - writeups open in new windows */
             .main-content {
-                min-width: 300px; /* Reduce minimum width on mobile */
+                display: none !important;
+            }
+        }
+        
+        /* Ensure main-content is visible on larger screens */
+        @media (min-width: 769px) {
+            .main-content {
+                display: flex !important;
             }
         }
         
         @media (max-width: 480px) {
-            .main-content {
-                min-width: 250px; /* Further reduce for very small screens */
+            .sidebar {
+                max-height: 70vh;
             }
             
             .session-item {
-                min-width: 180px;
                 padding: 10px;
+            }
+            
+            .sidebar-header h2 {
+                font-size: 16px;
+            }
+            
+            .new-writeup-btn {
+                font-size: 13px;
+                padding: 8px 12px;
             }
         }
     </style>
@@ -759,6 +801,11 @@
                     <button id="newWriteupBtn" class="new-writeup-btn secondary">+ New Writeup</button>
                 </div>
                 <div class="sessions-list" id="sessionsList">
+                    <!-- Loading indicator -->
+                    <div class="sessions-list-loading active" id="sessionsLoading">
+                        <div class="spinner"></div>
+                        <div class="sessions-list-loading-text">Loading writeups...</div>
+                    </div>
                     <!-- Sessions will be populated here -->
                     </div>
                 </div>
@@ -836,6 +883,21 @@
         let currentSessionId = null;
         let isGenerating = false;
         let regeneratingSessionIds = new Set(); // Track which sessions are showing regeneration controls
+        let isLoadingWriteups = false; // Track if writeups are currently loading
+        let isMobileView = false; // Track if we're in mobile view
+        
+        // Check if we're in mobile view
+        // Use 768px as breakpoint to match CSS media query
+        function checkMobileView() {
+            const width = window.innerWidth;
+            isMobileView = width <= 768;
+            return isMobileView;
+        }
+        
+        // Update mobile view on window resize
+        window.addEventListener('resize', () => {
+            checkMobileView();
+        });
         
         // Helper function to format context window size for display
         function formatContextWindow(contextWindow) {
@@ -1066,13 +1128,32 @@
             return modelMap[modelKey] || modelKey;
         }
 
+        // Show loading indicator
+        function showLoadingIndicator() {
+            const loadingEl = document.getElementById('sessionsLoading');
+            if (loadingEl) {
+                loadingEl.classList.add('active');
+            }
+        }
+        
+        // Hide loading indicator
+        function hideLoadingIndicator() {
+            const loadingEl = document.getElementById('sessionsLoading');
+            if (loadingEl) {
+                loadingEl.classList.remove('active');
+            }
+        }
+        
         // Render sessions in the sidebar
         function renderSessions() {
             const sessionsList = document.getElementById('sessionsList');
             const sessionsArray = Array.from(sessions.values()).sort((a, b) => b.createdAt - a.createdAt);
             
+            // Hide loading indicator when rendering
+            hideLoadingIndicator();
+            
             if (sessionsArray.length === 0) {
-                sessionsList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">No sessions yet. Create your first write-up!</div>';
+                sessionsList.innerHTML = '<div class="sessions-list-loading active" id="sessionsLoading"><div class="spinner"></div><div class="sessions-list-loading-text">Loading writeups...</div></div><div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">No sessions yet. Create your first write-up!</div>';
                 return;
             }
             
@@ -1346,6 +1427,23 @@
         
         // Select a session
         function selectSession(sessionId) {
+            const session = sessions.get(sessionId);
+            
+            // Check current screen size
+            const isCurrentlyMobile = checkMobileView();
+            console.log('selectSession called:', {sessionId, isCurrentlyMobile, windowWidth: window.innerWidth, session});
+            
+            // On mobile, open completed writeups in new window
+            // But still handle pending/running writeups normally
+            if (isCurrentlyMobile && session && session.writeupId && session.status === 'completed') {
+                console.log('Opening in new window (mobile + completed)');
+                const permalinkUrl = `${window.location.origin}/api/writeups/permalink/${session.writeupId}`;
+                window.open(permalinkUrl, '_blank');
+                return;
+            }
+            
+            // Normal behavior for desktop or non-completed writeups
+            console.log('Using normal flow (desktop or non-completed)');
             currentSessionId = sessionId;
             renderSessions();
             showSessionContent();
@@ -1353,11 +1451,21 @@
         
         // Show content for the selected session
         function showSessionContent() {
+            console.log('showSessionContent called', {currentSessionId, windowWidth: window.innerWidth});
+            
             const promptInterface = document.getElementById('promptInterface');
             const contentDisplay = document.getElementById('contentDisplay');
             const streamingDisplay = document.getElementById('streamingDisplay');
             const contentFrame = document.getElementById('contentFrame');
             const sessionFrame = document.getElementById('sessionFrame');
+            
+            console.log('Elements found:', {
+                promptInterface: !!promptInterface,
+                contentDisplay: !!contentDisplay,
+                streamingDisplay: !!streamingDisplay,
+                contentFrame: !!contentFrame,
+                sessionFrame: !!sessionFrame
+            });
             
             // Hide all displays first
             promptInterface.style.display = 'none';
@@ -1366,17 +1474,27 @@
             
             if (!currentSessionId) {
                 // Show prompt interface for new writeup
+                console.log('No currentSessionId, showing prompt interface');
                 promptInterface.style.display = 'flex';
                 return;
             }
             
             const session = sessions.get(currentSessionId);
-            if (!session) return;
+            console.log('Session found:', session);
             
-            // If session has a completed writeup with content, show it in iframe
-            if (session.writeupId && session.status === 'completed' && session.finalContent) {
+            if (!session) {
+                console.log('Session not found in map');
+                return;
+            }
+            
+            // If session has a completed writeup, show it in iframe
+            // Note: We don't need finalContent in memory since we load it via iframe
+            if (session.writeupId && session.status === 'completed') {
+                console.log('Showing completed writeup in iframe');
                 const permalinkUrl = `/api/writeups/permalink/${session.writeupId}`;
                 const sessionUrl = session.sessionId ? `/backend/conversation?session=${session.sessionId}` : `/api/writeups/stream/${session.writeupId}`;
+                
+                console.log('Loading URLs:', {permalinkUrl, sessionUrl});
                 
                 contentFrame.src = permalinkUrl;
                 sessionFrame.src = sessionUrl;
@@ -1384,11 +1502,14 @@
                 // Set content tab as active by default
                 switchTab('content');
                 contentDisplay.style.display = 'block';
+                console.log('Content display should now be visible');
             } else if (session.status === 'running' || session.status === 'generating') {
                 // Show streaming interface for running writeups
+                console.log('Showing streaming interface');
                 showStreamingInterface(session);
-                } else {
+            } else {
                 // For pending or other statuses, show welcome message
+                console.log('Showing welcome message for status:', session.status);
                 const welcomeMsg = promptInterface.querySelector('.welcome-message');
                 welcomeMsg.innerHTML = `
                     <h3>Write-ups Agent</h3>
@@ -1541,9 +1662,20 @@
         
         
         // Load existing writeups from database
-        async function loadExistingWriteups() {
+        async function loadExistingWriteups(showLoading = true) {
+            // Prevent multiple simultaneous loads
+            if (isLoadingWriteups) {
+                return;
+            }
+            
+            isLoadingWriteups = true;
+            if (showLoading) {
+                showLoadingIndicator();
+            }
+            
             try {
-                const response = await fetch('/api/writeups/list');
+                // Use lightweight endpoint for faster loading
+                const response = await fetch('/api/writeups/list?lightweight=true');
                 const data = await response.json();
                 
                 if (data.status === 'success') {
@@ -1590,6 +1722,9 @@
                 }
             } catch (error) {
                 console.error('Error loading existing writeups:', error);
+                hideLoadingIndicator();
+            } finally {
+                isLoadingWriteups = false;
             }
         }
         
@@ -1646,8 +1781,11 @@
         
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
+            // Check mobile view on load
+            checkMobileView();
+            
             loadAvailableModels();
-            loadExistingWriteups();
+            loadExistingWriteups(true); // Show loading indicator on initial load
             
             // Set up event listeners
             const sendButton = document.getElementById('sendButton');
@@ -1664,8 +1802,10 @@
                 }
             });
             
-            // Show prompt interface by default
-            showSessionContent();
+            // Show prompt interface by default (but not on mobile)
+            if (!isMobileView) {
+                showSessionContent();
+            }
         });
         
         // Handle sending a new message or executing pending writeup

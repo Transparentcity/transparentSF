@@ -2035,6 +2035,10 @@
                 // Extract available fields for color selection
                 const sampleItem = data.location_data[0];
                 if (sampleItem) {
+                    console.log('🔍 RAW Sample item from API:', sampleItem);
+                    console.log('🔍 Sample item keys:', Object.keys(sampleItem));
+                    console.log('🔍 Sample item tooltip_fields:', sampleItem.tooltip_fields);
+                    console.log('🔍 Sample item media_url:', sampleItem.media_url);
                     availableFields = Object.keys(sampleItem);
                     populateColorFieldOptions(availableFields);
                 }
@@ -3091,6 +3095,9 @@
                 const coordinates = e.features[0].geometry.coordinates.slice();
                 const properties = e.features[0].properties;
                 console.log('Map generator properties:', properties);
+                console.log('Map generator ALL property keys:', Object.keys(properties));
+                console.log('Map generator media_url property:', properties.media_url);
+                console.log('Map generator checking for any media fields:', Object.keys(properties).filter(k => k.toLowerCase().includes('media')));
                 
                 let tooltipContent = `<div class="tsf-tooltip">`;
                 tooltipContent += `<div class="tsf-tooltip-title">${properties.title}</div>`;
@@ -3175,19 +3182,44 @@
                             // Only show media if we have a valid URL
                             if (mediaUrl && mediaUrl.startsWith('http')) {
                                 console.log('✅ Map generator adding media thumbnail to tooltip');
-                                tooltipContent += `<div class="tsf-tooltip-row">
-                                    <span class="tsf-tooltip-label">${displayKey}:</span>
-                                    <div class="tsf-tooltip-value">
-                                        <a href="${mediaUrl}" target="_blank" class="media-link">
-                                            <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
-                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
-                                                 onmouseover="showImagePreview(event, '${mediaUrl}')"
-                                                 onmouseout="hideImagePreview()"
-                                                 style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer; margin-top: 5px;">
-                                            <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
-                                        </a>
-                                    </div>
-                                </div>`;
+                                
+                                // Check if this is a Verint attachment (blocked by ORB)
+                                const isVerintAttachment = mediaUrl.includes('form.us.empro.verintcloudservices.com') || 
+                                                          mediaUrl.includes('download_attachments');
+                                
+                                if (isVerintAttachment) {
+                                    // For Verint attachments, use iframe with cropping to show image area
+                                    tooltipContent += `<div class="tsf-tooltip-row">
+                                        <span class="tsf-tooltip-label">${displayKey}:</span>
+                                        <div class="tsf-tooltip-value">
+                                            <div class="verint-iframe-container" style="width: 150px; height: 100px; border: 2px solid #6B46C1; border-radius: 4px; overflow: hidden; position: relative; margin-top: 5px;">
+                                                <iframe src="${mediaUrl}" 
+                                                        style="width: 400px; height: 300px; border: none; position: absolute; top: -50px; left: -50px; transform: scale(0.5); transform-origin: 0 0;"
+                                                        sandbox="allow-same-origin allow-scripts allow-forms"
+                                                        onload="console.log('Verint iframe loaded')">
+                                                </iframe>
+                                                <div style="position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.7); color: white; font-size: 10px; padding: 2px 4px; border-radius: 2px;">
+                                                    <a href="${mediaUrl}" target="_blank" style="color: white; text-decoration: none;">🔗</a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>`;
+                                } else {
+                                    // For direct image URLs (like Cloudinary)
+                                    tooltipContent += `<div class="tsf-tooltip-row">
+                                        <span class="tsf-tooltip-label">${displayKey}:</span>
+                                        <div class="tsf-tooltip-value">
+                                            <a href="${mediaUrl}" target="_blank" class="media-link">
+                                                <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                                     onmouseover="showImagePreview(event, '${mediaUrl}')"
+                                                     onmouseout="hideImagePreview()"
+                                                     style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer; margin-top: 5px;">
+                                                <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
+                                            </a>
+                                        </div>
+                                    </div>`;
+                                }
                             }
                         } else {
                             tooltipContent += `<div class="tsf-tooltip-row">

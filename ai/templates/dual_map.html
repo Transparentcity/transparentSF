@@ -821,19 +821,43 @@
                         
                         // Only show media if we have a valid URL
                         if (mediaUrl && mediaUrl.startsWith('http')) {
-                            tooltipContent += `<div class="tsf-tooltip-row">
-                                <div class="tsf-tooltip-key">${displayKey}:</div>
-                                <div class="tsf-tooltip-val">
-                                    <a href="${mediaUrl}" target="_blank" class="media-link">
-                                        <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
-                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
-                                             onmouseover="showImagePreview(event, '${mediaUrl}')"
-                                             onmouseout="hideImagePreview()"
-                                             style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer;">
-                                        <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
-                                    </a>
-                                </div>
-                            </div>`;
+                            // Check if this is a Verint attachment (blocked by ORB)
+                            const isVerintAttachment = mediaUrl.includes('form.us.empro.verintcloudservices.com') || 
+                                                      mediaUrl.includes('download_attachments');
+                            
+                            if (isVerintAttachment) {
+                                // For Verint attachments, use iframe with cropping to show image area
+                                tooltipContent += `<div class="tsf-tooltip-row">
+                                    <div class="tsf-tooltip-key">${displayKey}:</div>
+                                    <div class="tsf-tooltip-val">
+                                        <div class="verint-iframe-container" style="width: 150px; height: 100px; border: 2px solid #6B46C1; border-radius: 4px; overflow: hidden; position: relative;">
+                                            <iframe src="${mediaUrl}" 
+                                                    style="width: 400px; height: 300px; border: none; position: absolute; top: -50px; left: -50px; transform: scale(0.5); transform-origin: 0 0;"
+                                                    sandbox="allow-same-origin allow-scripts allow-forms"
+                                                    onload="console.log('Verint iframe loaded')">
+                                            </iframe>
+                                            <div style="position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.7); color: white; font-size: 10px; padding: 2px 4px; border-radius: 2px;">
+                                                <a href="${mediaUrl}" target="_blank" style="color: white; text-decoration: none;">🔗</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>`;
+                            } else {
+                                // For direct image URLs (like Cloudinary)
+                                tooltipContent += `<div class="tsf-tooltip-row">
+                                    <div class="tsf-tooltip-key">${displayKey}:</div>
+                                    <div class="tsf-tooltip-val">
+                                        <a href="${mediaUrl}" target="_blank" class="media-link">
+                                            <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
+                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                                 onmouseover="showImagePreview(event, '${mediaUrl}')"
+                                                 onmouseout="hideImagePreview()"
+                                                 style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer;">
+                                            <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
+                                        </a>
+                                    </div>
+                                </div>`;
+                            }
                         }
                     } else {
                         tooltipContent += `<div class="tsf-tooltip-row">

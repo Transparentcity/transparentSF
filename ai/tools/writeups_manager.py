@@ -287,12 +287,14 @@ class WriteupsManager:
             2. ALWAYS include LIMIT clauses in DataSF queries (recommended: 500-1000 records max per query)
             3. For large datasets, make multiple focused queries rather than one large query
             4. Prioritize recent data and filter by relevant categories, districts, or time periods
-            5. Analyze the data thoroughly to identify key insights and patterns
-            6. Create maps and visualizations when geographic data is relevant using generate_map_with_query
-            7. Create a well-structured, comprehensive write-up that addresses the request
-            8. If data sampling was applied, acknowledge this limitation in your analysis
-            9. Ensure the content is accurate, informative, and well-organized
-            10. Format the output according to the specified format ({output_format})
+            5. Analyze the data thoroughly to identify key insights and patterns. 
+            6. When asked about changes in data, always try to identify the root cause of the change. 
+            7. Create maps and visualizations when geographic data is relevant using generate_map_with_query
+            8. Create a well-structured, comprehensive write-up that addresses the request
+            9. If data sampling was applied, acknowledge this limitation in your analysis
+            10. Ensure the content is accurate, informative, and well-organized
+            11. Include a brief executive summary at the top of the write-up with a statement of the main finding or findings.
+            12. Format the output according to the specified format ({output_format})
             
             CONTEXT WINDOW MANAGEMENT:
             - The system will automatically limit data to prevent context overflow
@@ -471,15 +473,29 @@ class WriteupsManager:
             logger.error(f"Error getting write-up: {e}")
             return None
     
-    def get_all_writeups(self) -> List[Dict[str, Any]]:
-        """Get all write-ups."""
+    def get_all_writeups(self, lightweight: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get all write-ups.
+        
+        Args:
+            lightweight: If True, only fetches essential fields for faster loading
+        """
         try:
             def get_all_writeups_db(conn):
                 cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT * FROM writeups 
-                    ORDER BY created_at DESC
-                """)
+                if lightweight:
+                    # Only select essential fields for faster loading
+                    cursor.execute("""
+                        SELECT id, title, status, created_at, updated_at, 
+                               original_prompt, model_key, session_id
+                        FROM writeups 
+                        ORDER BY created_at DESC
+                    """)
+                else:
+                    cursor.execute("""
+                        SELECT * FROM writeups 
+                        ORDER BY created_at DESC
+                    """)
                 rows = cursor.fetchall()
                 columns = [desc[0] for desc in cursor.description]
                 return [dict(zip(columns, row)) for row in rows]
@@ -494,22 +510,24 @@ class WriteupsManager:
                         if isinstance(value, datetime):
                             writeup[key] = value.isoformat()
                     
-                    # Parse JSON fields (handle both string and already-parsed JSON)
-                    if writeup.get('clarification_questions'):
-                        if isinstance(writeup['clarification_questions'], str):
-                            writeup['clarification_questions'] = json.loads(writeup['clarification_questions'])
-                    if writeup.get('clarification_answers'):
-                        if isinstance(writeup['clarification_answers'], str):
-                            writeup['clarification_answers'] = json.loads(writeup['clarification_answers'])
-                    if writeup.get('execution_plan'):
-                        if isinstance(writeup['execution_plan'], str):
-                            writeup['execution_plan'] = json.loads(writeup['execution_plan'])
-                    if writeup.get('execution_log'):
-                        if isinstance(writeup['execution_log'], str):
-                            writeup['execution_log'] = json.loads(writeup['execution_log'])
-                    if writeup.get('metadata'):
-                        if isinstance(writeup['metadata'], str):
-                            writeup['metadata'] = json.loads(writeup['metadata'])
+                    # Parse JSON fields only if not in lightweight mode
+                    if not lightweight:
+                        # Parse JSON fields (handle both string and already-parsed JSON)
+                        if writeup.get('clarification_questions'):
+                            if isinstance(writeup['clarification_questions'], str):
+                                writeup['clarification_questions'] = json.loads(writeup['clarification_questions'])
+                        if writeup.get('clarification_answers'):
+                            if isinstance(writeup['clarification_answers'], str):
+                                writeup['clarification_answers'] = json.loads(writeup['clarification_answers'])
+                        if writeup.get('execution_plan'):
+                            if isinstance(writeup['execution_plan'], str):
+                                writeup['execution_plan'] = json.loads(writeup['execution_plan'])
+                        if writeup.get('execution_log'):
+                            if isinstance(writeup['execution_log'], str):
+                                writeup['execution_log'] = json.loads(writeup['execution_log'])
+                        if writeup.get('metadata'):
+                            if isinstance(writeup['metadata'], str):
+                                writeup['metadata'] = json.loads(writeup['metadata'])
                 return writeups
             else:
                 logger.error(f"Database error: {result['message']}")

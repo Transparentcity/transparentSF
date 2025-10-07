@@ -6,6 +6,10 @@ import pandas as pd
 import logging
 import json
 from dateutil.relativedelta import relativedelta
+import time
+import os
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Create a logger for this module
 logger = logging.getLogger(__name__)
@@ -17,6 +21,27 @@ logging.basicConfig(
         logging.StreamHandler()  # This will output to console
     ]
 )
+
+def create_session_with_retry():
+    """
+    Creates a requests session with retry logic and proper timeout handling.
+    """
+    session = requests.Session()
+    
+    # Configure retry strategy
+    retry_strategy = Retry(
+        total=3,  # Total number of retries
+        backoff_factor=2,  # Exponential backoff: 1, 2, 4 seconds
+        status_forcelist=[429, 500, 502, 503, 504],  # HTTP status codes to retry
+        allowed_methods=["HEAD", "GET", "OPTIONS"]  # Methods to retry
+    )
+    
+    # Mount the adapter for both HTTP and HTTPS
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    return session
 
 def clean_query_string(query):
     """
@@ -71,10 +96,14 @@ def fetch_data_from_api(query_object):
     logger.info(f"Request parameters: {json.dumps(params, indent=2)}")
 
     headers = {
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-App-Token': os.getenv('SOCRATA_APP_TOKEN', '')  # Add Socrata app token for better rate limits
     }
     logger.info(f"Request headers: {json.dumps(headers, indent=2)}")
 
+    # Create session with retry logic
+    session = create_session_with_retry()
+    
     has_more_data = True
     while has_more_data:
         if not has_limit:
@@ -100,7 +129,8 @@ def fetch_data_from_api(query_object):
                 params["$query"] = cleaned_query
         logger.debug("URL being requested: %s, params: %s", url, params)
         try:
-            response = requests.get(url, params=params, headers=headers, timeout=60)  # 60 second timeout
+            # Use session with retry logic and increased timeout
+            response = session.get(url, params=params, headers=headers, timeout=300)  # Increased timeout to 300 seconds (5 minutes)
             logger.debug("Response Status Code: %s", response.status_code)
             response.raise_for_status()
             try:
@@ -146,6 +176,19 @@ def fetch_data_from_api(query_object):
                 else:
                     offset += limit
                     logger.debug("Proceeding to next offset: %d", offset)
+        except requests.exceptions.ReadTimeout as timeout_err:
+            # Log the actual query URL for debugging
+            full_url = f"{url}?$query={requests.utils.quote(params.get('$query', cleaned_query))}"
+            logger.error(f"Query timed out after 300s. URL: {full_url}")
+            logger.error(f"Query: {params.get('$query', 'N/A')}")
+            logger.error(f"Timeout error: {timeout_err}")
+            return {'error': f'Query timed out after 300 seconds: {str(timeout_err)}', 'queryURL': full_url}
+        except requests.exceptions.ConnectionError as conn_err:
+            full_url = f"{url}?$query={requests.utils.quote(params.get('$query', cleaned_query))}"
+            logger.error(f"Connection error. URL: {full_url}")
+            logger.error(f"Query: {params.get('$query', 'N/A')}")
+            logger.error(f"Connection error: {conn_err}")
+            return {'error': f'Connection error: {str(conn_err)}', 'queryURL': full_url}
         except requests.HTTPError as http_err:
             error_content = ''
             try:
@@ -161,11 +204,13 @@ def fetch_data_from_api(query_object):
                 error_content
             )
             # Construct the full URL with query parameters for the queryURL
-            full_url = f"{url}?$query={requests.utils.quote(cleaned_query)}"
+            full_url = f"{url}?$query={requests.utils.quote(params.get('$query', cleaned_query))}"
             return {'error': error_content, 'queryURL': full_url}
         except Exception as err:
+            full_url = f"{url}?$query={requests.utils.quote(params.get('$query', cleaned_query))}"
             logger.exception("An error occurred: %s", err)
-            return {'error': str(err), 'queryURL': None}
+            logger.error(f"Query URL: {full_url}")
+            return {'error': str(err), 'queryURL': full_url}
 
     logger.debug("Finished fetching data. Total records retrieved: %d", len(all_data))
     

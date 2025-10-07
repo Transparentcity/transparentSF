@@ -5196,105 +5196,6 @@ async def expand_chart_placeholders(request: Request):
         logger.error(f"Error in expand_chart_placeholders: {str(e)}", exc_info=True)
         return {"status": "error", "message": f"Error processing request: {str(e)}"}
 
-@router.get("/api/district-maps")
-@router.get("/backend/api/district-maps")  # Add an extra route
-async def get_district_maps(metric_id: str = None):
-    """
-    Retrieve district maps for a specific metric ID.
-    
-    Args:
-        metric_id: The ID of the metric to get maps for
-        
-    Returns:
-        JSON with a list of maps including their IDs and URLs
-    """
-    try:
-        import psycopg2
-        import psycopg2.extras
-        
-        logger.info(f"Getting district maps for metric_id={metric_id}")
-        
-        # Connect to PostgreSQL
-        conn = get_postgres_connection()
-        
-        # Create cursor with dictionary-like results
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        # Query to get maps for the specified metric
-        query = """
-        SELECT *
-        FROM maps
-        WHERE type = 'supervisor_district' AND active = TRUE
-        """
-        
-        # Add metric_id filter if provided
-        params = []
-        if metric_id:
-            # First try to use the direct metric_id column
-            query = """
-            SELECT *
-            FROM maps
-            WHERE type = 'supervisor_district' 
-              AND active = TRUE
-              AND (
-                  metric_id = %s 
-                  OR metadata::jsonb->>'metric_id' = %s
-              )
-            ORDER BY created_at DESC
-            """
-            params = [metric_id, metric_id]
-        else:
-            query += " ORDER BY created_at DESC"
-        
-        cursor.execute(query, params)
-        maps = cursor.fetchall()
-        
-        # Convert any date objects to ISO format strings for JSON serialization
-        for map_item in maps:
-            for key, value in map_item.items():
-                if hasattr(value, 'isoformat'):
-                    map_item[key] = value.isoformat()
-                # Parse JSON strings to objects
-                elif key in ('metadata', 'location_data') and value:
-                    if isinstance(value, str):
-                        try:
-                            map_item[key] = json.loads(value)
-                        except:
-                            # If parsing fails, keep as string
-                            pass
-                    # Ensure the metadata is properly formatted as a string when it's already an object
-                    elif isinstance(value, dict) or isinstance(value, list):
-                        try:
-                            # Convert to JSON string for display
-                            map_item[key] = json.dumps(value, indent=2)
-                        except:
-                            # If conversion fails, use string representation
-                            map_item[key] = str(value)
-        
-        logger.info(f"Found {len(maps)} maps for metric_id={metric_id}")
-        
-        cursor.close()
-        conn.close()
-        
-        return JSONResponse(
-            content={
-                "status": "success",
-                "metric_id": metric_id,
-                "map_count": len(maps),
-                "maps": maps
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Error getting district maps: {str(e)}", exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error", 
-                "message": f"Failed to get district maps: {str(e)}"
-            }
-        )
-
 @router.get("/api/all-maps")
 @router.get("/backend/api/all-maps")  # Add an extra route
 async def get_all_maps(metric_id: str = None):
@@ -5750,19 +5651,21 @@ async def get_map_chart(request: Request, id: str):
 @router.get("/backend/api/district-maps")  # Add an extra route
 async def get_district_maps(metric_id: str = None):
     """
-    Retrieve district maps for a specific metric ID.
+    Retrieve district and neighborhood maps for a specific metric ID.
+    
+    Returns both supervisor_district maps and analysis_neighborhood maps.
     
     Args:
         metric_id: The ID of the metric to get maps for
         
     Returns:
-        JSON with a list of maps including their IDs and URLs
+        JSON with lists of supervisor_district and analysis_neighborhood maps
     """
     try:
         import psycopg2
         import psycopg2.extras
         
-        logger.info(f"Getting district maps for metric_id={metric_id}")
+        logger.info(f"Getting district and neighborhood maps for metric_id={metric_id}")
         
         # Connect to PostgreSQL
         conn = get_postgres_connection()
@@ -5770,41 +5673,53 @@ async def get_district_maps(metric_id: str = None):
         # Create cursor with dictionary-like results
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Query to get maps for the specified metric
-        query = """
-        SELECT *
-        FROM maps
-        WHERE type = 'supervisor_district' AND active = TRUE
-        """
-        
-        # Add metric_id filter if provided
-        params = []
+        # Query to get both supervisor_district and analysis_neighborhood maps
         if metric_id:
-            # First try to use the direct metric_id column
             query = """
             SELECT *
             FROM maps
-            WHERE type = 'supervisor_district' 
+            WHERE type IN ('supervisor_district', 'analysis_neighborhood')
               AND active = TRUE
               AND (
                   metric_id = %s 
                   OR metadata::jsonb->>'metric_id' = %s
               )
-            ORDER BY created_at DESC
+            ORDER BY type, 
+                     CASE 
+                       WHEN metadata->>'map_type' = 'delta' THEN 2 
+                       ELSE 1 
+                     END,
+                     updated_at DESC
             """
             params = [metric_id, metric_id]
         else:
-            query += " ORDER BY created_at DESC"
+            query = """
+            SELECT *
+            FROM maps
+            WHERE type IN ('supervisor_district', 'analysis_neighborhood')
+              AND active = TRUE
+            ORDER BY type, 
+                     CASE 
+                       WHEN metadata->>'map_type' = 'delta' THEN 2 
+                       ELSE 1 
+                     END,
+                     updated_at DESC
+            """
+            params = []
         
         cursor.execute(query, params)
         maps = cursor.fetchall()
         
-        # Convert any date objects to ISO format strings for JSON serialization
+        # Separate maps by type
+        supervisor_district_maps = []
+        neighborhood_maps = []
+        
         for map_item in maps:
+            # Convert any date objects to ISO format strings for JSON serialization
             for key, value in map_item.items():
                 if hasattr(value, 'isoformat'):
                     map_item[key] = value.isoformat()
-                # Parse JSON strings to objects
+                # Parse JSON strings to objects for easier frontend consumption
                 elif key in ('metadata', 'location_data') and value:
                     if isinstance(value, str):
                         try:
@@ -5812,16 +5727,14 @@ async def get_district_maps(metric_id: str = None):
                         except:
                             # If parsing fails, keep as string
                             pass
-                    # Ensure the metadata is properly formatted as a string when it's already an object
-                    elif isinstance(value, dict) or isinstance(value, list):
-                        try:
-                            # Convert to JSON string for display
-                            map_item[key] = json.dumps(value, indent=2)
-                        except:
-                            # If conversion fails, use string representation
-                            map_item[key] = str(value)
+            
+            # Organize by type
+            if map_item.get('type') == 'supervisor_district':
+                supervisor_district_maps.append(map_item)
+            elif map_item.get('type') == 'analysis_neighborhood':
+                neighborhood_maps.append(map_item)
         
-        logger.info(f"Found {len(maps)} maps for metric_id={metric_id}")
+        logger.info(f"Found {len(supervisor_district_maps)} supervisor_district maps and {len(neighborhood_maps)} neighborhood maps for metric_id={metric_id}")
         
         cursor.close()
         conn.close()
@@ -5830,7 +5743,10 @@ async def get_district_maps(metric_id: str = None):
             content={
                 "status": "success",
                 "metric_id": metric_id,
-                "map_count": len(maps),
+                "total_count": len(maps),
+                "supervisor_district_maps": supervisor_district_maps,
+                "neighborhood_maps": neighborhood_maps,
+                # Legacy field for backward compatibility
                 "maps": maps
             }
         )

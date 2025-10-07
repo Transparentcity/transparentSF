@@ -98,14 +98,40 @@ def get_time_ranges(period_type: str, is_fiscal_year: bool = False) -> Tuple[Dic
                 'end': date(today.year - 7, 12, 31)
             }
         else:  # month
-            # Use last 24 months (2 years)
+            # Use the previous complete month (same logic as non-structured path)
+            if today.month == 1:
+                recent_month = 12
+                recent_year = today.year - 1
+            else:
+                recent_month = today.month - 1
+                recent_year = today.year
+            
+            # Calculate last day of the month
+            if recent_month == 12:
+                last_day = 31
+            elif recent_month in [4, 6, 9, 11]:
+                last_day = 30
+            elif recent_month == 2:
+                # Handle leap years
+                if recent_year % 4 == 0 and (recent_year % 100 != 0 or recent_year % 400 == 0):
+                    last_day = 29
+                else:
+                    last_day = 28
+            else:
+                last_day = 31
+            
             recent_period = {
-                'start': date(today.year - 2, today.month, 1),
-                'end': today
+                'start': date(recent_year, recent_month, 1),
+                'end': date(recent_year, recent_month, last_day)
             }
+            
+            # Compare to previous 24 months
+            comparison_start_month = recent_month
+            comparison_start_year = recent_year - 2
+            
             comparison_period = {
-                'start': date(today.year - 2, today.month, 1),
-                'end': date(today.year - 1, today.month, 1) - timedelta(days=1)
+                'start': date(comparison_start_year, comparison_start_month, 1),
+                'end': date(recent_year, recent_month, 1) - timedelta(days=1)
             }
     
     return recent_period, comparison_period
@@ -571,9 +597,20 @@ def transform_query_for_period_structured(
         if 'query_config' in query_info and 'ytd_config' in query_info['query_config']:
             custom_where_conditions = query_info['query_config']['ytd_config'].get('custom_where_conditions', [])
         
+        # Apply placeholder replacements to custom WHERE conditions
+        import re
+        replaced_where_conditions = []
+        for condition in custom_where_conditions:
+            replaced_condition = condition
+            for placeholder, value in replacements.items():
+                pattern = r'\b' + re.escape(placeholder) + r'\b'
+                replaced_condition = re.sub(pattern, value, replaced_condition)
+            replaced_where_conditions.append(replaced_condition)
+            logger.info(f"Replaced placeholders in WHERE condition: {condition} -> {replaced_condition}")
+        
         # Build WHERE clause
         where_conditions = [f"{date_field} >= '{comparison_start}'", f"{date_field} <= '{recent_end}'"]
-        where_conditions.extend(custom_where_conditions)
+        where_conditions.extend(replaced_where_conditions)
         where_clause = " AND ".join(where_conditions)
         
         # Build the transformed query (SOQL doesn't use FROM clauses - dataset specified in URL)
@@ -643,7 +680,18 @@ def transform_query_for_period_structured(
     elif 'query_config' in query_info and 'metric_config' in query_info['query_config']:
         custom_where_conditions = query_info['query_config']['metric_config'].get('custom_where_conditions', [])
     
-    where_conditions.extend(custom_where_conditions)
+    # Apply placeholder replacements to custom WHERE conditions
+    import re
+    replaced_where_conditions = []
+    for condition in custom_where_conditions:
+        replaced_condition = condition
+        for placeholder, value in replacements.items():
+            pattern = r'\b' + re.escape(placeholder) + r'\b'
+            replaced_condition = re.sub(pattern, value, replaced_condition)
+        replaced_where_conditions.append(replaced_condition)
+        logger.info(f"Replaced placeholders in WHERE condition: {condition} -> {replaced_condition}")
+    
+    where_conditions.extend(replaced_where_conditions)
     where_clause = " AND ".join(where_conditions)
     
     # Build the transformed query (SOQL doesn't use FROM clauses - dataset specified in URL)

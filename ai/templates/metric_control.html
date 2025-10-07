@@ -4065,11 +4065,11 @@
                     }
                 }, 2000); // Poll every 2 seconds
                 
-                // Set a timeout to stop polling after 10 minutes
+                // Set a timeout to stop polling after 20 minutes
                 setTimeout(() => {
                     clearInterval(pollInterval);
                     reject(new Error(`${jobName} timed out`));
-                }, 600000);
+                }, 1200000);
             });
         }
         

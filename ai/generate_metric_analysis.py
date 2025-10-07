@@ -1010,16 +1010,17 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                                 map_id = map_result.get('map_id')
                                 logging.info(f"Successfully generated density map with ID: {map_id}")
                                 
-                                # Store map ID and URL for markdown reference
+                                # Store map ID and URL for markdown reference (handle both MapBox and Datawrapper)
                                 generated_maps['density_map_id'] = map_id
-                                generated_maps['density_map_url'] = map_result.get('publish_url')
+                                map_url = map_result.get('publish_url') or map_result.get('view_url')
+                                generated_maps['density_map_url'] = map_url
                                 
                                 # Add map to HTML content
-                                if "publish_url" in map_result:
+                                if map_url:
                                     map_html = f"""
                                     <div class="map-container">
                                         <h3>District Map: {map_title}</h3>
-                                        <iframe width="100%" height="500" src="{map_result['publish_url']}" 
+                                        <iframe width="100%" height="500" src="{map_url}" 
                                             frameborder="0" allowfullscreen></iframe>
                                     </div>
                                     """
@@ -1160,16 +1161,17 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                                     map_id = map_result.get('map_id')
                                     logging.info(f"Successfully generated delta map with ID: {map_id}")
                                     
-                                    # Store map ID and URL for markdown reference
+                                    # Store map ID and URL for markdown reference (handle both MapBox and Datawrapper)
                                     generated_maps['delta_map_id'] = map_id
-                                    generated_maps['delta_map_url'] = map_result.get('publish_url')
+                                    map_url = map_result.get('publish_url') or map_result.get('view_url')
+                                    generated_maps['delta_map_url'] = map_url
                                     
                                     # Add map to HTML content
-                                    if "publish_url" in map_result:
+                                    if map_url:
                                         map_html = f"""
                                         <div class="map-container">
-                                            <h3>District Map: {map_title}</h3>
-                                            <iframe width="100%" height="500" src="{map_result['publish_url']}" 
+                                            <h3>District Changes: {map_title}</h3>
+                                            <iframe width="100%" height="500" src="{map_url}" 
                                                 frameborder="0" allowfullscreen></iframe>
                                         </div>
                                         """
@@ -1194,6 +1196,165 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                     map_markdown += f" - [View Map]({generated_maps['delta_map_url']})"
             
             all_markdown_contents.append(map_markdown)
+    
+    # Generate analysis_neighborhood maps if the field exists
+    if 'analysis_neighborhood' in dataset.columns and period_type == 'month':
+        logging.info("Found analysis_neighborhood field. Generating neighborhood maps...")
+        
+        try:
+            # Reuse the same month data already computed for supervisor_district maps
+            if 'month_period' in dataset.columns:
+                if 'period_type' in dataset.columns:
+                    recent_months = dataset[dataset['period_type'] == 'recent']['month_period'].unique()
+                else:
+                    recent_months = dataset['month_period'].unique()
+                
+                if len(recent_months) > 0:
+                    last_month = sorted(recent_months)[-1]
+                    all_months = sorted(dataset['month_period'].unique())
+                    second_last_month = all_months[-2] if len(all_months) > 1 else None
+                    
+                    # Format dates (same logic as supervisor_district)
+                    try:
+                        if isinstance(last_month, str) and (last_month.startswith('20') or 'T' in last_month):
+                            if 'T' in last_month:
+                                dt = datetime.fromisoformat(last_month.replace('Z', '+00:00'))
+                            else:
+                                if '-' in last_month and len(last_month.split('-')) == 2:
+                                    year, month = last_month.split('-')
+                                    dt = datetime(int(year), int(month), 1)
+                                else:
+                                    dt = datetime.fromisoformat(f"{last_month}-01")
+                            last_month_display = dt.strftime('%B %Y')
+                        else:
+                            last_month_display = str(last_month)
+                    except:
+                        last_month_display = str(last_month)
+                    
+                    # Filter for last month
+                    if 'period_type' in dataset.columns:
+                        last_month_data = dataset[(dataset['month_period'] == last_month) & 
+                                                (dataset['period_type'] == 'recent')]
+                    else:
+                        last_month_data = dataset[dataset['month_period'] == last_month]
+                    
+                    # Generate density map for neighborhoods
+                    if not last_month_data.empty:
+                        last_month_data_copy = last_month_data.copy()
+                        last_month_data_copy[value_field] = pd.to_numeric(last_month_data_copy[value_field], errors='coerce')
+                        
+                        if agg_functions[value_field] == 'mean':
+                            neighborhood_values = last_month_data_copy.groupby('analysis_neighborhood')[value_field].mean().reset_index()
+                        else:
+                            neighborhood_values = last_month_data_copy.groupby('analysis_neighborhood')[value_field].sum().reset_index()
+                        
+                        neighborhood_map_data = [{"neighborhood": str(row['analysis_neighborhood']), "value": float(row[value_field])} 
+                                               for _, row in neighborhood_values.iterrows() if pd.notna(row['analysis_neighborhood'])]
+                        
+                        if neighborhood_map_data:
+                            map_result = generate_map(
+                                context_variables={},
+                                map_title=f"{query_name} - {last_month_display} Values by Neighborhood",
+                                map_type="analysis_neighborhood",
+                                location_data=neighborhood_map_data,
+                                map_metadata={
+                                    "period": last_month_display,
+                                    "description": f"Values for {query_name} by analysis neighborhood for {last_month_display}"
+                                },
+                                metric_id=metric_id,
+                                group_field="analysis_neighborhood",
+                                map_provider="mapbox"
+                            )
+                            
+                            if map_result and map_result.get("map_id"):
+                                logging.info(f"Successfully generated neighborhood density map with ID: {map_result.get('map_id')}")
+                                map_url = map_result.get('publish_url') or map_result.get('view_url')
+                                if map_url:
+                                    map_html = f"""
+                                    <div class="map-container">
+                                        <h3>Neighborhood Map: {map_title}</h3>
+                                        <iframe width="100%" height="500" src="{map_url}" 
+                                            frameborder="0" allowfullscreen></iframe>
+                                    </div>
+                                    """
+                                    all_html_contents.append(map_html)
+                    
+                    # Generate delta map for neighborhoods
+                    if second_last_month and not last_month_data.empty:
+                        if 'period_type' in dataset.columns:
+                            if second_last_month in recent_months:
+                                second_last_month_data = dataset[(dataset['month_period'] == second_last_month) & 
+                                                               (dataset['period_type'] == 'recent')]
+                            else:
+                                second_last_month_data = dataset[(dataset['month_period'] == second_last_month) & 
+                                                               (dataset['period_type'] == 'comparison')]
+                        else:
+                            second_last_month_data = dataset[dataset['month_period'] == second_last_month]
+                        
+                        if not second_last_month_data.empty:
+                            last_month_copy = last_month_data.copy()
+                            second_month_copy = second_last_month_data.copy()
+                            
+                            last_month_copy[value_field] = pd.to_numeric(last_month_copy[value_field], errors='coerce')
+                            second_month_copy[value_field] = pd.to_numeric(second_month_copy[value_field], errors='coerce')
+                            
+                            if agg_functions[value_field] == 'mean':
+                                current_neighborhood = last_month_copy.groupby('analysis_neighborhood')[value_field].mean().reset_index()
+                                previous_neighborhood = second_month_copy.groupby('analysis_neighborhood')[value_field].mean().reset_index()
+                            else:
+                                current_neighborhood = last_month_copy.groupby('analysis_neighborhood')[value_field].sum().reset_index()
+                                previous_neighborhood = second_month_copy.groupby('analysis_neighborhood')[value_field].sum().reset_index()
+                            
+                            merged_neighborhood = pd.merge(current_neighborhood, previous_neighborhood, 
+                                                         on='analysis_neighborhood', suffixes=('_current', '_previous'))
+                            
+                            neighborhood_delta_data = []
+                            for _, row in merged_neighborhood.iterrows():
+                                if pd.notna(row['analysis_neighborhood']):
+                                    curr = row[f"{value_field}_current"]
+                                    prev = row[f"{value_field}_previous"]
+                                    pct_change = ((curr - prev) / prev) if prev != 0 else (0 if curr == 0 else 1.0)
+                                    neighborhood_delta_data.append({
+                                        "neighborhood": str(row['analysis_neighborhood']),
+                                        "current_value": curr,
+                                        "previous_value": prev,
+                                        "delta": curr - prev,
+                                        "percent_change": pct_change,
+                                        "value": pct_change
+                                    })
+                            
+                            if neighborhood_delta_data:
+                                map_result = generate_map(
+                                    context_variables={},
+                                    map_title=f"{query_name} - Neighborhood Changes",
+                                    map_type="analysis_neighborhood",
+                                    location_data=neighborhood_delta_data,
+                                    map_metadata={
+                                        "period": f"{last_month_display}",
+                                        "description": f"Percent change in {query_name} by analysis neighborhood",
+                                        "map_type": "delta"
+                                    },
+                                    metric_id=metric_id,
+                                    group_field="analysis_neighborhood",
+                                    map_provider="mapbox"
+                                )
+                                
+                                if map_result and map_result.get("map_id"):
+                                    logging.info(f"Successfully generated neighborhood delta map with ID: {map_result.get('map_id')}")
+                                    map_url = map_result.get('publish_url') or map_result.get('view_url')
+                                    if map_url:
+                                        map_html = f"""
+                                        <div class="map-container">
+                                            <h3>Neighborhood Changes: {map_title}</h3>
+                                            <iframe width="100%" height="500" src="{map_url}" 
+                                                frameborder="0" allowfullscreen></iframe>
+                                        </div>
+                                        """
+                                        all_html_contents.append(map_html)
+        
+        except Exception as e:
+            logging.error(f"Error generating analysis_neighborhood maps: {str(e)}")
+            logging.error(traceback.format_exc())
     
     # Process district-specific analysis if needed
     if process_districts and has_district and 'supervisor_district' in dataset.columns:

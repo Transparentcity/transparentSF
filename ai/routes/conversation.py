@@ -33,22 +33,22 @@ def clean_json_for_api(obj):
 
 @router.get("/api/sessions/{session_id}")
 async def get_session_data(session_id: str):
-    """Get session data for conversation viewer."""
+    """Get session data for conversation viewer (from GCS or local storage)."""
     try:
-        sessions_dir = os.path.join(os.path.dirname(__file__), '..', 'logs', 'sessions')
-        session_file = os.path.join(sessions_dir, f'{session_id}.json')
+        # Import GCS logger for cloud-enabled retrieval
+        from tools.gcs_logger import get_gcs_logger
         
-        # Direct filename lookup (session files are now named after session_id)
-        if os.path.exists(session_file):
-            logging.info(f"Found session {session_id}")
-            with open(session_file, 'r') as f:
-                session_data = json.load(f)
-            
+        # Use GCS logger which tries GCS first, then falls back to local storage
+        gcs_logger = get_gcs_logger()
+        session_data = gcs_logger.retrieve_session(session_id)
+        
+        if session_data:
+            logging.info(f"Retrieved session {session_id} (from GCS or local)")
             # Clean any problematic float values for FastAPI JSON serialization
             cleaned_data = clean_json_for_api(session_data)
             return JSONResponse(cleaned_data)
         
-        logging.warning(f"Session {session_id} not found")
+        logging.warning(f"Session {session_id} not found in GCS or local storage")
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     
     except HTTPException:

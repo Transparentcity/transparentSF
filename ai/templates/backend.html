@@ -4403,12 +4403,12 @@ Can you help me understand:
                             }
                         }, 2000); // Poll every 2 seconds
                         
-                        // Set a timeout to stop polling after 10 minutes
+                        // Set a timeout to stop polling after 20 minutes
                         setTimeout(() => {
                             clearInterval(pollInterval);
                             operationElement.textContent = 'Operation timed out. Check logs for details.';
                             hideLoading();
-                        }, 600000);
+                        }, 1200000);
                         
                     } else {
                         throw new Error(data.message || 'Failed to start dashboard metrics generation');
@@ -5421,6 +5421,26 @@ async function checkAgentConfig() {
             }
         }
 
+        function formatDuration(startTime, endTime) {
+            if (!startTime) return 'N/A';
+            
+            const start = new Date(startTime);
+            const end = endTime ? new Date(endTime) : new Date();
+            const duration = Math.floor((end - start) / 1000); // Duration in seconds
+            
+            if (duration < 60) {
+                return `${duration} seconds`;
+            } else if (duration < 3600) {
+                const minutes = Math.floor(duration / 60);
+                const seconds = duration % 60;
+                return `${minutes}m ${seconds}s`;
+            } else {
+                const hours = Math.floor(duration / 3600);
+                const minutes = Math.floor((duration % 3600) / 60);
+                return `${hours}h ${minutes}m`;
+            }
+        }
+
         function displayJobsInModal(jobs) {
             const jobsContent = document.getElementById('jobs-content');
 
@@ -5433,7 +5453,7 @@ async function checkAgentConfig() {
                 const statusClass = job.status.toLowerCase();
                 const progress = job.progress || 0;
                 const startTime = job.start_time ? new Date(job.start_time).toLocaleString() : 'Not started';
-                const duration = job.duration ? `${Math.round(job.duration)}s` : 'N/A';
+                const duration = formatDuration(job.start_time, job.end_time);
 
                 return `
                     <div class="job-item">

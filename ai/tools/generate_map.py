@@ -2060,12 +2060,34 @@ def generate_mapbox_map(context_variables, map_title, map_type, location_data=No
         if map_metadata:
             metadata.update(map_metadata)
         
+        # Determine map subtype (density or delta)
+        map_subtype = "delta" if map_metadata and map_metadata.get("map_type") == "delta" else "density"
+        
+        # Before inserting, deactivate previous maps of the same type for this metric/group_field
+        if metric_id and group_field:
+            try:
+                cursor.execute("""
+                    UPDATE maps 
+                    SET active = FALSE, updated_at = CURRENT_TIMESTAMP
+                    WHERE metric_id = %s 
+                    AND group_field = %s 
+                    AND type = %s
+                    AND (metadata->>'map_type' = %s OR (metadata->>'map_type' IS NULL AND %s = 'density'))
+                    AND active = TRUE
+                """, (metric_id, group_field, map_type, map_subtype, map_subtype))
+                
+                deactivated_count = cursor.rowcount
+                if deactivated_count > 0:
+                    logger.info(f"Deactivated {deactivated_count} previous {map_subtype} map(s) for metric_id={metric_id}, group_field={group_field}, type={map_type}")
+            except Exception as e:
+                logger.warning(f"Failed to deactivate previous maps: {str(e)}")
+        
         # Insert into database and get the auto-generated ID
         cursor.execute("""
             INSERT INTO maps (
-                title, type, location_data, metadata, active, created_at, updated_at, metric_id
+                title, type, location_data, metadata, active, created_at, updated_at, metric_id, group_field
             ) VALUES (
-                %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s
+                %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s
             ) RETURNING id
         """, (
             map_title,
@@ -2073,7 +2095,8 @@ def generate_mapbox_map(context_variables, map_title, map_type, location_data=No
             json.dumps(location_data),
             json.dumps(metadata),
             True,
-            metric_id  # Already converted to int in the route
+            metric_id,
+            group_field
         ))
         
         # Get the auto-generated map ID

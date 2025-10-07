@@ -341,18 +341,25 @@ async def _execute_writeup_with_progress(job, writeup_id: int, writeup_manager, 
         return {"status": "error", "message": str(e)}
 
 @router.get("/list")
-async def get_writeups():
-    """Get a list of all write-ups."""
-    logger.debug("Get write-ups called")
+async def get_writeups(lightweight: bool = False):
+    """
+    Get a list of all write-ups.
+    
+    Args:
+        lightweight: If True, returns only essential fields for faster loading
+    """
+    logger.debug(f"Get write-ups called (lightweight={lightweight})")
     try:
         from tools.writeups_manager import WriteupsManager
         
         writeup_manager = WriteupsManager()
-        writeups = writeup_manager.get_all_writeups()
+        # Pass lightweight parameter to database query for optimization
+        writeups = writeup_manager.get_all_writeups(lightweight=lightweight)
         
         return JSONResponse({
             "status": "success",
-            "writeups": writeups
+            "writeups": writeups,
+            "lightweight": lightweight
         })
     except Exception as e:
         error_message = f"Error getting write-ups: {str(e)}"

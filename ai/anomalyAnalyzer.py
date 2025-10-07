@@ -3535,7 +3535,7 @@ async def generate_map_endpoint(request: Request):
         
         # Fetch the data
         try:
-            response = requests.get(modified_query, timeout=30)
+            response = requests.get(modified_query, timeout=300)  # Increased timeout to 300 seconds (5 minutes)
             response.raise_for_status()
             data_results = response.json()
         except requests.exceptions.HTTPError as e:
