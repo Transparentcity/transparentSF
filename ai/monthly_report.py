@@ -2709,13 +2709,97 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
                 logger.error("Report text is empty! Cannot write empty content to file.")
                 return None
             
-            # Use GCS output manager for storage
+            # Use GCS output manager for storage with proper template rendering
             try:
                 from tools.output_manager import get_output_manager
-                output_manager = get_output_manager()
+                from jinja2 import Environment, FileSystemLoader
+                import os
+                
+                # Set up Jinja2 environment
+                template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+                env = Environment(loader=FileSystemLoader(template_dir))
+                
+                # Get GA property ID from environment
+                ga_property_id = os.getenv("GA_PROPERTY_ID", "")
+                
+                # Create a simple newsletter template structure
+                newsletter_template = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'IBM Plex Sans', Arial, sans-serif;
+            color: #222;
+            background-color: #fff;
+            padding: 2rem;
+            max-width: 1000px;
+            margin: auto;
+        }
+        h1, h2, h3 {
+            font-family: 'Inter', Arial, sans-serif;
+            color: #000;
+        }
+        .section {
+            margin-bottom: 2.5rem;
+        }
+        .takeaways ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .takeaways li::before {
+            content: "• ";
+            color: #000;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+        .chart {
+            margin: 1.5rem 0;
+            text-align: center;
+        }
+        .footer {
+            font-size: 0.85rem;
+            color: #666;
+            border-top: 1px solid #ccc;
+            padding-top: 1rem;
+            margin-top: 3rem;
+        }
+    </style>
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+</head>
+<body>
+    {{ newsletter_content|safe }}
+</body>
+</html>
+"""
+                
+                # Create template from string
+                template = env.from_string(newsletter_template)
+                
+                # Extract title from report_text if possible
+                title = "Monthly Newsletter"
+                if "title" in report_text.lower():
+                    # Try to extract title from the content
+                    import re
+                    title_match = re.search(r'<title>(.*?)</title>', report_text, re.IGNORECASE)
+                    if title_match:
+                        title = title_match.group(1)
+                
+                # Render the template with the newsletter content
+                rendered_html = template.render(
+                    title=title,
+                    newsletter_content=report_text,
+                    ga_property_id=ga_property_id
+                )
                 
                 success = output_manager.store_report(
-                    content=report_text,
+                    content=rendered_html,
                     filename=report_filename,
                     report_type="html"
                 )
@@ -2735,8 +2819,95 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
                 reports_dir.mkdir(parents=True, exist_ok=True)
                 report_path = reports_dir / report_filename
                 
+                # Create a proper newsletter HTML structure with GA tracking
+                from jinja2 import Environment, FileSystemLoader
+                import os
+                
+                # Set up Jinja2 environment
+                template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+                env = Environment(loader=FileSystemLoader(template_dir))
+                
+                # Get GA property ID from environment
+                ga_property_id = os.getenv("GA_PROPERTY_ID", "")
+                
+                # Create a simple newsletter template structure
+                newsletter_template = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'IBM Plex Sans', Arial, sans-serif;
+            color: #222;
+            background-color: #fff;
+            padding: 2rem;
+            max-width: 1000px;
+            margin: auto;
+        }
+        h1, h2, h3 {
+            font-family: 'Inter', Arial, sans-serif;
+            color: #000;
+        }
+        .section {
+            margin-bottom: 2.5rem;
+        }
+        .takeaways ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .takeaways li::before {
+            content: "• ";
+            color: #000;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+        .chart {
+            margin: 1.5rem 0;
+            text-align: center;
+        }
+        .footer {
+            font-size: 0.85rem;
+            color: #666;
+            border-top: 1px solid #ccc;
+            padding-top: 1rem;
+            margin-top: 3rem;
+        }
+    </style>
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+</head>
+<body>
+    {{ newsletter_content|safe }}
+</body>
+</html>
+"""
+                
+                # Create template from string
+                template = env.from_string(newsletter_template)
+                
+                # Extract title from report_text if possible
+                title = "Monthly Newsletter"
+                if "title" in report_text.lower():
+                    # Try to extract title from the content
+                    import re
+                    title_match = re.search(r'<title>(.*?)</title>', report_text, re.IGNORECASE)
+                    if title_match:
+                        title = title_match.group(1)
+                
+                # Render the template with the newsletter content
+                rendered_html = template.render(
+                    title=title,
+                    newsletter_content=report_text,
+                    ga_property_id=ga_property_id
+                )
+                
                 with open(report_path, 'w', encoding='utf-8') as f:
-                    f.write(report_text)
+                    f.write(rendered_html)
                 
                 # Verify the file was written successfully
                 if report_path.exists() and report_path.stat().st_size > 0:
@@ -2904,7 +3075,12 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
                     logger.info("✅ Successfully parsed JSON using raw extraction")
                 except json.JSONDecodeError as e:
                     logger.warning(f"Raw extraction found JSON but parsing failed: {e}")
-                    json_str = None
+                    # Try with strict=False
+                    try:
+                        proofread_data = json.loads(json_str, strict=False)
+                        logger.info("✅ Successfully parsed JSON using raw extraction with strict=False")
+                    except json.JSONDecodeError:
+                        json_str = None
             
             # Strategy 2: If raw extraction failed, try cleaning first
             if not proofread_data:
@@ -2920,7 +3096,12 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
                         logger.info("✅ Successfully parsed JSON using cleaned extraction")
                     except json.JSONDecodeError as e:
                         logger.warning(f"Cleaned extraction found JSON but parsing failed: {e}")
-                        json_str = None
+                        # Try with strict=False
+                        try:
+                            proofread_data = json.loads(json_str, strict=False)
+                            logger.info("✅ Successfully parsed JSON using cleaned extraction with strict=False")
+                        except json.JSONDecodeError:
+                            json_str = None
             
             # Strategy 3: Try direct parsing if response looks like pure JSON
             if not proofread_data:
@@ -2932,6 +3113,46 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
                         logger.info("✅ Successfully parsed JSON using direct parsing")
                     except json.JSONDecodeError as e:
                         logger.warning(f"Direct parsing failed: {e}")
+                        
+                        # Strategy 3b: Try with strict=False to allow control characters
+                        try:
+                            logger.info("Strategy 3b - trying json.loads with strict=False")
+                            proofread_data = json.loads(cleaned_response, strict=False)
+                            logger.info("✅ Successfully parsed JSON using strict=False")
+                        except json.JSONDecodeError as e2:
+                            logger.warning(f"Parsing with strict=False failed: {e2}")
+                            
+                            # Strategy 3c: Try sanitizing control characters
+                            try:
+                                logger.info("Strategy 3c - sanitizing control characters")
+                                import re
+                                # Replace literal control characters with their escaped versions
+                                # This regex finds all control characters (0x00-0x1F except tab, newline, carriage return)
+                                # that are not already escaped
+                                def escape_control_chars(text):
+                                    """Escape unescaped control characters in JSON string"""
+                                    result = []
+                                    i = 0
+                                    while i < len(text):
+                                        char = text[i]
+                                        # Check if this is an unescaped control character
+                                        if ord(char) < 0x20 and char not in '\t\n\r':
+                                            # Check if it's already escaped (preceded by backslash)
+                                            if i == 0 or text[i-1] != '\\':
+                                                # Escape it
+                                                result.append(f'\\u{ord(char):04x}')
+                                            else:
+                                                result.append(char)
+                                        else:
+                                            result.append(char)
+                                        i += 1
+                                    return ''.join(result)
+                                
+                                sanitized_response = escape_control_chars(cleaned_response)
+                                proofread_data = json.loads(sanitized_response)
+                                logger.info("✅ Successfully parsed JSON after sanitizing control characters")
+                            except json.JSONDecodeError as e3:
+                                logger.warning(f"Parsing after sanitization failed: {e3}")
             
             # Strategy 4: Try to find and extract JSON from any text
             if not proofread_data:
@@ -3003,13 +3224,38 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
             # Return a more specific error message
             return {"status": "error", "message": f"AI model failed to return valid JSON format. The model may not be following instructions properly. Error: {str(e)}. Please try again or check the model configuration."}
         
-        # Save the revised newsletter content
+        # Save the revised newsletter content using output manager (GCS with local fallback)
         report_path_obj = Path(report_path)
         revised_filename = f"{report_path_obj.stem}_revised{report_path_obj.suffix}"
-        revised_path = report_path_obj.parent / revised_filename
         
-        with open(revised_path, 'w', encoding='utf-8') as f:
-            f.write(revised_newsletter_content)
+        try:
+            from tools.output_manager import get_output_manager
+            output_manager = get_output_manager()
+            
+            success = output_manager.store_report(
+                content=revised_newsletter_content,
+                filename=revised_filename,
+                report_type="html"
+            )
+            
+            if success:
+                logger.info(f"Revised newsletter saved successfully using output manager: {revised_filename}")
+                revised_path = f"stored:{revised_filename}"  # Mark as stored in output manager
+            else:
+                logger.warning("Failed to save revised newsletter using output manager, falling back to local storage")
+                # Fallback to local storage
+                revised_path = report_path_obj.parent / revised_filename
+                with open(revised_path, 'w', encoding='utf-8') as f:
+                    f.write(revised_newsletter_content)
+                logger.info(f"Revised newsletter saved to local storage: {revised_path}")
+                
+        except ImportError:
+            logger.warning("Output manager not available, falling back to local file storage")
+            # Fallback to local storage
+            revised_path = report_path_obj.parent / revised_filename
+            with open(revised_path, 'w', encoding='utf-8') as f:
+                f.write(revised_newsletter_content)
+            logger.info(f"Revised newsletter saved to local storage: {revised_path}")
         
         # Note: Chart expansion will be handled by the main process after proofreading
         # to avoid sending heavy HTML with CSS/JS to the proofreader
@@ -3082,7 +3328,7 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
             # Continue, but log the error. The file is saved.
             return {"status": "partial", "revised_report_path": str(revised_path), "proofread_feedback": proofread_feedback, "headlines": headlines, "message": "Proofreading completed but database update failed"}
 
-        logger.info(f"Successfully proofread and revised newsletter: {revised_path}")
+        logger.info(f"Successfully proofread and revised newsletter: {revised_filename}")
         return {"status": "success", "revised_report_path": str(revised_path), "proofread_feedback": proofread_feedback, "headlines": headlines}
             
     except Exception as e:

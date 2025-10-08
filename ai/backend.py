@@ -2996,11 +2996,9 @@ async def get_time_series_data_count():
 
 
 @router.get("/monthly-reports")
-async def monthly_reports_page():
+async def monthly_reports_page(request: Request):
     """Serve the monthly reports interface page."""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(current_dir, "templates", "monthly_reports.html")
-    return FileResponse(template_path)
+    return templates.TemplateResponse("monthly_reports.html", {"request": request})
 
 
 

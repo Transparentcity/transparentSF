@@ -18,6 +18,13 @@ function switchChartTab(chartId, tabType) {
     } else if (tabType === 'dw' && dwPanel) {
         dwPanel.classList.add('active');
         if (dwBtn) dwBtn.classList.add('active');
+        
+        // Lazy load DataWrapper iframe when switching to DW tab
+        const dwIframe = dwPanel.querySelector('iframe[data-src]');
+        if (dwIframe && !dwIframe.src) {
+            dwIframe.src = dwIframe.getAttribute('data-src');
+            dwIframe.removeAttribute('data-src');
+        }
     }
 }
 

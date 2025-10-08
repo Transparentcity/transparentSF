@@ -2,6 +2,10 @@
 .chart-tabs-container {
     margin: 20px 0;
     position: relative;
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .chart-tabs-header {
@@ -44,11 +48,14 @@
 
 .chart-tab-content {
     position: relative;
+    width: 100%;
 }
 
 .chart-tab-panel {
     display: none !important;
-    min-height: 400px;
+    min-height: 700px; /* Increased from 400px to accommodate maps */
+    width: 100%;
+    overflow: hidden;
 }
 
 .chart-tab-panel.active {
@@ -58,6 +65,73 @@
 .datawrapper-chart-embed {
     padding: 20px;
     background-color: #fff;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Responsive iframe styling */
+.chart-tab-panel iframe {
+    width: 100% !important;
+    max-width: 1200px;
+    height: 700px !important; /* Increased from 600px */
+    border: none;
+    margin: 0 auto;
+    display: block;
+}
+
+/* Hide DataWrapper iframes until they're loaded */
+.chart-tab-panel iframe[data-src] {
+    display: none !important;
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 1200px) {
+    .chart-tabs-container {
+        max-width: 100%;
+        margin: 10px;
+    }
+    
+    .chart-tab-panel {
+        min-height: 600px;
+    }
+    
+    .chart-tab-panel iframe {
+        height: 600px !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .chart-tabs-container {
+        margin: 5px;
+    }
+    
+    .chart-tab-panel {
+        min-height: 500px;
+    }
+    
+    .chart-tab-panel iframe {
+        height: 500px !important;
+    }
+    
+    .chart-tabs-header {
+        position: relative;
+        bottom: auto;
+        right: auto;
+        margin-bottom: 10px;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .chart-tab-panel {
+        min-height: 400px;
+    }
+    
+    .chart-tab-panel iframe {
+        height: 400px !important;
+    }
 }
 
 

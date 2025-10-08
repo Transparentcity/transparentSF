@@ -353,7 +353,7 @@ def expand_chart_references_dw(report_path):
                     f'                title="Time Series Chart - Metric {metric_id}"\n'
                     f'                style="width: 100%; border: none;" \n'
                     f'                height="400"\n'
-                    f'                frameborder="0">\n'
+                    f'                frameborder="0" onload="this.style.display=\\"block\\"">\n'
                     f'        </iframe>\n'
                     f'    </div>\n'
                     f'</div>'
@@ -394,7 +394,7 @@ def expand_chart_references_dw(report_path):
                         f'                title="Anomaly {anomaly_id}: Trend Analysis"\n'
                         f'                style="width: 100%; border: none;" \n'
                         f'                height="400"\n'
-                        f'                frameborder="0">\n'
+                        f'                frameborder="0" onload="this.style.display=\\"block\\"">\n'
                         f'        </iframe>\n'
                         f'    </div>\n'
                         f'</div>'
@@ -435,7 +435,7 @@ def expand_chart_references_dw(report_path):
                     f'                title="Map {map_id}"\n'
                     f'                style="width: 100%; border: none;" \n'
                     f'                height="400"\n'
-                    f'                frameborder="0">\n'
+                    f'                frameborder="0" onload="this.style.display=\\"block\\"">\n'
                     f'        </iframe>\n'
                     f'    </div>\n'
                     f'</div>'
@@ -457,7 +457,7 @@ def expand_chart_references_dw(report_path):
                             f'                title="Map {map_id}"\n'
                             f'                style="width: 100%; border: none;" \n'
                             f'                height="400"\n'
-                            f'                frameborder="0">\n'
+                            f'                frameborder="0" onload="this.style.display=\\"block\\"">\n'
                             f'        </iframe>\n'
                             f'    </div>\n'
                             f'</div>'
@@ -518,7 +518,7 @@ def expand_chart_references_dw(report_path):
                                 f'                title="Anomaly {anomaly_id}: {img_alt}"\n'
                                 f'                style="width: 100%; border: none;" \n'
                                 f'                height="400"\n'
-                                f'                frameborder="0">\n'
+                                f'                frameborder="0" onload="this.style.display=\\"block\\"">\n'
                                 f'        </iframe>\n'
                                 f'    </div>\n'
                                 f'</div>'
@@ -560,7 +560,7 @@ def expand_chart_references_dw(report_path):
                                 f'                title="Anomaly {anomaly_id}: Trend Analysis"\n'
                                 f'                style="width: 100%; border: none;" \n'
                                 f'                height="400"\n'
-                                f'                frameborder="0">\n'
+                                f'                frameborder="0" onload="this.style.display=\\"block\\"">\n'
                                 f'        </iframe>\n'
                                 f'    </div>\n'
                                 f'</div>'
@@ -791,7 +791,7 @@ def expand_chart_references_with_tabs(report_path):
                     <iframe src="{dw_chart_url}"
                             title="Time Series Chart - Metric {metric_id}"
                             style="width: 1000px; height: 600px; border: none;" 
-                            frameborder="0">
+                            frameborder="0" onload="this.style.display='block'">
                     </iframe>
                 </div>
             </div>
@@ -803,8 +803,8 @@ def expand_chart_references_with_tabs(report_path):
                 dw_button_html = f'<button class="chart-tab-btn" onclick="switchChartTab(\'{chart_id}\', \'dw\')">DataWrapper</button>'
             
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Transparent SF</button>
             {dw_button_html}
@@ -812,7 +812,7 @@ def expand_chart_references_with_tabs(report_path):
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Time Series Chart - Metric {metric_id}">
@@ -854,7 +854,7 @@ def expand_chart_references_with_tabs(report_path):
                     <iframe src="{dw_chart_url}"
                             title="Anomaly {anomaly_id}: Trend Analysis"
                             style="width: 1000px; height: 600px; border: none;" 
-                            frameborder="0">
+                            frameborder="0" onload="this.style.display='block'">
                     </iframe>
                 </div>
             </div>
@@ -866,8 +866,8 @@ def expand_chart_references_with_tabs(report_path):
                 dw_button_html = f'<button class="chart-tab-btn" onclick="switchChartTab(\'{chart_id}\', \'dw\')">DataWrapper</button>'
             
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Transparent SF</button>
             {dw_button_html}
@@ -875,7 +875,7 @@ def expand_chart_references_with_tabs(report_path):
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Anomaly Analysis - ID {anomaly_id}">
@@ -917,7 +917,7 @@ def expand_chart_references_with_tabs(report_path):
                     <iframe src="{dw_chart_url}"
                             title="Map {map_id}"
                             style="width: 600px; height: 400px; border: none;" 
-                            frameborder="0">
+                            frameborder="0" onload="this.style.display='block'">
                     </iframe>
                 </div>
             </div>
@@ -929,7 +929,7 @@ def expand_chart_references_with_tabs(report_path):
                 dw_button_html = f'<button class="chart-tab-btn" onclick="switchChartTab(\'{chart_id}\', \'dw\')">DataWrapper</button>'
             
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
+<div class="chart-container">
     <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 600px; width: 100%;">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Transparent SF</button>
@@ -987,15 +987,15 @@ def expand_chart_references_with_tabs(report_path):
             
             # Dual maps don't have DataWrapper equivalents, so just use local iframe
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Dual Map Comparison</button>
         </div>
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/dual-map?map1_id={map1_id}&map2_id={map2_id}"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Dual Map Comparison - {map1_id} vs {map2_id}">
@@ -1110,7 +1110,7 @@ def expand_chart_references_with_auto_dw_generation(report_path):
                     <iframe src="{dw_chart_url}"
                             title="Time Series Chart - Metric {metric_id}"
                             style="width: 1000px; height: 600px; border: none;" 
-                            frameborder="0">
+                            frameborder="0" onload="this.style.display='block'">
                     </iframe>
                 </div>
             </div>
@@ -1122,8 +1122,8 @@ def expand_chart_references_with_auto_dw_generation(report_path):
                 dw_button_html = f'<button class="chart-tab-btn" onclick="switchChartTab(\'{chart_id}\', \'dw\')">DataWrapper</button>'
             
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Transparent SF</button>
             {dw_button_html}
@@ -1131,7 +1131,7 @@ def expand_chart_references_with_auto_dw_generation(report_path):
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Time Series Chart - Metric {metric_id}">
@@ -1172,7 +1172,7 @@ def expand_chart_references_with_auto_dw_generation(report_path):
                     <iframe src="{dw_chart_url}"
                             title="Anomaly {anomaly_id}: Trend Analysis"
                             style="width: 1000px; height: 600px; border: none;" 
-                            frameborder="0">
+                            frameborder="0" onload="this.style.display='block'">
                     </iframe>
                 </div>
             </div>
@@ -1184,8 +1184,8 @@ def expand_chart_references_with_auto_dw_generation(report_path):
                 dw_button_html = f'<button class="chart-tab-btn" onclick="switchChartTab(\'{chart_id}\', \'dw\')">DataWrapper</button>'
             
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Transparent SF</button>
             {dw_button_html}
@@ -1193,7 +1193,7 @@ def expand_chart_references_with_auto_dw_generation(report_path):
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}#chart-section"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Anomaly Analysis - ID {anomaly_id}">
@@ -1239,7 +1239,7 @@ def expand_chart_references_with_auto_dw_generation(report_path):
                     <iframe src="{dw_chart_url}"
                             title="Map {map_id}"
                             style="width: 600px; height: 400px; border: none;" 
-                            frameborder="0">
+                            frameborder="0" onload="this.style.display='block'">
                     </iframe>
                 </div>
             </div>
@@ -1251,7 +1251,7 @@ def expand_chart_references_with_auto_dw_generation(report_path):
                 dw_button_html = f'<button class="chart-tab-btn" onclick="switchChartTab(\'{chart_id}\', \'dw\')">DataWrapper</button>'
             
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
+<div class="chart-container">
     <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 600px; width: 100%;">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Transparent SF</button>
@@ -1309,15 +1309,15 @@ def expand_chart_references_with_auto_dw_generation(report_path):
             
             # Dual maps don't have DataWrapper equivalents, so just use local iframe
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Dual Map Comparison</button>
         </div>
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/dual-map?map1_id={map1_id}&map2_id={map2_id}"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Dual Map Comparison - {map1_id} vs {map2_id}">
@@ -2079,11 +2079,11 @@ def expand_charts_with_tabs_final(report_path):
             if dw_url:
                 dw_tab_html = f'''
             <div id="{chart_id}_dw" class="chart-tab-panel">
-                <div class="datawrapper-chart-embed" style="display: flex; justify-content: center;">
-                    <iframe src="{dw_url}"
+                <div class="datawrapper-chart-embed">
+                    <iframe data-src="{dw_url}"
                             title="Time Series Chart - Metric {metric_id}"
-                            style="width: 1000px; height: 600px; border: none;" 
-                            frameborder="0">
+                            frameborder="0"
+                            onload="this.style.display='block'">
                     </iframe>
                 </div>
             </div>
@@ -2095,8 +2095,8 @@ def expand_charts_with_tabs_final(report_path):
                 dw_button_html = f'<button class="chart-tab-btn" onclick="switchChartTab(\'{chart_id}\', \'dw\')">DataWrapper</button>'
             
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Transparent SF</button>
             {dw_button_html}
@@ -2104,7 +2104,7 @@ def expand_charts_with_tabs_final(report_path):
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/backend/time-series-chart?metric_id={metric_id}&district={district}&period_type={period_type}"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Time Series Chart - Metric {metric_id}">
@@ -2120,9 +2120,9 @@ def expand_charts_with_tabs_final(report_path):
         def replace_time_series_id(match):
             chart_id = match.group(1)
             return f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
+<div class="chart-container">
     <iframe src="/backend/time-series-chart?chart_id={chart_id}"
-            style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+            
             frameborder="0" 
             scrolling="no"
             title="Time Series Chart - ID {chart_id}">
@@ -2152,10 +2152,10 @@ def expand_charts_with_tabs_final(report_path):
                 dw_tab_html = f'''
             <div id="{chart_id}_dw" class="chart-tab-panel">
                 <div class="datawrapper-chart-embed" style="display: flex; justify-content: center;">
-                    <iframe src="{dw_url}"
+                    <iframe data-src="{dw_url}"
                             title="Anomaly Analysis - {anomaly_id}"
                             style="width: 1000px; height: 600px; border: none;" 
-                            frameborder="0">
+                            frameborder="0" onload="this.style.display='block'">
                     </iframe>
                 </div>
             </div>
@@ -2167,8 +2167,8 @@ def expand_charts_with_tabs_final(report_path):
                 dw_button_html = f'<button class="chart-tab-btn" onclick="switchChartTab(\'{chart_id}\', \'dw\')">DataWrapper</button>'
             
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Transparent SF</button>
             {dw_button_html}
@@ -2176,7 +2176,7 @@ def expand_charts_with_tabs_final(report_path):
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/anomaly-analyzer/anomaly-chart?id={anomaly_id}"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Anomaly Analysis - {anomaly_id}">
@@ -2222,10 +2222,10 @@ def expand_charts_with_tabs_final(report_path):
                 dw_tab_html = f'''
             <div id="{chart_id}_dw" class="chart-tab-panel">
                 <div class="datawrapper-chart-embed" style="display: flex; justify-content: center;">
-                    <iframe src="{dw_url}"
+                    <iframe data-src="{dw_url}"
                             title="Map - {map_id}"
                             style="width: 1000px; height: 600px; border: none;" 
-                            frameborder="0">
+                            frameborder="0" onload="this.style.display='block'">
                     </iframe>
                 </div>
             </div>
@@ -2241,8 +2241,8 @@ def expand_charts_with_tabs_final(report_path):
                 if dw_url:
                     # Use DataWrapper as the primary (and only) option
                     tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'dw')">DataWrapper</button>
         </div>
@@ -2255,7 +2255,7 @@ def expand_charts_with_tabs_final(report_path):
                 else:
                     # Fallback if no DataWrapper URL available
                     tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
+<div class="chart-container">
     <div style="padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;">
         <p style="margin: 0; color: #6c757d;">Supervisor district map {map_id} - DataWrapper version not available</p>
     </div>
@@ -2264,8 +2264,8 @@ def expand_charts_with_tabs_final(report_path):
             else:
                 # Standard tabbed interface with both TransparentSF and DataWrapper
                 tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Transparent SF</button>
             {dw_button_html}
@@ -2273,7 +2273,7 @@ def expand_charts_with_tabs_final(report_path):
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/backend/map-chart?id={map_id}"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Map - {map_id}">
@@ -2293,15 +2293,15 @@ def expand_charts_with_tabs_final(report_path):
             
             # Dual maps don't have DataWrapper equivalents, so just use local iframe
             tabs_html = f'''
-<div class="chart-container" style="display: flex; justify-content: center; margin: 20px 0;">
-    <div class="chart-tabs-container" id="{chart_id}_container" style="max-width: 1000px; width: 100%;">
+<div class="chart-container">
+    <div class="chart-tabs-container" id="{chart_id}_container">
         <div class="chart-tabs-header">
             <button class="chart-tab-btn active" onclick="switchChartTab('{chart_id}', 'local')">Dual Map Comparison</button>
         </div>
         <div class="chart-tab-content">
             <div id="{chart_id}_local" class="chart-tab-panel active">
                 <iframe src="/dual-map?map1_id={map1_id}&map2_id={map2_id}"
-                        style="width: 1000px; height: 600px; border: none; margin: 0 auto;" 
+                        
                         frameborder="0" 
                         scrolling="no"
                         title="Dual Map Comparison - {map1_id} vs {map2_id}">
