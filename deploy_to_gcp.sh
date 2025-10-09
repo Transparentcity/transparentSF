@@ -104,57 +104,70 @@ print_status "Current branch: $CURRENT_BRANCH"
 # Deploy to VM
 print_status "Connecting to VM and deploying..."
 
-# Create deployment commands
-DEPLOY_COMMANDS="
-set -e
-cd $VM_PATH
-
-echo '🔄 Pulling latest changes...'
-sudo -u transparentsf git fetch origin
-sudo -u transparentsf git checkout $CURRENT_BRANCH
-sudo -u transparentsf git pull origin $CURRENT_BRANCH
-
-echo '📦 Installing/updating Python dependencies...'
-sudo -u transparentsf /opt/transparentsf/venv/bin/pip install -r requirements.txt
-
-echo '🔧 Setting up directories and permissions...'
-sudo -u transparentsf mkdir -p ai/logs ai/output ai/static
-sudo chown -R transparentsf:transparentsf ai/logs ai/output ai/static
-sudo chmod 755 ai/logs ai/output ai/static
-
-echo '🐳 Checking Qdrant service...'
-if ! systemctl is-active --quiet qdrant; then
-    echo 'Starting Qdrant service...'
-    sudo systemctl start qdrant
-fi
-
-echo '🔄 Restarting TransparentSF application...'
-sudo systemctl restart transparentsf
-
-echo '⏳ Waiting for application to start...'
-sleep 5
-
-echo '✅ Checking application status...'
-sudo systemctl status transparentsf --no-pager -l
-
-echo '🌐 Application should be available at: http://$(curl -s metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H \"Metadata-Flavor: Google\")'
-"
-
-# Execute deployment on VM
-print_status "Executing deployment commands on VM..."
+# Execute deployment steps one by one for better error handling
+print_status "Step 1: Pulling latest changes..."
 gcloud compute ssh $VM_NAME \
     --project=$PROJECT_ID \
     --zone=$ZONE \
-    --command="$DEPLOY_COMMANDS"
+    --command="cd $VM_PATH && sudo -u transparentsf git fetch origin"
+
+print_status "Step 2: Handling git conflicts and updating code..."
+gcloud compute ssh $VM_NAME \
+    --project=$PROJECT_ID \
+    --zone=$ZONE \
+    --command="cd $VM_PATH && sudo -u transparentsf git stash && sudo -u transparentsf git checkout $CURRENT_BRANCH && sudo -u transparentsf git pull origin $CURRENT_BRANCH"
+
+print_status "Step 3: Installing/updating Python dependencies..."
+gcloud compute ssh $VM_NAME \
+    --project=$PROJECT_ID \
+    --zone=$ZONE \
+    --command="cd $VM_PATH && sudo -u transparentsf /opt/transparentsf/venv/bin/pip install -r requirements.txt"
+
+print_status "Step 4: Setting up directories and permissions..."
+gcloud compute ssh $VM_NAME \
+    --project=$PROJECT_ID \
+    --zone=$ZONE \
+    --command="cd $VM_PATH && sudo -u transparentsf mkdir -p ai/logs ai/output ai/static && sudo chown -R transparentsf:transparentsf ai/logs ai/output ai/static && sudo chmod 755 ai/logs ai/output ai/static"
+
+print_status "Step 5: Checking Qdrant service..."
+gcloud compute ssh $VM_NAME \
+    --project=$PROJECT_ID \
+    --zone=$ZONE \
+    --command="if ! systemctl is-active --quiet qdrant; then echo 'Starting Qdrant service...' && sudo systemctl start qdrant; else echo 'Qdrant is already running'; fi"
+
+print_status "Step 6: Restarting TransparentSF application..."
+gcloud compute ssh $VM_NAME \
+    --project=$PROJECT_ID \
+    --zone=$ZONE \
+    --command="sudo systemctl restart transparentsf"
+
+print_status "Step 7: Waiting for application to start..."
+sleep 10
+
+print_status "Step 8: Checking application status..."
+gcloud compute ssh $VM_NAME \
+    --project=$PROJECT_ID \
+    --zone=$ZONE \
+    --command="sudo systemctl status transparentsf --no-pager -l"
+
+print_status "Step 9: Testing application endpoints..."
+# Get external IP for testing
+EXTERNAL_IP=$(gcloud compute instances describe $VM_NAME \
+    --project=$PROJECT_ID \
+    --zone=$ZONE \
+    --format="get(networkInterfaces[0].accessConfigs[0].natIP)")
+
+print_status "Testing application at http://$EXTERNAL_IP..."
+# Test the main application endpoint
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://$EXTERNAL_IP/ || echo "000")
+if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "404" ]; then
+    print_status "Application is responding (HTTP $HTTP_CODE)"
+else
+    print_warning "Application may not be fully ready yet (HTTP $HTTP_CODE)"
+fi
 
 if [ $? -eq 0 ]; then
     print_status "Deployment completed successfully!"
-    
-    # Get VM external IP
-    EXTERNAL_IP=$(gcloud compute instances describe $VM_NAME \
-        --project=$PROJECT_ID \
-        --zone=$ZONE \
-        --format="get(networkInterfaces[0].accessConfigs[0].natIP)")
     
     echo ""
     echo -e "${GREEN}🎉 Deployment Complete!${NC}"
