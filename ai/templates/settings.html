@@ -254,21 +254,77 @@
                 show(s, 'Starting metadata reload (Step 1 of 3)...');
                 
                 // Step 1: Refresh dataset URLs
-                const step1 = await fetchJSON('/backend/refresh_dataset_urls', { method: 'GET' });
+                const step1Response = await fetchJSON('/backend/refresh_dataset_urls', { method: 'GET' });
+                if (step1Response.status !== 'success') {
+                    throw new Error(`Step 1 failed: ${step1Response.message}`);
+                }
+                show(s, 'Step 1 started: Dataset URLs refresh job created. Waiting for completion...');
+                
+                // Wait for Step 1 to complete
+                const step1JobId = step1Response.job_id;
+                await waitForJobCompletion(step1JobId, 'Step 1');
                 show(s, 'Step 1 complete: Dataset URLs refreshed. Starting Step 2...');
                 
                 // Step 2: Fetch metadata
-                const step2 = await fetchJSON('/backend/fetch_metadata', { method: 'GET' });
+                const step2Response = await fetchJSON('/backend/fetch_metadata', { method: 'GET' });
+                if (step2Response.status !== 'success') {
+                    throw new Error(`Step 2 failed: ${step2Response.message}`);
+                }
+                show(s, 'Step 2 started: Metadata fetch job created. Waiting for completion...');
+                
+                // Wait for Step 2 to complete
+                const step2JobId = step2Response.job_id;
+                await waitForJobCompletion(step2JobId, 'Step 2');
                 show(s, 'Step 2 complete: Metadata fetched and stored. Starting Step 3...');
                 
                 // Step 3: Reload SF Public data into vector database
-                const step3 = await fetchJSON('/backend/reload_sfpublic', { method: 'GET' });
+                const step3Response = await fetchJSON('/backend/reload_sfpublic', { method: 'GET' });
+                if (step3Response.status !== 'success') {
+                    throw new Error(`Step 3 failed: ${step3Response.message}`);
+                }
+                show(s, 'Step 3 started: SF Public reload job created. Waiting for completion...');
+                
+                // Wait for Step 3 to complete
+                const step3JobId = step3Response.job_id;
+                await waitForJobCompletion(step3JobId, 'Step 3');
                 show(s, 'All steps complete! SF Public metadata successfully reloaded into vector database.');
             } catch (e) {
                 show(s, 'Failed to reload metadata: ' + e.message, false);
             } finally {
                 btn.disabled = false;
             }
+        }
+        
+        async function waitForJobCompletion(jobId, stepName) {
+            const maxWaitTime = 30 * 60 * 1000; // 30 minutes max wait
+            const pollInterval = 2000; // Poll every 2 seconds
+            const startTime = Date.now();
+            
+            while (Date.now() - startTime < maxWaitTime) {
+                try {
+                    const jobResponse = await fetchJSON(`/backend/jobs/${jobId}`);
+                    const job = jobResponse.job;
+                    
+                    if (job.status === 'completed') {
+                        return job.result;
+                    } else if (job.status === 'failed') {
+                        throw new Error(`${stepName} job failed: ${job.error}`);
+                    } else if (job.status === 'running') {
+                        // Update progress if available
+                        if (job.progress > 0) {
+                            const s = document.getElementById('metadata-status');
+                            show(s, `${stepName} in progress... ${job.progress}% complete`);
+                        }
+                    }
+                    
+                    // Wait before next poll
+                    await new Promise(resolve => setTimeout(resolve, pollInterval));
+                } catch (e) {
+                    throw new Error(`Error checking ${stepName} job status: ${e.message}`);
+                }
+            }
+            
+            throw new Error(`${stepName} job timed out after 30 minutes`);
         }
         
         async function viewNotes() {
@@ -535,8 +591,8 @@
             // Initialize job badge polling
             initializeJobsBadge();
             
-            // Check for active jobs every 30 seconds
-            setInterval(checkActiveJobs, 30000);
+            // Check for active jobs every 60 seconds (reduced from 30s)
+            pollingManager.createInterval(checkActiveJobs, 60000, 'settings-active-jobs');
             
             // Add click handler for jobs badge
             const jobsBadge = document.getElementById('jobs-badge');
@@ -547,6 +603,9 @@
             }
         });
     </script>
+    
+    <!-- Polling Manager -->
+    <script src="/static/js/polling-manager.js"></script>
     <script src="/static/js/darkmode.js"></script>
     <script src="/static/js/iframe-darkmode.js"></script>
 </head>
@@ -555,7 +614,6 @@
         <div class="tabs">
             <h2>Settings</h2>
             <button id="tabbtn-query" class="tab-btn" onclick="setActive('query')">Query Tool</button>
-            <button id="tabbtn-actions" class="tab-btn" onclick="setActive('actions')">Actions</button>
             <button id="tabbtn-database" class="tab-btn" onclick="setActive('database')">Database</button>
             <button id="tabbtn-metrics" class="tab-btn" onclick="setActive('metrics')">Metrics</button>
             <button id="tabbtn-utilities" class="tab-btn" onclick="setActive('utilities')">Utilities</button>
@@ -626,8 +684,9 @@
             </div>
             
             
-            <div id="panel-actions" class="tab-panel" style="display:none">
-                <h3>Actions</h3>
+            <div id="panel-utilities" class="tab-panel" style="display:none">
+                <h3>Utilities</h3>
+                
                 <div class="card">
                     <h4>Dashboard Metrics</h4>
                     <p>Generate dashboard metrics analysis for the current year-to-date period.</p>
@@ -646,10 +705,7 @@
                     </div>
                     <div id="metadata-status" class="status"></div>
                 </div>
-            </div>
-            
-            <div id="panel-utilities" class="tab-panel" style="display:none">
-                <h3>Utilities</h3>
+                
                 <div class="card">
                     <h4>Note Viewer</h4>
                     <p>View and manage system notes.</p>
@@ -658,7 +714,6 @@
                     </div>
                     <div id="notes-status" class="status"></div>
                 </div>
-                
                 
                 <div class="card">
                     <h4>Selective Data Cleanup</h4>

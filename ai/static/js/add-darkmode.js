@@ -108,13 +108,21 @@
         addDarkModeFiles();
         applyDarkModeStyles();
         
-        // Wait for dark mode manager to be available
+        // Wait for dark mode manager to be available with timeout
+        let attempts = 0;
+        const maxAttempts = 20; // 20 attempts * 500ms = 10 seconds total
+        
         const checkDarkMode = setInterval(() => {
+            attempts++;
+            
             if (window.darkModeManager) {
                 clearInterval(checkDarkMode);
                 console.log('Dark mode initialized successfully');
+            } else if (attempts >= maxAttempts) {
+                clearInterval(checkDarkMode);
+                console.warn('Dark mode manager not found after 10 seconds, continuing without it');
             }
-        }, 100);
+        }, 500); // Reduced from 100ms to 500ms
     }
     
     // Run initialization

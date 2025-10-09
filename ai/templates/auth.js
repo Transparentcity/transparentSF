@@ -49,5 +49,12 @@ function logout() {
     document.getElementById('password').value = '';
 }
 
-// Prevent access to chat interface through console
-setInterval(checkLoginStatus, 1000);
+// Listen for storage changes to detect login/logout from other tabs
+window.addEventListener('storage', function(e) {
+    if (e.key === 'isLoggedIn') {
+        checkLoginStatus();
+    }
+});
+
+// Use sessionStorage events instead of polling for better performance
+// This eliminates the 1-second interval that was causing memory leaks

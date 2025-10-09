@@ -528,4 +528,134 @@ async def get_anomaly_metadata(anomaly_id: int):
         
     except Exception as e:
         logger.error(f"Error getting anomaly metadata: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error getting anomaly metadata: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error getting anomaly metadata: {str(e)}")
+
+
+@router.post("/generate-dw-map")
+async def generate_dw_map(map_id: int = Query(..., description="Map ID to generate DW version for")):
+    """
+    Generate a Datawrapper version of a map using the map_id.
+    This follows the same pattern as the existing DW chart generation endpoints.
+    """
+    try:
+        logger.info(f"Generating DW map for map_id: {map_id}")
+        
+        # Import the tools we need
+        from tools.gen_map_dw import create_datawrapper_map
+        
+        # Create the Datawrapper map
+        dw_map_url = create_datawrapper_map(map_id)
+        
+        if dw_map_url:
+            logger.info(f"Successfully generated DW map for map_id {map_id}: {dw_map_url}")
+            
+            # Update the map metadata with the DW URL
+            try:
+                import psycopg2
+                import psycopg2.extras
+                import json
+                
+                conn = get_postgres_connection()
+                cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                
+                # Get current metadata
+                cursor.execute("SELECT metadata FROM maps WHERE id = %s", (map_id,))
+                result = cursor.fetchone()
+                
+                if result:
+                    # Update metadata with DW URL
+                    current_metadata = result['metadata'] or {}
+                    if isinstance(current_metadata, str):
+                        try:
+                            current_metadata = json.loads(current_metadata)
+                        except json.JSONDecodeError:
+                            current_metadata = {}
+                    
+                    current_metadata['dw_url'] = dw_map_url
+                    
+                    # Update the database
+                    cursor.execute("""
+                        UPDATE maps 
+                        SET metadata = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (json.dumps(current_metadata), map_id))
+                    
+                    conn.commit()
+                    logger.info(f"Updated map metadata for map_id: {map_id}")
+                
+                cursor.close()
+                conn.close()
+                
+            except Exception as e:
+                logger.warning(f"Failed to update map metadata: {str(e)}")
+            
+            return JSONResponse({
+                "status": "success",
+                "message": f"Successfully generated DW map for map_id {map_id}",
+                "map_url": dw_map_url,
+                "map_id": map_id
+            })
+        else:
+            logger.error(f"Failed to generate DW map for map_id {map_id}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate DW map for map_id {map_id}")
+            
+    except Exception as e:
+        logger.error(f"Error generating DW map for map_id {map_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error generating DW map: {str(e)}")
+
+
+@router.get("/api/map-metadata/{map_id}")
+async def get_map_metadata(map_id: int):
+    """
+    Get map metadata including DW URL if available.
+    """
+    try:
+        logger.info(f"Getting map metadata for map_id: {map_id}")
+        
+        # Import database utilities
+        import psycopg2
+        import psycopg2.extras
+        import os
+        import json
+        
+        # Connect to PostgreSQL
+        conn = get_postgres_connection()
+        
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Get map metadata
+        cursor.execute("""
+            SELECT id, title, type, metadata, metric_id, group_field, published_url
+            FROM maps 
+            WHERE id = %s
+        """, (map_id,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Map with ID {map_id} not found")
+        
+        # Parse metadata
+        metadata = result['metadata'] or {}
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                metadata = {}
+        
+        return JSONResponse({
+            "status": "success",
+            "map_id": map_id,
+            "title": result['title'],
+            "type": result['type'],
+            "metadata": metadata,
+            "metric_id": result['metric_id'],
+            "group_field": result['group_field'],
+            "published_url": result['published_url']
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting map metadata: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error getting map metadata: {str(e)}") 

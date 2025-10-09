@@ -362,9 +362,8 @@ async def reload_vector_db():
             "log_content": "Error occurred before log file could be read"
         })
 
-@router.get("/reload_sfpublic")
-async def reload_sfpublic():
-    """Reload the SF Public Data collection."""
+def reload_sfpublic_sync():
+    """Synchronous function to reload SF Public Data collection."""
     logger.debug("Reload SF Public Data collection called")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -397,26 +396,50 @@ async def reload_sfpublic():
             
         if result.returncode == 0:
             logger.info("SF Public Data collection reloaded successfully.")
-            return JSONResponse({
+            return {
                 "status": "success",
                 "message": "SF Public Data collection reloaded successfully.",
                 "output": result.stdout,
                 "log_content": log_content
-            })
+            }
         else:
             logger.error(f"Failed to reload SF Public Data collection: {result.stderr}")
-            return JSONResponse({
+            return {
                 "status": "error",
                 "message": "Failed to reload SF Public Data collection.",
                 "output": result.stderr,
                 "log_content": log_content
-            })
+            }
     except Exception as e:
         logger.exception(f"Error reloading SF Public Data collection: {str(e)}")
-        return JSONResponse({
-            "status": "error", 
+        return {
+            "status": "error",
             "message": str(e),
             "log_content": "Error occurred before log file could be read"
+        }
+
+@router.get("/reload_sfpublic")
+async def reload_sfpublic():
+    """Start reloading the SF Public Data collection as a background job."""
+    logger.debug("Reload SF Public Data collection called")
+    try:
+        # Create background job
+        job_id = job_manager.create_job("sf_public_reload", "Reload SF Public Data collection")
+        
+        # Start the job asynchronously
+        asyncio.create_task(job_manager.run_job(job_id, reload_sfpublic_sync))
+        
+        logger.info(f"Started SF Public Data reload job: {job_id}")
+        return JSONResponse({
+            "status": "success",
+            "message": "SF Public Data reload started as background job.",
+            "job_id": job_id
+        })
+    except Exception as e:
+        logger.exception(f"Error starting SF Public Data reload job: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
         })
 
 @router.get("/dataset-json/{filename:path}")
@@ -6046,10 +6069,9 @@ async def dashboard_page(request: Request):
     
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
-@router.get("/fetch_metadata")
-async def fetch_metadata_route():
-    """Fetch SF dataset metadata using fetch_metadata.py and store it in Postgres."""
-    logger.debug("Fetch metadata route called")
+def fetch_metadata_sync():
+    """Synchronous function to fetch SF dataset metadata."""
+    logger.debug("Fetch metadata called")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         script_path = os.path.join(script_dir, "fetch_metadata.py")
@@ -6082,33 +6104,56 @@ async def fetch_metadata_route():
 
         if result.returncode == 0:
             logger.info("Metadata fetched and stored successfully.")
-            return JSONResponse({
+            return {
                 "status": "success",
                 "message": "Metadata fetched and stored successfully.",
                 "output": result.stdout,
                 "log_content": log_content
-            })
+            }
         else:
             logger.error(f"Metadata fetch failed: {result.stderr}")
-            return JSONResponse({
+            return {
                 "status": "error",
                 "message": "Failed to fetch metadata.",
                 "output": result.stderr,
                 "log_content": log_content
-            })
+            }
     except Exception as e:
         logger.exception(f"Error fetching metadata: {str(e)}")
-        return JSONResponse({
+        return {
             "status": "error",
             "message": str(e),
             "log_content": "Error occurred before log file could be read"
+        }
+
+@router.get("/fetch_metadata")
+async def fetch_metadata_route():
+    """Start fetching SF dataset metadata as a background job."""
+    logger.debug("Fetch metadata route called")
+    try:
+        # Create background job
+        job_id = job_manager.create_job("fetch_metadata", "Fetch SF dataset metadata")
+        
+        # Start the job asynchronously
+        asyncio.create_task(job_manager.run_job(job_id, fetch_metadata_sync))
+        
+        logger.info(f"Started metadata fetch job: {job_id}")
+        return JSONResponse({
+            "status": "success",
+            "message": "Metadata fetch started as background job.",
+            "job_id": job_id
+        })
+    except Exception as e:
+        logger.exception(f"Error starting metadata fetch job: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
         })
 
 
-@router.get("/refresh_dataset_urls")
-async def refresh_dataset_urls_route():
-    """Refresh the dataset URLs list using fetch_dataset_urls.py."""
-    logger.debug("Refresh dataset URLs route called")
+def refresh_dataset_urls_sync():
+    """Synchronous function to refresh dataset URLs."""
+    logger.debug("Refresh dataset URLs called")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         script_path = os.path.join(script_dir, "fetch_dataset_urls.py")
@@ -6147,26 +6192,50 @@ async def refresh_dataset_urls_route():
 
         if result.returncode == 0:
             logger.info("Dataset URLs refreshed successfully.")
-            return JSONResponse({
+            return {
                 "status": "success",
                 "message": "Dataset URLs refreshed successfully.",
                 "output": result.stdout,
                 "log_content": log_content
-            })
+            }
         else:
             logger.error(f"Dataset URLs refresh failed: {result.stderr}")
-            return JSONResponse({
+            return {
                 "status": "error",
                 "message": "Failed to refresh dataset URLs.",
                 "output": result.stderr,
                 "log_content": log_content
-            })
+            }
     except Exception as e:
         logger.exception(f"Error refreshing dataset URLs: {str(e)}")
-        return JSONResponse({
+        return {
             "status": "error",
             "message": str(e),
             "log_content": "Error occurred before log file could be read"
+        }
+
+@router.get("/refresh_dataset_urls")
+async def refresh_dataset_urls_route():
+    """Start refreshing dataset URLs as a background job."""
+    logger.debug("Refresh dataset URLs route called")
+    try:
+        # Create background job
+        job_id = job_manager.create_job("refresh_dataset_urls", "Refresh dataset URLs")
+        
+        # Start the job asynchronously
+        asyncio.create_task(job_manager.run_job(job_id, refresh_dataset_urls_sync))
+        
+        logger.info(f"Started dataset URLs refresh job: {job_id}")
+        return JSONResponse({
+            "status": "success",
+            "message": "Dataset URLs refresh started as background job.",
+            "job_id": job_id
+        })
+    except Exception as e:
+        logger.exception(f"Error starting dataset URLs refresh job: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
         })
 
 @router.post("/create_monthly_report")

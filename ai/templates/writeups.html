@@ -1025,7 +1025,12 @@
         
         // Start polling for title updates
         function startTitlePolling(writeupId, sessionId) {
-            const pollInterval = setInterval(async () => {
+            const key = `title-poll-${writeupId}`;
+            
+            // Clear any existing polling for this writeup
+            pollingManager.clearPolling(key);
+            
+            const pollInterval = pollingManager.createInterval(async () => {
                 try {
                     const response = await fetch(`/api/writeups/${writeupId}/title`);
                     const result = await response.json();
@@ -1038,25 +1043,30 @@
                             // Title has been generated, update it
                             session.title = newTitle;
                             renderSessions();
-                            clearInterval(pollInterval);
+                            pollingManager.clearPolling(key);
                         }
                     }
                 } catch (error) {
                     console.error('Error polling for title update:', error);
                 }
-            }, 1000); // Poll every second
+            }, 3000, key); // Reduced from 1s to 3s
             
             // Stop polling after 30 seconds to avoid infinite polling
-            setTimeout(() => {
-                clearInterval(pollInterval);
-            }, 30000);
+            pollingManager.createTimeout(() => {
+                pollingManager.clearPolling(key);
+            }, 30000, `${key}-timeout`);
         }
         
         // Wait for title generation to complete
         async function waitForTitleGeneration(writeupId, sessionId) {
             console.log(`Waiting for title generation for writeup ${writeupId}`);
             return new Promise((resolve) => {
-                const pollInterval = setInterval(async () => {
+                const key = `title-wait-${writeupId}`;
+                
+                // Clear any existing polling for this writeup
+                pollingManager.clearPolling(key);
+                
+                const pollInterval = pollingManager.createInterval(async () => {
                     try {
                         const response = await fetch(`/api/writeups/${writeupId}/title`);
                         const result = await response.json();
@@ -1072,21 +1082,21 @@
                                 console.log(`Title generated for writeup ${writeupId}: "${newTitle}"`);
                                 session.title = newTitle;
                                 renderSessions();
-                                clearInterval(pollInterval);
+                                pollingManager.clearPolling(key);
                                 resolve();
                             }
                         }
                     } catch (error) {
                         console.error('Error polling for title update:', error);
                     }
-                }, 1000); // Poll every second
+                }, 3000, key); // Reduced from 1s to 3s
                 
                 // Stop polling after 30 seconds to avoid infinite waiting
-                setTimeout(() => {
+                pollingManager.createTimeout(() => {
                     console.log(`Title generation timeout for writeup ${writeupId}, continuing anyway`);
-                    clearInterval(pollInterval);
+                    pollingManager.clearPolling(key);
                     resolve(); // Resolve anyway to continue execution
-                }, 30000);
+                }, 30000, `${key}-timeout`);
             });
         }
         
@@ -1400,17 +1410,20 @@
                     }
                     
                     // Reload writeups periodically to check for completion
-                    const checkInterval = setInterval(async () => {
+                    const key = `writeup-check-${sessionId}`;
+                    pollingManager.clearPolling(key);
+                    
+                    const checkInterval = pollingManager.createInterval(async () => {
                         console.log('Checking writeup status...');
                         await loadExistingWriteups();
                         const session = sessions.get(sessionId);
                         if (session && (session.status === 'completed' || session.status === 'failed')) {
                             console.log('Writeup completed, stopping interval');
-                            clearInterval(checkInterval);
+                            pollingManager.clearPolling(key);
                             // Switch to content view when completed
                             showSessionContent();
                         }
-                    }, 3000);
+                    }, 5000, key); // Reduced from 3s to 5s
                 } else {
                     updateSession(sessionId, {
                         status: 'failed',
@@ -1627,8 +1640,13 @@
         
         // Start monitoring conversation for streaming updates
         function startConversationMonitoring(sessionId) {
-            // Poll for conversation updates every 2 seconds
-            const pollInterval = setInterval(async () => {
+            const key = `conversation-monitor-${sessionId}`;
+            
+            // Clear any existing monitoring for this session
+            pollingManager.clearPolling(key);
+            
+            // Poll for conversation updates every 5 seconds (reduced from 2s)
+            const pollInterval = pollingManager.createInterval(async () => {
                 try {
                     const response = await fetch(`/backend/conversation?session=${sessionId}`);
                     const html = await response.text();
@@ -1652,12 +1670,12 @@
                     // Check if the session is still running
                     const session = sessions.get(currentSessionId);
                     if (session && (session.status === 'completed' || session.status === 'failed')) {
-                        clearInterval(pollInterval);
+                        pollingManager.clearPolling(key);
                     }
                 } catch (error) {
                     console.error('Error monitoring conversation:', error);
                 }
-            }, 2000);
+            }, 5000, key); // Reduced from 2s to 5s
         }
         
         
@@ -1939,14 +1957,17 @@
                     }
                     
                     // Reload writeups periodically to check for completion
-                    const checkInterval = setInterval(async () => {
+                    const key = `writeup-check-${sessionId}`;
+                    pollingManager.clearPolling(key);
+                    
+                    const checkInterval = pollingManager.createInterval(async () => {
                         await loadExistingWriteups();
                         const session = sessions.get(sessionId);
                         if (session && (session.status === 'completed' || session.status === 'failed')) {
-                            clearInterval(checkInterval);
+                            pollingManager.clearPolling(key);
                             showSessionContent(); // Refresh the display
                         }
-                    }, 3000);
+                    }, 5000, key); // Reduced from 3s to 5s
                 } else {
                     const sessionId = `writeup_${writeupId}`;
                     updateSession(sessionId, {
@@ -2072,14 +2093,17 @@
                     }
                     
                     // Reload writeups periodically to check for completion
-                    const checkInterval = setInterval(async () => {
+                    const key = `writeup-check-${sessionId}`;
+                    pollingManager.clearPolling(key);
+                    
+                    const checkInterval = pollingManager.createInterval(async () => {
                         await loadExistingWriteups();
                         const session = sessions.get(sessionId);
                         if (session && (session.status === 'completed' || session.status === 'failed')) {
-                            clearInterval(checkInterval);
+                            pollingManager.clearPolling(key);
                             showSessionContent(); // Switch to content view when completed
                         }
-                    }, 3000);
+                    }, 5000, key); // Reduced from 3s to 5s
                 } else {
                     updateSession(sessionId, {
                         status: 'failed',
@@ -2275,6 +2299,9 @@
             }
         });
     </script>
+    
+    <!-- Polling Manager -->
+    <script src="/static/js/polling-manager.js"></script>
     
     <!-- Dark Mode JavaScript -->
     <script src="/static/js/darkmode.js"></script>

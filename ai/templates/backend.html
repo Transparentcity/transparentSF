@@ -2700,22 +2700,23 @@
             
             console.log('Starting pie chart animation test...');
             
-            const interval = setInterval(() => {
+            const key = 'pie-chart-test';
+            const interval = pollingManager.createInterval(() => {
                 testTokens += 150;
                 currentContextTokens = testTokens;
                 updateContextWindowStatus();
                 
                 if (testTokens >= maxTestTokens) {
-                    clearInterval(interval);
+                    pollingManager.clearPolling(key);
                     
                     // Reset after showing the full demonstration
-                    setTimeout(() => {
+                    pollingManager.createTimeout(() => {
                         console.log('Resetting pie chart after test');
                         currentContextTokens = 0;
                         updateContextWindowStatus();
-                    }, 3000);
+                    }, 3000, `${key}-reset`);
                 }
-            }, 200);
+            }, 200, key);
         }
         
         // Make test function available globally for manual testing
@@ -2895,11 +2896,14 @@
         function monitorSessionPersistence() {
             console.log('🔍 Starting session persistence monitoring...');
             
+            const key = 'session-persistence-monitor';
+            pollingManager.clearPolling(key);
+            
             // Check session status every 10 seconds
-            const monitorInterval = setInterval(async () => {
+            const monitorInterval = pollingManager.createInterval(async () => {
                 if (!explainerSessionId) {
                     console.log('⏹️ No session to monitor, stopping');
-                    clearInterval(monitorInterval);
+                    pollingManager.clearPolling(key);
                     return;
                 }
                 
@@ -2914,7 +2918,7 @@
                         
                         if (!sessionExists && totalSessions === 0) {
                             console.log('❌ SESSION DISAPPEARED! All sessions cleared.');
-                            clearInterval(monitorInterval);
+                            pollingManager.clearPolling(key);
                             
                             // Update pie chart to show session is gone
                             currentContextTokens = 0;
@@ -2924,13 +2928,13 @@
                 } catch (error) {
                     console.error('Error monitoring sessions:', error);
                 }
-            }, 10000); // Check every 10 seconds
+            }, 10000, key); // Check every 10 seconds
             
             // Stop monitoring after 2 minutes
-            setTimeout(() => {
-                clearInterval(monitorInterval);
+            pollingManager.createTimeout(() => {
+                pollingManager.clearPolling(key);
                 console.log('⏹️ Session persistence monitoring stopped');
-            }, 120000);
+            }, 120000, `${key}-timeout`);
         }
         
         window.monitorSessionPersistence = monitorSessionPersistence;
@@ -3026,27 +3030,26 @@
         
         // Start periodic context window updates during conversations
         function startPeriodicContextUpdates() {
-            if (contextUpdateInterval) {
-                clearInterval(contextUpdateInterval);
-            }
+            const key = 'context-update-interval';
+            pollingManager.clearPolling(key);
             
             console.log('Starting periodic context window updates');
-            // Poll more frequently while processing (1s) to keep the pie fresh
-            contextUpdateInterval = setInterval(() => {
+            // Poll more frequently while processing (2s) to keep the pie fresh
+            contextUpdateInterval = pollingManager.createInterval(() => {
                 if (explainerSessionId && isExplainerProcessing) {
                     console.log('Periodic context update check');
                     fetchContextWindowStatus();
                 }
-            }, 1000); // Update every 1 second during active conversation
+            }, 2000, key); // Reduced from 1s to 2s
         }
         
         // Stop periodic context window updates
         function stopPeriodicContextUpdates() {
-            if (contextUpdateInterval) {
-                console.log('Stopping periodic context window updates');
-                clearInterval(contextUpdateInterval);
-                contextUpdateInterval = null;
-            }
+            const key = 'context-update-interval';
+            pollingManager.clearPolling(key);
+            contextUpdateInterval = null;
+            console.log('Stopping periodic context window updates');
+            
             // One final fetch to reflect post-processing state
             if (typeof fetchContextWindowStatus === 'function') {
                 fetchContextWindowStatus();
@@ -4364,7 +4367,10 @@ Can you help me understand:
                         checkActiveJobs();
                         
                         // Poll for job status
-                        const pollInterval = setInterval(async () => {
+                        const key = `dashboard-job-${jobId}`;
+                        pollingManager.clearPolling(key);
+                        
+                        const pollInterval = pollingManager.createInterval(async () => {
                             try {
                                 const statusResponse = await fetch(`/backend/jobs/${jobId}`);
                                 const statusData = await statusResponse.json();
@@ -4375,7 +4381,7 @@ Can you help me understand:
                                     if (job.status === 'running') {
                                         operationElement.textContent = `Generating dashboard metrics... (${job.progress}%)`;
                                     } else if (job.status === 'completed') {
-                                        clearInterval(pollInterval);
+                                        pollingManager.clearPolling(key);
                                         operationElement.textContent = 'Dashboard metrics generated successfully!';
                                         
                                         // Wait a moment to show the success message
@@ -4388,27 +4394,27 @@ Can you help me understand:
                                         // Update active jobs button
                                         checkActiveJobs();
                                     } else if (job.status === 'failed') {
-                                        clearInterval(pollInterval);
+                                        pollingManager.clearPolling(key);
                                         hideLoading();
                                         checkActiveJobs();
                                         throw new Error(job.error || 'Job failed');
                                     }
                                 } else {
-                                    clearInterval(pollInterval);
+                                    pollingManager.clearPolling(key);
                                     throw new Error('Failed to get job status');
                                 }
                             } catch (error) {
-                                clearInterval(pollInterval);
+                                pollingManager.clearPolling(key);
                                 throw error;
                             }
-                        }, 2000); // Poll every 2 seconds
+                        }, 5000, key); // Reduced from 2s to 5s
                         
                         // Set a timeout to stop polling after 20 minutes
-                        setTimeout(() => {
-                            clearInterval(pollInterval);
+                        pollingManager.createTimeout(() => {
+                            pollingManager.clearPolling(key);
                             operationElement.textContent = 'Operation timed out. Check logs for details.';
                             hideLoading();
-                        }, 1200000);
+                        }, 1200000, `${key}-timeout`);
                         
                     } else {
                         throw new Error(data.message || 'Failed to start dashboard metrics generation');
@@ -4490,8 +4496,8 @@ Can you help me understand:
                 initializeJobsBadge();
             }
             
-            // Check for active jobs every 30 seconds
-            setInterval(checkActiveJobs, 30000);
+            // Check for active jobs every 60 seconds (reduced from 30s)
+            pollingManager.createInterval(checkActiveJobs, 60000, 'global-active-jobs');
             
             
             // Manual test button for jobs badge (temporary)
@@ -5651,5 +5657,8 @@ Can you help me understand:
         // Initialize analysis parameters handling
         handleAnalysisParameters();
     </script>
+    
+    <!-- Polling Manager -->
+    <script src="/static/js/polling-manager.js"></script>
 </body>
 </html>

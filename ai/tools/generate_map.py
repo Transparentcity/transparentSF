@@ -1241,6 +1241,13 @@ def create_datawrapper_chart(chart_title, location_data, map_type="point", refer
                         if map_metadata and map_metadata.get("map_type") == "delta":
                             # Convert to percentage, round to nearest integer, and clamp to [-100, 100] so extreme outliers use edge colours
                             value_for_coloring = max(min(round(percent_change * 100), 100), -100)
+                            
+                            # Apply greendirection logic: if greendirection is 'down', invert the values
+                            # so that decreases (negative percent_change) become positive (green) and increases become negative (red)
+                            greendirection = map_metadata.get("greendirection", "up")
+                            if greendirection == "down":
+                                value_for_coloring = -value_for_coloring
+                            
                             # For delta maps, reorganize CSV to put percentage value first
                             csv_data += f"{key_value},{value_for_coloring},{current},{previous},{delta},{percent_change}\n"
                         else:
@@ -2063,22 +2070,21 @@ def generate_mapbox_map(context_variables, map_title, map_type, location_data=No
         # Determine map subtype (density or delta)
         map_subtype = "delta" if map_metadata and map_metadata.get("map_type") == "delta" else "density"
         
-        # Before inserting, deactivate previous maps of the same type for this metric/group_field
-        if metric_id and group_field:
+        # Before inserting, deactivate previous maps of the same type for this metric
+        if metric_id:
             try:
                 cursor.execute("""
                     UPDATE maps 
                     SET active = FALSE, updated_at = CURRENT_TIMESTAMP
                     WHERE metric_id = %s 
-                    AND group_field = %s 
                     AND type = %s
                     AND (metadata->>'map_type' = %s OR (metadata->>'map_type' IS NULL AND %s = 'density'))
                     AND active = TRUE
-                """, (metric_id, group_field, map_type, map_subtype, map_subtype))
+                """, (metric_id, map_type, map_subtype, map_subtype))
                 
                 deactivated_count = cursor.rowcount
                 if deactivated_count > 0:
-                    logger.info(f"Deactivated {deactivated_count} previous {map_subtype} map(s) for metric_id={metric_id}, group_field={group_field}, type={map_type}")
+                    logger.info(f"Deactivated {deactivated_count} previous {map_subtype} map(s) for metric_id={metric_id}, type={map_type}")
             except Exception as e:
                 logger.warning(f"Failed to deactivate previous maps: {str(e)}")
         
@@ -3338,6 +3344,13 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
                     if map_metadata and map_metadata.get("map_type") == "delta":
                         # Convert to percentage, round to nearest integer, and clamp to [-100, 100] so extreme outliers use edge colours
                         value_for_coloring = max(min(round(percent_change * 100), 100), -100)
+                        
+                        # Apply greendirection logic: if greendirection is 'down', invert the values
+                        # so that decreases (negative percent_change) become positive (green) and increases become negative (red)
+                        greendirection = map_metadata.get("greendirection", "up")
+                        if greendirection == "down":
+                            value_for_coloring = -value_for_coloring
+                        
                         # For delta maps, reorganize CSV to put percentage value first
                         csv_data += f"{key_value},{value_for_coloring},{current},{previous},{delta},{percent_change}\n"
                     else:

@@ -4033,7 +4033,10 @@
             }
             
             return new Promise((resolve, reject) => {
-                const pollInterval = setInterval(async () => {
+                const key = `job-poll-${jobId}`;
+                pollingManager.clearPolling(key);
+                
+                const pollInterval = pollingManager.createInterval(async () => {
                     try {
                         const response = await fetch(`/backend/jobs/${jobId}`);
                         const data = await response.json();
@@ -4046,30 +4049,30 @@
                                 updateProgressBar(progressBar, `${progress}%`);
                                 progressStatus.textContent = `Running ${jobName}... (${job.progress}%)`;
                             } else if (job.status === 'completed') {
-                                clearInterval(pollInterval);
+                                pollingManager.clearPolling(key);
                                 updateProgressBar(progressBar, `${endProgress}%`);
                                 progressStatus.textContent = `${jobName} completed successfully`;
                                 addLogEntry(`${jobName} completed successfully`, 'success');
                                 resolve(job.result);
                             } else if (job.status === 'failed') {
-                                clearInterval(pollInterval);
+                                pollingManager.clearPolling(key);
                                 throw new Error(job.error || `${jobName} failed`);
                             }
                         } else {
-                            clearInterval(pollInterval);
+                            pollingManager.clearPolling(key);
                             throw new Error('Failed to get job status');
                         }
                     } catch (error) {
-                        clearInterval(pollInterval);
+                        pollingManager.clearPolling(key);
                         reject(error);
                     }
-                }, 2000); // Poll every 2 seconds
+                }, 5000, key); // Reduced from 2s to 5s
                 
                 // Set a timeout to stop polling after 20 minutes
-                setTimeout(() => {
-                    clearInterval(pollInterval);
+                pollingManager.createTimeout(() => {
+                    pollingManager.clearPolling(key);
                     reject(new Error(`${jobName} timed out`));
-                }, 1200000);
+                }, 1200000, `${key}-timeout`);
             });
         }
         
@@ -4234,11 +4237,7 @@
                             `<iframe src="${url}" frameborder="0" onload="adjustIframeHeight(this)"></iframe>`}
                     </div>
                     <div class="chart-card-footer">
-                        ${chartType === 'maps' && isEmbedded ? `
-                            <button class="chart-dw-btn" onclick="window.open('/backend/map-chart?id=${id}', '_blank')">
-                                <i class="fas fa-external-link-alt"></i> Full View
-                            </button>
-                        ` : dwUrl ? `
+                        ${dwUrl ? `
                             <button class="chart-dw-btn" onclick="window.open('${dwUrl}', '_blank')">
                                 View in Datawrapper
                             </button>
@@ -4247,6 +4246,11 @@
                                 Generate DW Version
                             </button>
                         `}
+                        ${chartType === 'maps' && isEmbedded ? `
+                            <button class="chart-dw-btn" onclick="window.open('/backend/map-chart?id=${id}', '_blank')" style="margin-left: 8px;">
+                                <i class="fas fa-external-link-alt"></i> Full View
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
             `;
@@ -4458,15 +4462,30 @@
                 
                 const maps = data.maps || [];
                 
-                // Transform maps to modal format - handle both published and non-published maps
-                return maps.map(map => {
+                // Transform maps to modal format and fetch DW URLs
+                const mapsWithDW = await Promise.all(maps.map(async (map) => {
+                    let dwUrl = null;
+                    
+                    // Try to get DW URL from metadata
+                    try {
+                        const metadataResponse = await fetch(`/backend/api/map-metadata/${map.id}`);
+                        if (metadataResponse.ok) {
+                            const metadataData = await metadataResponse.json();
+                            if (metadataData.status === 'success' && metadataData.metadata) {
+                                dwUrl = metadataData.metadata.dw_url || null;
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to fetch metadata for map ${map.id}:`, error);
+                    }
+                    
                     if (map.published_url) {
                         // Use published URL if available
                         return {
                             id: map.id,
                             title: map.title || `Map ${map.id}`,
                             url: map.published_url,
-                            dwUrl: null,
+                            dwUrl: dwUrl,
                             isEmbedded: false
                         };
                     } else {
@@ -4475,11 +4494,13 @@
                             id: map.id,
                             title: map.title || `Map ${map.id}`,
                             url: `/backend/map-chart?id=${map.id}`,
-                            dwUrl: null,
+                            dwUrl: dwUrl,
                             isEmbedded: true
                         };
                     }
-                });
+                }));
+                
+                return mapsWithDW;
                 
             } catch (error) {
                 console.error('Error loading maps:', error);
@@ -4577,6 +4598,14 @@
                             'Content-Type': 'application/json',
                         }
                     });
+                } else if (chartType === 'maps') {
+                    endpoint = `/backend/generate-dw-map?map_id=${chartId}`;
+                    response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
                 } else {
                     throw new Error(`Unsupported chart type: ${chartType}`);
                 }
@@ -4587,20 +4616,22 @@
                 
                 const data = await response.json();
                 
-                if (data.status === 'success' && data.chart_url) {
+                if (data.status === 'success' && (data.chart_url || data.map_url)) {
+                    const dwUrl = data.chart_url || data.map_url;
+                    
                     // Store the DW URL in the database
-                    await storeDWUrlInDatabase(chartType, chartId, data.chart_url);
+                    await storeDWUrlInDatabase(chartType, chartId, dwUrl);
                     
                     // Update the button to show "View in Datawrapper" with the new URL
                     button.textContent = 'View in Datawrapper';
                     button.disabled = false;
                     button.classList.remove('loading');
-                    button.onclick = () => window.open(data.chart_url, '_blank');
+                    button.onclick = () => window.open(dwUrl, '_blank');
                     
                     // Add the generated chart as a new card in the modal
-                    addGeneratedChartToInterface(chartType, chartId, data.chart_url);
+                    addGeneratedChartToInterface(chartType, chartId, dwUrl);
                     
-                    console.log(`Successfully generated DW chart: ${data.chart_url}`);
+                    console.log(`Successfully generated DW chart: ${dwUrl}`);
                 } else {
                     throw new Error(data.message || 'Failed to generate DW chart');
                 }
@@ -4637,6 +4668,10 @@
                         anomaly_id: chartId,
                         dw_url: dwUrl
                     };
+                } else if (chartType === 'maps') {
+                    // Maps already store DW URL in metadata when generated, so no need to update
+                    console.log(`DW URL for map ${chartId} already stored in metadata: ${dwUrl}`);
+                    return;
                 } else {
                     console.warn(`Unknown chart type for database storage: ${chartType}`);
                     return;
@@ -4761,6 +4796,9 @@
         }
     </script>
 
+    <!-- Polling Manager -->
+    <script src="/static/js/polling-manager.js"></script>
+    
     <!-- Dark Mode JavaScript -->
     <script src="/static/js/darkmode.js"></script>
     <script src="/static/js/iframe-darkmode.js"></script>

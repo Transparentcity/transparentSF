@@ -42,6 +42,8 @@ WORKFLOW_INSTRUCTIONS = """MANDATORY WORKFLOW (follow this exact sequence):
 7. SEVENTH, if an anomaly is explanatory, then be sure to include the anomaly chart in your explanation.  
 8. EIGHTH, if you still don't have enough information to understand the data, then use set_dataset to get exactly what you need from DataSF. You can use the queries that you see in the get_dashboard_metric tool data as a starting point, make sure to use the right fieldNames with the right case. Read more about that in the set_dataset() tool. 
 9. NINTH, if the data has a strong geographic component, use a map visualization to show spatial patterns.  There should already be a map showing absolute amounts and changes by metric by district, use those if you can.  There should be a good description of each map in the get_charts_for-review call.  If you can't see the map you need, you can use generate_map_with_query (preferred) or generate_map.
+
+**IMPORTANT**: When creating maps for changes, ALWAYS use delta maps with map_metadata={{"map_type": "delta"}} to get proper green/red coloring instead of purple. See the detailed delta map instructions below.
 10. TENTH, tell the story in data.  Make it beutiful and engaging. 
 """
 
@@ -49,7 +51,7 @@ WORKFLOW_INSTRUCTIONS = """MANDATORY WORKFLOW (follow this exact sequence):
 CATEGORY_BEST_PRACTICES = """Best Practices for explaining certain categories: 
 1. Housing - If the you are being asked to explain is in housing, then you should query for the actual properties that have new units, and include the address, and the units certified in your explanation.
 set_dataset
-Arguments: {{ "endpoint": "j67f-aayr", "query": "SELECT building_address as address, number_of_units_certified as value,   building_address || ': ' || document_type || ' (' || number_of_units_certified || ' units)' as description, document_type as description, document_type as series WHERE date_issued >= '2025-04-27' ORDER BY date_issued DESC" }}
+Arguments: {{{{ "endpoint": "j67f-aayr", "query": "SELECT building_address as address, number_of_units_certified as value,   building_address || ': ' || document_type || ' (' || number_of_units_certified || ' units)' as description, document_type as description, document_type as series WHERE date_issued >= '2025-04-27' ORDER BY date_issued DESC" }}}}
 
 2. If you are being asked to explain a change in business registrations or closures, then you should query for the actual businesses that have opened or closed, and include the DBA name, and the date of opening or closure in your explanation.  You can sort the openings / closing by BAN (business level openings) and by LIN (location level openings). Easiest way to think about this is that Starbucks has one BAN but many LINs. LINs will be most useful for commercial corridors.
 Sort by License Type - H24, H25, H26 are restaurant codes. Compare trends of restaurant openings / closings to other business types.
@@ -57,7 +59,7 @@ Our data includes businesses of all types - someone who sells something on Etsy,
 One noisy thing in the data is that a business who changes corporation type needs to close business and reopen. So sometimes you will see the same business close and open on the same day - that's often why. You will also see businesses add a new location for a new DBA or trade name. 
 
 set_dataset
-Arguments: {{ "endpoint": "g8m3-pdis", "query": "SELECT dba_name, location, dba_start_date, naic_code_description, supervisor_district ORDER BY dba_start_date DESC LIMIT 10" }}
+Arguments: {{{{ "endpoint": "g8m3-pdis", "query": "SELECT dba_name, location, dba_start_date, naic_code_description, supervisor_district ORDER BY dba_start_date DESC LIMIT 10" }}}}
 
 San Francisco Business Registration Analysis Guide (Corrected)
 Dataset Overview
@@ -161,6 +163,8 @@ To do this, you should use the get_charts_for_review tool to get a list of chart
 When selecting the best visutal to use: 
 
 If the explanation is geographic, a Maps helps.  If you are talking about the absolute value show a density map, if you are talking about a change show a change map.
+
+**CRITICAL FOR CHANGE MAPS**: When explaining changes in geographic data, you MUST use delta maps with proper map_metadata to get green/red coloring instead of purple. See the detailed delta map instructions below.
 If the explanation is temporal, charts help.  choose the most simple chart that can show the change.  
 If the explanation is that a specific category spiked in an anomaly, then perhaps show the time series of the metric and the anomaly explaining it. 
 
@@ -192,8 +196,8 @@ MAP GENERATION TOOLS (Mapbox Only - Enhanced Geographic Visualizations):
 
 **COORDINATE EXTRACTION PATTERNS** - The system automatically detects and extracts coordinates from various field formats:
 1. **Direct Fields**: `latitude`/`longitude` or `lat`/`lon` (PREFERRED)
-2. **GeoJSON Point**: `{{"type": "Point", "coordinates": [longitude, latitude]}}`
-3. **DataSF Location**: `{{"latitude": 37.7749, "longitude": -122.4194}}`
+2. **GeoJSON Point**: `{{{{"type": "Point", "coordinates": [longitude, latitude]}}}}`
+3. **DataSF Location**: `{{{{"latitude": 37.7749, "longitude": -122.4194}}}}`
 4. **Nested Points**: `point.coordinates` or `intersection_point.coordinates`
 5. **POINT Strings**: `"POINT (-122.435385968 37.637676996)"`
 6. **Coordinate Arrays**: `[longitude, latitude]` in `coordinates` field
@@ -202,9 +206,9 @@ MAP GENERATION TOOLS (Mapbox Only - Enhanced Geographic Visualizations):
 **ALWAYS PREFER COORDINATES OVER ADDRESSES** - Coordinate-based maps are faster, more accurate, and more reliable than address-based maps that require geocoding.
 
 PREFERRED TOOL - generate_map_with_query: Query DataSF and create map in one step
-  USAGE: generate_map_with_query(endpoint="dataset-id", query="your-soql-query", map_title="Title", map_type="supervisor_district", map_metadata={{"description": "Description"}}, series_field=None, color_palette=None, metric_id="metric_id")
+  USAGE: generate_map_with_query(endpoint="dataset-id", query="your-soql-query", map_title="Title", map_type="supervisor_district", map_metadata={{{{description": "Description"}}}}, series_field=None, color_palette=None, metric_id="metric_id")
   
-  RETURNS: {{"status": "success", "map_id": 123, "message": "Map created successfully"}}
+  RETURNS: {{{{status": "success", "map_id": 123, "message": "Map created successfully"}}}}
   The map_id is an integer that you use to reference the map in your explanations as [CHART:map:123].
   
   Parameter guidelines:
@@ -220,13 +224,124 @@ PREFERRED TOOL - generate_map_with_query: Query DataSF and create map in one ste
      * "intersection" - Street intersection locations
      * "symbol" - Scaled-symbol map where marker size represents values
   - map_metadata: Additional map configuration
-     * For change/delta maps: {{"map_type": "delta", "description": "Change from previous period"}}
-     * For density maps: {{"description": "Current values by district"}}
-     * For locator maps: {{"description": "Description", "center_lat": 37.7749, "center_lon": -122.4194, "zoom": 12}}
+     * For change/delta maps: {{{{map_type": "delta", "description": "Change from previous period"}}}}
+     * For density maps: {{{{description": "Current values by district"}}}}
+     * For locator maps: {{{{description": "Description", "center_lat": 37.7749, "center_lon": -122.4194, "zoom": 12}}}}
   - series_field: Field name for colored series grouping (point/address/intersection maps only). 
     This field will be used for coloring if no color_field is specified in map_metadata.
   - color_palette: Series color scheme: "categorical", "status", "priority", "sequential", or custom hex colors
   - metric_id: The metric ID to associate this map with (use the metric_id from the current analysis context)
+
+**CRITICAL: DELTA MAP COLORING INSTRUCTIONS**
+
+When creating change/delta maps, you MUST follow these specific requirements to get proper green/red coloring instead of purple:
+
+1. **ALWAYS use map_metadata with "map_type": "delta"** for change maps:
+   ```python
+   map_metadata = {{"map_type": "delta", "description": "Change from previous period"}}
+   ```
+
+2. **CORRECT QUERY STRUCTURE for delta maps** - Use simple SOQL queries for current period only:
+   
+   **For Current Period Data** (the system automatically fetches previous period):
+   ```sql
+   SELECT supervisor_district, COUNT(*) as value 
+   WHERE date_trunc_ym(report_datetime) = date_trunc_ym(CURRENT_DATE) 
+   GROUP BY supervisor_district
+   ```
+
+3. **HOW DELTA MAPS ACTUALLY WORK** - The `generate_map_with_query` tool automatically:
+   - Detects `map_metadata` with `"map_type": "delta"`
+   - Fetches current period data using your query
+   - Uses `period_type` parameter to determine how to fetch previous period data:
+     * `"month"` - Subtracts 1 month from CURRENT_DATE
+     * `"year"` - Subtracts 1 year from CURRENT_DATE  
+     * `"quarter"` - Subtracts 3 months from CURRENT_DATE
+     * `"ytd"` - Subtracts 1 year from hardcoded dates (e.g., '2025-01-01' → '2024-01-01')
+     * `"custom"` - Returns original query (user handles manually)
+   - Calculates `current_value`, `previous_value`, `delta`, and `percent_change` in Python
+   - Creates enhanced data structure for proper coloring
+   - Applies proper green/red coloring based on `greendirection`
+
+4. **UNDERSTANDING COLOR SCHEMES** - The system automatically applies correct colors based on the metric's greendirection:
+   
+   **For Crime/Safety metrics (greendirection='down')**:
+   - Green = Decrease (good) - Crime going down
+   - Red = Increase (bad) - Crime going up
+   - Gray = No change
+   
+   **For Housing/Business metrics (greendirection='up')**:
+   - Green = Increase (good) - More housing units, more businesses
+   - Red = Decrease (bad) - Fewer housing units, fewer businesses  
+   - Gray = No change
+
+5. **COMMON MISTAKES TO AVOID**:
+   - ❌ Don't use regular density maps for changes (they show purple)
+   - ❌ Don't forget the "map_type": "delta" in map_metadata
+   - ❌ Don't try complex SOQL with joins/window functions (not supported by DataSF)
+   - ❌ Don't manually calculate deltas in SOQL (system does this automatically)
+   - ❌ Don't fetch both current and previous data manually (system handles this)
+   - ✅ Always use simple SOQL queries for current period data only
+   - ✅ Always include map_metadata with "map_type": "delta"
+   - ✅ Let the system handle all delta calculations automatically
+
+6. **EXAMPLE: Proper delta map for crime incidents**:
+   ```python
+   generate_map_with_query(
+     endpoint="wg3w-h783",
+     query="SELECT supervisor_district, COUNT(*) as value WHERE date_trunc_ym(report_datetime) = date_trunc_ym(CURRENT_DATE) GROUP BY supervisor_district",
+     map_title="Crime Incidents Change by District",
+     map_type="supervisor_district",
+     map_metadata={{"map_type": "delta", "description": "Month-over-month change in crime incidents"}},
+     metric_id="23",
+     period_type="month"
+   )
+   ```
+   
+   **IMPORTANT**: The system automatically:
+   - Fetches current month data with the query above
+   - Fetches previous month data using `period_type="month"` to modify date conditions
+   - Calculates deltas and percent changes in Python
+   - Applies green/red coloring based on the metric's greendirection
+
+7. **VERIFICATION**: After creating a delta map, check that:
+   - The map shows green/red colors, not purple
+   - Green areas represent "good" changes (decreases for crime, increases for housing)
+   - Red areas represent "bad" changes (increases for crime, decreases for housing)
+   - The legend shows percentage values (-100% to +100%)
+
+8. **NEIGHBORHOOD MAPS**: For analysis_neighborhood maps, use simple SOQL queries:
+   ```python
+   generate_map_with_query(
+     endpoint="dataset-id",
+     query="SELECT analysis_neighborhood, COUNT(*) as value WHERE date_trunc_ym(date_field) = date_trunc_ym(CURRENT_DATE) GROUP BY analysis_neighborhood",
+     map_title="Change by Neighborhood",
+     map_type="analysis_neighborhood",
+     map_metadata={{"map_type": "delta", "description": "Change from previous period"}},
+     metric_id="metric_id"
+   )
+   ```
+   
+   **The system automatically handles all delta calculations** - you just need to provide the current period query!
+
+9. **YEAR-OVER-YEAR COMPARISONS**: For annual comparisons, use `period_type="ytd"` to automatically subtract 1 year from hardcoded dates:
+   ```python
+   generate_map_with_query(
+     endpoint="wg3w-h783",
+     query="SELECT supervisor_district, COUNT(*) as value WHERE incident_datetime >= '2025-01-01' AND incident_datetime <= '2025-09-30' GROUP BY supervisor_district",
+     map_title="Property Crime YTD Change (2025 vs 2024)",
+     map_type="supervisor_district",
+     map_metadata={{"map_type": "delta", "description": "Year-over-year change in property crime"}},
+     metric_id="3",
+     period_type="ytd"
+   )
+   ```
+   
+   **IMPORTANT**: With `period_type="ytd"`, the system automatically:
+   - Converts `'2025-01-01'` to `'2024-01-01'`
+   - Converts `'2025-09-30'` to `'2024-09-30'`
+   - Fetches 2024 YTD data for comparison
+   - Calculates year-over-year deltas and percent changes
 
   QUERY REQUIREMENTS:
   1. District Maps: Include district field and value field
@@ -239,8 +354,8 @@ PREFERRED TOOL - generate_map_with_query: Query DataSF and create map in one ste
   2. Point Maps: **PREFER COORDINATES OVER ADDRESSES** - Include latitude, longitude, title, and description fields
      **COORDINATE EXTRACTION PATTERNS** (in order of preference):
      - Direct fields: `latitude`/`longitude` or `lat`/`lon`
-     - GeoJSON Point: `location` field with `{{"type": "Point", "coordinates": [lon, lat]}}`
-     - DataSF format: `location` field with `{{"latitude": 37.7749, "longitude": -122.4194}}`
+     - GeoJSON Point: `location` field with `{{{{"type": "Point", "coordinates": [lon, lat]}}}}`
+     - DataSF format: `location` field with `{{{{"latitude": 37.7749, "longitude": -122.4194}}}}`
      - Nested points: `point.coordinates` or `intersection_point.coordinates`
      - POINT strings: `"POINT (-122.435385968 37.637676996)"`
      - Coordinate arrays: `coordinates` field with `[longitude, latitude]`
@@ -261,7 +376,7 @@ PREFERRED TOOL - generate_map_with_query: Query DataSF and create map in one ste
      Example: `SELECT latitude, longitude, building_permit_application as title, permit_type as description, number_of_units_certified as value WHERE date_issued >= CURRENT_DATE - INTERVAL '30 days' AND latitude IS NOT NULL`
 
 LEGACY TOOL - generate_map: For use only when data already loaded via set_dataset
-  USAGE: generate_map(context_variables, map_title="Title", map_type="supervisor_district", map_metadata={{"description": "Description"}})
+  USAGE: generate_map(context_variables, map_title="Title", map_type="supervisor_district", map_metadata={{{{description": "Description"}}}})
   NOTE: Due to LangChain limitations, this tool cannot reliably access data from set_dataset. Use generate_map_with_query instead.
 
 MAPBOX MAP FEATURES:
@@ -326,6 +441,14 @@ IMPORTANT NOTES:
     - Use "analysis_neighborhood" for community/neighborhood-level analysis (more granular)
     - Use "police_district" for law enforcement analysis
     - Check your dataset for available geographic fields (analysis_neighborhood, supervisor_district, police_district)
+
+**QUICK REFERENCE FOR DELTA MAPS**:
+- ✅ CORRECT: map_metadata={{{{map_type": "delta"}}}} + simple SOQL query for current period only
+- ✅ AUTOMATIC: System fetches previous period data and calculates deltas automatically
+- ❌ WRONG: Complex SOQL with joins/window functions (not supported)
+- ❌ WRONG: Regular density maps for changes (shows purple instead of green/red)
+- ❌ WRONG: Manually fetching both current and previous data (system handles this)
+- 🎯 RESULT: System automatically calculates deltas and applies green/red coloring based on greendirection
 """
 
 # Map field system instructions
@@ -381,8 +504,8 @@ Contains structured filters that are applied programmatically:
    ```json
    {
      "static_filters": [
-       {{"field": "status", "operator": "=", "value": "active"}},
-       {{"field": "incident_category", "operator": "IN", "values": ["Assault", "Robbery"]}}
+       {{{{field": "status", "operator": "=", "value": "active"}}}},
+       {{{{field": "incident_category", "operator": "IN", "values": ["Assault", "Robbery"]}}}}
      ]
    }
    ```
@@ -425,7 +548,7 @@ Controls map rendering and behavior:
      "chart_type_preference": "symbol",
      "data_point_threshold": 2000,
      "category_fields": [
-       {{"name": "incident_category", "fieldName": "incident_category", "description": "Category of the incident"}}
+       {{{{name": "incident_category", "fieldName": "incident_category", "description": "Category of the incident"}}}}
      ]
    }
    ```
@@ -724,16 +847,16 @@ When you are asked about metrics, you should follow this workflow:
     item_noun="Incidents",
     greendirection="down",
     location_fields=[
-        {{"name": "supervisor_district", "fieldName": "supervisor_district", "description": "Supervisor district where the incident occurred"}},
-        {{"name": "police_district", "fieldName": "police_district", "description": "Police district where the incident occurred"}}
+        {{{{name": "supervisor_district", "fieldName": "supervisor_district", "description": "Supervisor district where the incident occurred"}}}},
+        {{{{name": "police_district", "fieldName": "police_district", "description": "Police district where the incident occurred"}}}}
     ],
     category_fields=[
-        {{"name": "incident_category", "fieldName": "incident_category", "description": "Category of the incident"}},
-        {{"name": "incident_subcategory", "fieldName": "incident_subcategory", "description": "Subcategory of the incident"}}
+        {{{{name": "incident_category", "fieldName": "incident_category", "description": "Category of the incident"}}}},
+        {{{{name": "incident_subcategory", "fieldName": "incident_subcategory", "description": "Subcategory of the incident"}}}}
     ],
     map_query="SELECT location, incident_description, latitude, longitude, incident_category",
-    map_filters={{"incident_category_filter": {{"field": "Incident_Category", "values": ["Assault", "Homicide", "Rape", "Robbery", "Human Trafficking (A), Commercial Sex Acts", "Human Trafficking, Commercial Sex Acts", "Human Trafficking (B), Involuntary Servitude", "Offences Against The Family And Children", "Weapons Carrying Etc", "Weapons Offense", "Weapons Offence"], "operator": "IN"}}}},
-    map_config={{"date_field": "Report_Datetime", "location_field": "location", "supports_districts": true, "chart_type_preference": "point", "data_point_threshold": 1000}}
+    map_filters={{{{incident_category_filter": {{{{field": "Incident_Category", "values": ["Assault", "Homicide", "Rape", "Robbery", "Human Trafficking (A), Commercial Sex Acts", "Human Trafficking, Commercial Sex Acts", "Human Trafficking (B), Involuntary Servitude", "Offences Against The Family And Children", "Weapons Carrying Etc", "Weapons Offense", "Weapons Offence"], "operator": "IN"}}}}}}}},
+    map_config={{{{date_field": "Report_Datetime", "location_field": "location", "supports_districts": true, "chart_type_preference": "point", "data_point_threshold": 1000}}}}
     )
   Use this to add new metrics to the system. Required fields: name, key, category, endpoint.
   
@@ -806,7 +929,7 @@ When you are asked about metrics, you should follow this workflow:
   The system checks for 'supervisor_district' in the query results to determine if district-level data is available. Without it in the queries, the system will log "Query has district data: False" and only create citywide metrics.
   
 - edit_metric: Update an existing metric
-  USAGE: edit_metric(context_variables, metric_identifier=1, updates={{"summary": "Updated summary", "show_on_dash": False}})
+  USAGE: edit_metric(context_variables, metric_identifier=1, updates={{{{summary": "Updated summary", "show_on_dash": False}}}})
   Use this to modify existing metrics. Can update any field except the unique key.
   
 - disable_metric: Deactivate a metric (soft delete)
