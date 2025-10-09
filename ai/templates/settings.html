@@ -251,42 +251,19 @@
             if (!confirm('This will reload all SF Public metadata. Continue?')) return;
             btn.disabled = true;
             try {
-                show(s, 'Starting metadata reload (Step 1 of 3)...');
+                show(s, 'Starting SF Public metadata reload (3-step process)...');
                 
-                // Step 1: Refresh dataset URLs
-                const step1Response = await fetchJSON('/backend/refresh_dataset_urls', { method: 'GET' });
-                if (step1Response.status !== 'success') {
-                    throw new Error(`Step 1 failed: ${step1Response.message}`);
+                // Start the full reload process as a background job
+                const response = await fetchJSON('/backend/reload_sfpublic', { method: 'GET' });
+                if (response.status !== 'success') {
+                    throw new Error(`Failed to start reload: ${response.message}`);
                 }
-                show(s, 'Step 1 started: Dataset URLs refresh job created. Waiting for completion...');
                 
-                // Wait for Step 1 to complete
-                const step1JobId = step1Response.job_id;
-                await waitForJobCompletion(step1JobId, 'Step 1');
-                show(s, 'Step 1 complete: Dataset URLs refreshed. Starting Step 2...');
+                const jobId = response.job_id;
+                show(s, `Reload job started (ID: ${jobId}). Monitoring progress...`);
                 
-                // Step 2: Fetch metadata
-                const step2Response = await fetchJSON('/backend/fetch_metadata', { method: 'GET' });
-                if (step2Response.status !== 'success') {
-                    throw new Error(`Step 2 failed: ${step2Response.message}`);
-                }
-                show(s, 'Step 2 started: Metadata fetch job created. Waiting for completion...');
-                
-                // Wait for Step 2 to complete
-                const step2JobId = step2Response.job_id;
-                await waitForJobCompletion(step2JobId, 'Step 2');
-                show(s, 'Step 2 complete: Metadata fetched and stored. Starting Step 3...');
-                
-                // Step 3: Reload SF Public data into vector database
-                const step3Response = await fetchJSON('/backend/reload_sfpublic', { method: 'GET' });
-                if (step3Response.status !== 'success') {
-                    throw new Error(`Step 3 failed: ${step3Response.message}`);
-                }
-                show(s, 'Step 3 started: SF Public reload job created. Waiting for completion...');
-                
-                // Wait for Step 3 to complete
-                const step3JobId = step3Response.job_id;
-                await waitForJobCompletion(step3JobId, 'Step 3');
+                // Wait for job completion
+                await waitForJobCompletion(jobId, 'SF Public Metadata Reload');
                 show(s, 'All steps complete! SF Public metadata successfully reloaded into vector database.');
             } catch (e) {
                 show(s, 'Failed to reload metadata: ' + e.message, false);

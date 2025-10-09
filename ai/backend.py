@@ -362,10 +362,28 @@ async def reload_vector_db():
             "log_content": "Error occurred before log file could be read"
         })
 
-def reload_sfpublic_sync():
-    """Synchronous function to reload SF Public Data collection."""
-    logger.debug("Reload SF Public Data collection called")
+def reload_sfpublic_full_sync():
+    """Synchronous function to reload SF Public Data collection (all 3 steps)."""
+    logger.debug("Reload SF Public Data collection (full process) called")
     try:
+        results = {}
+        
+        # Step 1: Refresh dataset URLs
+        logger.info("Step 1: Refreshing dataset URLs...")
+        step1_result = refresh_dataset_urls_sync()
+        results['step1'] = step1_result
+        if step1_result['status'] != 'success':
+            raise Exception(f"Step 1 failed: {step1_result['message']}")
+        
+        # Step 2: Fetch metadata
+        logger.info("Step 2: Fetching metadata...")
+        step2_result = fetch_metadata_sync()
+        results['step2'] = step2_result
+        if step2_result['status'] != 'success':
+            raise Exception(f"Step 2 failed: {step2_result['message']}")
+        
+        # Step 3: Reload SF Public data into vector database
+        logger.info("Step 3: Reloading SF Public data into vector database...")
         script_dir = os.path.dirname(os.path.abspath(__file__))
         script_path = os.path.join(script_dir, "vector_loader_sfpublic.py")
         log_file = os.path.join(script_dir, "logs", "vector_loader.log")
@@ -396,7 +414,7 @@ def reload_sfpublic_sync():
             
         if result.returncode == 0:
             logger.info("SF Public Data collection reloaded successfully.")
-            return {
+            step3_result = {
                 "status": "success",
                 "message": "SF Public Data collection reloaded successfully.",
                 "output": result.stdout,
@@ -404,30 +422,43 @@ def reload_sfpublic_sync():
             }
         else:
             logger.error(f"Failed to reload SF Public Data collection: {result.stderr}")
-            return {
+            step3_result = {
                 "status": "error",
                 "message": "Failed to reload SF Public Data collection.",
                 "output": result.stderr,
                 "log_content": log_content
             }
+        
+        results['step3'] = step3_result
+        
+        if step3_result['status'] != 'success':
+            raise Exception(f"Step 3 failed: {step3_result['message']}")
+        
+        logger.info("All steps completed successfully!")
+        return {
+            "status": "success",
+            "message": "SF Public metadata successfully reloaded into vector database.",
+            "results": results
+        }
+        
     except Exception as e:
-        logger.exception(f"Error reloading SF Public Data collection: {str(e)}")
+        logger.exception(f"Error in SF Public Data reload process: {str(e)}")
         return {
             "status": "error",
             "message": str(e),
-            "log_content": "Error occurred before log file could be read"
+            "results": results if 'results' in locals() else {}
         }
 
 @router.get("/reload_sfpublic")
 async def reload_sfpublic():
-    """Start reloading the SF Public Data collection as a background job."""
+    """Start reloading the SF Public Data collection as a background job (all 3 steps)."""
     logger.debug("Reload SF Public Data collection called")
     try:
         # Create background job
-        job_id = job_manager.create_job("sf_public_reload", "Reload SF Public Data collection")
+        job_id = job_manager.create_job("sf_public_reload", "Reload SF Public Data collection (3-step process)")
         
         # Start the job asynchronously
-        asyncio.create_task(job_manager.run_job(job_id, reload_sfpublic_sync))
+        asyncio.create_task(job_manager.run_job(job_id, reload_sfpublic_full_sync))
         
         logger.info(f"Started SF Public Data reload job: {job_id}")
         return JSONResponse({
