@@ -1,0 +1,91 @@
+═══════════════════════════════════════════════════════════════════
+  SSL CERTIFICATE FIX - COMMAND CHEAT SHEET
+═══════════════════════════════════════════════════════════════════
+
+DNS STATUS: ✅ VERIFIED
+  platform.transparentsf.com → 34.27.136.197 ✅
+  beta.transparentsf.com → 34.27.136.197 ✅
+
+VM INFO:
+  Instance: transparentsf-prod
+  Project: euphoric-oath-467718-p3
+  Zone: us-central1-a
+  IP: 34.27.136.197
+
+═══════════════════════════════════════════════════════════════════
+COMMANDS TO RUN (in order):
+═══════════════════════════════════════════════════════════════════
+
+# 1. SSH into VM
+gcloud compute ssh transparentsf-prod --project=euphoric-oath-467718-p3 --zone=us-central1-a
+
+# 2. Go to project directory
+cd /opt/transparentsf
+
+# 3. Pull latest code
+sudo -u transparentsf git fetch origin
+sudo -u transparentsf git pull origin gcp-migration-complete
+
+# 4. Stop nginx
+sudo systemctl stop nginx
+
+# 5. Get SSL certificate (copy/paste as one command)
+sudo certbot certonly --standalone -d platform.transparentsf.com -d beta.transparentsf.com --agree-tos --non-interactive --expand
+
+# 6. Start nginx
+sudo systemctl start nginx
+
+# 7. Backup old nginx config
+sudo cp /etc/nginx/sites-enabled/transparentsf /etc/nginx/sites-enabled/transparentsf.backup
+
+# 8. Copy new nginx config
+sudo cp /opt/transparentsf/nginx_transparentsf.conf /etc/nginx/sites-available/transparentsf
+
+# 9. Test nginx config
+sudo nginx -t
+
+# 10. If test passed, reload nginx
+sudo systemctl reload nginx
+
+# 11. Restart app
+sudo systemctl restart transparentsf
+
+# 12. Verify certificate
+sudo certbot certificates
+
+# 13. Check services status
+sudo systemctl status nginx
+sudo systemctl status transparentsf
+
+═══════════════════════════════════════════════════════════════════
+VERIFY IN BROWSER:
+═══════════════════════════════════════════════════════════════════
+
+https://platform.transparentsf.com
+https://beta.transparentsf.com
+
+═══════════════════════════════════════════════════════════════════
+TROUBLESHOOTING COMMANDS:
+═══════════════════════════════════════════════════════════════════
+
+# View nginx error logs
+sudo tail -50 /var/log/nginx/error.log
+
+# View app logs
+sudo journalctl -u transparentsf -n 100 --no-pager
+
+# View all certificates
+sudo certbot certificates
+
+# Check certificate files exist
+sudo ls -la /etc/letsencrypt/live/platform.transparentsf.com/
+
+# Check if port 80 is open
+sudo netstat -tulpn | grep :80
+
+# Restart everything if needed
+sudo systemctl restart nginx
+sudo systemctl restart transparentsf
+
+═══════════════════════════════════════════════════════════════════
+

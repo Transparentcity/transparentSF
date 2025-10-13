@@ -217,7 +217,6 @@ from routes.writeups import router as writeups_router, set_templates as set_writ
 from routes.legal_code import router as legal_code_router, set_templates as set_legal_code_templates
 from routes.settings import router as settings_router, set_templates as set_settings_templates
 from routes.vacancy_analysis import router as vacancy_analysis_router, set_templates as set_vacancy_analysis_templates
-from routes.proven_vacancy_analysis import router as proven_vacancy_router, set_templates as set_proven_vacancy_templates
 from routes.dual_map import router as dual_map_router, set_templates as set_dual_map_templates
 
 app = FastAPI()
@@ -229,8 +228,6 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://beta.transparentsf.com",
-        "https://dashboard.transparentsf.com",
-        "https://transparentsf.com",
         "https://platform.transparentsf.com",
         "http://localhost:8081",
         "http://localhost:3000",
@@ -363,9 +360,18 @@ logger.debug(f"Logs directory: {logs_dir}")
 metrics_dir = os.path.join(current_dir, "data/dashboard")
 logger.debug(f"Metrics directory: {metrics_dir}")
 
+# Initialize output manager for GCS integration
+try:
+    from tools.output_manager import get_output_manager
+    OUTPUT_MANAGER_AVAILABLE = True
+    logger.info("Output manager available for GCS integration")
+except ImportError:
+    OUTPUT_MANAGER_AVAILABLE = False
+    logger.warning("Output manager not available, using local storage only")
+
 @app.get("/api/metrics/{filename}")
 async def get_metrics(filename: str):
-    """Serve metrics data from JSON files."""
+    """Serve metrics data from JSON files, checking GCS first if available."""
     # Ensure filename ends with .json
     if not filename.endswith('.json'):
         filename = f"{filename}.json"
@@ -375,9 +381,20 @@ async def get_metrics(filename: str):
         # Extract district number
         district_str = filename.split('_')[1].split('.')[0]
         
-        # Try to serve top_level.json from the district subfolder
+        # Try GCS first if available
+        if OUTPUT_MANAGER_AVAILABLE:
+            try:
+                output_manager = get_output_manager()
+                data = output_manager.retrieve_dashboard_metric(district_str, 'top_level')
+                if data:
+                    logger.debug(f"Retrieved top_level metrics for district {district_str} from GCS")
+                    return JSONResponse(content=data)
+            except Exception as e:
+                logger.warning(f"Error retrieving from GCS, falling back to local: {e}")
+        
+        # Fallback to local file system
         new_file_path = os.path.join(output_dir, 'dashboard', district_str, 'top_level.json')
-        logger.debug(f"Attempting to read metrics from: {new_file_path}")
+        logger.debug(f"Attempting to read metrics from local: {new_file_path}")
         try:
             with open(new_file_path, 'r') as f:
                 data = json.load(f)
@@ -396,8 +413,24 @@ async def get_metrics(filename: str):
     # Format could be something like "crime_incidents_ytd.json"
     elif '_' in filename and not filename.startswith('district_'):
         # This is likely a metric file request
-        # We need to determine which district it belongs to
-        # First, try to find it in each district folder
+        # Extract metric ID (remove .json extension)
+        metric_id = filename[:-5] if filename.endswith('.json') else filename
+        
+        # Try GCS first if available - check all districts
+        if OUTPUT_MANAGER_AVAILABLE:
+            try:
+                output_manager = get_output_manager()
+                # Try to find the metric in each district, starting with citywide (0)
+                for district_num in range(12):  # 0-11 for citywide and districts 1-11
+                    district_str = str(district_num)
+                    data = output_manager.retrieve_dashboard_metric(district_str, metric_id)
+                    if data:
+                        logger.debug(f"Retrieved metric {metric_id} for district {district_str} from GCS")
+                        return JSONResponse(content=data)
+            except Exception as e:
+                logger.warning(f"Error retrieving metric from GCS, falling back to local: {e}")
+        
+        # Fallback to local file system
         for district_num in range(12):  # 0-11 for citywide and districts 1-11
             district_str = str(district_num)
             metric_file_path = os.path.join(output_dir, 'dashboard', district_str, filename)
@@ -667,14 +700,25 @@ async def get_metric_by_id(metric_id: int):
 
 @app.get("/api/district/{district_id}/metric/{metric_id}")
 async def get_district_metric(district_id: str, metric_id: str):
-    """Serve a specific metric for a specific district."""
-    # Ensure metric_id ends with .json
-    if not metric_id.endswith('.json'):
-        metric_id = f"{metric_id}.json"
+    """Serve a specific metric for a specific district, checking GCS first if available."""
+    # Remove .json extension if present for consistency
+    if metric_id.endswith('.json'):
+        metric_id = metric_id[:-5]
     
-    # Construct the file path
-    file_path = os.path.join(output_dir, 'dashboard', district_id, metric_id)
-    logger.debug(f"Attempting to read district metric from: {file_path}")
+    # Try GCS first if available
+    if OUTPUT_MANAGER_AVAILABLE:
+        try:
+            output_manager = get_output_manager()
+            data = output_manager.retrieve_dashboard_metric(district_id, metric_id)
+            if data:
+                logger.debug(f"Retrieved metric {metric_id} for district {district_id} from GCS")
+                return JSONResponse(content=data)
+        except Exception as e:
+            logger.warning(f"Error retrieving metric from GCS, falling back to local: {e}")
+    
+    # Fallback to local file system
+    file_path = os.path.join(output_dir, 'dashboard', district_id, f"{metric_id}.json")
+    logger.debug(f"Attempting to read district metric from local: {file_path}")
     
     try:
         with open(file_path, 'r') as f:
@@ -692,10 +736,21 @@ async def get_district_metric(district_id: str, metric_id: str):
 
 @app.get("/api/district/{district_id}")
 async def get_district_top_level(district_id: str):
-    """Serve the top-level metrics for a specific district."""
-    # Construct the file path
+    """Serve the top-level metrics for a specific district, checking GCS first if available."""
+    # Try GCS first if available
+    if OUTPUT_MANAGER_AVAILABLE:
+        try:
+            output_manager = get_output_manager()
+            data = output_manager.retrieve_dashboard_metric(district_id, 'top_level')
+            if data:
+                logger.debug(f"Retrieved top_level metrics for district {district_id} from GCS")
+                return JSONResponse(content=data)
+        except Exception as e:
+            logger.warning(f"Error retrieving top_level from GCS, falling back to local: {e}")
+    
+    # Fallback to local file system
     file_path = os.path.join(output_dir, 'dashboard', district_id, 'top_level.json')
-    logger.debug(f"Attempting to read district top-level metrics from: {file_path}")
+    logger.debug(f"Attempting to read district top-level metrics from local: {file_path}")
     
     try:
         with open(file_path, 'r') as f:
@@ -713,8 +768,26 @@ async def get_district_top_level(district_id: str):
 
 @app.get("/api/district/{district_id}/metrics")
 async def list_district_metrics(district_id: str):
-    """List all available metrics for a specific district."""
-    # Construct the directory path
+    """List all available metrics for a specific district, checking GCS first if available."""
+    # Try GCS first if available
+    if OUTPUT_MANAGER_AVAILABLE:
+        try:
+            output_manager = get_output_manager()
+            files = output_manager.list_files("dashboard", district_id)
+            if files:
+                # Filter out top_level.json and extract metric IDs
+                metric_ids = []
+                for file_path in files:
+                    filename = os.path.basename(file_path)
+                    if filename.endswith('.json') and filename != 'top_level.json':
+                        metric_ids.append(filename[:-5])  # Remove .json extension
+                
+                logger.debug(f"Retrieved {len(metric_ids)} metrics for district {district_id} from GCS")
+                return JSONResponse(content={"metrics": metric_ids})
+        except Exception as e:
+            logger.warning(f"Error listing metrics from GCS, falling back to local: {e}")
+    
+    # Fallback to local file system
     dir_path = os.path.join(output_dir, 'dashboard', district_id)
     logger.debug(f"Attempting to list metrics in directory: {dir_path}")
     
@@ -737,8 +810,34 @@ async def list_district_metrics(district_id: str):
 
 @app.get("/api/districts")
 async def list_districts():
-    """List all available districts."""
+    """List all available districts, checking GCS first if available."""
     try:
+        districts = []
+        
+        # Try GCS first if available
+        if OUTPUT_MANAGER_AVAILABLE:
+            try:
+                output_manager = get_output_manager()
+                # Try to get top_level for each district (0-11)
+                for district_num in range(12):
+                    district_id = str(district_num)
+                    data = output_manager.retrieve_dashboard_metric(district_id, 'top_level')
+                    if data:
+                        district_name = data.get('name', f"District {district_id}")
+                        districts.append({
+                            'id': district_id,
+                            'name': district_name
+                        })
+                
+                if districts:
+                    logger.debug(f"Retrieved {len(districts)} districts from GCS")
+                    # Sort by district ID
+                    districts.sort(key=lambda x: int(x['id']))
+                    return JSONResponse(content={"districts": districts})
+            except Exception as e:
+                logger.warning(f"Error listing districts from GCS, falling back to local: {e}")
+        
+        # Fallback to local file system
         districts = []
         dashboard_dir = os.path.join(output_dir, 'dashboard')
         
@@ -870,11 +969,6 @@ set_vacancy_analysis_templates(templates)
 app.include_router(vacancy_analysis_router, tags=["vacancy-analysis"])
 logger.debug("Included vacancy analysis router")
 
-# Mount proven vacancy analysis router
-set_proven_vacancy_templates(templates)
-app.include_router(proven_vacancy_router, tags=["proven-vacancy"])
-logger.debug("Included proven vacancy analysis router")
-
 # Local vacancy analysis router removed - using optimized main route instead
 
 # Mount dual map router
@@ -897,6 +991,38 @@ async def api_add_subscriber(request: Request):
     # Forward the request to the backend handler
     return await backend_add_subscriber(request)
 
+
+@app.post("/api/analyze-ytd")
+async def api_analyze_ytd():
+    """Generate YTD (Year-to-Date) dashboard metrics asynchronously with job tracking."""
+    logger.info("API request to generate YTD dashboard metrics")
+    try:
+        # Import necessary modules
+        try:
+            from generate_dashboard_metrics import main as generate_metrics_main
+            from background_jobs import job_manager
+        except ImportError:
+            from .generate_dashboard_metrics import main as generate_metrics_main
+            from .background_jobs import job_manager
+        
+        # Create a background job
+        job_id = job_manager.create_job("ytd_metrics", "Generate YTD dashboard metrics")
+        
+        # Start the job in the background
+        asyncio.create_task(job_manager.run_job(job_id, generate_metrics_main))
+        
+        logger.info(f"YTD metrics generation started with job_id: {job_id}")
+        return JSONResponse({
+            "status": "success",
+            "message": "YTD metrics generation started",
+            "job_id": job_id
+        })
+    except Exception as e:
+        logger.exception(f"Error starting YTD metrics generation: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
 
 
 @app.get("/api/district-shapes/{district_type}")
