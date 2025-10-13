@@ -229,6 +229,7 @@ app.add_middleware(
     allow_origins=[
         "https://beta.transparentsf.com",
         "https://platform.transparentsf.com",
+        "https://dashboard.transparentsf.com",
         "http://localhost:8081",
         "http://localhost:3000",
         "http://localhost:8000"

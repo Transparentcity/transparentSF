@@ -8,17 +8,19 @@ set -e
 echo "🔐 Updating SSL Certificate for TransparentSF domains..."
 echo "   - platform.transparentsf.com"
 echo "   - beta.transparentsf.com"
+echo "   - dashboard.transparentsf.com"
 echo ""
 
 # Stop nginx to allow Certbot to use port 80
 echo "Stopping nginx..."
 sudo systemctl stop nginx
 
-# Request certificate for both domains
+# Request certificate for all three domains
 echo "Requesting SSL certificate from Let's Encrypt..."
 sudo certbot certonly --standalone \
   -d platform.transparentsf.com \
   -d beta.transparentsf.com \
+  -d dashboard.transparentsf.com \
   --agree-tos \
   --non-interactive \
   --expand
