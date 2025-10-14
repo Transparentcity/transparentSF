@@ -227,6 +227,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://transparentsf.com",
         "https://beta.transparentsf.com",
         "https://platform.transparentsf.com",
         "https://dashboard.transparentsf.com",
