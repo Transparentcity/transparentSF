@@ -3338,6 +3338,10 @@ async def time_series_chart_page(request: Request):
     # Check if format=image is in the query parameters
     format_param = request.query_params.get('format')
     
+    # Check if this is an embedded request (like from writeups)
+    is_embedded = request.query_params.get('embedded') == 'true' or 'embedded' in str(request.url)
+    logger.info(f"Time series chart request - is_embedded={is_embedded}, query_params={dict(request.query_params)}")
+    
     if format_param == 'image':
         try:
             # Extract parameters for the chart
@@ -3356,7 +3360,8 @@ async def time_series_chart_page(request: Request):
             chart_data_response = await get_chart_by_metric_legacy(
                 metric_id=metric_id,
                 district=int(district),
-                period_type=period_type
+                period_type=period_type,
+                is_embedded=is_embedded
             )
             
             # Check if the response was successful and parse the JSON body
@@ -5596,11 +5601,20 @@ async def get_map_chart(request: Request, id: str):
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Query to get the map by ID
-        cursor.execute("""
-            SELECT id, title, published_url, chart_id, edit_url, type, metadata, location_data
-            FROM maps 
-            WHERE id = %s AND active = TRUE
-        """, (id,))
+        # For embedded requests (like from writeups), show inactive maps too
+        # For non-embedded requests, only show active maps
+        if is_embedded:
+            cursor.execute("""
+                SELECT id, title, published_url, chart_id, edit_url, type, metadata, location_data, active
+                FROM maps 
+                WHERE id = %s
+            """, (id,))
+        else:
+            cursor.execute("""
+                SELECT id, title, published_url, chart_id, edit_url, type, metadata, location_data, active
+                FROM maps 
+                WHERE id = %s AND active = TRUE
+            """, (id,))
         
         map_record = cursor.fetchone()
         cursor.close()
@@ -5613,12 +5627,12 @@ async def get_map_chart(request: Request, id: str):
                 "message": f"Map with ID {id} not found"
             }, status_code=404)
         
-        logger.info(f"Map record found - id={map_record['id']}, title={map_record['title']}, published_url={bool(map_record['published_url'])}")
+        logger.info(f"Map record found - id={map_record['id']}, title={map_record['title']}, published_url={bool(map_record['published_url'])}, active={map_record.get('active', 'unknown')}")
         
         # For embedded mode, always serve the template regardless of published URL
         if is_embedded:
             logger.info(f"Serving embedded map template for id={id}")
-            logger.info(f"Map has published_url: {bool(map_record['published_url'])}")
+            logger.info(f"Map has published_url: {bool(map_record['published_url'])}, active: {map_record.get('active', 'unknown')}")
             
             # Get location data
             location_data = map_record.get('location_data', [])

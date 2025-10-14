@@ -3057,6 +3057,15 @@
                     }
                 }
                 
+                // Add all other properties from the original item, without overwriting computed color/strokeColor
+                Object.keys(item).forEach(key => {
+                    if (key !== 'lat' && key !== 'lon' && key !== 'coordinates' && 
+                        key !== 'title' && key !== 'description' && key !== 'value' &&
+                        key !== 'color' && key !== 'strokeColor') {
+                        properties[key] = item[key];
+                    }
+                });
+                
                 return {
                     type: 'Feature',
                     properties: properties,
@@ -3118,116 +3127,116 @@
                 
                 // Add additional tooltip fields including media URLs
                 console.log('Map generator tooltip_fields:', properties.tooltip_fields);
-                if (properties.tooltip_fields) {
-                    let tooltipFields = properties.tooltip_fields;
-                    console.log('Raw tooltip_fields:', tooltipFields, typeof tooltipFields);
-                    if (typeof tooltipFields === 'string') {
-                        try { 
-                            tooltipFields = JSON.parse(tooltipFields); 
-                            console.log('Parsed tooltip_fields:', tooltipFields);
-                        } catch (err) { 
-                            console.log('Failed to parse tooltip_fields:', err);
-                            tooltipFields = {}; 
-                        }
+                let tooltipFields = properties.tooltip_fields || {};
+                if (typeof tooltipFields === 'string') {
+                    try { 
+                        tooltipFields = JSON.parse(tooltipFields); 
+                        console.log('Parsed tooltip_fields:', tooltipFields);
+                    } catch (err) { 
+                        console.log('Failed to parse tooltip_fields:', err);
+                        tooltipFields = {}; 
                     }
+                }
+                
+                // Define location fields to exclude from tooltip
+                const locationFields = new Set(['lat','lon','long','latitude','longitude','coordinates','point','point_geom','intersection','address','street','city','state','zip']);
+                
+                // Helper function to add a row to tooltip (similar to map.html)
+                const addRow = (key, val) => {
+                    if (!val || val === '') return;
+                    const displayKey = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                     
-                    for (const [field, value] of Object.entries(tooltipFields)) {
-                        console.log(`Map generator processing field: ${field}, value:`, value, `type: ${typeof value}`);
-                        if (field === 'title' || field === 'description' || field === 'value' || field === 'count' || field === 'scale') continue;
-                        if (!value || value === '') continue;
-                        
-                        const displayKey = field.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                        
-                        // Check if this is a media URL field
-                        if (field.toLowerCase().includes('media_url') || field.toLowerCase().includes('mediaurl')) {
-                            console.log(`Map generator found media URL field: ${field}`, value);
+                    // Special handling for media URLs
+                    if (key.toLowerCase().includes('media_url') || key.toLowerCase().includes('mediaurl')) {
+                        console.log(`🖼️ Map generator processing media URL field: ${key}`, val);
+                        // Extract URL from nested object or use direct string
+                        let mediaUrl = val;
+                        try {
+                            // Handle stringified JSON objects like "{'url': 'https://...'}"
+                            if (typeof val === 'string' && val.includes("'url':")) {
+                                const urlMatch = val.match(/'url':\s*'([^']+)'/);
+                                if (urlMatch) {
+                                    mediaUrl = urlMatch[1];
+                                }
+                            }
+                            // Handle actual JSON objects
+                            else if (typeof val === 'object' && val.url) {
+                                mediaUrl = val.url;
+                            }
+                            // Handle JSON string objects
+                            else if (typeof val === 'string' && val.startsWith('{')) {
+                                const parsed = JSON.parse(val.replace(/'/g, '"'));
+                                if (parsed.url) {
+                                    mediaUrl = parsed.url;
+                                }
+                            }
+                        } catch (e) {
+                            // If parsing fails, use original value
                         }
                         
-                        // Special handling for media URLs
-                        if (field.toLowerCase().includes('media_url') || field.toLowerCase().includes('mediaurl')) {
-                            console.log(`🖼️ Map generator processing media URL field: ${field}`, value);
-                            // Extract URL from nested object or use direct string
-                            let mediaUrl = value;
-                            try {
-                                // Handle stringified JSON objects like "{'url': 'https://...'}"
-                                if (typeof value === 'string' && value.includes("'url':")) {
-                                    console.log('Map generator parsing stringified JSON with single quotes');
-                                    const urlMatch = value.match(/'url':\s*'([^']+)'/);
-                                    if (urlMatch) {
-                                        mediaUrl = urlMatch[1];
-                                        console.log('Map generator extracted URL from single quotes:', mediaUrl);
-                                    }
-                                }
-                                // Handle actual JSON objects
-                                else if (typeof value === 'object' && value.url) {
-                                    console.log('Map generator extracting URL from object');
-                                    mediaUrl = value.url;
-                                    console.log('Map generator extracted URL from object:', mediaUrl);
-                                }
-                                // Handle JSON string objects
-                                else if (typeof value === 'string' && value.startsWith('{')) {
-                                    console.log('Map generator parsing JSON string');
-                                    const parsed = JSON.parse(value.replace(/'/g, '"'));
-                                    if (parsed.url) {
-                                        mediaUrl = parsed.url;
-                                        console.log('Map generator extracted URL from JSON string:', mediaUrl);
-                                    }
-                                }
-                            } catch (e) {
-                                console.log('❌ Map generator failed to parse media URL:', value, e);
-                            }
+                        if (mediaUrl && mediaUrl.startsWith('http')) {
+                            // Check if this is a Verint attachment (blocked by ORB)
+                            const isVerintAttachment = mediaUrl.includes('form.us.empro.verintcloudservices.com') || 
+                                                      mediaUrl.includes('download_attachments');
                             
-                            console.log(`Map generator final mediaUrl: ${mediaUrl}, valid: ${mediaUrl && mediaUrl.startsWith('http')}`);
-                            
-                            // Only show media if we have a valid URL
-                            if (mediaUrl && mediaUrl.startsWith('http')) {
-                                console.log('✅ Map generator adding media thumbnail to tooltip');
-                                
-                                // Check if this is a Verint attachment (blocked by ORB)
-                                const isVerintAttachment = mediaUrl.includes('form.us.empro.verintcloudservices.com') || 
-                                                          mediaUrl.includes('download_attachments');
-                                
-                                if (isVerintAttachment) {
-                                    // For Verint attachments, use iframe with cropping to show image area
-                                    tooltipContent += `<div class="tsf-tooltip-row">
-                                        <span class="tsf-tooltip-label">${displayKey}:</span>
-                                        <div class="tsf-tooltip-value">
-                                            <div class="verint-iframe-container" style="width: 150px; height: 100px; border: 2px solid #6B46C1; border-radius: 4px; overflow: hidden; position: relative; margin-top: 5px;">
-                                                <iframe src="${mediaUrl}" 
-                                                        style="width: 400px; height: 300px; border: none; position: absolute; top: -50px; left: -50px; transform: scale(0.5); transform-origin: 0 0;"
-                                                        sandbox="allow-same-origin allow-scripts allow-forms"
-                                                        onload="console.log('Verint iframe loaded')">
-                                                </iframe>
-                                                <div style="position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.7); color: white; font-size: 10px; padding: 2px 4px; border-radius: 2px;">
-                                                    <a href="${mediaUrl}" target="_blank" style="color: white; text-decoration: none;">🔗</a>
-                                                </div>
+                            if (isVerintAttachment) {
+                                // For Verint attachments, use iframe with cropping to show image area
+                                tooltipContent += `<div class="tsf-tooltip-row">
+                                    <span class="tsf-tooltip-label">${displayKey}:</span>
+                                    <div class="tsf-tooltip-value">
+                                        <div class="verint-iframe-container" style="width: 150px; height: 100px; border: 2px solid #6B46C1; border-radius: 4px; overflow: hidden; position: relative; margin-top: 5px;">
+                                            <iframe src="${mediaUrl}" 
+                                                    style="width: 400px; height: 300px; border: none; position: absolute; top: -50px; left: -50px; transform: scale(0.5); transform-origin: 0 0;"
+                                                    sandbox="allow-same-origin allow-scripts allow-forms"
+                                                    onload="console.log('Verint iframe loaded')">
+                                            </iframe>
+                                            <div style="position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.7); color: white; font-size: 10px; padding: 2px 4px; border-radius: 2px;">
+                                                <a href="${mediaUrl}" target="_blank" style="color: white; text-decoration: none;">🔗</a>
                                             </div>
                                         </div>
-                                    </div>`;
-                                } else {
-                                    // For direct image URLs (like Cloudinary)
-                                    tooltipContent += `<div class="tsf-tooltip-row">
-                                        <span class="tsf-tooltip-label">${displayKey}:</span>
-                                        <div class="tsf-tooltip-value">
-                                            <a href="${mediaUrl}" target="_blank" class="media-link">
-                                                <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
-                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
-                                                     onmouseover="showImagePreview(event, '${mediaUrl}')"
-                                                     onmouseout="hideImagePreview()"
-                                                     style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer; margin-top: 5px;">
-                                                <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
-                                            </a>
-                                        </div>
-                                    </div>`;
-                                }
+                                    </div>
+                                </div>`;
+                            } else {
+                                // For direct image URLs (like Cloudinary)
+                                tooltipContent += `<div class="tsf-tooltip-row">
+                                    <span class="tsf-tooltip-label">${displayKey}:</span>
+                                    <div class="tsf-tooltip-value">
+                                        <a href="${mediaUrl}" target="_blank" class="media-link">
+                                            <img src="${mediaUrl}" alt="Media" class="media-thumbnail" 
+                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                                 onmouseover="showImagePreview(event, '${mediaUrl}')"
+                                                 onmouseout="hideImagePreview()"
+                                                 style="max-width: 150px; max-height: 100px; border-radius: 4px; cursor: pointer; margin-top: 5px;">
+                                            <span style="display: none; color: #6B46C1; text-decoration: underline;">View Media</span>
+                                        </a>
+                                    </div>
+                                </div>`;
                             }
-                        } else {
-                            tooltipContent += `<div class="tsf-tooltip-row">
-                                <span class="tsf-tooltip-label">${displayKey}:</span>
-                                <span class="tsf-tooltip-value">${value}</span>
-                            </div>`;
                         }
+                    } else {
+                        tooltipContent += `<div class="tsf-tooltip-row">
+                            <span class="tsf-tooltip-label">${displayKey}:</span>
+                            <span class="tsf-tooltip-value">${val}</span>
+                        </div>`;
                     }
+                };
+                
+                // Add additional tooltip fields from tooltip_fields
+                for (const [field, value] of Object.entries(tooltipFields)) {
+                    if (field === 'title' || field === 'description' || field === 'value' || field === 'count' || field === 'scale') continue;
+                    if (locationFields.has(field)) continue;
+                    if (/(^|_)(lat|lon|long|coord|address|street|city|state|zip|point|geom)(_|$)/i.test(field)) continue;
+                    addRow(field, value);
+                }
+                
+                // Add remaining non-location properties (avoid duplicates) - this was missing!
+                for (const key of Object.keys(properties)) {
+                    if (['title','description','value','color','strokeColor','tooltip_fields','scale','count','opacity'].includes(key)) continue;
+                    if (locationFields.has(key)) continue;
+                    if (/(^|_)(lat|lon|long|coord|address|street|city|state|zip|point|geom)(_|$)/i.test(key)) continue;
+                    // Skip if we already included via tooltip_fields
+                    if (tooltipFields && Object.prototype.hasOwnProperty.call(tooltipFields, key)) continue;
+                    addRow(key, properties[key]);
                 }
                 
                 tooltipContent += `</div>`;

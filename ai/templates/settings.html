@@ -621,8 +621,8 @@
                 
                 <!-- Business Cache Management -->
                 <div class="card">
-                    <h4>Business Cache Management</h4>
-                    <p>Manage the business data cache for fast vacancy map searches. Cache refresh runs as a background job.</p>
+                    <h4>Business Cache Management (Simple Architecture)</h4>
+                    <p>Manage the raw business data cache for fast vacancy map searches. The cache mirrors DataSF data without processing - all analysis happens on-demand. Cache refresh runs as a background job.</p>
                     <div class="row">
                         <button class="btn primary" onclick="refreshBusinessCache()">Refresh Business Cache</button>
                         <button class="btn secondary" onclick="getCacheStats()">Check Cache Status</button>
@@ -630,11 +630,15 @@
                     </div>
                     <div id="cache-status" class="status"></div>
                     <div id="cache-stats" class="card info" style="display: none; margin-top: 12px;">
-                        <div>Business Records: <span id="cache-business-count">-</span></div>
-                        <div>Open Businesses: <span id="cache-open-count">-</span></div>
-                        <div>Closed Businesses: <span id="cache-closed-count">-</span></div>
-                        <div>Tax Records: <span id="cache-tax-count">-</span></div>
+                        <div><strong>Raw Data Cache (business_registrations_cache + commercial_tax_cache)</strong></div>
+                        <div>Business Registrations: <span id="cache-business-count">-</span></div>
+                        <div>├─ Open: <span id="cache-open-count">-</span></div>
+                        <div>└─ Closed: <span id="cache-closed-count">-</span></div>
+                        <div>Commercial Tax Records: <span id="cache-tax-count">-</span></div>
                         <div>Last Updated: <span id="cache-last-updated">-</span></div>
+                        <div style="margin-top: 8px; font-size: 0.9em; color: #666;">
+                            <em>Note: Individual unit data (2139 A, 2139 B, etc.) is preserved in raw cache and processed on-demand in queries.</em>
+                        </div>
                     </div>
                 </div>
                 

@@ -546,7 +546,8 @@ async def get_chart_by_metric_legacy(
     district: int = 0,
     period_type: str = 'year',
     group_field: str = None,
-    groups: str = None
+    groups: str = None,
+    is_embedded: bool = False
 ):
     """
     Get chart data for a specific metric, district, and period type.
@@ -559,6 +560,7 @@ async def get_chart_by_metric_legacy(
         period_type: The period type (default: 'year')
         group_field: Optional group field (default: null)
         groups: Comma-separated list of group values to include (default: null)
+        is_embedded: Whether this is called from an embedded context (like writeups) (default: False)
     
     Returns:
         ChartResponse with metadata and data points
@@ -604,31 +606,54 @@ async def get_chart_by_metric_legacy(
                 params = (metric_id, district, db_period_type, group_field)
             
             # Query to find the chart
-            query = f"""
-                SELECT 
-                    chart_id, 
-                    period_type, 
-                    object_type, 
-                    object_id, 
-                    object_name, 
-                    field_name, 
-                    district, 
-                    group_field,
-                    executed_query_url,
-                    caption,
-                    metadata
-                FROM time_series_metadata 
-                WHERE object_id = %s AND district::TEXT = %s 
-                AND period_type = %s {group_field_condition}
-                AND is_active = TRUE
-            """
+            # Query to get chart metadata
+            # For embedded requests (like from writeups), show inactive charts too
+            # For non-embedded requests, only show active charts
+            if is_embedded:
+                query = f"""
+                    SELECT 
+                        chart_id, 
+                        period_type, 
+                        object_type, 
+                        object_id, 
+                        object_name, 
+                        field_name, 
+                        district, 
+                        group_field,
+                        executed_query_url,
+                        caption,
+                        metadata
+                    FROM time_series_metadata 
+                    WHERE object_id = %s AND district::TEXT = %s 
+                    AND period_type = %s {group_field_condition}
+                """
+            else:
+                query = f"""
+                    SELECT 
+                        chart_id, 
+                        period_type, 
+                        object_type, 
+                        object_id, 
+                        object_name, 
+                        field_name, 
+                        district, 
+                        group_field,
+                        executed_query_url,
+                        caption,
+                        metadata
+                    FROM time_series_metadata 
+                    WHERE object_id = %s AND district::TEXT = %s 
+                    AND period_type = %s {group_field_condition}
+                    AND is_active = TRUE
+                """
             
             cursor.execute(query, params)
             chart_metadata = cursor.fetchone()
             
             if not chart_metadata:
                 cursor.close()
-                raise HTTPException(status_code=404, detail=f"No active chart found for metric_id={metric_id}, district={district}, period_type={db_period_type}, group_field={group_field}")
+                chart_status = "active" if not is_embedded else "active or inactive"
+                raise HTTPException(status_code=404, detail=f"No {chart_status} chart found for metric_id={metric_id}, district={district}, period_type={db_period_type}, group_field={group_field}")
             
             # Get the chart data
             chart_id = chart_metadata["chart_id"]

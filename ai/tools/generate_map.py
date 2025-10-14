@@ -2071,22 +2071,25 @@ def generate_mapbox_map(context_variables, map_title, map_type, location_data=No
         map_subtype = "delta" if map_metadata and map_metadata.get("map_type") == "delta" else "density"
         
         # Before inserting, deactivate previous maps of the same type for this metric
-        if metric_id:
+        # BUT: Skip deactivation for point/symbol maps - keep all point maps active
+        if metric_id and map_type != "symbol":
             try:
                 cursor.execute("""
                     UPDATE maps 
                     SET active = FALSE, updated_at = CURRENT_TIMESTAMP
-                    WHERE metric_id = %s 
+                    WHERE metric_id::text = %s 
                     AND type = %s
                     AND (metadata->>'map_type' = %s OR (metadata->>'map_type' IS NULL AND %s = 'density'))
                     AND active = TRUE
-                """, (metric_id, map_type, map_subtype, map_subtype))
+                """, (str(metric_id), map_type, map_subtype, map_subtype))
                 
                 deactivated_count = cursor.rowcount
                 if deactivated_count > 0:
                     logger.info(f"Deactivated {deactivated_count} previous {map_subtype} map(s) for metric_id={metric_id}, type={map_type}")
             except Exception as e:
                 logger.warning(f"Failed to deactivate previous maps: {str(e)}")
+        elif map_type == "symbol":
+            logger.info(f"Keeping all previous point maps active for metric_id={metric_id}")
         
         # Insert into database and get the auto-generated ID
         cursor.execute("""

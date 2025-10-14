@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <!-- Cache bust: Simple cache migration 2025-10-12 -->
     <title>Storefront Vacancy | TransparentSF</title>
     
     <!-- Favicon -->
@@ -680,9 +684,9 @@
             
             <!-- Summary Statistics Overlay -->
             <div class="summary-overlay" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px);">
-                <div id="summaryHeaderToggle" class="d-flex align-items-center justify-content-between px-2 py-1 border-bottom" style="cursor: pointer; transition: background-color 0.2s ease;" onclick="toggleSummary()" role="button" tabindex="0" aria-expanded="true" onmouseover="this.style.backgroundColor='var(--bg-tertiary, rgba(0,0,0,0.05))'" onmouseout="this.style.backgroundColor='transparent'">
+                <div id="summaryHeaderToggle" class="d-flex align-items-center justify-content-between px-2 py-1 border-bottom" style="cursor: pointer; transition: background-color 0.2s ease;" role="button" tabindex="0" aria-expanded="true" onmouseover="this.style.backgroundColor='var(--bg-tertiary, rgba(0,0,0,0.05))'" onmouseout="this.style.backgroundColor='transparent'">
                     <span class="small fw-bold">Overview</span>
-                    <i id="summaryChevron" class="fas fa-chevron-down small"></i>
+                    <i id="summaryChevron" class="fas fa-chevron-up small"></i>
                 </div>
                 <div id="summaryStatsBar" class="d-flex flex-column small px-3 py-2" style="gap: 6px; min-width: 220px; display: block; transition: all 0.3s ease-in-out; overflow: hidden;">
                     <div class="d-flex justify-content-between">
@@ -722,6 +726,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
+        // Vacancy Analysis JavaScript - Updated: Business name display fix
         // Global variables
         let vacancyMap = null;
         let currentData = null;
@@ -1204,17 +1209,24 @@
             const updatePointColors = () => {
                 try {
                     if (vacancyMap && vacancyMap.getLayer('points-circles')) {
-                        const colors = getThemeColors();
-                        console.log('Updating point colors with:', colors);
+                        console.log('Updating point colors based on occupancy rate');
+                        // Use occupancy-based gradient (same as initial layer)
                         vacancyMap.setPaintProperty('points-circles', 'circle-color', [
-                            'case',
-                            ['==', ['get', 'building_color'], 'red'],
-                            colors.closed,  // Red for majority closed buildings
-                            ['==', ['get', 'building_color'], 'green'],
-                            colors.open,    // Green for majority open buildings
-                            colors.mixed    // Gray for 50/50 mixed buildings
+                            'interpolate',
+                            ['linear'],
+                            // Calculate occupancy rate: open / total (0.0 to 1.0)
+                            [
+                                '/',
+                                ['get', 'streetfront_open_count'],
+                                ['max', ['get', 'total_streetfront_addresses'], 1]
+                            ],
+                            0.0, '#ff4444',   // 0% occupied: Red
+                            0.33, '#ff8844',  // 33% occupied: Orange-red
+                            0.5, '#ffcc44',   // 50% occupied: Yellow
+                            0.67, '#ccff44',  // 67% occupied: Yellow-green
+                            1.0, '#44ff44'    // 100% occupied: Green
                         ]);
-                        console.log('Successfully updated point colors for theme:', colors);
+                        console.log('Successfully updated point colors based on occupancy');
                     } else {
                         console.log('Cannot update point colors - map or layer not ready');
                     }
@@ -1666,28 +1678,28 @@
                         certificate_number: unitData.certificate_number,
                         
                         // Unit-specific properties (each unit is now a single point)
-                        total_addresses: displayTotalCount,  // Always 1 for individual units
+                        total_addresses: unitData.individual_addresses_count || displayTotalCount,
                         open_addresses: displayOpenCount,    // 1 if open, 0 if closed
                         closed_addresses: displayClosedCount, // 1 if closed, 0 if open
                         street_level_addresses: streetLevelTotal, // 1 if street level, 0 if upper
                         upper_floor_addresses: upperFloorTotal,   // 1 if upper floor, 0 if street
-                        total_businesses: 1,  // Each unit is one business
-                        addresses_data: [unitData],  // Individual unit as single-item array
+                        total_businesses: unitData.business_count || 1,
+                        addresses_data: unitData.addresses_data || [unitData],  // Use actual addresses_data from API
                         
-                        // Street-level specific counts
-                        street_level_open: streetLevelOpen,
-                        street_level_closed: streetLevelClosed,
-                        street_level_total: streetLevelTotal,
+                        // Street-level specific counts (use API building-level data if available)
+                        streetfront_open_count: unitData.streetfront_open_count || streetLevelOpen,
+                        streetfront_closed_count: unitData.streetfront_closed_count || streetLevelClosed,
+                        total_streetfront_addresses: unitData.total_streetfront_addresses || streetLevelTotal,
                         
-                        // Upper-floor specific counts
-                        upper_floor_open: upperFloorOpen,
-                        upper_floor_closed: upperFloorClosed,
-                        upper_floor_total: upperFloorTotal,
+                        // Upper-floor specific counts (use API building-level data if available)
+                        upper_floor_open_count: unitData.upper_floor_open_count || upperFloorOpen,
+                        upper_floor_closed_count: unitData.upper_floor_closed_count || upperFloorClosed,
+                        total_upper_floor_addresses: unitData.total_upper_floor_addresses || upperFloorTotal,
                         
                         // For map display compatibility - use building data directly
-                        business_count: unitData.total_units || unitData.business_count || 1,
-                        open_count: unitData.open_units || (isOpen ? 1 : 0),
-                        closed_count: unitData.closed_units || (isOpen ? 0 : 1),
+                        business_count: unitData.business_count || 1,
+                        open_count: unitData.streetfront_open_count || (isOpen ? 1 : 0),
+                        closed_count: unitData.streetfront_closed_count || (isOpen ? 0 : 1),
                         
                         // Building-level coloring  
                         building_color: unitData.building_color || (isOpen ? 'green' : 'red'),
@@ -1967,24 +1979,38 @@
                         'circle-radius': [
                             'interpolate',
                             ['linear'],
-                            ['get', 'business_count'],
-                            1, 4,     // Single business: 4px
-                            2, 7,     // 2 businesses: 7px
-                            5, 12,    // 5 businesses: 12px
-                            10, 18,   // 10 businesses: 18px
-                            20, 25,   // 20 businesses: 25px
-                            40, 35    // 40+ businesses: 35px
+                            // Scale by total_streetfront_addresses AND buildings_at_location
+                            [
+                                '*',
+                                ['get', 'total_streetfront_addresses'],
+                                ['coalesce', ['get', 'buildings_at_location'], 1]  // Multiply by buildings at location (default 1)
+                            ],
+                            1, 6,     // 1 storefront: 6px
+                            2, 9,     // 2 storefronts: 9px
+                            5, 14,    // 5 storefronts: 14px
+                            10, 20,   // 10 storefronts: 20px
+                            20, 28,   // 20 storefronts: 28px
+                            40, 38    // 40+ storefronts: 38px
                         ],
                         'circle-color': [
-                            'case',
-                            ['==', ['get', 'building_color'], 'red'],
-                            '#ff6b6b',  // Red for majority closed buildings
-                            ['==', ['get', 'building_color'], 'green'], 
-                            '#51cf66',  // Green for majority open buildings
-                            '#868e96'   // Gray for 50/50 mixed buildings
+                            'interpolate',
+                            ['linear'],
+                            // Calculate occupancy rate: open / total (0.0 to 1.0)
+                            [
+                                '/',
+                                ['get', 'streetfront_open_count'],
+                                ['max', ['get', 'total_streetfront_addresses'], 1]  // Avoid division by zero
+                            ],
+                            0.0, '#ff4444',   // 0% occupied: Red
+                            0.33, '#ff8844',  // 33% occupied: Orange-red
+                            0.5, '#ffcc44',   // 50% occupied: Yellow
+                            0.67, '#ccff44',  // 67% occupied: Yellow-green
+                            1.0, '#44ff44'    // 100% occupied: Green
                         ],
-                        'circle-stroke-width': 0,  // Remove stroke/outline
-                        'circle-opacity': 0.8
+                        'circle-stroke-width': 1,
+                        'circle-stroke-color': '#ffffff',
+                        'circle-stroke-opacity': 0.6,
+                        'circle-opacity': 0.85
                     }
                 });
                 
@@ -2247,6 +2273,16 @@
                                 <h5 class="fw-bold mb-2" style="color: #ad35fa;"><i class="fas fa-building"></i> ${buildingAddress}</h5>
                         `;
                         
+                        // Add notice if multiple buildings are combined at this location
+                        const buildingsAtLocation = properties.buildings_at_location || 1;
+                        if (buildingsAtLocation > 1) {
+                            content += `
+                                <div class="alert alert-info p-2 mb-2" style="font-size: 0.85rem;">
+                                    <i class="fas fa-layer-group"></i> <strong>${buildingsAtLocation} buildings</strong> share this location (same coordinates in DataSF)
+                                </div>
+                            `;
+                        }
+                        
         // Calculate storefront-specific statistics from addresses data
         let openStorefronts = 0;
         let closedStorefronts = 0;
@@ -2393,7 +2429,7 @@
                             // (No divider here; will render upper section after)
                             
                             // Get the most recent business and filing date
-                            let lastBusinessName = 'No Business';
+                            let lastBusinessName = addressData.dba_name || 'No Business';
                             let lastFilingDate = 'N/A';
                             
                             if (addressData.businesses && Array.isArray(addressData.businesses) && addressData.businesses.length > 0) {
@@ -2429,7 +2465,8 @@
                                 });
                                 
                                 const mostRecentBusiness = sortedBusinesses[0];
-                                lastBusinessName = mostRecentBusiness.dba_name || 'Unknown Business';
+                                // Use the business name from the most recent business, but fall back to addressData.dba_name
+                                lastBusinessName = mostRecentBusiness.dba_name || addressData.dba_name || 'Unknown Business';
                                 
                                 // Get the most recent filing date - prioritize end dates for closed businesses
                                 const parseDate = (dateStr) => {
@@ -2450,7 +2487,7 @@
                                     relevantDates = [
                                         parseDate(mostRecentBusiness.dba_end_date),
                                         parseDate(mostRecentBusiness.location_end_date),
-                                        parseDate(addressData.most_recent_close_date)
+                                        parseDate(addressData.close_date)
                                     ].filter(d => d);
                                 } else {
                                     // For open businesses, show the most recent activity (start or end dates)
@@ -2459,7 +2496,7 @@
                                         parseDate(mostRecentBusiness.location_start_date),
                                         parseDate(mostRecentBusiness.dba_end_date),
                                         parseDate(mostRecentBusiness.location_end_date),
-                                        parseDate(addressData.most_recent_open_date)
+                                        parseDate(addressData.open_date)
                                     ].filter(d => d);
                                 }
                                 
@@ -2567,6 +2604,7 @@
                                                     <span class="fw-bold">${business.dba_name || 'Unknown Business'}</span>
                                                     <span class="${businessStatusClass}">${businessStatusIcon} ${statusDisplay}</span>
                                                 </div>
+                                                ${business.ownership_name ? `<div class="text-muted" style="font-size: 0.75rem;"><i class="fas fa-user"></i> ${business.ownership_name}</div>` : ''}
                                                 ${categoryInfo ? `<div class="text-muted" style="font-size: 0.7rem;">${categoryInfo}</div>` : ''}
                                             </div>
                                         `;
@@ -2598,7 +2636,7 @@
                             const statusIcon = isOpen ? '●' : '●';
                             const addressIndex = idx; // for template continuity
 
-                            let lastBusinessName = 'No Business';
+                            let lastBusinessName = addressData.dba_name || 'No Business';
                             let lastFilingDate = 'N/A';
                             if (addressData.businesses && Array.isArray(addressData.businesses) && addressData.businesses.length > 0) {
                                 const sortedBusinesses = [...addressData.businesses].sort((a, b) => {
@@ -2613,7 +2651,7 @@
                                     return bLatest - aLatest;
                                 });
                                 const mostRecentBusiness = sortedBusinesses[0];
-                                lastBusinessName = mostRecentBusiness.dba_name || 'Unknown Business';
+                                lastBusinessName = mostRecentBusiness.dba_name || addressData.dba_name || 'Unknown Business';
                                 const parseDate = (dateStr) => { if (!dateStr) return null; try { return new Date(dateStr.split('T')[0]); } catch { return null; } };
                                 let relevantDates = [];
                                 if (addressData.status === 'Closed') {
@@ -2833,21 +2871,35 @@
         
         // Summary toggle
         function toggleSummary() {
+            console.log('toggleSummary called');
             const bar = document.getElementById('summaryStatsBar');
             const chev = document.getElementById('summaryChevron');
             const header = document.getElementById('summaryHeaderToggle');
-            if (!bar || !chev || !header) return;
+            
+            if (!bar || !chev || !header) {
+                console.error('Missing elements:', { bar, chev, header });
+                return;
+            }
             
             const isExpanded = header.getAttribute('aria-expanded') === 'true';
+            console.log('Current state - isExpanded:', isExpanded);
             
             if (isExpanded) {
-                // Collapse
-                bar.style.maxHeight = bar.scrollHeight + 'px';
+                // Collapse - chevron should point DOWN when collapsed
+                console.log('Collapsing overview');
+                const currentHeight = bar.scrollHeight;
+                bar.style.maxHeight = currentHeight + 'px';
+                bar.style.overflow = 'hidden';
+                
                 // Force reflow
-                bar.offsetHeight;
-                bar.style.maxHeight = '0px';
-                bar.style.padding = '0 12px';
-                chev.style.transform = 'rotate(0deg)';
+                requestAnimationFrame(() => {
+                    bar.style.maxHeight = '0px';
+                    bar.style.paddingTop = '0';
+                    bar.style.paddingBottom = '0';
+                });
+                
+                chev.classList.remove('fa-chevron-up');
+                chev.classList.add('fa-chevron-down');
                 header.setAttribute('aria-expanded', 'false');
                 
                 // After animation, hide the element
@@ -2855,20 +2907,30 @@
                     bar.style.display = 'none';
                 }, 300);
             } else {
-                // Expand
-                bar.style.display = 'block';
+                // Expand - chevron should point UP when expanded
+                console.log('Expanding overview');
+                bar.style.display = 'flex';
                 bar.style.maxHeight = '0px';
-                bar.style.padding = '0 12px';
+                bar.style.paddingTop = '0';
+                bar.style.paddingBottom = '0';
+                bar.style.overflow = 'hidden';
+                
                 // Force reflow
-                bar.offsetHeight;
-                bar.style.maxHeight = bar.scrollHeight + 'px';
-                bar.style.padding = '12px';
-                chev.style.transform = 'rotate(180deg)';
+                requestAnimationFrame(() => {
+                    const targetHeight = bar.scrollHeight;
+                    bar.style.maxHeight = targetHeight + 'px';
+                    bar.style.paddingTop = '8px';
+                    bar.style.paddingBottom = '8px';
+                });
+                
+                chev.classList.remove('fa-chevron-down');
+                chev.classList.add('fa-chevron-up');
                 header.setAttribute('aria-expanded', 'true');
                 
                 // After animation, remove maxHeight to allow natural height
                 setTimeout(() => {
                     bar.style.maxHeight = 'none';
+                    bar.style.overflow = 'visible';
                 }, 300);
             }
         }
@@ -2877,6 +2939,8 @@
             document.addEventListener('click', (e) => {
                 const hdr = e.target.closest('#summaryHeaderToggle');
                 if (hdr) {
+                    e.preventDefault();
+                    e.stopPropagation();
                     toggleSummary();
                 }
             });
@@ -2886,6 +2950,7 @@
                 const hdr = e.target.closest('#summaryHeaderToggle');
                 if (hdr && (e.key === 'Enter' || e.key === ' ')) {
                     e.preventDefault();
+                    e.stopPropagation();
                     toggleSummary();
                 }
             });

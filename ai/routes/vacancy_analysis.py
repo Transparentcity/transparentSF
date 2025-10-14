@@ -18,6 +18,62 @@ from background_jobs import job_manager
 # Configure logging
 logger = logging.getLogger(__name__)
 
+def extract_building_address(full_address):
+    """Extract building address without unit letters/numbers"""
+    if not full_address:
+        return None
+
+    import re
+
+    # Convert to uppercase for consistent processing
+    address = full_address.upper()
+
+    # Remove common unit patterns more comprehensively
+    # Apply patterns in order of specificity (most specific first)
+
+    # Pattern 1: Handle unit letters that appear after street number (like "2139 A POLK ST")
+    # This handles cases where unit letter(s) are between number and street name
+    # Remove one or more consecutive unit letters: "2139 A B C POLK ST" → "2139 POLK ST"
+    address = re.sub(r'(\d+)\s+([A-Z](?:\s+[A-Z])*\s+)([A-Z]+)', r'\1 \3', address)
+    
+    # Pattern 1a: Handle single unit letter after street number (like "2139 B POLK ST")
+    # This is a more specific pattern for single letters
+    address = re.sub(r'(\d+)\s+([A-Z])\s+([A-Z]+)', r'\1 \3', address)
+
+    # Pattern 1b: Handle # unit letters in the middle (like "2139 POLK ST #C")
+    address = re.sub(r'(\d+\s+[A-Z\s]+)\s+#[A-Z]\s*$', r'\1', address)
+    # Pattern 1c: Handle # unit numbers in the middle/end with optional space (like "123 MAIN ST # 301")
+    address = re.sub(r'(\d+\s+[A-Z\s]+)\s+#\s*\d+\s*$', r'\1', address)
+
+    # Pattern 2: Handle complex unit combinations at the end (multiple letters, separators)
+    # Handle patterns like: A B C, A, B, C, A & B, A B AND C, etc.
+    # This needs to handle multiple consecutive unit letters at the end
+    address = re.sub(r'\s+[A-Z](?:\s+[A-Z])*\s*$', '', address)  # A B C, A B, A patterns at end
+
+    # Pattern 3: Remove numbered units with letters at the end (1A, 2B, etc.)
+    address = re.sub(r'\s+\d+[A-Z]?\s*$', '', address)
+
+    # Pattern 4: Remove simple unit letters at the end (A, B, C, etc.)
+    address = re.sub(r'\s+[A-Z]\s*$', '', address)
+
+    # Pattern 5: Remove numbered units (#1, # 2, etc.) and unit letters with # (#A, #B, #C)
+    address = re.sub(r'\s+#\s*\d+\s*$', '', address)
+    address = re.sub(r'\s+#[A-Z]\s*$', '', address)  # Remove #A, #B, #C at end
+
+    # Pattern 6: Remove apartment/suite/unit indicators with numbers/letters
+    address = re.sub(r'\s+(?:APT|APARTMENT|UNIT|STE|SUITE|RM|ROOM|FL|FLOOR)\s*[A-Z0-9]+\s*$', '', address, flags=re.IGNORECASE)
+
+    # Pattern 6: Clean up any remaining artifacts and normalize whitespace
+    address = re.sub(r'\s+', ' ', address)  # Normalize whitespace
+    address = re.sub(r'\s*[,;]+\s*$', '', address)  # Remove trailing commas/semicolons
+    address = re.sub(r'\s*&\s*$', '', address)  # Remove trailing &
+    address = re.sub(r'\s+AND\s*$', '', address)  # Remove trailing AND
+
+    # Pattern 7: Handle repeated unit letters (like "2139 B POLK ST B")
+    address = re.sub(r'\b([A-Z])\s+([A-Z\s]+)\s+\1\b', r'\1 \2', address)  # Remove duplicate unit letters
+
+    return address.strip()
+
 # Create router
 router = APIRouter()
 
@@ -261,6 +317,10 @@ async def get_vacancy_data(
             # This handles cases where unit letter(s) are between number and street name
             # Remove one or more consecutive unit letters: "2139 A B C POLK ST" → "2139 POLK ST"
             address = re.sub(r'(\d+)\s+([A-Z](?:\s+[A-Z])*\s+)([A-Z]+)', r'\1 \3', address)
+            
+            # Pattern 1a: Handle single unit letter after street number (like "2139 B POLK ST")
+            # This is a more specific pattern for single letters
+            address = re.sub(r'(\d+)\s+([A-Z])\s+([A-Z]+)', r'\1 \3', address)
 
             # Pattern 1b: Handle # unit letters in the middle (like "2139 POLK ST #C")
             address = re.sub(r'(\d+\s+[A-Z\s]+)\s+#[A-Z]\s*$', r'\1', address)
@@ -408,12 +468,14 @@ async def get_vacancy_data(
             for individual_address, address_businesses in individual_address_groups.items():
                 total_business_count += len(address_businesses)
 
-                # Sort by start date to get the most recent business
-                sorted_businesses = sorted(address_businesses,
-                                         key=lambda b: parse_date(b.get('dba_start_date')) or parse_date(b.get('location_start_date')) or datetime.min,
-                                         reverse=True)
-
-                most_recent_business = sorted_businesses[0] if sorted_businesses else None
+                # Get the MOST RECENT business at this address
+                # Use MAXIMUM of dba_start_date and location_start_date
+                most_recent_business = max(address_businesses,
+                    key=lambda b: max(
+                        parse_date(b.get('dba_start_date')) or datetime.min,
+                        parse_date(b.get('location_start_date')) or datetime.min
+                    ))
+                
                 if not most_recent_business:
                     continue
 
@@ -642,13 +704,13 @@ async def get_cached_vacancy_data(
         
         logger.info(f"Getting cached vacancy data with search: {business_search}")
         
-        # Check if cache tables exist first
+        # Check if NEW simple cache tables exist
         def check_cache_exists(conn):
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables 
-                    WHERE table_name = 'business_cache'
+                    WHERE table_name = 'business_registrations_cache'
                 );
             """)
             exists = cursor.fetchone()[0]
@@ -659,7 +721,7 @@ async def get_cached_vacancy_data(
         cache_exists = cache_result.get('result', False) if cache_result.get('status') == 'success' else False
         
         if not cache_exists:
-            logger.warning("Business cache tables don't exist. Falling back to API endpoint.")
+            logger.warning("Simple cache tables don't exist. Falling back to API endpoint.")
             # Fall back to the original API endpoint
             result = await get_vacancy_data(
                 industry_type=industry_type,
@@ -672,98 +734,89 @@ async def get_cached_vacancy_data(
             # Add a note about cache setup
             if hasattr(result, 'body') and result.body:
                 data = json.loads(result.body)
-                data['cache_note'] = "Using API data. Run 'python setup_business_cache.py --populate' to enable fast cached searches."
+                data['cache_note'] = "Using API data. Refresh cache to enable fast cached searches."
                 return JSONResponse(data)
             return result
         
-        # Build SQL query for cached data
-        base_query = f"""
+        # Build SQL query for simple raw cache - single table query (no joins needed)
+        # The has_commercial_tax_filing flag is pre-computed during cache refresh
+        base_query = """
         SELECT 
-            id, certificate_number, dba_name, naic_code_description, lic_code_description,
-            business_corridor, supervisor_district, full_business_address, distinct_address,
-            building_address, location_lat, location_lon, status, is_street_level,
-            business_count, streetfront_open_count, streetfront_closed_count,
-            total_streetfront_addresses, upper_floor_open_count, upper_floor_closed_count,
-            total_upper_floor_addresses, individual_addresses_count, addresses_data,
-            has_commercial_tax_filing, tax_filing_addresses, vacancy_status, tax_filing_year,
-            tax_filing_ban, tax_filing_entity
-        FROM business_cache
+            b.id, b.certificate_number, b.dba_name, b.ownership_name, b.full_business_address,
+            b.normalized_address, b.is_street_level, b.has_commercial_tax_filing,
+            b.dba_start_date, b.dba_end_date, b.location_start_date, b.location_end_date,
+            b.administratively_closed, b.naic_code_description, b.lic_code_description,
+            b.business_corridor, b.supervisor_district, b.location_lat, b.location_lon
+        FROM business_registrations_cache b
         WHERE 1=1
         """
         
         params = []
-        param_count = 0
         
-        # Add business search filter
+        # Add business search filter - search business name, ownership name, and address
         if business_search and business_search.strip():
-            param_count += 1
-            base_query += f" AND dba_name ILIKE %s"
-            params.append(f"%{business_search.strip()}%")
+            base_query += " AND (b.dba_name ILIKE %s OR b.ownership_name ILIKE %s OR b.full_business_address ILIKE %s)"
+            search_term = f"%{business_search.strip()}%"
+            params.append(search_term)
+            params.append(search_term)
+            params.append(search_term)
         
         # Add industry type filter
-        if industry_type and industry_type:
+        if industry_type:
             if isinstance(industry_type, list):
-                industry_conditions = " OR ".join([f"naic_code_description ILIKE %s" for _ in industry_type])
+                industry_conditions = " OR ".join([f"b.naic_code_description ILIKE %s" for _ in industry_type])
                 base_query += f" AND ({industry_conditions})"
                 for item in industry_type:
                     params.append(f"%{item}%")
             else:
-                param_count += 1
-                base_query += f" AND naic_code_description ILIKE %s"
+                base_query += " AND b.naic_code_description ILIKE %s"
                 params.append(f"%{industry_type}%")
         
         # Add license type filter
-        if license_type and license_type:
+        if license_type:
             if isinstance(license_type, list):
-                license_conditions = " OR ".join([f"lic_code_description ILIKE %s" for _ in license_type])
+                license_conditions = " OR ".join([f"b.lic_code_description ILIKE %s" for _ in license_type])
                 base_query += f" AND ({license_conditions})"
                 for item in license_type:
                     params.append(f"%{item}%")
             else:
-                param_count += 1
-                base_query += f" AND lic_code_description ILIKE %s"
+                base_query += " AND b.lic_code_description ILIKE %s"
                 params.append(f"%{license_type}%")
         
         # Add business corridor filter
-        if business_corridor and business_corridor:
+        if business_corridor:
             if isinstance(business_corridor, list):
-                corridor_conditions = " OR ".join([f"business_corridor ILIKE %s" for _ in business_corridor])
+                corridor_conditions = " OR ".join([f"b.business_corridor ILIKE %s" for _ in business_corridor])
                 base_query += f" AND ({corridor_conditions})"
                 for item in business_corridor:
                     params.append(f"%{item}%")
             else:
-                param_count += 1
-                base_query += f" AND business_corridor ILIKE %s"
+                base_query += " AND b.business_corridor ILIKE %s"
                 params.append(f"%{business_corridor}%")
         
         # Add corridor only filter
         if corridor_only:
-            base_query += f" AND business_corridor IS NOT NULL AND business_corridor != ''"
+            base_query += " AND b.business_corridor IS NOT NULL AND b.business_corridor != ''"
         
         # Add district filter
-        if district and district:
+        if district:
             if isinstance(district, list):
-                district_conditions = " OR ".join([f"supervisor_district = %s" for _ in district])
+                district_conditions = " OR ".join([f"b.supervisor_district = %s" for _ in district])
                 base_query += f" AND ({district_conditions})"
                 for item in district:
                     params.append(str(item))
             else:
-                param_count += 1
-                base_query += f" AND supervisor_district = %s"
+                base_query += " AND b.supervisor_district = %s"
                 params.append(str(district))
         
-        # Add status filter
-        if status and status.strip():
-            param_count += 1
-            base_query += f" AND status = %s"
-            params.append(status.strip())
+        # Status filter will be applied in Python after determining status from dates
         
-        # Add commercial tax filing filter
+        # Add commercial tax filing filter (uses pre-computed flag)
         if commercial_tax_filing_only:
-            base_query += f" AND has_commercial_tax_filing = TRUE"
+            base_query += " AND b.has_commercial_tax_filing = true"
         
-        # Add ordering and limit
-        base_query += " ORDER BY dba_name"
+        # Add ordering: Sort by dba_name for consistent results
+        base_query += " ORDER BY b.dba_name"
         base_query += f" LIMIT {min(limit, 250000)}"
         
         logger.info(f"Executing cached query: {base_query}")
@@ -778,119 +831,388 @@ async def get_cached_vacancy_data(
             return [dict(zip(columns, row)) for row in rows]
         
         cached_result = execute_with_connection(get_cached_data)
-        cached_data = cached_result.get('result', []) if cached_result.get('status') == 'success' else []
+        raw_business_data = cached_result.get('result', []) if cached_result.get('status') == 'success' else []
         
-        logger.info(f"Raw cached data count: {len(cached_data)}")
-        if cached_data:
-            logger.info(f"First record keys: {list(cached_data[0].keys())}")
-            logger.info(f"First record dba_name: {cached_data[0].get('dba_name')}")
-            logger.info(f"First record addresses_data type: {type(cached_data[0].get('addresses_data'))}")
+        logger.info(f"Raw business data count: {len(raw_business_data)}")
+        if raw_business_data and len(raw_business_data) > 0:
+            logger.info(f"Sample record keys: {list(raw_business_data[0].keys())}")
+            logger.info(f"Sample has_commercial_tax_filing: {raw_business_data[0].get('has_commercial_tax_filing')}")
         
-        # Convert to the format expected by the frontend
-        processed_data = []
-        for record in cached_data:
-            # Parse addresses_data - it might be a list or JSON string
-            addresses_data = []
-            if record.get('addresses_data'):
-                if isinstance(record['addresses_data'], list):
-                    # Already a list
-                    addresses_data = record['addresses_data']
-                else:
-                    # Try to parse as JSON string
-                    try:
-                        addresses_data = json.loads(record['addresses_data'])
-                    except (json.JSONDecodeError, TypeError):
-                        addresses_data = []
+        # Process raw data in Python - determine status, group by normalized address, etc.
+        from datetime import datetime
+        from collections import defaultdict
+        from decimal import Decimal
+        
+        # Helper function to determine business status from dates
+        def determine_status(record):
+            """Determine if a business is Open or Closed based on dates"""
+            dba_start = record.get('dba_start_date')
+            dba_end = record.get('dba_end_date')
+            location_start = record.get('location_start_date')
+            location_end = record.get('location_end_date')
+            admin_closed = record.get('administratively_closed', False)
             
-            # Extract coordinates from addresses_data or use location_lat/lon as fallback
+            # Closed if administratively closed
+            if admin_closed:
+                return 'Closed'
+            
+            # Closed if opened and closed on the same day (likely data error or never actually opened)
+            if dba_start and dba_end:
+                # Compare dates only (ignore time)
+                dba_start_date = dba_start.date() if hasattr(dba_start, 'date') else dba_start
+                dba_end_date = dba_end.date() if hasattr(dba_end, 'date') else dba_end
+                if dba_start_date == dba_end_date:
+                    return 'Closed'
+            
+            if location_start and location_end:
+                location_start_date = location_start.date() if hasattr(location_start, 'date') else location_start
+                location_end_date = location_end.date() if hasattr(location_end, 'date') else location_end
+                if location_start_date == location_end_date:
+                    return 'Closed'
+            
+            # Closed if has end date
+            if dba_end or location_end:
+                return 'Closed'
+            
+            # Otherwise open
+            return 'Open'
+        
+        # Helper function to check if address is street level
+        def is_street_level(address):
+            """Check if address is street-level (not upper floor)"""
+            if not address:
+                return True
+            import re
+            # Look for indicators of upper floor units
+            upper_floor_patterns = [
+                r'#\s*\d+',  # #123
+                r'(?:APT|APARTMENT|UNIT|STE|SUITE|RM|ROOM|FL|FLOOR)\s*[A-Z0-9]+',  # APT 2, SUITE 100
+                r'\d{2,}[A-Z]?\s*$',  # 123, 123A at end
+            ]
+            address_upper = address.upper()
+            for pattern in upper_floor_patterns:
+                if re.search(pattern, address_upper):
+                    return False
+            return True
+        
+        def canonicalize_unit_address(full_address):
+            """
+            Canonicalize unit addresses to handle variations like:
+            - '2139 Polk St A' and '2139 A Polk St' -> '2139 POLK ST A'
+            - '2139 Polk St #C' -> '2139 POLK ST C'
+            - '2139 B Polk St B' -> '2139 POLK ST B' (take last unit letter)
+            """
+            import re
+            if not full_address:
+                return ''
+            
+            addr = full_address.strip().upper()
+            
+            # Pattern to match: [number] [optional unit] [street name] [optional unit]
+            # Examples: "2139 A POLK ST", "2139 POLK ST A", "2139 POLK ST #C"
+            
+            # Extract street number at the start
+            match = re.match(r'^(\d+(?:-\d+)?)', addr)
+            if not match:
+                return addr  # Can't parse, return as-is
+            
+            street_number = match.group(1)
+            rest = addr[len(street_number):].strip()
+            
+            # Try to extract unit identifier (single letter/number or #X format)
+            # Look for patterns like: "A ", "#C", "B ", at beginning or end
+            unit_letters = []
+            
+            # Pattern 1: Unit letter at beginning (before street name)
+            # "A POLK ST" or "#C POLK ST"
+            unit_match = re.match(r'^([A-Z]|#[A-Z0-9]+)\s+(.+)$', rest)
+            if unit_match:
+                unit = unit_match.group(1).replace('#', '').strip()
+                rest = unit_match.group(2)
+                unit_letters.append(unit)
+            
+            # Pattern 2: Unit letter at end (after street name)
+            # "POLK ST A" or "POLK ST #C" or "POLK ST B"
+            unit_match = re.search(r'\s+([A-Z]|#[A-Z0-9]+)$', rest)
+            if unit_match:
+                unit = unit_match.group(1).replace('#', '').strip()
+                rest = rest[:unit_match.start()]
+                unit_letters.append(unit)
+            
+            # Clean up street name
+            street_name = rest.strip()
+            
+            # Normalize street name
+            street_name = re.sub(r'\s+', ' ', street_name)
+            
+            # Canonical format: "NUMBER STREET NAME UNIT"
+            # If we found multiple unit letters (like "2139 B POLK ST B"), take the last one
+            if unit_letters:
+                # Take the last unit letter (most likely correct)
+                canonical = f"{street_number} {street_name} {unit_letters[-1]}"
+            else:
+                canonical = f"{street_number} {street_name}"
+            
+            return canonical.strip()
+        
+        # Group by normalized building address (use pre-computed DB column)
+        building_groups = defaultdict(list)
+        for record in raw_business_data:
+            # Use pre-computed normalized_address from database (more reliable)
+            normalized_address = record.get('normalized_address', '')
+            if normalized_address:
+                building_groups[normalized_address].append(record)
+        
+        logger.info(f"Grouped into {len(building_groups)} buildings")
+        
+        # Process each building group
+        processed_data = []
+        for normalized_address, business_records in building_groups.items():
+            # FIRST: Group businesses by their individual distinct addresses within this building
+            # This is critical - multiple businesses can be at the same unit address over time
+            individual_address_groups = defaultdict(list)
+            for record in business_records:
+                raw_address = record.get('full_business_address', '')
+                # Canonicalize address to handle variations like "2139 A Polk St" vs "2139 Polk St A"
+                canonical_address = canonicalize_unit_address(raw_address)
+                individual_address_groups[canonical_address].append(record)
+            
+            # NOW process each distinct address
+            addresses_data_formatted = []
+            street_level_open = 0
+            street_level_closed = 0
+            upper_floor_open = 0
+            upper_floor_closed = 0
+            
+            # Get coordinates from first record with coordinates
             coordinates = [None, None]
             
-            # First try to get coordinates from addresses_data
-            if addresses_data and len(addresses_data) > 0:
-                first_address = addresses_data[0]
-                if 'location' in first_address and 'coordinates' in first_address['location']:
-                    coords = first_address['location']['coordinates']
-                    if len(coords) >= 2:
-                        coordinates = [coords[0], coords[1]]  # [lon, lat]
-            
-            # If no coordinates found in addresses_data, fall back to location_lat/lon
-            if coordinates == [None, None] and record['location_lon'] is not None and record['location_lat'] is not None:
-                # Fallback to location_lat/lon fields - now stored as FLOAT
-                # Convert Decimal to float if needed
-                from decimal import Decimal
-                lat = float(record['location_lat']) if isinstance(record['location_lat'], Decimal) else record['location_lat']
-                lon = float(record['location_lon']) if isinstance(record['location_lon'], Decimal) else record['location_lon']
-                coordinates = [lon, lat]
-            
-            # Convert numeric fields for JSON serialization (now mostly FLOAT types)
-            def convert_numeric(value):
-                if value is None:
-                    return None
-                from decimal import Decimal
-                if isinstance(value, Decimal):
-                    return float(value)
-                return value
-            
-            # Normalize status field to proper case
-            status = record['status']
-            if status:
-                status = status.lower()
-                if status == 'open':
-                    status = 'Open'
-                elif status == 'closed':
-                    status = 'Closed'
+            for distinct_address, address_businesses in individual_address_groups.items():
+                # Get the MOST RECENT business at this address
+                # Use MAXIMUM of dba_start_date and location_start_date (same as building-level logic)
+                most_recent_business = max(address_businesses,
+                    key=lambda r: max(
+                        r.get('dba_start_date') or datetime.min,
+                        r.get('location_start_date') or datetime.min
+                    ))
+                
+                if not most_recent_business:
+                    continue
+                
+                # Determine status for this ADDRESS (based on most recent business)
+                unit_status = determine_status(most_recent_business)
+                
+                # Check if this ADDRESS is street level (use database column from cache)
+                street_level = most_recent_business.get('is_street_level', True)
+                
+                # Count THIS ADDRESS (not each business)
+                if street_level:
+                    if unit_status == 'Open':
+                        street_level_open += 1
+                    else:
+                        street_level_closed += 1
                 else:
-                    status = 'Unknown'
-            else:
-                status = 'Unknown'
-            
-            # Process addresses_data to match the expected format from non-cached version
-            processed_addresses_data = []
-            for addr in addresses_data:
-                processed_addr = {
-                    'address': addr.get('full_business_address', ''),
-                    'distinct_address': addr.get('full_business_address', ''),
-                    'status': status,  # Use building-level status
-                    'is_street_level': addr.get('is_street_level', True),
-                    'business_count': 1,
-                    'dba_name': addr.get('dba_name', 'Unknown Business'),
-                    'open_date': addr.get('dba_start_date'),
-                    'close_date': addr.get('dba_end_date'),
-                    'businesses': [addr]
+                    if unit_status == 'Open':
+                        upper_floor_open += 1
+                    else:
+                        upper_floor_closed += 1
+                
+                # Get coordinates if we don't have them yet
+                if coordinates == [None, None]:
+                    lat = most_recent_business.get('location_lat')
+                    lon = most_recent_business.get('location_lon')
+                    if lat is not None and lon is not None:
+                        # Convert Decimal to float if needed
+                        lat = float(lat) if isinstance(lat, Decimal) else lat
+                        lon = float(lon) if isinstance(lon, Decimal) else lon
+                        coordinates = [lon, lat]
+                
+                # Convert businesses to JSON-serializable format
+                businesses_serializable = []
+                for biz in address_businesses:
+                    biz_data = {
+                        'dba_name': biz.get('dba_name', 'Unknown Business'),
+                        'certificate_number': biz.get('certificate_number'),
+                        'dba_start_date': biz.get('dba_start_date').isoformat() if biz.get('dba_start_date') else None,
+                        'dba_end_date': biz.get('dba_end_date').isoformat() if biz.get('dba_end_date') else None,
+                        'location_start_date': biz.get('location_start_date').isoformat() if biz.get('location_start_date') else None,
+                        'location_end_date': biz.get('location_end_date').isoformat() if biz.get('location_end_date') else None,
+                        'naic_code_description': biz.get('naic_code_description'),
+                        'lic_code_description': biz.get('lic_code_description'),
+                        'status': determine_status(biz),
+                        'ban_match': None,  # No longer joined to tax table
+                        'address_match': None,  # No longer joined to tax table
+                        'tax_filing_year': None,
+                        'tax_filing_entity': None,
+                        'vacancy_status': None
+                    }
+                    businesses_serializable.append(biz_data)
+                
+                # Format this address for frontend
+                formatted_unit = {
+                    'address': distinct_address,
+                    'distinct_address': distinct_address,
+                    'status': unit_status,
+                    'unit_status': unit_status,  # Backwards compatibility
+                    'street_level': street_level,  # Frontend expects 'street_level' not 'is_street_level'
+                    'is_street_level': street_level,  # Keep both for compatibility
+                    'business_count': len(address_businesses),  # Historical count
+                    'dba_name': most_recent_business.get('dba_name', 'Unknown Business'),
+                    'open_date': most_recent_business.get('dba_start_date').isoformat() if most_recent_business.get('dba_start_date') else None,
+                    'close_date': most_recent_business.get('dba_end_date').isoformat() if most_recent_business.get('dba_end_date') else None,
+                    'businesses': businesses_serializable  # All businesses at this address (JSON-safe)
                 }
-                processed_addresses_data.append(processed_addr)
+                addresses_data_formatted.append(formatted_unit)
             
-            processed_record = {
+            # Determine overall building status (most recent business across all addresses)
+            all_businesses_flat = []
+            for businesses in individual_address_groups.values():
+                all_businesses_flat.extend(businesses)
+            
+            # Use the MAXIMUM of dba_start_date and location_start_date to find most recent business
+            # This ensures we pick the business that most recently opened at THIS location
+            most_recent = max(all_businesses_flat, 
+                            key=lambda r: max(
+                                r.get('dba_start_date') or datetime.min,
+                                r.get('location_start_date') or datetime.min
+                            ))
+            building_status = determine_status(most_recent)
+            
+            # Get representative data from first record
+            first_record = business_records[0]
+            
+            # Check if building has tax filing (uses pre-computed flag)
+            has_tax_filing = first_record.get('has_commercial_tax_filing', False)
+            
+            # Apply status filter if specified
+            if status and building_status != status:
+                continue
+            
+            # Create building record
+            building_record = {
                 'location': {
                     'type': 'Point',
                     'coordinates': coordinates
                 },
-                'dba_name': record['dba_name'] or 'Unknown Business',
-                'naic_code_description': record['naic_code_description'],
-                'lic_code_description': record['lic_code_description'],
-                'business_corridor': record['business_corridor'],
-                'supervisor_district': record['supervisor_district'],
-                'status': status,
-                'full_business_address': record['full_business_address'] or 'Unknown Address',
-                'distinct_address': record['distinct_address'] or record['full_business_address'] or 'Unknown Address',
-                'building_address': record['building_address'] or record['full_business_address'] or 'Unknown Address',
-                'business_count': convert_numeric(record['business_count']),
-                'streetfront_open_count': convert_numeric(record['streetfront_open_count']),
-                'streetfront_closed_count': convert_numeric(record['streetfront_closed_count']),
-                'total_streetfront_addresses': convert_numeric(record['total_streetfront_addresses']),
-                'upper_floor_open_count': convert_numeric(record['upper_floor_open_count']),
-                'upper_floor_closed_count': convert_numeric(record['upper_floor_closed_count']),
-                'total_upper_floor_addresses': convert_numeric(record['total_upper_floor_addresses']),
-                'addresses_data': processed_addresses_data,
-                'individual_addresses_count': convert_numeric(record['individual_addresses_count']),
-                'has_commercial_tax_filing': record.get('has_commercial_tax_filing', False),
-                'tax_filing_addresses': record.get('tax_filing_addresses', []),
-                'vacancy_status': record.get('vacancy_status', 'unfiled'),
-                'tax_filing_year': convert_numeric(record.get('tax_filing_year', 0)),
-                'tax_filing_ban': record.get('tax_filing_ban', ''),
-                'tax_filing_entity': record.get('tax_filing_entity', '')
+                'dba_name': most_recent.get('dba_name', 'Unknown Business'),
+                'naic_code_description': first_record['naic_code_description'],
+                'lic_code_description': first_record['lic_code_description'],
+                'business_corridor': first_record['business_corridor'],
+                'supervisor_district': first_record['supervisor_district'],
+                'status': building_status,
+                'full_business_address': normalized_address,
+                'distinct_address': normalized_address,
+                'building_address': normalized_address,
+                'business_count': len(all_businesses_flat),  # Total businesses across all addresses
+                'streetfront_open_count': street_level_open,
+                'streetfront_closed_count': street_level_closed,
+                'total_streetfront_addresses': street_level_open + street_level_closed,
+                'upper_floor_open_count': upper_floor_open,
+                'upper_floor_closed_count': upper_floor_closed,
+                'total_upper_floor_addresses': upper_floor_open + upper_floor_closed,
+                'addresses_data': addresses_data_formatted,
+                'individual_addresses_count': len(individual_address_groups),  # Number of DISTINCT addresses
+                'has_commercial_tax_filing': has_tax_filing,
+                'tax_filing_addresses': [normalized_address] if has_tax_filing else [],
+                'vacancy_status': None,  # No longer available (would need separate tax table query)
+                'tax_filing_year': None,
+                'tax_filing_ban': None,
+                'tax_filing_entity': None
             }
-            processed_data.append(processed_record)
+            processed_data.append(building_record)
+        
+        # Group buildings by coordinates (combine buildings at same location)
+        logger.info(f"Grouping {len(processed_data)} buildings by coordinates...")
+        coordinate_groups = defaultdict(list)
+        buildings_without_coords = []
+        
+        for building in processed_data:
+            coords = building.get('location', {}).get('coordinates', [])
+            # Check that coordinates exist and are not None
+            if len(coords) == 2 and coords[0] is not None and coords[1] is not None:
+                # Round to 6 decimal places to group nearby buildings
+                coord_key = (round(coords[0], 6), round(coords[1], 6))
+                coordinate_groups[coord_key].append(building)
+            else:
+                # Buildings without valid coordinates are kept separately
+                buildings_without_coords.append(building)
+        
+        # Merge buildings at same location
+        merged_data = []
+        for coord_key, buildings in coordinate_groups.items():
+            if len(buildings) == 1:
+                # Single building at this location - keep as is
+                merged_data.append(buildings[0])
+            else:
+                # Multiple buildings at same location - merge them
+                logger.info(f"Merging {len(buildings)} buildings at {coord_key}")
+                
+                # Combine all addresses_data from all buildings
+                all_addresses_data = []
+                all_business_names = []
+                total_business_count = 0
+                total_streetfront_open = 0
+                total_streetfront_closed = 0
+                total_streetfront = 0
+                total_upper_open = 0
+                total_upper_closed = 0
+                total_upper = 0
+                
+                for bldg in buildings:
+                    all_addresses_data.extend(bldg.get('addresses_data', []))
+                    all_business_names.append(bldg.get('dba_name', 'Unknown'))
+                    total_business_count += bldg.get('business_count', 0)
+                    total_streetfront_open += bldg.get('streetfront_open_count', 0)
+                    total_streetfront_closed += bldg.get('streetfront_closed_count', 0)
+                    total_streetfront += bldg.get('total_streetfront_addresses', 0)
+                    total_upper_open += bldg.get('upper_floor_open_count', 0)
+                    total_upper_closed += bldg.get('upper_floor_closed_count', 0)
+                    total_upper += bldg.get('total_upper_floor_addresses', 0)
+                
+                # Determine overall status based on majority
+                open_count = sum(1 for b in buildings if b.get('status') == 'Open')
+                closed_count = sum(1 for b in buildings if b.get('status') == 'Closed')
+                overall_status = 'Open' if open_count > closed_count else ('Closed' if closed_count > 0 else 'Unknown')
+                
+                # Create combined building record
+                primary_building = buildings[0]
+                merged_building = {
+                    'location': primary_building.get('location'),
+                    'dba_name': f"{len(buildings)} Buildings: {', '.join(all_business_names[:3])}{'...' if len(all_business_names) > 3 else ''}",
+                    'naic_code_description': 'Mixed',
+                    'lic_code_description': 'Mixed',
+                    'business_corridor': primary_building.get('business_corridor'),
+                    'supervisor_district': primary_building.get('supervisor_district'),
+                    'status': overall_status,
+                    'full_business_address': f"{buildings[0].get('building_address')} + {len(buildings)-1} more",
+                    'distinct_address': buildings[0].get('distinct_address'),
+                    'building_address': buildings[0].get('building_address'),
+                    'business_count': total_business_count,
+                    'streetfront_open_count': total_streetfront_open,
+                    'streetfront_closed_count': total_streetfront_closed,
+                    'total_streetfront_addresses': total_streetfront,
+                    'upper_floor_open_count': total_upper_open,
+                    'upper_floor_closed_count': total_upper_closed,
+                    'total_upper_floor_addresses': total_upper,
+                    'addresses_data': all_addresses_data,
+                    'individual_addresses_count': len(all_addresses_data),
+                    'has_commercial_tax_filing': any(b.get('has_commercial_tax_filing', False) for b in buildings),
+                    'tax_filing_addresses': [],
+                    'vacancy_status': None,
+                    'tax_filing_year': None,
+                    'tax_filing_ban': None,
+                    'tax_filing_entity': None,
+                    'buildings_at_location': len(buildings),  # Add this for scaling
+                }
+                merged_data.append(merged_building)
+        
+        # Add buildings without coordinates to the result (can't be grouped by location)
+        merged_data.extend(buildings_without_coords)
+        
+        logger.info(f"After merging: {len(merged_data)} unique locations (from {len(processed_data)} buildings)")
+        logger.info(f"  - {len(coordinate_groups)} locations with coordinates")
+        logger.info(f"  - {len(buildings_without_coords)} buildings without valid coordinates")
+        processed_data = merged_data
         
         # Calculate summary statistics
         total_buildings = len(processed_data)
@@ -975,10 +1297,13 @@ async def search_businesses(
         logger.info(f"Fast business search for: '{search_term}'")
         
         # Build optimized query for business search
+        # Note: SOQL uses case-sensitive LIKE, so we convert both to uppercase for case-insensitive search
+        search_term_upper = search_term.upper()
         search_query = f"""
         SELECT 
             location,
             dba_name,
+            ownership_name,
             naic_code_description,
             lic_code_description,
             business_corridor,
@@ -991,7 +1316,9 @@ async def search_businesses(
             full_business_address,
             certificate_number
         WHERE location IS NOT NULL 
-        AND dba_name LIKE '%{search_term}%'
+        AND (upper(dba_name) LIKE '%{search_term_upper}%' 
+             OR upper(ownership_name) LIKE '%{search_term_upper}%'
+             OR upper(full_business_address) LIKE '%{search_term_upper}%')
         ORDER BY dba_name
         LIMIT {min(limit, 1000)}
         """
@@ -1062,6 +1389,7 @@ async def search_businesses(
                     'coordinates': coordinates
                 },
                 'dba_name': record.get('dba_name', 'Unknown Business'),
+                'ownership_name': record.get('ownership_name', 'Unknown Owner'),
                 'naic_code_description': record.get('naic_code_description'),
                 'lic_code_description': record.get('lic_code_description'),
                 'business_corridor': record.get('business_corridor'),
@@ -1164,10 +1492,10 @@ async def refresh_business_cache(
 async def _run_business_cache_refresh_job(job_id: str, limit: Optional[int] = None):
     """Run the business cache refresh job in the background."""
     try:
-        from ai.tools.business_cache_processor import BusinessCacheProcessor
+        from ai.tools.simple_business_cache import SimpleBusinessCache
         import asyncio
         
-        logger.info(f"Starting business cache refresh job {job_id} with limit {limit}")
+        logger.info(f"Starting simple cache refresh job {job_id} with limit {limit}")
         
         # Mark job as running
         job = job_manager.get_job(job_id)
@@ -1177,8 +1505,8 @@ async def _run_business_cache_refresh_job(job_id: str, limit: Optional[int] = No
         
         # Run the cache refresh in a thread pool to avoid blocking
         def run_cache_refresh():
-            processor = BusinessCacheProcessor()
-            return processor.refresh_cache(limit)
+            cache = SimpleBusinessCache()
+            return cache.refresh_cache(limit)
         
         # Execute in thread pool to prevent blocking
         loop = asyncio.get_event_loop()
@@ -1191,16 +1519,16 @@ async def _run_business_cache_refresh_job(job_id: str, limit: Optional[int] = No
         job = job_manager.get_job(job_id)
         if job:
             job.complete({
-                "business_records": result['business_records'],
-                "tax_records": result['tax_records'],
-                "duration_seconds": result['duration_seconds']
+                "business_records": result.get('business_cache', {}).get('successful', 0),
+                "tax_records": result.get('tax_cache', {}).get('successful', 0),
+                "duration_seconds": result.get('elapsed_time', 0)
             })
-            logger.info(f"Business cache refresh job {job_id} completed successfully")
+            logger.info(f"Simple cache refresh job {job_id} completed successfully")
         else:
             logger.error(f"Job {job_id} not found when trying to complete")
         
     except Exception as e:
-        logger.error(f"Business cache refresh job {job_id} failed: {str(e)}", exc_info=True)
+        logger.error(f"Simple cache refresh job {job_id} failed: {str(e)}", exc_info=True)
         job = job_manager.get_job(job_id)
         if job:
             job.fail(str(e))
@@ -1212,14 +1540,52 @@ async def _run_business_cache_refresh_job(job_id: str, limit: Optional[int] = No
 async def get_cache_stats():
     """Get statistics about the cached business data"""
     try:
-        from ai.tools.business_cache_processor import BusinessCacheProcessor
+        from ai.tools.simple_business_cache import SimpleBusinessCache
+        from ai.tools.db_utils import execute_with_connection
         
-        processor = BusinessCacheProcessor()
-        stats = processor.get_cache_stats()
+        cache = SimpleBusinessCache()
+        raw_stats = cache.get_cache_stats()
+        
+        # Calculate open/closed businesses by querying the cache
+        def count_business_status(conn):
+            cursor = conn.cursor()
+            
+            # Count open businesses (no end date and not admin closed)
+            cursor.execute("""
+                SELECT COUNT(*) FROM business_registrations_cache 
+                WHERE dba_end_date IS NULL 
+                AND location_end_date IS NULL 
+                AND administratively_closed = FALSE
+            """)
+            open_count = cursor.fetchone()[0]
+            
+            # Count closed businesses
+            cursor.execute("""
+                SELECT COUNT(*) FROM business_registrations_cache 
+                WHERE dba_end_date IS NOT NULL 
+                OR location_end_date IS NOT NULL 
+                OR administratively_closed = TRUE
+            """)
+            closed_count = cursor.fetchone()[0]
+            
+            cursor.close()
+            return {'open': open_count, 'closed': closed_count}
+        
+        status_result = execute_with_connection(count_business_status)
+        status_counts = status_result.get('result', {'open': 0, 'closed': 0}) if status_result.get('status') == 'success' else {'open': 0, 'closed': 0}
+        
+        # Format stats for UI (matching expected format)
+        formatted_stats = {
+            'business_records': raw_stats['business_registrations']['count'],
+            'open_businesses': status_counts['open'],
+            'closed_businesses': status_counts['closed'],
+            'tax_records': raw_stats['commercial_tax']['count'],
+            'last_updated': raw_stats['business_registrations']['last_updated']
+        }
         
         return JSONResponse({
             "status": "success",
-            "stats": stats
+            "stats": formatted_stats
         })
         
     except Exception as e:

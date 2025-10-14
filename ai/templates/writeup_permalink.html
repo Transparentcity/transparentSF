@@ -495,7 +495,7 @@
                         // Chart ID format: [CHART:time_series_id:chart_id]
                         const chartId = paramParts[0];
                         return `<div class="chart-container">
-                            <iframe src="/backend/time-series-chart?chart_id=${chartId}" 
+                            <iframe src="/backend/time-series-chart?chart_id=${chartId}&embedded=true" 
                                     style="width: 100%; height: 500px; border: none;" 
                                     frameborder="0" scrolling="no">
                             </iframe>
@@ -506,7 +506,7 @@
                         const district = paramParts[1] || '0';
                         const period = paramParts[2] || 'month';
                         return `<div class="chart-container">
-                            <iframe src="/backend/time-series-chart?metric_id=${metricId}&district=${district}&period_type=${period}" 
+                            <iframe src="/backend/time-series-chart?metric_id=${metricId}&district=${district}&period_type=${period}&embedded=true" 
                                     style="width: 100%; height: 500px; border: none;" 
                                     frameborder="0" scrolling="no">
                             </iframe>
