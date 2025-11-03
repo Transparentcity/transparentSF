@@ -117,7 +117,8 @@ async def get_chart_data(chart_id: str):
                     field_name, 
                     district, 
                     group_field,
-                    executed_query_url
+                    executed_query_url,
+                    metadata
                 FROM time_series_metadata 
                 WHERE chart_id = %s
             """, (chart_id,))
@@ -152,6 +153,18 @@ async def get_chart_data(chart_id: str):
         
         metadata_result, data_results = db_result["result"]
         
+        # Parse metadata JSON if it exists
+        metadata_json = {}
+        if metadata_result.get("metadata"):
+            if isinstance(metadata_result["metadata"], str):
+                try:
+                    metadata_json = json.loads(metadata_result["metadata"])
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse metadata JSON for chart_id {chart_id}")
+                    metadata_json = {}
+            elif isinstance(metadata_result["metadata"], dict):
+                metadata_json = metadata_result["metadata"]
+        
         # Map database period type to frontend period type for the response
         frontend_period_type_map = {
             'year': 'annual',
@@ -177,6 +190,11 @@ async def get_chart_data(chart_id: str):
                 "byline": "Chart: TransparentSF"
             }
         }
+        
+        # Merge in fields from metadata JSON (caption, notes, description, etc.)
+        for key, value in metadata_json.items():
+            if key not in response["metadata"]:  # Don't overwrite existing fields
+                response["metadata"][key] = value
         
         # Add group_field if it exists
         if metadata_result["group_field"]:
@@ -351,7 +369,8 @@ async def get_chart_data_legacy(chart_id: int):
                     field_name, 
                     district, 
                     group_field,
-                    executed_query_url
+                    executed_query_url,
+                    metadata
                 FROM time_series_metadata 
                 WHERE chart_id = %s
             """, (chart_id,))
@@ -386,6 +405,18 @@ async def get_chart_data_legacy(chart_id: int):
         
         metadata_result, data_results = db_result["result"]
         
+        # Parse metadata JSON if it exists
+        metadata_json = {}
+        if metadata_result.get("metadata"):
+            if isinstance(metadata_result["metadata"], str):
+                try:
+                    metadata_json = json.loads(metadata_result["metadata"])
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse metadata JSON for chart_id {chart_id}")
+                    metadata_json = {}
+            elif isinstance(metadata_result["metadata"], dict):
+                metadata_json = metadata_result["metadata"]
+        
         # Map database period type to frontend period type for the response
         frontend_period_type_map = {
             'year': 'annual',
@@ -411,6 +442,11 @@ async def get_chart_data_legacy(chart_id: int):
                 "byline": "Chart: TransparentSF"
             }
         }
+        
+        # Merge in fields from metadata JSON (caption, notes, description, etc.)
+        for key, value in metadata_json.items():
+            if key not in response["metadata"]:  # Don't overwrite existing fields
+                response["metadata"][key] = value
         
         # Add group_field if it exists
         if metadata_result["group_field"]:

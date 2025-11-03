@@ -18,6 +18,9 @@
     <link rel="stylesheet" href="/static/darkmode.css">
     <script src="/static/js/darkmode.js"></script>
     
+    <!-- Plotly.js for charts -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -150,6 +153,26 @@
             margin-bottom: 30px;
         }
         
+        .chart-container {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+        }
+        
+        #business-chart {
+            width: 100%;
+            height: 400px;
+        }
+        
         .stat-card {
             background-color: var(--bg-secondary);
             border: 1px solid var(--border-primary);
@@ -205,6 +228,11 @@
     
     <div id="summary-stats" class="summary-stats" style="display: none;"></div>
     
+    <div id="chart-container" class="chart-container" style="display: none;">
+        <div class="chart-title">Business Trends Over Time</div>
+        <div id="business-chart"></div>
+    </div>
+    
     <div id="table-container" class="table-container" style="display: none;">
         <table id="data-table">
             <thead>
@@ -254,6 +282,7 @@
             document.getElementById('error-container').style.display = 'none';
             document.getElementById('table-container').style.display = 'none';
             document.getElementById('summary-stats').style.display = 'none';
+            document.getElementById('chart-container').style.display = 'none';
             
             try {
                 const url = `/api/active-businesses/data?restaurant_only=${restaurantOnly}`;
@@ -313,15 +342,18 @@
             document.getElementById('summary-stats').innerHTML = summaryHtml;
             document.getElementById('summary-stats').style.display = 'grid';
             
-            // Display table
-            const tbody = document.getElementById('table-body');
-            tbody.innerHTML = '';
-            
             // Sort data by date (oldest first)
             const sortedData = [...data].sort((a, b) => {
                 if (a.year !== b.year) return a.year - b.year;
                 return a.month - b.month;
             });
+            
+            // Display chart
+            displayChart(sortedData);
+            
+            // Display table
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
             
             sortedData.forEach(row => {
                 const tr = document.createElement('tr');
@@ -341,6 +373,119 @@
             });
             
             document.getElementById('table-container').style.display = 'block';
+        }
+        
+        function displayChart(data) {
+            // Prepare data for Plotly
+            const labels = data.map(row => row.label);
+            const activeData = data.map(row => row.active);
+            const newData = data.map(row => row.new);
+            const closedData = data.map(row => row.closed);
+            
+            // Get current theme
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            const textColor = isDark ? '#ffffff' : '#222222';
+            const gridColor = isDark ? '#444444' : '#e0e0e0';
+            const bgColor = isDark ? '#1a1a1a' : '#ffffff';
+            
+            const traces = [
+                {
+                    x: labels,
+                    y: activeData,
+                    name: 'Active',
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: {
+                        color: '#4A7463', // Spruce green
+                        width: 2
+                    },
+                    marker: {
+                        size: 4
+                    }
+                },
+                {
+                    x: labels,
+                    y: newData,
+                    name: 'New',
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: {
+                        color: '#71B2CA', // Sky blue
+                        width: 2
+                    },
+                    marker: {
+                        size: 4
+                    }
+                },
+                {
+                    x: labels,
+                    y: closedData,
+                    name: 'Closed',
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: {
+                        color: '#FF6B5A', // Warm coral
+                        width: 2
+                    },
+                    marker: {
+                        size: 4
+                    }
+                }
+            ];
+            
+            const layout = {
+                title: {
+                    text: '',
+                    font: { color: textColor }
+                },
+                xaxis: {
+                    title: {
+                        text: 'Month',
+                        font: { color: textColor }
+                    },
+                    tickfont: { color: textColor },
+                    gridcolor: gridColor,
+                    showgrid: true
+                },
+                yaxis: {
+                    title: {
+                        text: 'Number of Businesses',
+                        font: { color: textColor }
+                    },
+                    tickfont: { color: textColor },
+                    gridcolor: gridColor,
+                    showgrid: true
+                },
+                plot_bgcolor: bgColor,
+                paper_bgcolor: bgColor,
+                font: {
+                    color: textColor,
+                    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+                },
+                legend: {
+                    font: { color: textColor },
+                    x: 0,
+                    y: 1,
+                    bgcolor: 'rgba(0,0,0,0)'
+                },
+                hovermode: 'x unified',
+                margin: {
+                    l: 60,
+                    r: 30,
+                    t: 20,
+                    b: 60
+                }
+            };
+            
+            const config = {
+                displayModeBar: true,
+                responsive: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d']
+            };
+            
+            Plotly.newPlot('business-chart', traces, layout, config);
+            document.getElementById('chart-container').style.display = 'block';
         }
         
         // Load data on page load

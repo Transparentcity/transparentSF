@@ -193,6 +193,27 @@
             font-size: 13px;
         }
         
+        /* Related analysis links */
+        .analysis-link {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            text-decoration: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            display: inline-block;
+        }
+        
+        .analysis-link:hover {
+            background: var(--bright-purple);
+            border-color: var(--bright-purple);
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px var(--shadow-light);
+        }
+        
         .district-stats {
             max-height: 250px;
             overflow-y: auto;
@@ -243,6 +264,134 @@
         
         .filter-section {
             margin-bottom: 12px;
+        }
+        
+        /* Mobile bottom sheet styling */
+        .mobile-bottom-sheet {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 25vh;
+            min-height: 200px;
+            max-height: 400px;
+            background: var(--bg-secondary);
+            border-top: 2px solid var(--border-primary);
+            border-radius: 16px 16px 0 0;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 10000;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .mobile-bottom-sheet.show {
+            transform: translateY(0);
+        }
+        
+        .mobile-bottom-sheet-header {
+            position: sticky;
+            top: 0;
+            background: var(--bg-secondary);
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1;
+        }
+        
+        .mobile-bottom-sheet-drag-handle {
+            position: absolute;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 4px;
+            background: var(--border-primary);
+            border-radius: 2px;
+            cursor: grab;
+        }
+        
+        .mobile-bottom-sheet-drag-handle:active {
+            cursor: grabbing;
+        }
+        
+        .mobile-bottom-sheet-close {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 4px 8px;
+            line-height: 1;
+        }
+        
+        .mobile-bottom-sheet-content {
+            padding: 16px;
+            padding-bottom: 20px;
+        }
+        
+        .mobile-bottom-sheet-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .mobile-bottom-sheet-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        @media (min-width: 768px) {
+            .mobile-bottom-sheet,
+            .mobile-bottom-sheet-overlay {
+                display: none !important;
+            }
+        }
+        
+        /* Zoning tooltip styling */
+        .zoning-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            pointer-events: none;
+            z-index: 10001;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            white-space: nowrap;
+            max-width: 300px;
+            line-height: 1.5;
+            display: none;
+        }
+        
+        .zoning-tooltip.show {
+            display: block;
+        }
+        
+        .zoning-tooltip .district-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffd93d;
+            margin-bottom: 4px;
+            display: block;
+        }
+        
+        .zoning-tooltip .zoning-type {
+            font-size: 12px;
+            color: #ffffff;
+            opacity: 0.9;
         }
         
         /* Popup styling */
@@ -544,6 +693,14 @@
             <div>
                 <h1 class="page-title">Storefront Vacancy</h1>
                 <p class="page-subtitle">Analyze storefront vacancy rates across San Francisco with interactive mapping and filtering</p>
+                <div class="mt-3" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <a href="/active-businesses" class="analysis-link">
+                        <i class="fas fa-chart-line"></i> Active Business Analysis
+                    </a>
+                    <a href="/active-businesses?restaurant_only=true" class="analysis-link">
+                        <i class="fas fa-utensils"></i> Restaurant Analysis
+                    </a>
+                </div>
             </div>
         </div>
         
@@ -576,50 +733,37 @@
                         </select>
                     </div>
                     
-                    <div class="filter-section">
-                        <label for="businessCorridor" class="form-label">Business Corridor:</label>
-                        <select id="businessCorridor" class="form-select">
-                            <option value="">All Corridors</option>
-                        </select>
-                    </div>
-                    
-                    <div class="filter-section">
-                        <label for="neighborhood" class="form-label">Neighborhood:</label>
-                        <select id="neighborhood" class="form-select">
-                            <option value="">All Neighborhoods</option>
-                        </select>
-                    </div>
-                    
-                    <div class="filter-section">
+                    <div class="filter-section" id="industryTypeSection" style="display: none;">
                         <label class="form-label">Industry Type (NAICS):</label>
                         <div id="industryTypeContainer" class="checkbox-container" style="max-height: 120px; overflow-y: auto; border: 1px solid var(--border-primary); border-radius: 4px; padding: 6px; background: var(--bg-tertiary);">
                             <!-- Industry type checkboxes will be populated here -->
                         </div>
                     </div>
                 
-                    <div class="filter-section">
+                    <div class="filter-section" id="licenseTypeSection" style="display: none;">
                         <label class="form-label">License Type:</label>
                         <div id="licenseTypeContainer" class="checkbox-container" style="max-height: 120px; overflow-y: auto; border: 1px solid var(--border-primary); border-radius: 4px; padding: 6px; background: var(--bg-tertiary);">
                             <!-- License type checkboxes will be populated here -->
                         </div>
                     </div>
                     
-                    
                     <div class="filter-section">
-                        <label for="statusFilter" class="form-label">Status Filter:</label>
-                        <select id="statusFilter" class="form-select">
-                            <option value="">All (Open & Closed)</option>
-                            <option value="open">Open Only</option>
-                            <option value="closed">Closed Only</option>
-                        </select>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0" id="zoningDistrictLabel">Zoning District:</label>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="clearAllZoning" style="display: none;">
+                                Clear All
+                            </button>
+                        </div>
+                        <div id="zoningDistrictContainer" class="checkbox-container" style="max-height: 120px; overflow-y: auto; border: 1px solid var(--border-primary); border-radius: 4px; padding: 6px; background: var(--bg-tertiary);">
+                            <!-- Zoning district checkboxes will be populated here -->
+                        </div>
                     </div>
-                    
                     
                     <div class="filter-section">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="corridorOnly" checked>
+                            <input class="form-check-input" type="checkbox" id="corridorOnly">
                             <label class="form-check-label" for="corridorOnly">
-                                Show only business corridors <span class="badge badge-sm bg-success ms-1">Default</span>
+                                Show only business corridors
                             </label>
                         </div>
                     </div>
@@ -635,18 +779,9 @@
                     
                     <div class="filter-section">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="streetLevelOnly">
+                            <input class="form-check-input" type="checkbox" id="streetLevelOnly" checked>
                             <label class="form-check-label" for="streetLevelOnly">
-                                Street-level storefronts only
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div class="filter-section">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="commercialTaxFilingOnly" checked>
-                            <label class="form-check-label" for="commercialTaxFilingOnly">
-                                Vacancy Tax Addresses
+                                Street level only
                             </label>
                         </div>
                     </div>
@@ -655,6 +790,14 @@
                         <span id="filterButtonText">Apply Filters</span>
                         <span id="filterSpinner" class="loading-spinner" style="display: none;"></span>
                     </button>
+                </div>
+                
+                <!-- Zoning District Breakdown -->
+                <div class="stats-panel">
+                    <h5 class="section-title">Zoning District Breakdown</h5>
+                    <div id="zoningDistrictStats" class="district-stats">
+                        <!-- Zoning district stats will be populated here -->
+                    </div>
                 </div>
                 
                 <!-- District Breakdown -->
@@ -682,8 +825,25 @@
                 </div>
             </div>
             
+            <!-- Map Overlay Controls -->
+            <div class="map-overlay-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1001; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px); min-width: 200px;">
+                <h6 class="section-title mb-2" style="font-size: 0.9rem; font-weight: 600;">Map Layers</h6>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="showZoningOverlay">
+                    <label class="form-check-label" for="showZoningOverlay" style="font-size: 0.85rem;">
+                        Show Zoning Districts
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="showDotLayer" checked>
+                    <label class="form-check-label" for="showDotLayer" style="font-size: 0.85rem;">
+                        Show Business Dots
+                    </label>
+                </div>
+            </div>
+            
             <!-- Summary Statistics Overlay -->
-            <div class="summary-overlay" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px);">
+            <div class="summary-overlay" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px); margin-top: 120px;">
                 <div id="summaryHeaderToggle" class="d-flex align-items-center justify-content-between px-2 py-1 border-bottom" style="cursor: pointer; transition: background-color 0.2s ease;" role="button" tabindex="0" aria-expanded="true" onmouseover="this.style.backgroundColor='var(--bg-tertiary, rgba(0,0,0,0.05))'" onmouseout="this.style.backgroundColor='transparent'">
                     <span class="small fw-bold">Overview</span>
                     <i id="summaryChevron" class="fas fa-chevron-up small"></i>
@@ -812,7 +972,7 @@
             // Sync filter values from desktop to mobile
             function syncFiltersDesktopToMobile() {
                 // Sync dropdowns
-                const dropdowns = ['district', 'businessCorridor', 'neighborhood', 'statusFilter'];
+                const dropdowns = ['district'];
                 dropdowns.forEach(id => {
                     const desktop = document.getElementById(id);
                     const mobile = document.getElementById('mobile-' + id);
@@ -848,12 +1008,21 @@
                         mobileCheckbox.checked = true;
                     }
                 });
+                
+                // Sync zoning district checkboxes
+                const zoningCheckboxes = document.querySelectorAll('input[name="zoning_district"]:checked');
+                zoningCheckboxes.forEach(checkbox => {
+                    const mobileCheckbox = document.querySelector(`input[name="zoning_district"][value="${checkbox.value}"]`);
+                    if (mobileCheckbox && mobileCheckbox.id.startsWith('mobile-')) {
+                        mobileCheckbox.checked = true;
+                    }
+                });
             }
             
             // Sync filter values from mobile to desktop
             function syncFiltersMobileToDesktop() {
                 // Sync dropdowns
-                const dropdowns = ['district', 'businessCorridor', 'neighborhood', 'statusFilter'];
+                const dropdowns = ['district'];
                 dropdowns.forEach(id => {
                     const desktop = document.getElementById(id);
                     const mobile = document.getElementById('mobile-' + id);
@@ -893,6 +1062,17 @@
                         }
                     }
                 });
+                
+                // Sync zoning district checkboxes
+                const mobileZoningCheckboxes = document.querySelectorAll('input[name="zoning_district"]');
+                mobileZoningCheckboxes.forEach(mobileCheckbox => {
+                    if (mobileCheckbox.id.startsWith('mobile-')) {
+                        const desktopCheckbox = document.querySelector(`input[name="zoning_district"][value="${mobileCheckbox.value}"]:not([id^="mobile-"])`);
+                        if (desktopCheckbox) {
+                            desktopCheckbox.checked = mobileCheckbox.checked;
+                        }
+                    }
+                });
             }
             
             // Clear all mobile filters
@@ -910,7 +1090,7 @@
                 });
                 
                 // Set defaults for certain checkboxes
-                const defaultChecked = ['mobile-corridorOnly', 'mobile-streetLevelOnly'];
+                const defaultChecked = [];
                 defaultChecked.forEach(id => {
                     const checkbox = document.getElementById(id);
                     if (checkbox) checkbox.checked = true;
@@ -1003,6 +1183,7 @@
                     // Log what we received
                     console.log('Industry types:', filters.industry_types?.length || 'undefined');
                     console.log('License types:', filters.license_types?.length || 'undefined');
+                    console.log('Zoning districts:', filters.zoning_districts?.length || 'undefined');
                     console.log('Business corridors:', filters.business_corridors?.length || 'undefined');
                     console.log('Neighborhoods:', filters.neighborhoods?.length || 'undefined');
                     console.log('Districts:', filters.districts?.length || 'undefined');
@@ -1061,26 +1242,79 @@
                         licenseContainer.appendChild(checkboxWrapper);
                     });
                     
-                    // Populate zoning categories as checkboxes
-                    // Zoning categories removed - no longer needed
+                    // Populate zoning districts as checkboxes
+                    const zoningContainer = document.getElementById('zoningDistrictContainer');
+                    zoningContainer.innerHTML = ''; // Clear any existing content
                     
-                    // Populate business corridors
-                    const corridorSelect = document.getElementById('businessCorridor');
-                    (filters.business_corridors || []).forEach(corridor => {
-                        const option = document.createElement('option');
-                        option.value = corridor;
-                        option.textContent = corridor;
-                        corridorSelect.appendChild(option);
+                    (filters.zoning_districts || []).forEach(zoning => {
+                        const checkboxWrapper = document.createElement('div');
+                        checkboxWrapper.className = 'form-check';
+                        
+                        const checkbox = document.createElement('input');
+                        checkbox.className = 'form-check-input';
+                        checkbox.type = 'checkbox';
+                        checkbox.id = `zoning_${zoning.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                        checkbox.value = zoning;
+                        checkbox.name = 'zoning_district';
+                        
+                        // Pre-check all zoning districts starting with "NC"
+                        if (zoning && zoning.trim().toUpperCase().startsWith('NC')) {
+                            checkbox.checked = true;
+                        }
+                        
+                        const label = document.createElement('label');
+                        label.className = 'form-check-label';
+                        label.htmlFor = checkbox.id;
+                        label.textContent = zoning;
+                        label.style.fontSize = '11px';
+                        label.style.lineHeight = '1.2';
+                        label.style.marginLeft = '4px';
+                        
+                        checkboxWrapper.appendChild(checkbox);
+                        checkboxWrapper.appendChild(label);
+                        zoningContainer.appendChild(checkboxWrapper);
                     });
                     
-                    // Populate neighborhoods
-                    const neighborhoodSelect = document.getElementById('neighborhood');
-                    (filters.neighborhoods || []).forEach(neighborhood => {
-                        const option = document.createElement('option');
-                        option.value = neighborhood;
-                        option.textContent = neighborhood;
-                        neighborhoodSelect.appendChild(option);
+                    // Function to update zoning district count display (define before use)
+                    window.updateZoningDistrictCount = function() {
+                        const zoningContainer = document.getElementById('zoningDistrictContainer');
+                        if (!zoningContainer) return;
+                        const checkboxes = zoningContainer.querySelectorAll('input[type="checkbox"]');
+                        const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+                        const label = document.getElementById('zoningDistrictLabel');
+                        const clearAllBtn = document.getElementById('clearAllZoning');
+                        
+                        if (label) {
+                            if (checkedCount > 0) {
+                                label.textContent = `Zoning District (${checkedCount} selected):`;
+                                if (clearAllBtn) clearAllBtn.style.display = 'inline-block';
+                            } else {
+                                label.textContent = 'Zoning District:';
+                                if (clearAllBtn) clearAllBtn.style.display = 'none';
+                            }
+                        }
+                    };
+                    
+                    // Update zoning district count and setup clear all button
+                    updateZoningDistrictCount();
+                    
+                    // Setup clear all button
+                    const clearAllBtn = document.getElementById('clearAllZoning');
+                    if (clearAllBtn) {
+                        clearAllBtn.addEventListener('click', function() {
+                            const checkboxes = zoningContainer.querySelectorAll('input[type="checkbox"]');
+                            checkboxes.forEach(cb => cb.checked = false);
+                            updateZoningDistrictCount();
+                            debouncedApplyFilters();
+                        });
+                    }
+                    
+                    // Update count when checkboxes change
+                    zoningContainer.addEventListener('change', function() {
+                        updateZoningDistrictCount();
                     });
+                    
+                    // Business corridors and neighborhoods removed - no longer populate
                     
                     // Populate districts first
                     const districtSelect = document.getElementById('district');
@@ -1284,6 +1518,535 @@
                 updateMapTheme();
             });
             
+            // Zoning overlay state
+            let zoningSourceLoaded = false;
+            let zoningOverlayVisible = false;
+            
+            // Zoning tooltip element
+            let zoningTooltip = null;
+            
+            // Function to get zoning type description
+            function getZoningTypeDescription(zoning) {
+                if (!zoning) return 'Unknown';
+                
+                const zoningUpper = zoning.toUpperCase().trim();
+                
+                // Residential zones
+                if (zoningUpper.startsWith('RH-')) return 'Residential - House (RH)';
+                if (zoningUpper.startsWith('RM-')) return 'Residential - Multi-Unit (RM)';
+                if (zoningUpper.startsWith('RTO')) return 'Residential - Transit-Oriented (RTO)';
+                if (zoningUpper.startsWith('RED')) return 'Residential - Enhanced Density (RED)';
+                if (zoningUpper.startsWith('R')) return 'Residential';
+                
+                // Commercial zones
+                if (zoningUpper.startsWith('NC-')) return 'Neighborhood Commercial (NC)';
+                if (zoningUpper.startsWith('CC-')) return 'Community Commercial (CC)';
+                if (zoningUpper.startsWith('C-')) return 'Commercial';
+                if (zoningUpper.startsWith('PDR')) return 'Production, Distribution & Repair (PDR)';
+                
+                // Mixed use zones
+                if (zoningUpper.includes('MU') || zoningUpper.includes('MIXED')) return 'Mixed Use';
+                if (zoningUpper.startsWith('BR-')) return 'Bayview Mixed Use (BR)';
+                
+                // Commercial/Manufacturing
+                if (zoningUpper.startsWith('M-')) return 'Manufacturing';
+                
+                // Planned Development
+                if (zoningUpper.startsWith('P-')) return 'Planned Development';
+                
+                // Industrial
+                if (zoningUpper.startsWith('I-')) return 'Industrial';
+                
+                // Open space
+                if (zoningUpper.startsWith('OS')) return 'Open Space';
+                
+                // Default
+                return 'Zoning District';
+            }
+            
+            // Setup zoning tooltip
+            function setupZoningTooltip() {
+                // Create tooltip element if it doesn't exist
+                if (!zoningTooltip) {
+                    zoningTooltip = document.createElement('div');
+                    zoningTooltip.className = 'zoning-tooltip';
+                    zoningTooltip.id = 'zoningTooltip';
+                    document.body.appendChild(zoningTooltip);
+                }
+                
+                // Remove existing event listeners to avoid duplicates
+                vacancyMap.off('mousemove', 'zoning-choropleth', onZoningMouseMove);
+                vacancyMap.off('mouseleave', 'zoning-choropleth', onZoningMouseLeave);
+                vacancyMap.off('mousemove', 'zoning-outline', onZoningMouseMove);
+                vacancyMap.off('mouseleave', 'zoning-outline', onZoningMouseLeave);
+                
+                // Add event listeners to both layers
+                vacancyMap.on('mousemove', 'zoning-choropleth', onZoningMouseMove);
+                vacancyMap.on('mouseleave', 'zoning-choropleth', onZoningMouseLeave);
+                vacancyMap.on('mousemove', 'zoning-outline', onZoningMouseMove);
+                vacancyMap.on('mouseleave', 'zoning-outline', onZoningMouseLeave);
+                
+                // Change cursor on hover
+                vacancyMap.on('mouseenter', 'zoning-choropleth', function() {
+                    vacancyMap.getCanvas().style.cursor = 'pointer';
+                });
+                vacancyMap.on('mouseleave', 'zoning-choropleth', function() {
+                    vacancyMap.getCanvas().style.cursor = '';
+                });
+                vacancyMap.on('mouseenter', 'zoning-outline', function() {
+                    vacancyMap.getCanvas().style.cursor = 'pointer';
+                });
+                vacancyMap.on('mouseleave', 'zoning-outline', function() {
+                    vacancyMap.getCanvas().style.cursor = '';
+                });
+            }
+            
+            // Handle mouse move over zoning layers
+            function onZoningMouseMove(e) {
+                if (!zoningTooltip) return;
+                
+                const features = vacancyMap.queryRenderedFeatures(e.point, {
+                    layers: ['zoning-choropleth', 'zoning-outline']
+                });
+                
+                if (features.length > 0) {
+                    const feature = features[0];
+                    const zoning = feature.properties.zoning || feature.properties.name || 'Unknown';
+                    const zoningType = getZoningTypeDescription(zoning);
+                    
+                    // Update tooltip content
+                    zoningTooltip.innerHTML = `
+                        <span class="district-name">${zoning}</span>
+                        <span class="zoning-type">${zoningType}</span>
+                    `;
+                    
+                    // Show tooltip
+                    zoningTooltip.classList.add('show');
+                    
+                    // Position tooltip near cursor (offset to avoid blocking)
+                    const x = e.point.x + 15;
+                    const y = e.point.y - 15;
+                    
+                    zoningTooltip.style.left = x + 'px';
+                    zoningTooltip.style.top = y + 'px';
+                    
+                    // Adjust if tooltip goes off screen
+                    const rect = zoningTooltip.getBoundingClientRect();
+                    if (rect.right > window.innerWidth) {
+                        zoningTooltip.style.left = (e.point.x - rect.width - 15) + 'px';
+                    }
+                    if (rect.top < 0) {
+                        zoningTooltip.style.top = (e.point.y + 15) + 'px';
+                    }
+                } else {
+                    // Hide tooltip if no features
+                    zoningTooltip.classList.remove('show');
+                }
+            }
+            
+            // Handle mouse leave from zoning layers
+            function onZoningMouseLeave() {
+                if (zoningTooltip) {
+                    zoningTooltip.classList.remove('show');
+                }
+            }
+            
+            // Function to get color for zoning district
+            function getZoningColor(zoning) {
+                if (!zoning) return '#cccccc';
+                
+                const zoningUpper = zoning.toUpperCase().trim();
+                
+                // Residential zones
+                if (zoningUpper.startsWith('RH-')) return '#ff6b9d'; // Pink
+                if (zoningUpper.startsWith('RM-')) return '#ffb3ba'; // Light pink
+                if (zoningUpper.startsWith('RTO')) return '#ffcccc'; // Very light pink
+                if (zoningUpper.startsWith('RED')) return '#ff9999'; // Medium pink
+                if (zoningUpper.startsWith('R')) return '#ffb3ba'; // Generic residential
+                
+                // Commercial zones
+                if (zoningUpper.startsWith('NC-')) return '#4ecdc4'; // Teal
+                if (zoningUpper.startsWith('CC-')) return '#95e1d3'; // Light teal
+                if (zoningUpper.startsWith('C-')) return '#44a08d'; // Dark teal
+                if (zoningUpper.startsWith('PDR')) return '#6bcf7f'; // Green
+                
+                // Mixed use zones
+                if (zoningUpper.includes('MU') || zoningUpper.includes('MIXED')) return '#f7b731'; // Yellow
+                if (zoningUpper.startsWith('BR-')) return '#f7b731'; // Bayview Mixed Use (BR-MU)
+                
+                // Commercial/Manufacturing
+                if (zoningUpper.startsWith('M-')) return '#2d8659'; // Dark green
+                
+                // Planned Development
+                if (zoningUpper.startsWith('P-')) return '#ffd93d'; // Light yellow
+                
+                // Industrial
+                if (zoningUpper.startsWith('I-')) return '#a55eea'; // Purple
+                
+                // Open space
+                if (zoningUpper.startsWith('OS')) return '#26de81'; // Green
+                
+                // Default
+                console.log('Unknown zoning type:', zoning, 'using default color');
+                return '#cccccc';
+            }
+            
+            // Add layers to map (called after source is loaded)
+            function addZoningLayers() {
+                if (!vacancyMap || !vacancyMap.getSource('zoning-polygons')) {
+                    console.warn('Cannot add zoning layers - map or source not ready');
+                    return false;
+                }
+                
+                try {
+                    if (!vacancyMap.getLayer('zoning-choropleth')) {
+                        // Determine where to insert the layer (before points-circles if it exists)
+                        let beforeId = null;
+                        try {
+                            if (vacancyMap.getLayer('points-circles')) {
+                                beforeId = 'points-circles';
+                            } else if (vacancyMap.getLayer('vacancy-heatmap')) {
+                                beforeId = 'vacancy-heatmap';
+                            }
+                        } catch (e) {
+                            console.warn('Error checking for existing layers:', e);
+                        }
+                        
+                        console.log('Adding zoning-choropleth layer, before:', beforeId);
+                        
+                        // Add fill layer (use beforeId only if it exists, otherwise add at end)
+                        const fillLayerConfig = {
+                            id: 'zoning-choropleth',
+                            type: 'fill',
+                            source: 'zoning-polygons',
+                            paint: {
+                                'fill-color': ['get', 'color'],
+                                'fill-opacity': 0.3,
+                                'fill-outline-color': '#ffffff'
+                            }
+                        };
+                        
+                        if (beforeId) {
+                            vacancyMap.addLayer(fillLayerConfig, beforeId);
+                        } else {
+                            vacancyMap.addLayer(fillLayerConfig);
+                        }
+                        
+                        console.log('Zoning choropleth layer added');
+                        
+                        // Verify it was added
+                        const verifyFill = vacancyMap.getLayer('zoning-choropleth');
+                        if (!verifyFill) {
+                            throw new Error('Failed to add zoning-choropleth layer');
+                        }
+                        
+                        // Add outline layer for better visibility
+                        const outlineLayerConfig = {
+                            id: 'zoning-outline',
+                            type: 'line',
+                            source: 'zoning-polygons',
+                            paint: {
+                                'line-color': '#ffffff',
+                                'line-width': 1,
+                                'line-opacity': 0.6
+                            }
+                        };
+                        
+                        if (beforeId) {
+                            vacancyMap.addLayer(outlineLayerConfig, beforeId);
+                        } else {
+                            vacancyMap.addLayer(outlineLayerConfig);
+                        }
+                        
+                        console.log('Zoning outline layer added');
+                        console.log('Zoning layers added successfully');
+                        
+                        // Verify layers exist
+                        const choroplethExists = vacancyMap.getLayer('zoning-choropleth');
+                        const outlineExists = vacancyMap.getLayer('zoning-outline');
+                        console.log('Layer verification - choropleth:', !!choroplethExists, 'outline:', !!outlineExists);
+                        
+                        // Setup mouseover tooltip for zoning layers
+                        setupZoningTooltip();
+                        
+                        return true;
+                    } else {
+                        console.log('Zoning layers already exist');
+                        return true;
+                    }
+                } catch (layerError) {
+                    console.error('Error adding zoning layers:', layerError);
+                    console.error('Layer error details:', layerError.message, layerError.stack);
+                    return false;
+                }
+            }
+            
+            // Load and add zoning overlay
+            async function loadZoningOverlay() {
+                if (!vacancyMap) {
+                    console.log('Map not initialized, waiting...');
+                    setTimeout(loadZoningOverlay, 500);
+                    return;
+                }
+                
+                // Wait for map style to be loaded
+                if (!vacancyMap.isStyleLoaded()) {
+                    console.log('Map style not loaded, waiting...');
+                    vacancyMap.once('style.load', loadZoningOverlay);
+                    return;
+                }
+                
+                try {
+                    console.log('Loading zoning district polygons...');
+                    const response = await fetch('/api/vacancy/zoning-polygons');
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Zoning polygons API response:', data);
+                    
+                    if (data.status === 'success' && data.geojson && data.geojson.features) {
+                        console.log(`Loaded ${data.count} zoning district polygons`);
+                        console.log('Sample feature:', data.geojson.features[0]);
+                        
+                        // Process features to add color property based on zoning type
+                        const processedFeatures = data.geojson.features.map(feature => {
+                            const zoning = feature.properties.zoning || '';
+                            const color = getZoningColor(zoning);
+                            return {
+                                ...feature,
+                                properties: {
+                                    ...feature.properties,
+                                    color: color
+                                }
+                            };
+                        });
+                        
+                        const processedGeoJSON = {
+                            ...data.geojson,
+                            features: processedFeatures
+                        };
+                        
+                        console.log('Processed GeoJSON features:', processedFeatures.length);
+                        console.log('Sample processed feature:', processedFeatures[0]);
+                        
+                        // Update source with processed data
+                        if (!vacancyMap.getSource('zoning-polygons')) {
+                            console.log('Adding new zoning-polygons source...');
+                            vacancyMap.addSource('zoning-polygons', {
+                                type: 'geojson',
+                                data: processedGeoJSON
+                            });
+                            console.log('Zoning source added successfully');
+                        } else {
+                            console.log('Updating existing zoning-polygons source...');
+                            vacancyMap.getSource('zoning-polygons').setData(processedGeoJSON);
+                            console.log('Zoning source updated successfully');
+                        }
+                        
+                        // Add layers using the shared function
+                        const layersAdded = addZoningLayers();
+                        
+                        if (layersAdded) {
+                            // Set visibility based on checkbox
+                            const showZoningCheckbox = document.getElementById('showZoningOverlay');
+                            const shouldShow = showZoningCheckbox && showZoningCheckbox.checked;
+                            
+                            console.log('Setting zoning overlay visibility, checkbox checked:', shouldShow);
+                            
+                            if (vacancyMap.getLayer('zoning-choropleth')) {
+                                vacancyMap.setLayoutProperty('zoning-choropleth', 'visibility', shouldShow ? 'visible' : 'none');
+                                vacancyMap.setLayoutProperty('zoning-outline', 'visibility', shouldShow ? 'visible' : 'none');
+                                zoningOverlayVisible = shouldShow;
+                                
+                                // Verify the setting
+                                const actualVisibility = vacancyMap.getLayoutProperty('zoning-choropleth', 'visibility');
+                                console.log('Zoning overlay visibility set to:', actualVisibility);
+                            }
+                        } else {
+                            console.error('Failed to add zoning layers');
+                        }
+                        
+                        zoningSourceLoaded = true;
+                        console.log('Zoning overlay loaded successfully');
+                    } else {
+                        console.error('Failed to load zoning polygons:', data);
+                    }
+                } catch (error) {
+                    console.error('Error loading zoning overlay:', error);
+                }
+            }
+            
+            // Toggle dot layer visibility
+            function toggleDotLayer(show) {
+                console.log('toggleDotLayer called with show:', show);
+                
+                if (!vacancyMap) {
+                    console.warn('Map not initialized');
+                    return;
+                }
+                
+                // Check if layer exists
+                if (vacancyMap.getLayer('points-circles')) {
+                    console.log('Setting dot layer visibility to:', show ? 'visible' : 'none');
+                    vacancyMap.setLayoutProperty('points-circles', 'visibility', show ? 'visible' : 'none');
+                    vacancyMap.triggerRepaint();
+                } else {
+                    console.warn('points-circles layer does not exist');
+                }
+            }
+            
+            // Toggle zoning overlay visibility
+            function toggleZoningOverlay(show) {
+                console.log('toggleZoningOverlay called with show:', show, 'zoningSourceLoaded:', zoningSourceLoaded);
+                
+                if (!zoningSourceLoaded) {
+                    if (show) {
+                        console.log('Source not loaded, loading now...');
+                        loadZoningOverlay();
+                    }
+                    return;
+                }
+                
+                // Check if layers exist, if not try to add them
+                if (!vacancyMap.getLayer('zoning-choropleth')) {
+                    console.warn('Zoning choropleth layer does not exist, attempting to add layers...');
+                    console.log('Source exists:', !!vacancyMap.getSource('zoning-polygons'));
+                    console.log('Map ready:', !!vacancyMap && vacancyMap.isStyleLoaded());
+                    
+                    if (show) {
+                        // Make sure source exists
+                        if (!vacancyMap.getSource('zoning-polygons')) {
+                            console.log('Source not found, reloading overlay...');
+                            loadZoningOverlay();
+                            return;
+                        }
+                        
+                        const layersAdded = addZoningLayers();
+                        if (!layersAdded) {
+                            console.error('Failed to add zoning layers, will retry...');
+                            // Retry after a short delay
+                            setTimeout(() => {
+                                if (vacancyMap.getSource('zoning-polygons')) {
+                                    const retryAdded = addZoningLayers();
+                                    if (retryAdded) {
+                                        toggleZoningOverlay(true);
+                                    }
+                                }
+                            }, 500);
+                            return;
+                        }
+                        console.log('Layers added successfully, now setting visibility...');
+                    } else {
+                        return; // Can't hide what doesn't exist
+                    }
+                }
+                
+                // Now toggle visibility
+                if (vacancyMap.getLayer('zoning-choropleth')) {
+                    console.log('Setting zoning layer visibility to:', show ? 'visible' : 'none');
+                    vacancyMap.setLayoutProperty('zoning-choropleth', 'visibility', show ? 'visible' : 'none');
+                    vacancyMap.setLayoutProperty('zoning-outline', 'visibility', show ? 'visible' : 'none');
+                    zoningOverlayVisible = show;
+                    
+                    // Verify the change
+                    const actualVisibility = vacancyMap.getLayoutProperty('zoning-choropleth', 'visibility');
+                    console.log('Zoning layer visibility after change:', actualVisibility);
+                    
+                    // Force a repaint
+                    vacancyMap.triggerRepaint();
+                } else {
+                    console.error('Zoning choropleth layer still does not exist after add attempt');
+                }
+            }
+            
+            // Add checkbox event listener (wait for DOM to be ready)
+            function setupZoningCheckboxListener() {
+                const checkbox = document.getElementById('showZoningOverlay');
+                if (checkbox) {
+                    // Remove existing listeners by cloning
+                    const newCheckbox = checkbox.cloneNode(true);
+                    checkbox.parentNode.replaceChild(newCheckbox, checkbox);
+                    
+                    // Add change listener
+                    newCheckbox.addEventListener('change', function(e) {
+                        console.log('=== ZONING CHECKBOX CHANGED ===');
+                        console.log('Checked:', e.target.checked);
+                        console.log('Zoning source loaded:', zoningSourceLoaded);
+                        console.log('Map exists:', !!vacancyMap);
+                        console.log('Source exists:', !!vacancyMap?.getSource('zoning-polygons'));
+                        console.log('Layer exists:', !!vacancyMap?.getLayer('zoning-choropleth'));
+                        
+                        const checked = e.target.checked;
+                        
+                        // If checking and source not loaded, load it
+                        if (checked && !zoningSourceLoaded) {
+                            console.log('Loading zoning overlay...');
+                            loadZoningOverlay();
+                            return;
+                        }
+                        
+                        // If checking and layers don't exist, try to add them
+                        if (checked && zoningSourceLoaded && !vacancyMap?.getLayer('zoning-choropleth')) {
+                            console.log('Source loaded but layers missing, adding layers...');
+                            if (addZoningLayers()) {
+                                // Layers added, now set visibility
+                                vacancyMap.setLayoutProperty('zoning-choropleth', 'visibility', 'visible');
+                                vacancyMap.setLayoutProperty('zoning-outline', 'visibility', 'visible');
+                                zoningOverlayVisible = true;
+                                vacancyMap.triggerRepaint();
+                                console.log('Layers added and made visible');
+                            }
+                            return;
+                        }
+                        
+                        // Normal toggle
+                        toggleZoningOverlay(checked);
+                    });
+                    
+                    console.log('Zoning overlay checkbox event listener set up');
+                } else {
+                    console.warn('Zoning overlay checkbox not found, will retry...');
+                    setTimeout(setupZoningCheckboxListener, 500);
+                }
+            }
+            
+            // Set up dot layer checkbox listener
+            function setupDotLayerCheckboxListener() {
+                const checkbox = document.getElementById('showDotLayer');
+                if (checkbox) {
+                    checkbox.addEventListener('change', function() {
+                        const checked = this.checked;
+                        console.log('Dot layer checkbox changed:', checked);
+                        toggleDotLayer(checked);
+                    });
+                    
+                    // Set initial state
+                    if (vacancyMap && vacancyMap.getLayer('points-circles')) {
+                        const currentVisibility = vacancyMap.getLayoutProperty('points-circles', 'visibility');
+                        checkbox.checked = currentVisibility !== 'none';
+                    }
+                    
+                    console.log('Dot layer checkbox event listener set up');
+                } else {
+                    console.warn('Dot layer checkbox not found, will retry...');
+                    setTimeout(setupDotLayerCheckboxListener, 500);
+                }
+            }
+            
+            // Set up checkbox listeners when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    setupZoningCheckboxListener();
+                    setupDotLayerCheckboxListener();
+                });
+            } else {
+                setupZoningCheckboxListener();
+                setupDotLayerCheckboxListener();
+            }
+            
             vacancyMap.on('load', function() {
                 // Set initial cursor
                 vacancyMap.getCanvas().style.cursor = 'default';
@@ -1294,6 +2057,17 @@
                 
                 // Ensure map is properly centered on San Francisco
                 ensureMapCenteredOnSF();
+                
+                // Load zoning overlay if checkbox is checked (with a small delay to ensure map is fully ready)
+                setTimeout(() => {
+                    const showZoningCheckbox = document.getElementById('showZoningOverlay');
+                    if (showZoningCheckbox && showZoningCheckbox.checked) {
+                        console.log('Map loaded, checkbox is checked, loading zoning overlay...');
+                        loadZoningOverlay();
+                    } else {
+                        console.log('Map loaded, checkbox not checked, skipping zoning overlay load');
+                    }
+                }, 500);
             });
         }
         
@@ -1368,10 +2142,12 @@
                 const checkedLicenseTypes = Array.from(document.querySelectorAll('input[name="license_type"]:checked'))
                     .map(checkbox => checkbox.value);
                 
-                const businessCorridor = document.getElementById('businessCorridor').value;
-                const neighborhood = document.getElementById('neighborhood').value;
+                // Collect checked zoning districts
+                const checkedZoningDistricts = Array.from(document.querySelectorAll('input[name="zoning_district"]:checked'))
+                    .map(checkbox => checkbox.value);
+                
                 const district = document.getElementById('district').value;
-                const statusFilter = document.getElementById('statusFilter').value;
+                // Business corridor, neighborhood, and status filter removed
                 const businessSearch = document.getElementById('businessSearch').value;
                 
                 // Check if search should override all filters (3+ characters)
@@ -1381,10 +2157,9 @@
                 console.log('DEBUG: Filter values:', {
                     industry_types: checkedIndustryTypes,
                     license_types: checkedLicenseTypes,
-                    business_corridor: businessCorridor,
-                    neighborhood: neighborhood,
+                    zoning_districts: checkedZoningDistricts,
                     district: district,
-                    status_filter: statusFilter,
+                    // business_corridor, neighborhood, and status_filter removed
                     business_search: businessSearch
                 });
                 const corridorOnly = document.getElementById('corridorOnly').checked;
@@ -1406,6 +2181,7 @@
                         currentData = cachedResult.data;
                         updateMap(cachedResult.data);
                         updateStats(cachedResult.summary, {});
+                        updateZoningDistrictStats(cachedResult.data);
                         return;
                     }
                     
@@ -1434,6 +2210,7 @@
                         currentData = searchResult.data;
                         updateMap(searchResult.data);
                         updateStats(searchResult.summary, {});
+                        updateZoningDistrictStats(searchResult.data);
                         
                         // Update loading state
                         filterButton.disabled = false;
@@ -1459,18 +2236,26 @@
                         params.append('license_type', type);
                     });
                     
-                    if (businessCorridor) params.append('business_corridor', businessCorridor);
-                    if (neighborhood) params.append('neighborhood', neighborhood);
+                    // Add multiple zoning districts
+                    checkedZoningDistricts.forEach(zoning => {
+                        params.append('zoning_district', zoning);
+                    });
+                    
                     if (district) params.append('district', district);
-                    if (statusFilter) params.append('status_filter', statusFilter);
+                    // Business corridor, neighborhood, and status filter removed
                     if (businessSearch) params.append('business_search', businessSearch);
                     if (corridorOnly) params.append('corridor_only', 'true');
                     if (licensedOnly) params.append('licensed_only', 'true');
                     if (streetLevelOnly) params.append('street_level_only', 'true');
                     
-                    // Commercial tax filing filter
-                    const commercialTaxFilingOnly = document.getElementById('commercialTaxFilingOnly').checked;
-                    if (commercialTaxFilingOnly) params.append('commercial_tax_filing_only', 'true');
+                    // Increase limit for citywide views to ensure all businesses are included
+                    const isCitywide = !district || district === '';
+                    if (isCitywide) {
+                        params.append('limit', '250000');  // Higher limit for citywide
+                    } else {
+                        params.append('limit', '100000');  // Lower limit for district views
+                    }
+                    
                 }
                 
                 // Check cache first
@@ -1482,6 +2267,7 @@
                     currentData = cachedResult.data;
                     updateMap(cachedResult.data);
                     updateStats(cachedResult.summary, cachedResult.district_stats);
+                    updateZoningDistrictStats(cachedResult.data);
                     return;
                 }
                 
@@ -1518,6 +2304,7 @@
                     currentData = result.data;
                     updateMap(result.data);
                     updateStats(result.summary, result.district_stats);
+                    updateZoningDistrictStats(result.data);
                     
                     updateLoadingMessage('Finalizing...', 'Map update complete');
                 } else {
@@ -1601,7 +2388,7 @@
                 vacancyMap.removeSource('points');
             }
             
-            // Check if street-level only filter is active
+            // Get street level filter from checkbox
             const streetLevelOnly = document.getElementById('streetLevelOnly').checked;
             
             // Prepare data for Mapbox - filter for valid coordinates
@@ -1618,15 +2405,34 @@
             
             console.log('Valid coordinates:', validData.length, 'of', data.length, 'items');
             
-            // If street-level only filter is active, also filter out buildings with no street-level addresses
+            // If street-level only filter is active, filter to only buildings with street-level addresses
             if (streetLevelOnly) {
                 console.log('Street-level filter is active, filtering data...');
                 console.log('Before street-level filter:', validData.length, 'items');
                 validData = validData.filter(item => {
-                    // Individual unit records have is_street_level field directly
-                    const isStreetLevel = item.is_street_level;
-                    // Filter out upper-floor units when street-level only is active
-                    return isStreetLevel;
+                    // Check if building has any street-level addresses
+                    // Option 1: Check building-level streetfront count
+                    const hasStreetfront = (item.total_streetfront_addresses || 0) > 0;
+                    
+                    // Option 2: Check addresses_data array for street-level units
+                    let hasStreetLevelInAddresses = false;
+                    if (item.addresses_data && Array.isArray(item.addresses_data)) {
+                        hasStreetLevelInAddresses = item.addresses_data.some(addr => 
+                            addr.is_street_level === true || addr.street_level === true
+                        );
+                    }
+                    
+                    // Option 3: Check is_street_level field directly (for individual unit records)
+                    const isStreetLevelDirect = item.is_street_level === true;
+                    
+                    // Keep if ANY of these conditions are true
+                    const keep = hasStreetfront || hasStreetLevelInAddresses || isStreetLevelDirect;
+                    
+                    if (!keep) {
+                        console.log('Filtering out building:', item.full_business_address, 'hasStreetfront:', hasStreetfront, 'hasStreetLevelInAddresses:', hasStreetLevelInAddresses, 'isStreetLevelDirect:', isStreetLevelDirect);
+                    }
+                    
+                    return keep;
                 });
                 console.log('After street-level filter:', validData.length, 'items');
             }
@@ -1985,12 +2791,12 @@
                                 ['get', 'total_streetfront_addresses'],
                                 ['coalesce', ['get', 'buildings_at_location'], 1]  // Multiply by buildings at location (default 1)
                             ],
-                            1, 6,     // 1 storefront: 6px
-                            2, 9,     // 2 storefronts: 9px
-                            5, 14,    // 5 storefronts: 14px
-                            10, 20,   // 10 storefronts: 20px
-                            20, 28,   // 20 storefronts: 28px
-                            40, 38    // 40+ storefronts: 38px
+                            1, 4,     // 1 storefront: 4px (reduced from 5px)
+                            2, 7,     // 2 storefronts: 7px (reduced from 8px)
+                            5, 12,    // 5 storefronts: 12px (reduced from 13px)
+                            10, 18,   // 10 storefronts: 18px (reduced from 19px)
+                            20, 26,   // 20 storefronts: 26px (reduced from 27px)
+                            40, 36    // 40+ storefronts: 36px (reduced from 37px)
                         ],
                         'circle-color': [
                             'interpolate',
@@ -2015,6 +2821,13 @@
                 });
                 
                 console.log('Successfully added points-circles layer with', geojsonData.features.length, 'features');
+                
+                // Sync checkbox state with layer visibility
+                const dotCheckbox = document.getElementById('showDotLayer');
+                if (dotCheckbox && vacancyMap.getLayer('points-circles')) {
+                    const currentVisibility = vacancyMap.getLayoutProperty('points-circles', 'visibility');
+                    dotCheckbox.checked = currentVisibility !== 'none';
+                }
                 
                 // Update point colors for current theme with a small delay to ensure layer is ready
                 console.log('Calling updatePointColors after layer creation...');
@@ -2188,8 +3001,15 @@
                     // Debug: Log the properties to see what we're working with
                     console.log('Feature properties:', properties);
                     
-                    // Remove existing popups
+                    // Detect mobile mode (screen width < 768px)
+                    const isMobile = window.innerWidth < 768;
+                    
+                    // Remove existing popups and bottom sheets
                     document.querySelectorAll('.mapboxgl-popup').forEach(popup => popup.remove());
+                    const existingSheet = document.getElementById('mobileBottomSheet');
+                    const existingOverlay = document.getElementById('mobileBottomSheetOverlay');
+                    if (existingSheet) existingSheet.remove();
+                    if (existingOverlay) existingOverlay.remove();
 
                     // Create popup based on status
                     const isOpen = properties.status === 'Open';
@@ -2428,47 +3248,23 @@
                             // Track counts and add divider between street level and upper floor
                             // (No divider here; will render upper section after)
                             
-                            // Get the most recent business and filing date
-                            let lastBusinessName = addressData.dba_name || 'No Business';
-                            let lastFilingDate = 'N/A';
+                            // Separate businesses into open and closed
+                            const openBusinesses = [];
+                            const closedBusinesses = [];
                             
                             if (addressData.businesses && Array.isArray(addressData.businesses) && addressData.businesses.length > 0) {
-                                // Sort businesses by most recent activity
-                                const sortedBusinesses = [...addressData.businesses].sort((a, b) => {
-                                    const parseDate = (dateStr) => {
-                                        if (!dateStr) return null;
-                                        try {
-                                            return new Date(dateStr.split('T')[0]);
-                                        } catch {
-                                            return null;
-                                        }
-                                    };
-                                    
-                                    const aDates = [
-                                        parseDate(a.dba_start_date),
-                                        parseDate(a.location_start_date),
-                                        parseDate(a.dba_end_date),
-                                        parseDate(a.location_end_date)
-                                    ].filter(d => d);
-                                    
-                                    const bDates = [
-                                        parseDate(b.dba_start_date),
-                                        parseDate(b.location_start_date),
-                                        parseDate(b.dba_end_date),
-                                        parseDate(b.location_end_date)
-                                    ].filter(d => d);
-                                    
-                                    const aLatest = aDates.length > 0 ? Math.max(...aDates.map(d => d.getTime())) : 0;
-                                    const bLatest = bDates.length > 0 ? Math.max(...bDates.map(d => d.getTime())) : 0;
-                                    
-                                    return bLatest - aLatest;
+                                addressData.businesses.forEach(business => {
+                                    const businessStatus = calculateBusinessStatus(business);
+                                    if (businessStatus === 'Open') {
+                                        openBusinesses.push(business);
+                                    } else {
+                                        closedBusinesses.push(business);
+                                    }
                                 });
-                                
-                                const mostRecentBusiness = sortedBusinesses[0];
-                                // Use the business name from the most recent business, but fall back to addressData.dba_name
-                                lastBusinessName = mostRecentBusiness.dba_name || addressData.dba_name || 'Unknown Business';
-                                
-                                // Get the most recent filing date - prioritize end dates for closed businesses
+                            }
+                            
+                            // Helper function to format business date
+                            const formatBusinessDate = (business) => {
                                 const parseDate = (dateStr) => {
                                     if (!dateStr) return null;
                                     try {
@@ -2478,138 +3274,146 @@
                                     }
                                 };
                                 
-                                // For closed businesses, prioritize end dates; for open businesses, prioritize start dates
-                                const businessStatus = calculateBusinessStatus(mostRecentBusiness);
+                                const businessStatus = calculateBusinessStatus(business);
                                 let relevantDates = [];
                                 
                                 if (businessStatus === 'Closed') {
-                                    // For closed businesses, show the closure date
                                     relevantDates = [
-                                        parseDate(mostRecentBusiness.dba_end_date),
-                                        parseDate(mostRecentBusiness.location_end_date),
-                                        parseDate(addressData.close_date)
+                                        parseDate(business.dba_end_date),
+                                        parseDate(business.location_end_date)
                                     ].filter(d => d);
                                 } else {
-                                    // For open businesses, show the most recent activity (start or end dates)
                                     relevantDates = [
-                                        parseDate(mostRecentBusiness.dba_start_date),
-                                        parseDate(mostRecentBusiness.location_start_date),
-                                        parseDate(mostRecentBusiness.dba_end_date),
-                                        parseDate(mostRecentBusiness.location_end_date),
-                                        parseDate(addressData.open_date)
+                                        parseDate(business.dba_start_date),
+                                        parseDate(business.location_start_date),
+                                        parseDate(business.dba_end_date),
+                                        parseDate(business.location_end_date)
                                     ].filter(d => d);
                                 }
                                 
                                 if (relevantDates.length > 0) {
                                     const mostRecentDate = new Date(Math.max(...relevantDates.map(d => d.getTime())));
-                                    lastFilingDate = mostRecentDate.toLocaleDateString();
+                                    return mostRecentDate.toLocaleDateString();
                                 }
-                            }
-                            
-                            // Count total businesses for expand button
-                            const totalBusinesses = addressData.business_count || (addressData.businesses ? addressData.businesses.length : 0);
-                            const hasMultipleBusinesses = totalBusinesses > 1;
+                                return 'N/A';
+                            };
                             
                             content += `
                                 <div class="address-item ${addressIndex < streetList.length - 1 ? 'border-bottom' : ''} pb-2 mb-2">
-                                    <!-- Compact 2-line display -->
+                                    <!-- Address header -->
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <span class="fw-bold text-secondary small"><i class="fas fa-map-marker-alt"></i> ${addressData.distinct_address || addressData.address}</span>
                                         <span class="${statusClass} fw-bold small">${statusIcon} ${addressData.status}</span>
                                     </div>
-                                    <div class="d-flex justify-content-between align-items-center small text-muted">
-                                        <span><i class="fas fa-store"></i> ${lastBusinessName}</span>
-                                        <span><i class="fas fa-calendar"></i> ${lastFilingDate}</span>
-                                    </div>
                             `;
                             
-                            // Add expandable section for detailed business information
-                            if (hasMultipleBusinesses) {
+                            // Display all open businesses at first level
+                            if (openBusinesses.length > 0) {
+                                openBusinesses.forEach((business, openIdx) => {
+                                    const businessDate = formatBusinessDate(business);
+                                    content += `
+                                        <div class="d-flex justify-content-between align-items-center small ${openIdx < openBusinesses.length - 1 || closedBusinesses.length > 0 ? 'mb-1' : ''}" style="color: #28a745;">
+                                            <span><i class="fas fa-store"></i> <strong>${business.dba_name || 'Unknown Business'}</strong></span>
+                                            <span><i class="fas fa-calendar"></i> ${businessDate}</span>
+                                        </div>
+                                    `;
+                                });
+                            } else if (addressData.dba_name) {
+                                // Fallback: show address-level business name if no businesses array
+                                const parseDate = (dateStr) => {
+                                    if (!dateStr) return null;
+                                    try {
+                                        return new Date(dateStr.split('T')[0]);
+                                    } catch {
+                                        return null;
+                                    }
+                                };
+                                let relevantDates = [];
+                                if (addressData.status === 'Closed') {
+                                    relevantDates = [parseDate(addressData.close_date)].filter(d => d);
+                                } else {
+                                    relevantDates = [parseDate(addressData.open_date)].filter(d => d);
+                                }
+                                const businessDate = relevantDates.length > 0 
+                                    ? new Date(Math.max(...relevantDates.map(d => d.getTime()))).toLocaleDateString() 
+                                    : 'N/A';
+                                content += `
+                                    <div class="d-flex justify-content-between align-items-center small text-muted">
+                                        <span><i class="fas fa-store"></i> ${addressData.dba_name}</span>
+                                        <span><i class="fas fa-calendar"></i> ${businessDate}</span>
+                                    </div>
+                                `;
+                            }
+                            
+                            // Show closed businesses in collapsible section if any exist
+                            if (closedBusinesses.length > 0) {
                                 const expandId = `expand-${addressIndex}`;
                                 content += `
                                     <div class="mt-2">
                                         <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#${expandId}" aria-expanded="false" aria-controls="${expandId}" onclick="toggleChevron(this)">
-                                            <i class="fas fa-chevron-down"></i> Show ${totalBusinesses} Business${totalBusinesses > 1 ? 'es' : ''}
+                                            <i class="fas fa-chevron-down"></i> Show ${closedBusinesses.length} Closed Business${closedBusinesses.length > 1 ? 'es' : ''}
                                         </button>
                                         <div class="collapse mt-2" id="${expandId}">
                                             <div class="businesses-detail ms-3 small">
                                 `;
                                 
-                                // Show detailed business information
-                                if (addressData.businesses && Array.isArray(addressData.businesses)) {
-                                    // Sort businesses: open first, then closed
-                                    const sortedBusinesses = [...addressData.businesses].sort((a, b) => {
-                                        const aStatus = calculateBusinessStatus(a);
-                                        const bStatus = calculateBusinessStatus(b);
-                                        
-                                        if (aStatus === 'Open' && bStatus === 'Closed') return -1;
-                                        if (aStatus === 'Closed' && bStatus === 'Open') return 1;
-                                        return 0;
-                                    });
+                                // Show only closed businesses
+                                closedBusinesses.forEach((business, businessIndex) => {
+                                    const businessStatusClass = 'text-danger';
+                                    const businessStatusIcon = '●';
                                     
-                                    sortedBusinesses.forEach((business, businessIndex) => {
-                                        const businessStatus = calculateBusinessStatus(business);
-                                        const businessOpen = businessStatus === 'Open';
-                                        const businessStatusClass = businessOpen ? 'text-success' : 'text-danger';
-                                        const businessStatusIcon = businessOpen ? '●' : '●';
-                                        
-                                        // Format closure date if business is closed
-                                        let statusDisplay = businessStatus;
-                                        if (!businessOpen) {
-                                            const parseDate = (dateStr) => {
-                                                if (!dateStr) return null;
-                                                try {
-                                                    return new Date(dateStr.split('T')[0]);
-                                                } catch {
-                                                    return null;
-                                                }
-                                            };
-                                            
-                                            // Get closure dates from business record
-                                            const dbaEnd = parseDate(business.dba_end_date);
-                                            const locationEnd = parseDate(business.location_end_date);
-                                            const closeDates = [dbaEnd, locationEnd].filter(d => d);
-                                            
-                                            // Also try to get closure date from address-level data
-                                            const addressCloseDate = parseDate(addressData.most_recent_close_date);
-                                            if (addressCloseDate) {
-                                                closeDates.push(addressCloseDate);
-                                            }
-                                            
-                                            if (closeDates.length > 0) {
-                                                const mostRecentClose = new Date(Math.max(...closeDates.map(d => d.getTime())));
-                                                statusDisplay = mostRecentClose.toLocaleDateString();
-                                            } else {
-                                                statusDisplay = 'Closed';
-                                            }
+                                    // Format closure date
+                                    const parseDate = (dateStr) => {
+                                        if (!dateStr) return null;
+                                        try {
+                                            return new Date(dateStr.split('T')[0]);
+                                        } catch {
+                                            return null;
                                         }
-                                        
-                                        // Build category display (only show non-N/A categories)
-                                        let categoryInfo = '';
-                                        const industry = business.naic_code_description;
-                                        const license = business.lic_code_description;
-                                        
-                                        if (industry && industry !== 'N/A' && industry.trim() !== '') {
-                                            categoryInfo += `<i class="fas fa-industry"></i> ${industry}`;
-                                        }
-                                        
-                                        if (license && license !== 'N/A' && license.trim() !== '') {
-                                            if (categoryInfo) categoryInfo += ' | ';
-                                            categoryInfo += `<i class="fas fa-certificate"></i> ${license}`;
-                                        }
-                                        
-                                        content += `
-                                            <div class="business-item ${businessIndex < sortedBusinesses.length - 1 ? 'border-bottom border-light' : ''} pb-1 mb-1">
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <span class="fw-bold">${business.dba_name || 'Unknown Business'}</span>
-                                                    <span class="${businessStatusClass}">${businessStatusIcon} ${statusDisplay}</span>
-                                                </div>
-                                                ${business.ownership_name ? `<div class="text-muted" style="font-size: 0.75rem;"><i class="fas fa-user"></i> ${business.ownership_name}</div>` : ''}
-                                                ${categoryInfo ? `<div class="text-muted" style="font-size: 0.7rem;">${categoryInfo}</div>` : ''}
+                                    };
+                                    
+                                    // Get closure dates from business record
+                                    const dbaEnd = parseDate(business.dba_end_date);
+                                    const locationEnd = parseDate(business.location_end_date);
+                                    const closeDates = [dbaEnd, locationEnd].filter(d => d);
+                                    
+                                    // Also try to get closure date from address-level data
+                                    const addressCloseDate = parseDate(addressData.close_date);
+                                    if (addressCloseDate) {
+                                        closeDates.push(addressCloseDate);
+                                    }
+                                    
+                                    let statusDisplay = 'Closed';
+                                    if (closeDates.length > 0) {
+                                        const mostRecentClose = new Date(Math.max(...closeDates.map(d => d.getTime())));
+                                        statusDisplay = mostRecentClose.toLocaleDateString();
+                                    }
+                                    
+                                    // Build category display (only show non-N/A categories)
+                                    let categoryInfo = '';
+                                    const industry = business.naic_code_description;
+                                    const license = business.lic_code_description;
+                                    
+                                    if (industry && industry !== 'N/A' && industry.trim() !== '') {
+                                        categoryInfo += `<i class="fas fa-industry"></i> ${industry}`;
+                                    }
+                                    
+                                    if (license && license !== 'N/A' && license.trim() !== '') {
+                                        if (categoryInfo) categoryInfo += ' | ';
+                                        categoryInfo += `<i class="fas fa-certificate"></i> ${license}`;
+                                    }
+                                    
+                                    content += `
+                                        <div class="business-item ${businessIndex < closedBusinesses.length - 1 ? 'border-bottom border-light' : ''} pb-1 mb-1">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="fw-bold">${business.dba_name || 'Unknown Business'}</span>
+                                                <span class="${businessStatusClass}">${businessStatusIcon} ${statusDisplay}</span>
                                             </div>
-                                        `;
-                                    });
-                                }
+                                            ${business.ownership_name ? `<div class="text-muted" style="font-size: 0.75rem;"><i class="fas fa-user"></i> ${business.ownership_name}</div>` : ''}
+                                            ${categoryInfo ? `<div class="text-muted" style="font-size: 0.7rem;">${categoryInfo}</div>` : ''}
+                                        </div>
+                                    `;
+                                });
                                 
                                 content += `
                                             </div>
@@ -2706,27 +3510,141 @@
                         return content;
                     };
 
+                    const popupContent = generatePopupContent(properties);
+                    const buildingAddress = getAddressFromLocation(properties);
+
+                    if (isMobile) {
+                        // Mobile: Show bottom sheet card
+                        console.log('Mobile mode: Showing bottom sheet');
+                        
+                        // Create overlay
+                        const overlay = document.createElement('div');
+                        overlay.id = 'mobileBottomSheetOverlay';
+                        overlay.className = 'mobile-bottom-sheet-overlay';
+                        document.body.appendChild(overlay);
+                        
+                        // Create bottom sheet
+                        const bottomSheet = document.createElement('div');
+                        bottomSheet.id = 'mobileBottomSheet';
+                        bottomSheet.className = 'mobile-bottom-sheet';
+                        
+                        // Remove the header from popup content for mobile (it's in the sheet header)
+                        let mobileContent = popupContent;
+                        // Remove the h5 header from the content since we're showing it in the sheet header
+                        mobileContent = mobileContent.replace(/<h5[^>]*>.*?<\/h5>/s, '');
+                        
+                        bottomSheet.innerHTML = `
+                            <div class="mobile-bottom-sheet-drag-handle"></div>
+                            <div class="mobile-bottom-sheet-header">
+                                <h6 class="mb-0 fw-bold" style="color: #ad35fa;"><i class="fas fa-building"></i> ${buildingAddress}</h6>
+                                <button class="mobile-bottom-sheet-close" aria-label="Close">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div class="mobile-bottom-sheet-content">
+                                ${mobileContent}
+                            </div>
+                        `;
+                        
+                        document.body.appendChild(bottomSheet);
+                        
+                        // Show with animation
+                        setTimeout(() => {
+                            bottomSheet.classList.add('show');
+                            overlay.classList.add('show');
+                        }, 10);
+                        
+                        // Close handlers
+                        const closeSheet = () => {
+                            bottomSheet.classList.remove('show');
+                            overlay.classList.remove('show');
+                            setTimeout(() => {
+                                bottomSheet.remove();
+                                overlay.remove();
+                            }, 300);
+                        };
+                        
+                        // Close button
+                        bottomSheet.querySelector('.mobile-bottom-sheet-close').addEventListener('click', closeSheet);
+                        
+                        // Close on overlay click
+                        overlay.addEventListener('click', closeSheet);
+                        
+                        // Swipe to dismiss
+                        let touchStartY = 0;
+                        let touchStartTime = 0;
+                        let isDragging = false;
+                        
+                        bottomSheet.addEventListener('touchstart', (e) => {
+                            touchStartY = e.touches[0].clientY;
+                            touchStartTime = Date.now();
+                            isDragging = false;
+                        });
+                        
+                        bottomSheet.addEventListener('touchmove', (e) => {
+                            if (!touchStartY) return;
+                            const touchY = e.touches[0].clientY;
+                            const deltaY = touchY - touchStartY;
+                            
+                            if (deltaY > 10) {
+                                isDragging = true;
+                                // Allow dragging down
+                                bottomSheet.style.transform = `translateY(${Math.max(0, deltaY)}px)`;
+                            }
+                        });
+                        
+                        bottomSheet.addEventListener('touchend', (e) => {
+                            if (!touchStartY) return;
+                            const touchY = e.changedTouches[0].clientY;
+                            const deltaY = touchY - touchStartY;
+                            const deltaTime = Date.now() - touchStartTime;
+                            const velocity = deltaY / deltaTime;
+                            
+                            // Close if dragged down more than 50px or with sufficient velocity
+                            if (deltaY > 50 || (deltaY > 20 && velocity > 0.3)) {
+                                closeSheet();
+                            } else {
+                                // Snap back
+                                bottomSheet.style.transform = '';
+                            }
+                            
+                            touchStartY = 0;
+                            isDragging = false;
+                        });
+                        
+                        // Prevent scrolling the map when interacting with sheet
+                        bottomSheet.addEventListener('touchmove', (e) => {
+                            if (isDragging) {
+                                e.preventDefault();
+                            }
+                        }, { passive: false });
+                        
+                        console.log('Bottom sheet created for:', properties.business_name);
+                    } else {
+                        // Desktop: Show popup
+                        console.log('Desktop mode: Showing popup');
                         const popup = new mapboxgl.Popup({
                             closeButton: true,
                             closeOnClick: false,
                             offset: [0, -10],
-                        anchor: 'top',
-                        className: 'custom-popup'
+                            anchor: 'top',
+                            className: 'custom-popup'
                         })
                             .setLngLat(coordinates)
-                        .setHTML(generatePopupContent(properties))
+                            .setHTML(popupContent)
                             .addTo(vacancyMap);
 
-                    // Fix accessibility issue with close button
-                    setTimeout(() => {
-                        const closeButton = document.querySelector('.custom-popup .mapboxgl-popup-close-button');
-                        if (closeButton) {
-                            closeButton.removeAttribute('aria-hidden');
-                        }
-                    }, 100);
+                        // Fix accessibility issue with close button
+                        setTimeout(() => {
+                            const closeButton = document.querySelector('.custom-popup .mapboxgl-popup-close-button');
+                            if (closeButton) {
+                                closeButton.removeAttribute('aria-hidden');
+                            }
+                        }, 100);
 
                         console.log('Popup created for:', properties.business_name);
                     }
+                }
             }
         }
         
@@ -2811,6 +3729,128 @@
             });
         }
         
+        // Update zoning district statistics
+        function updateZoningDistrictStats(data) {
+            if (!data || !Array.isArray(data)) {
+                const zoningContainer = document.getElementById('zoningDistrictStats');
+                if (zoningContainer) {
+                    zoningContainer.innerHTML = '<div class="district-stats-text">No data available</div>';
+                }
+                return;
+            }
+            
+            // Calculate stats by zoning district
+            const zoningStats = {};
+            
+            data.forEach(building => {
+                // Get zoning district from building (handle null, undefined, and empty strings)
+                const zoningDistrict = (building.zoning_district && building.zoning_district.trim()) 
+                    ? building.zoning_district.trim() 
+                    : 'Unknown';
+                
+                // Initialize stats for this zoning district if needed
+                if (!zoningStats[zoningDistrict]) {
+                    zoningStats[zoningDistrict] = {
+                        total: 0,
+                        open: 0,
+                        closed: 0
+                    };
+                }
+                
+                // Parse addresses data to count storefronts
+                let addressesData = building.addresses_data;
+                if (typeof addressesData === 'string') {
+                    try {
+                        addressesData = JSON.parse(addressesData);
+                    } catch (e) {
+                        addressesData = [];
+                    }
+                }
+                
+                if (Array.isArray(addressesData)) {
+                    addressesData.forEach(addr => {
+                        // Only count street-level storefronts
+                        if (addr.is_street_level) {
+                            zoningStats[zoningDistrict].total++;
+                            if (addr.status === 'Open') {
+                                zoningStats[zoningDistrict].open++;
+                            } else {
+                                zoningStats[zoningDistrict].closed++;
+                            }
+                        }
+                    });
+                }
+            });
+            
+            // Update the display
+            const zoningContainer = document.getElementById('zoningDistrictStats');
+            if (!zoningContainer) return;
+            
+            zoningContainer.innerHTML = '';
+            
+            // Sort zoning districts alphabetically
+            const sortedZoning = Object.entries(zoningStats).sort((a, b) => {
+                // Put "Unknown" at the end
+                if (a[0] === 'Unknown') return 1;
+                if (b[0] === 'Unknown') return -1;
+                return a[0].localeCompare(b[0]);
+            });
+            
+            // Calculate totals
+            const totals = Object.values(zoningStats).reduce((acc, stats) => {
+                acc.total += stats.total;
+                acc.open += stats.open;
+                acc.closed += stats.closed;
+                return acc;
+            }, { total: 0, open: 0, closed: 0 });
+            
+            const overallVacancyRate = totals.total > 0 ? (totals.closed / totals.total * 100) : 0;
+            
+            // Only show if there's data
+            if (totals.total === 0) {
+                zoningContainer.innerHTML = '<div class="district-stats-text">No storefront data available</div>';
+                return;
+            }
+            
+            // Add header for overall totals
+            const headerItem = document.createElement('div');
+            headerItem.className = 'district-item';
+            headerItem.style.backgroundColor = 'var(--primary-color)';
+            headerItem.style.color = 'white';
+            headerItem.style.fontWeight = 'bold';
+            headerItem.innerHTML = `
+                <div class="district-name">🏙️ All Zoning Districts</div>
+                <div class="district-stats-text">
+                    Total: ${totals.total.toLocaleString()} | 
+                    Open: ${totals.open.toLocaleString()} | 
+                    Closed: ${totals.closed.toLocaleString()} | 
+                    Vacancy: ${overallVacancyRate.toFixed(1)}%
+                </div>
+            `;
+            zoningContainer.appendChild(headerItem);
+            
+            // Add each zoning district
+            sortedZoning.forEach(([zoning, stats]) => {
+                // Skip districts with no data
+                if (stats.total === 0) return;
+                
+                const vacancyRate = stats.total > 0 ? (stats.closed / stats.total * 100) : 0;
+                
+                const zoningItem = document.createElement('div');
+                zoningItem.className = 'district-item';
+                zoningItem.innerHTML = `
+                    <div class="district-name">${zoning}</div>
+                    <div class="district-stats-text">
+                        Total: ${stats.total.toLocaleString()} | 
+                        Open: ${stats.open.toLocaleString()} | 
+                        Closed: ${stats.closed.toLocaleString()} | 
+                        Vacancy: ${vacancyRate.toFixed(1)}%
+                    </div>
+                `;
+                zoningContainer.appendChild(zoningItem);
+            });
+        }
+        
         // Function to toggle chevron icon rotation
         function toggleChevron(button) {
             const chevron = button.querySelector('i');
@@ -2846,15 +3886,13 @@
         
         // Event listeners
         document.getElementById('applyFilters').addEventListener('click', applyFilters);
-        document.getElementById('commercialTaxFilingOnly').addEventListener('change', debouncedApplyFilters);
         
         // Add change event listeners for checkbox containers (use debounced version)
         document.getElementById('industryTypeContainer').addEventListener('change', debouncedApplyFilters);
         document.getElementById('licenseTypeContainer').addEventListener('change', debouncedApplyFilters);
-        document.getElementById('businessCorridor').addEventListener('change', debouncedApplyFilters);
-        document.getElementById('neighborhood').addEventListener('change', debouncedApplyFilters);
+        document.getElementById('zoningDistrictContainer').addEventListener('change', debouncedApplyFilters);
         document.getElementById('district').addEventListener('change', debouncedApplyFilters);
-        document.getElementById('statusFilter').addEventListener('change', debouncedApplyFilters);
+        // Business corridor, neighborhood, and status filter event listeners removed
         document.getElementById('businessSearch').addEventListener('input', (e) => {
             updateSearchOverrideUI();
             debouncedApplyFilters();

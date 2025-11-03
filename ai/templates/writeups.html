@@ -725,6 +725,87 @@
             color: var(--text-primary);
         }
         
+        /* New Writeup Modal */
+        .new-writeup-modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+        }
+        
+        .new-writeup-modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .new-writeup-modal-content {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .new-writeup-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+        
+        .new-writeup-modal-header h3 {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 18px;
+            color: var(--text-primary);
+        }
+        
+        .new-writeup-modal-close {
+            color: var(--text-secondary);
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s ease;
+        }
+        
+        .new-writeup-modal-close:hover {
+            color: var(--text-primary);
+        }
+        
+        .new-writeup-modal-body {
+            padding: 20px;
+            flex: 1;
+        }
+        
+        .new-writeup-modal .input-area {
+            padding: 0;
+        }
+        
+        .new-writeup-modal .input-container {
+            max-width: 100%;
+        }
+        
         /* Responsive design */
         @media (max-width: 1024px) {
             :root {
@@ -877,6 +958,34 @@
         </div>
     </div>
     
+    <!-- New Writeup Modal (for narrow mode) -->
+    <div id="newWriteupModal" class="new-writeup-modal">
+        <div class="new-writeup-modal-content">
+            <div class="new-writeup-modal-header">
+                <h3>Create New Write-up</h3>
+                <button class="new-writeup-modal-close" onclick="closeNewWriteupModal()">&times;</button>
+            </div>
+            <div class="new-writeup-modal-body">
+                <div class="input-area">
+                    <div class="input-container">
+                        <div class="model-selector">
+                            <label for="modalModelSelect">Model:</label>
+                            <select id="modalModelSelect">
+                                <option value="">Loading models...</option>
+                            </select>
+                        </div>
+                        <div class="prompt-input">
+                            <textarea id="modalPromptTextarea" class="prompt-textarea" placeholder="Describe what you want the write-up to cover. Be as specific as possible about the topic, scope, and any particular aspects you want to focus on..." rows="3"></textarea>
+                            <button id="modalSendButton" class="send-button">
+                                Generate
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script>
         // Global state
         let sessions = new Map();
@@ -933,15 +1042,6 @@
                 if (data.status === 'success') {
                     const modelSelect = document.getElementById('modelSelect');
                     
-                    // Clear existing options
-                    modelSelect.innerHTML = '';
-                    
-                    // Add default option
-                    const defaultOption = document.createElement('option');
-                    defaultOption.value = '';
-                    defaultOption.textContent = `Default (${data.default_model})`;
-                    modelSelect.appendChild(defaultOption);
-                    
                     // Add available models grouped by provider
                     const modelsByProvider = {};
                     data.models.forEach(model => {
@@ -951,33 +1051,66 @@
                         modelsByProvider[model.provider].push(model);
                     });
                     
-                    // Add models by provider
-                    Object.keys(modelsByProvider).forEach(provider => {
-                        const providerOption = document.createElement('option');
-                        providerOption.value = '';
-                        providerOption.textContent = `--- ${provider.toUpperCase()} ---`;
-                        providerOption.disabled = true;
-                        modelSelect.appendChild(providerOption);
+                    // Helper to add models to a select element
+                    const addModelsToSelect = (selectElement) => {
+                        // Clear existing options
+                        selectElement.innerHTML = '';
                         
-                        // Add models for this provider
-                        modelsByProvider[provider].forEach(model => {
-                            const option = document.createElement('option');
-                            option.value = model.key;
-                            const contextWindowStr = formatContextWindow(model.context_window);
-                            const pricingStr = formatPricing(model.input_price_per_million, model.output_price_per_million);
-                            option.textContent = `${model.name} (${contextWindowStr} context, ${pricingStr}/M)`;
-                            modelSelect.appendChild(option);
+                        // Add default option
+                        const defaultOption = document.createElement('option');
+                        defaultOption.value = '';
+                        defaultOption.textContent = `Default (${data.default_model})`;
+                        selectElement.appendChild(defaultOption);
+                        
+                        // Add models by provider
+                        Object.keys(modelsByProvider).forEach(provider => {
+                            const providerOption = document.createElement('option');
+                            providerOption.value = '';
+                            providerOption.textContent = `--- ${provider.toUpperCase()} ---`;
+                            providerOption.disabled = true;
+                            selectElement.appendChild(providerOption);
+                            
+                            // Add models for this provider
+                            modelsByProvider[provider].forEach(model => {
+                                const option = document.createElement('option');
+                                option.value = model.key;
+                                const contextWindowStr = formatContextWindow(model.context_window);
+                                const pricingStr = formatPricing(model.input_price_per_million, model.output_price_per_million);
+                                option.textContent = `${model.name} (${contextWindowStr} context, ${pricingStr}/M)`;
+                                selectElement.appendChild(option);
+                            });
                         });
-                    });
+                    };
+                    
+                    // Add models to main select
+                    addModelsToSelect(modelSelect);
+                    
+                    // Also add to modal select if it exists
+                    const modalModelSelect = document.getElementById('modalModelSelect');
+                    if (modalModelSelect) {
+                        addModelsToSelect(modalModelSelect);
+                    }
                 } else {
                     console.error('Failed to load models:', data.message);
                     const modelSelect = document.getElementById('modelSelect');
-                    modelSelect.innerHTML = '<option value="">Error loading models</option>';
+                    const modalModelSelect = document.getElementById('modalModelSelect');
+                    if (modelSelect) {
+                        modelSelect.innerHTML = '<option value="">Error loading models</option>';
+                    }
+                    if (modalModelSelect) {
+                        modalModelSelect.innerHTML = '<option value="">Error loading models</option>';
+                    }
                 }
             } catch (error) {
                 console.error('Error loading models:', error);
                 const modelSelect = document.getElementById('modelSelect');
-                modelSelect.innerHTML = '<option value="">Error loading models</option>';
+                const modalModelSelect = document.getElementById('modalModelSelect');
+                if (modelSelect) {
+                    modelSelect.innerHTML = '<option value="">Error loading models</option>';
+                }
+                if (modalModelSelect) {
+                    modalModelSelect.innerHTML = '<option value="">Error loading models</option>';
+                }
             }
         }
         
@@ -1551,16 +1684,155 @@
         function showNewWriteup() {
             currentSessionId = null;
             renderSessions();
-            showSessionContent();
             
-            // Reset button text and welcome message
-            const sendButton = document.getElementById('sendButton');
-            sendButton.textContent = 'Generate';
+            // Check if we're in narrow mode
+            const isCurrentlyMobile = checkMobileView();
             
-            const welcomeMsg = document.querySelector('.welcome-message');
-            welcomeMsg.innerHTML = `
-                <h3>Create New Write-up</h3>
-            `;
+            if (isCurrentlyMobile) {
+                // Show modal in narrow mode
+                showNewWriteupModal();
+            } else {
+                // Normal behavior for desktop
+                showSessionContent();
+                
+                // Reset button text and welcome message
+                const sendButton = document.getElementById('sendButton');
+                sendButton.textContent = 'Generate';
+                
+                const welcomeMsg = document.querySelector('.welcome-message');
+                welcomeMsg.innerHTML = `
+                    <h3>Create New Write-up</h3>
+                `;
+            }
+        }
+        
+        // Show new writeup modal (for narrow mode)
+        function showNewWriteupModal() {
+            const modal = document.getElementById('newWriteupModal');
+            if (!modal) return;
+            
+            // Populate model dropdown in modal
+            const modalModelSelect = document.getElementById('modalModelSelect');
+            const mainModelSelect = document.getElementById('modelSelect');
+            if (modalModelSelect && mainModelSelect) {
+                modalModelSelect.innerHTML = mainModelSelect.innerHTML;
+            }
+            
+            // Clear textarea
+            const modalPromptTextarea = document.getElementById('modalPromptTextarea');
+            if (modalPromptTextarea) {
+                modalPromptTextarea.value = '';
+            }
+            
+            // Show modal
+            modal.classList.add('show');
+            
+            // Focus on textarea
+            if (modalPromptTextarea) {
+                setTimeout(() => {
+                    modalPromptTextarea.focus();
+                }, 100);
+            }
+        }
+        
+        // Close new writeup modal
+        function closeNewWriteupModal() {
+            const modal = document.getElementById('newWriteupModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
+        }
+        
+        // Handle send button in modal
+        async function handleModalSendMessage() {
+            if (isGenerating) return;
+            
+            const modalPromptTextarea = document.getElementById('modalPromptTextarea');
+            const modalModelSelect = document.getElementById('modalModelSelect');
+            const modalSendButton = document.getElementById('modalSendButton');
+            
+            if (!modalPromptTextarea || !modalModelSelect || !modalSendButton) return;
+            
+            const prompt = modalPromptTextarea.value.trim();
+            const modelKey = modalModelSelect.value;
+            
+            if (!prompt) {
+                return;
+            }
+            
+            isGenerating = true;
+            modalSendButton.disabled = true;
+            modalSendButton.textContent = 'Creating...';
+            
+            const sessionTitle = createSessionTitle(prompt);
+            const promptPreview = prompt.length > 60 ? prompt.substring(0, 57) + '...' : prompt;
+            
+            // Clear input immediately
+            modalPromptTextarea.value = '';
+            
+            // Close modal
+            closeNewWriteupModal();
+            
+            // Create a temporary session immediately with spinner
+            const tempSessionId = `temp_${Date.now()}`;
+            addSession(tempSessionId, 'Generating title...', 'pending', promptPreview);
+            
+            try {
+                const response = await fetch('/api/writeups/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        title: '', // Let the backend generate the title
+                        prompt: prompt,
+                        output_format: 'html',
+                        generate_title: true,
+                        model_key: modelKey
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    // Replace the temporary session with the real one
+                    const newSessionId = `writeup_${result.writeup_id}`;
+                    const generatedTitle = result.title || 'Generating title...';
+                    
+                    // Remove temp session and add real one
+                    sessions.delete(tempSessionId);
+                    addSession(newSessionId, generatedTitle, 'pending', promptPreview);
+                    sessions.get(newSessionId).writeupId = result.writeup_id;
+                    
+                    // Start polling for title updates if it's still generating
+                    if (generatedTitle === 'Generating title...') {
+                        modalSendButton.textContent = 'Generating title...';
+                        await waitForTitleGeneration(result.writeup_id, newSessionId);
+                    }
+                    
+                    // Automatically execute the writeup with the selected model
+                    modalSendButton.textContent = 'Executing...';
+                    await executePendingWriteup(result.writeup_id, modelKey);
+                } else {
+                    // Remove temp session on error
+                    sessions.delete(tempSessionId);
+                    renderSessions();
+                    alert(`Error: ${result.message || 'Failed to create write-up'}`);
+                }
+            } catch (error) {
+                // Remove temp session on error
+                sessions.delete(tempSessionId);
+                renderSessions();
+                alert(`Error: ${error.message}`);
+            } finally {
+                isGenerating = false;
+                // Reset button state if modal is still open
+                const modalSendButton = document.getElementById('modalSendButton');
+                if (modalSendButton) {
+                    modalSendButton.disabled = false;
+                    modalSendButton.textContent = 'Generate';
+                }
+            }
         }
         
         // Show streaming interface for running writeups
@@ -1817,6 +2089,43 @@
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     handleSendMessage();
+                }
+            });
+            
+            // Set up modal event listeners
+            const modalSendButton = document.getElementById('modalSendButton');
+            const modalPromptTextarea = document.getElementById('modalPromptTextarea');
+            
+            if (modalSendButton) {
+                modalSendButton.addEventListener('click', handleModalSendMessage);
+            }
+            
+            if (modalPromptTextarea) {
+                modalPromptTextarea.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleModalSendMessage();
+                    }
+                });
+            }
+            
+            // Close modal when clicking outside
+            const newWriteupModal = document.getElementById('newWriteupModal');
+            if (newWriteupModal) {
+                newWriteupModal.addEventListener('click', function(e) {
+                    if (e.target === newWriteupModal) {
+                        closeNewWriteupModal();
+                    }
+                });
+            }
+            
+            // Close modal with Escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const modal = document.getElementById('newWriteupModal');
+                    if (modal && modal.classList.contains('show')) {
+                        closeNewWriteupModal();
+                    }
                 }
             });
             

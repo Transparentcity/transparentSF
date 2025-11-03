@@ -8,7 +8,7 @@ and calculates vacancy rates with filtering by license type and business corrido
 
 import logging
 import os
-from fastapi import APIRouter, Request, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from typing import Dict, Any, Optional, List
@@ -422,6 +422,11 @@ async def get_vacancy_data(
             # Addresses ending with letter (e.g., "101 LOMBARD ST 23W", "101 LOMBARD ST 409W")
             if re.search(r'\s[0-9]+[A-Z]\s*$', s):
                 return True
+            # Addresses with unit/apartment numbers using hyphen or underscore
+            # (e.g., "2443 FILLMORE ST 380-2710", "2443 FILLMORE ST 380_2266")
+            # This pattern indicates unit/apartment numbers, not street-level addresses
+            if re.search(r'\s\d+[-_]\d+', s):
+                return True
             return False
 
         for record in raw_data:
@@ -468,49 +473,97 @@ async def get_vacancy_data(
             for individual_address, address_businesses in individual_address_groups.items():
                 total_business_count += len(address_businesses)
 
-                # Get the MOST RECENT business at this address
-                # Use MAXIMUM of dba_start_date and location_start_date
+                if not address_businesses:
+                    continue
+
+                # Determine if this is a street-level address using robust detection
+                is_street_level = not is_upper_floor_address(individual_address)
+
+                # Check ALL businesses at this address - if ANY is open, address is open
+                # This handles cases where one business closes but another is still open
+                address_has_open_business = False
+                address_has_closed_business = False
+                
+                # Get the most recent business for display purposes
                 most_recent_business = max(address_businesses,
                     key=lambda b: max(
                         parse_date(b.get('dba_start_date')) or datetime.min,
                         parse_date(b.get('location_start_date')) or datetime.min
                     ))
                 
-                if not most_recent_business:
-                    continue
-
-                # Determine if this is a street-level address using robust detection
-                is_street_level = not is_upper_floor_address(individual_address)
-
-                # Get status of most recent business
+                # Check status of each business at this address
+                # Use same logic as determine_status function
+                for business in address_businesses:
+                    dba_start = parse_date(business.get('dba_start_date'))
+                    location_start = parse_date(business.get('location_start_date'))
+                    dba_end = parse_date(business.get('dba_end_date'))
+                    location_end = parse_date(business.get('location_end_date'))
+                    admin_closed = business.get('administratively_closed', False)
+                    
+                    # Determine if this business is currently open (same logic as determine_status)
+                    # Closed if administratively closed
+                    if admin_closed:
+                        business_status = 'Closed'
+                    else:
+                        # Normalize dates for comparison
+                        def normalize_date(d):
+                            if d is None:
+                                return None
+                            if hasattr(d, 'date'):
+                                return d.date()
+                            return d
+                        
+                        dba_start_date = normalize_date(dba_start)
+                        dba_end_date = normalize_date(dba_end)
+                        location_start_date = normalize_date(location_start)
+                        location_end_date = normalize_date(location_end)
+                        
+                        # Closed if opened and closed on the same day (likely data error)
+                        if dba_start_date and dba_end_date and dba_start_date == dba_end_date:
+                            business_status = 'Closed'
+                        elif location_start_date and location_end_date and location_start_date == location_end_date:
+                            business_status = 'Closed'
+                        else:
+                            # Get the most recent start and end dates
+                            all_start_dates = [d for d in [dba_start_date, location_start_date] if d is not None]
+                            all_end_dates = [d for d in [dba_end_date, location_end_date] if d is not None]
+                            
+                            most_recent_start = max(all_start_dates) if all_start_dates else None
+                            most_recent_end = max(all_end_dates) if all_end_dates else None
+                            
+                            # If there's an end date, check if it's more recent than the start date
+                            if most_recent_end:
+                                # If no start date, or end date is more recent than start date, it's closed
+                                if most_recent_start is None or most_recent_end >= most_recent_start:
+                                    business_status = 'Closed'
+                                # If start date is more recent than end date, it reopened and is open
+                                else:
+                                    business_status = 'Open'
+                            # If there's a start date and no end date, it's open
+                            elif most_recent_start:
+                                business_status = 'Open'
+                            # No dates available - default to open (assume active if no closure info)
+                            else:
+                                business_status = 'Open'
+                    
+                    if business_status == 'Open':
+                        address_has_open_business = True
+                    else:
+                        address_has_closed_business = True
+                
+                # Determine individual address status: open if ANY business is open
+                if address_has_open_business:
+                    individual_status = 'Open'
+                elif address_has_closed_business:
+                    individual_status = 'Closed'
+                else:
+                    individual_status = 'Unknown'
+                
+                # Get dates from most recent business for display
                 dba_start = parse_date(most_recent_business.get('dba_start_date'))
                 location_start = parse_date(most_recent_business.get('location_start_date'))
                 dba_end = parse_date(most_recent_business.get('dba_end_date'))
                 location_end = parse_date(most_recent_business.get('location_end_date'))
-
-                all_open_dates = []
-                all_close_dates = []
-                if dba_start:
-                    all_open_dates.append(dba_start)
-                if location_start:
-                    all_open_dates.append(location_start)
-                if dba_end:
-                    all_close_dates.append(dba_end)
-                if location_end:
-                    all_close_dates.append(location_end)
-
-                most_recent_open_date = max(all_open_dates) if all_open_dates else None
-                most_recent_close_date = max(all_close_dates) if all_close_dates else None
-
-                # Determine individual address status
-                if not most_recent_close_date:
-                    individual_status = 'Open'
-                elif not most_recent_open_date:
-                    individual_status = 'Closed'
-                elif most_recent_close_date > most_recent_open_date:
-                    individual_status = 'Closed'
-                else:
-                    individual_status = 'Open'
 
                 # Count streetfront addresses
                 if is_street_level:
@@ -595,6 +648,7 @@ async def get_vacancy_data(
                 'lic_code_description': primary_business.get('lic_code_description'),
                 'business_corridor': primary_business.get('business_corridor'),
                 'supervisor_district': primary_business.get('supervisor_district'),
+                'zoning_district': primary_business.get('zoning_district'),  # Add zoning district
                 'status': overall_status,
                 'full_business_address': display_address,  # Canonicalized building address for display
                 'distinct_address': building_distinct_address,  # Canonicalized address
@@ -693,9 +747,12 @@ async def get_cached_vacancy_data(
     business_corridor: Optional[List[str]] = Query(None),
     corridor_only: bool = Query(False, description="Filter to only businesses with corridor designation"),
     district: Optional[List[str]] = Query(None),
+    zoning_district: Optional[List[str]] = Query(None, description="Filter by zoning district"),
     status: Optional[str] = Query(None),
+    street_level_only: bool = Query(False, description="Filter to only street-level storefronts"),
+    licensed_only: bool = Query(False, description="Filter to only licensed businesses"),
     commercial_tax_filing_only: bool = Query(False, description="Filter to only buildings with commercial tax filings"),
-    limit: int = Query(50000, description="Maximum number of results to return")
+    limit: int = Query(250000, description="Maximum number of results to return")
 ):
     """Get vacancy data from local cache - much faster than API calls"""
     try:
@@ -746,7 +803,7 @@ async def get_cached_vacancy_data(
             b.normalized_address, b.is_street_level, b.has_commercial_tax_filing,
             b.dba_start_date, b.dba_end_date, b.location_start_date, b.location_end_date,
             b.administratively_closed, b.naic_code_description, b.lic_code_description,
-            b.business_corridor, b.supervisor_district, b.location_lat, b.location_lon
+            b.business_corridor, b.supervisor_district, b.zoning_district, b.location_lat, b.location_lon
         FROM business_registrations_cache b
         WHERE 1=1
         """
@@ -809,7 +866,26 @@ async def get_cached_vacancy_data(
                 base_query += " AND b.supervisor_district = %s"
                 params.append(str(district))
         
+        # Add zoning district filter
+        if zoning_district:
+            if isinstance(zoning_district, list):
+                zoning_conditions = " OR ".join([f"b.zoning_district = %s" for _ in zoning_district])
+                base_query += f" AND ({zoning_conditions})"
+                for item in zoning_district:
+                    params.append(str(item))
+            else:
+                base_query += " AND b.zoning_district = %s"
+                params.append(str(zoning_district))
+        
         # Status filter will be applied in Python after determining status from dates
+        
+        # Add street-level only filter
+        if street_level_only:
+            base_query += " AND b.is_street_level = true"
+        
+        # Add licensed only filter
+        if licensed_only:
+            base_query += " AND b.lic_code_description IS NOT NULL AND b.lic_code_description != ''"
         
         # Add commercial tax filing filter (uses pre-computed flag)
         if commercial_tax_filing_only:
@@ -821,6 +897,9 @@ async def get_cached_vacancy_data(
         
         logger.info(f"Executing cached query: {base_query}")
         logger.info(f"With params: {params}")
+        logger.info(f"Filters applied - corridor_only: {corridor_only}, street_level_only: {street_level_only}, "
+                   f"licensed_only: {licensed_only}, commercial_tax_filing_only: {commercial_tax_filing_only}, "
+                   f"zoning_district: {zoning_district}")
         
         def get_cached_data(conn):
             cursor = conn.cursor()
@@ -856,25 +935,47 @@ async def get_cached_vacancy_data(
             if admin_closed:
                 return 'Closed'
             
+            # Normalize dates for comparison
+            def normalize_date(d):
+                if d is None:
+                    return None
+                if hasattr(d, 'date'):
+                    return d.date()
+                return d
+            
+            dba_start_date = normalize_date(dba_start)
+            dba_end_date = normalize_date(dba_end)
+            location_start_date = normalize_date(location_start)
+            location_end_date = normalize_date(location_end)
+            
             # Closed if opened and closed on the same day (likely data error or never actually opened)
-            if dba_start and dba_end:
-                # Compare dates only (ignore time)
-                dba_start_date = dba_start.date() if hasattr(dba_start, 'date') else dba_start
-                dba_end_date = dba_end.date() if hasattr(dba_end, 'date') else dba_end
-                if dba_start_date == dba_end_date:
+            if dba_start_date and dba_end_date and dba_start_date == dba_end_date:
                     return 'Closed'
             
-            if location_start and location_end:
-                location_start_date = location_start.date() if hasattr(location_start, 'date') else location_start
-                location_end_date = location_end.date() if hasattr(location_end, 'date') else location_end
-                if location_start_date == location_end_date:
+            if location_start_date and location_end_date and location_start_date == location_end_date:
                     return 'Closed'
             
-            # Closed if has end date
-            if dba_end or location_end:
-                return 'Closed'
+            # Get the most recent start and end dates
+            all_start_dates = [d for d in [dba_start_date, location_start_date] if d is not None]
+            all_end_dates = [d for d in [dba_end_date, location_end_date] if d is not None]
             
-            # Otherwise open
+            most_recent_start = max(all_start_dates) if all_start_dates else None
+            most_recent_end = max(all_end_dates) if all_end_dates else None
+            
+            # If there's an end date, check if it's more recent than the start date
+            if most_recent_end:
+                # If no start date, or end date is more recent than start date, it's closed
+                if most_recent_start is None or most_recent_end >= most_recent_start:
+                    return 'Closed'
+                # If start date is more recent than end date, it reopened and is open
+                else:
+                    return 'Open'
+            
+            # If there's a start date and no end date, it's open
+            if most_recent_start:
+                return 'Open'
+            
+            # No dates available - default to open (assume active if no closure info)
             return 'Open'
         
         # Helper function to check if address is street level
@@ -888,6 +989,7 @@ async def get_cached_vacancy_data(
                 r'#\s*\d+',  # #123
                 r'(?:APT|APARTMENT|UNIT|STE|SUITE|RM|ROOM|FL|FLOOR)\s*[A-Z0-9]+',  # APT 2, SUITE 100
                 r'\d{2,}[A-Z]?\s*$',  # 123, 123A at end
+                r'\s\d+[-_]\d+',  # Hyphenated or underscored numbers (e.g., "380-2710", "380_2266") - indicates unit/apartment
             ]
             address_upper = address.upper()
             for pattern in upper_floor_patterns:
@@ -988,7 +1090,10 @@ async def get_cached_vacancy_data(
             coordinates = [None, None]
             
             for distinct_address, address_businesses in individual_address_groups.items():
-                # Get the MOST RECENT business at this address
+                if not address_businesses:
+                    continue
+                
+                # Get the MOST RECENT business at this address (for display purposes)
                 # Use MAXIMUM of dba_start_date and location_start_date (same as building-level logic)
                 most_recent_business = max(address_businesses,
                     key=lambda r: max(
@@ -996,14 +1101,39 @@ async def get_cached_vacancy_data(
                         r.get('location_start_date') or datetime.min
                     ))
                 
-                if not most_recent_business:
-                    continue
+                # Check ALL businesses at this address - if ANY is open, address is open
+                # This handles cases where one business closes but another is still open
+                address_has_open_business = False
+                address_has_closed_business = False
                 
-                # Determine status for this ADDRESS (based on most recent business)
-                unit_status = determine_status(most_recent_business)
+                for business in address_businesses:
+                    business_status = determine_status(business)
+                    if business_status == 'Open':
+                        address_has_open_business = True
+                    else:
+                        address_has_closed_business = True
+                
+                # Determine status for this ADDRESS: open if ANY business is open
+                if address_has_open_business:
+                    unit_status = 'Open'
+                elif address_has_closed_business:
+                    unit_status = 'Closed'
+                else:
+                    unit_status = 'Unknown'
                 
                 # Check if this ADDRESS is street level (use database column from cache)
-                street_level = most_recent_business.get('is_street_level', True)
+                # But also validate using the address string to catch any database inconsistencies
+                db_street_level = most_recent_business.get('is_street_level', True)
+                address_string = distinct_address or most_recent_business.get('full_business_address', '')
+                
+                # Validate with runtime check - override database value if needed
+                validated_street_level = is_street_level(address_string)
+                
+                # Use validated value if it differs from database (log if different for debugging)
+                if db_street_level != validated_street_level:
+                    logger.debug(f"Street level mismatch for {address_string}: DB={db_street_level}, Validated={validated_street_level}")
+                
+                street_level = validated_street_level
                 
                 # Count THIS ADDRESS (not each business)
                 if street_level:
@@ -1064,19 +1194,36 @@ async def get_cached_vacancy_data(
                 }
                 addresses_data_formatted.append(formatted_unit)
             
-            # Determine overall building status (most recent business across all addresses)
+            # Determine overall building status - Open if ANY address has ANY open business
             all_businesses_flat = []
             for businesses in individual_address_groups.values():
                 all_businesses_flat.extend(businesses)
             
-            # Use the MAXIMUM of dba_start_date and location_start_date to find most recent business
-            # This ensures we pick the business that most recently opened at THIS location
+            # Check if ANY business at ANY address is open
+            building_has_open_business = False
+            building_has_closed_business = False
+            
+            for business in all_businesses_flat:
+                business_status = determine_status(business)
+                if business_status == 'Open':
+                    building_has_open_business = True
+                else:
+                    building_has_closed_business = True
+            
+            # Building is Open if ANY business is open
+            if building_has_open_business:
+                building_status = 'Open'
+            elif building_has_closed_business:
+                building_status = 'Closed'
+            else:
+                building_status = 'Unknown'
+            
+            # Get most recent business for display purposes
             most_recent = max(all_businesses_flat, 
                             key=lambda r: max(
                                 r.get('dba_start_date') or datetime.min,
                                 r.get('location_start_date') or datetime.min
                             ))
-            building_status = determine_status(most_recent)
             
             # Get representative data from first record
             first_record = business_records[0]
@@ -1099,6 +1246,7 @@ async def get_cached_vacancy_data(
                 'lic_code_description': first_record['lic_code_description'],
                 'business_corridor': first_record['business_corridor'],
                 'supervisor_district': first_record['supervisor_district'],
+                'zoning_district': first_record.get('zoning_district'),  # Add zoning district
                 'status': building_status,
                 'full_business_address': normalized_address,
                 'distinct_address': normalized_address,
@@ -1147,8 +1295,8 @@ async def get_cached_vacancy_data(
                 # Multiple buildings at same location - merge them
                 logger.info(f"Merging {len(buildings)} buildings at {coord_key}")
                 
-                # Combine all addresses_data from all buildings
-                all_addresses_data = []
+                # Combine all addresses_data from all buildings, merging addresses with same canonical address
+                all_addresses_data_dict = {}  # Key: canonical address, Value: merged address data
                 all_business_names = []
                 total_business_count = 0
                 total_streetfront_open = 0
@@ -1159,7 +1307,61 @@ async def get_cached_vacancy_data(
                 total_upper = 0
                 
                 for bldg in buildings:
-                    all_addresses_data.extend(bldg.get('addresses_data', []))
+                    # Process each address from this building
+                    for addr_data in bldg.get('addresses_data', []):
+                        # Use distinct_address as the key for merging (canonicalized address)
+                        canonical_key = addr_data.get('distinct_address', addr_data.get('address', ''))
+                        
+                        if canonical_key in all_addresses_data_dict:
+                            # Merge businesses from this address into existing address entry
+                            existing_addr = all_addresses_data_dict[canonical_key]
+                            existing_businesses = existing_addr.get('businesses', [])
+                            new_businesses = addr_data.get('businesses', [])
+                            
+                            # Merge businesses (avoid duplicates by certificate_number)
+                            existing_cert_nums = {b.get('certificate_number') for b in existing_businesses if b.get('certificate_number')}
+                            for biz in new_businesses:
+                                if biz.get('certificate_number') not in existing_cert_nums:
+                                    existing_businesses.append(biz)
+                            
+                            # Update status - if either is open, merged address is open
+                            if existing_addr.get('status') == 'Open' or addr_data.get('status') == 'Open':
+                                existing_addr['status'] = 'Open'
+                            elif existing_addr.get('status') == 'Closed' and addr_data.get('status') == 'Closed':
+                                existing_addr['status'] = 'Closed'
+                            else:
+                                existing_addr['status'] = 'Unknown'
+                            
+                            # Update business count
+                            existing_addr['business_count'] = len(existing_businesses)
+                            
+                            # Update dba_name to show most recent business
+                            if existing_businesses:
+                                # Find most recent business by dates
+                                def parse_date_str(date_str):
+                                    """Parse date string to datetime for comparison"""
+                                    if not date_str:
+                                        return datetime.min
+                                    try:
+                                        if isinstance(date_str, str):
+                                            # Handle ISO format strings
+                                            if 'T' in date_str:
+                                                return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                                            return datetime.strptime(date_str, '%Y-%m-%d')
+                                        return datetime.min
+                                    except:
+                                        return datetime.min
+                                
+                                most_recent = max(existing_businesses,
+                                    key=lambda b: max(
+                                        parse_date_str(b.get('dba_start_date')),
+                                        parse_date_str(b.get('location_start_date'))
+                                    ))
+                                existing_addr['dba_name'] = most_recent.get('dba_name', existing_addr.get('dba_name', 'Unknown Business'))
+                        else:
+                            # First time seeing this canonical address - add it
+                            all_addresses_data_dict[canonical_key] = addr_data.copy()
+                    
                     all_business_names.append(bldg.get('dba_name', 'Unknown'))
                     total_business_count += bldg.get('business_count', 0)
                     total_streetfront_open += bldg.get('streetfront_open_count', 0)
@@ -1169,6 +1371,9 @@ async def get_cached_vacancy_data(
                     total_upper_closed += bldg.get('upper_floor_closed_count', 0)
                     total_upper += bldg.get('total_upper_floor_addresses', 0)
                 
+                # Convert dict back to list
+                all_addresses_data = list(all_addresses_data_dict.values())
+                
                 # Determine overall status based on majority
                 open_count = sum(1 for b in buildings if b.get('status') == 'Open')
                 closed_count = sum(1 for b in buildings if b.get('status') == 'Closed')
@@ -1176,6 +1381,10 @@ async def get_cached_vacancy_data(
                 
                 # Create combined building record
                 primary_building = buildings[0]
+                # Get zoning district from primary building (or use first non-null one)
+                zoning_districts = [b.get('zoning_district') for b in buildings if b.get('zoning_district')]
+                primary_zoning = zoning_districts[0] if zoning_districts else primary_building.get('zoning_district')
+                
                 merged_building = {
                     'location': primary_building.get('location'),
                     'dba_name': f"{len(buildings)} Buildings: {', '.join(all_business_names[:3])}{'...' if len(all_business_names) > 3 else ''}",
@@ -1183,6 +1392,7 @@ async def get_cached_vacancy_data(
                     'lic_code_description': 'Mixed',
                     'business_corridor': primary_building.get('business_corridor'),
                     'supervisor_district': primary_building.get('supervisor_district'),
+                    'zoning_district': primary_zoning,  # Use primary building's zoning district
                     'status': overall_status,
                     'full_business_address': f"{buildings[0].get('building_address')} + {len(buildings)-1} more",
                     'distinct_address': buildings[0].get('distinct_address'),
@@ -1443,21 +1653,16 @@ async def search_businesses(
 
 @router.post("/api/vacancy/refresh-cache")
 async def refresh_business_cache(
+    background_tasks: BackgroundTasks,
     limit: Optional[int] = Query(None, description="Limit number of business records to process")
 ):
     """Refresh the business cache by fetching fresh data from DataSF API (async job)"""
     try:
-        import asyncio
-        
         logger.info("Starting business cache refresh job...")
         
         # Create a background job
         job_id = job_manager.create_job("business_cache_refresh", f"Refresh business cache (limit: {limit or 'all'})")
         logger.info(f"Created job {job_id} for business cache refresh")
-        
-        # Debug: List all jobs before verification
-        all_jobs_before = job_manager.get_all_jobs()
-        logger.info(f"All jobs before verification: {list(all_jobs_before.keys())}")
         
         # Verify job was created
         job = job_manager.get_job(job_id)
@@ -1465,19 +1670,12 @@ async def refresh_business_cache(
             logger.error(f"Failed to create job {job_id}")
             raise HTTPException(status_code=500, detail="Failed to create background job")
         
-        logger.info(f"Job {job_id} verified, starting background task")
+        logger.info(f"Job {job_id} verified, scheduling background task")
         
-        # Debug: List all jobs after verification
-        all_jobs_after = job_manager.get_all_jobs()
-        logger.info(f"All jobs after verification: {list(all_jobs_after.keys())}")
-        
-        # Start the job in the background with a small delay to ensure job is created
-        async def delayed_start():
-            await asyncio.sleep(0.1)  # Small delay to ensure job is created
-            await _run_business_cache_refresh_job(job_id, limit)
-        
-        task = asyncio.create_task(delayed_start())
-        logger.info(f"Created background task for business cache refresh job {job_id}")
+        # Use FastAPI BackgroundTasks to ensure the task runs
+        # This is more reliable than asyncio.create_task() which might be garbage collected
+        background_tasks.add_task(_run_business_cache_refresh_job, job_id, limit)
+        logger.info(f"Scheduled background task for business cache refresh job {job_id}")
         
         return JSONResponse({
             "status": "success",
@@ -1486,8 +1684,102 @@ async def refresh_business_cache(
         })
         
     except Exception as e:
-        logger.error(f"Error starting business cache refresh job: {str(e)}")
+        logger.error(f"Error starting business cache refresh job: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error starting business cache refresh: {str(e)}")
+
+@router.post("/api/vacancy/refresh-zoning")
+async def refresh_zoning_only(
+    background_tasks: BackgroundTasks,
+    limit: Optional[int] = Query(None, description="Limit number of zoning records to process")
+):
+    """Update only zoning data without refreshing business/tax caches (faster for testing)"""
+    try:
+        logger.info("Starting zoning-only update job...")
+        
+        # Create a background job
+        job_id = job_manager.create_job("zoning_only_update", f"Update zoning data only (limit: {limit or 'all'})")
+        logger.info(f"Created job {job_id} for zoning-only update")
+        
+        # Verify job was created
+        job = job_manager.get_job(job_id)
+        if not job:
+            logger.error(f"Failed to create job {job_id}")
+            raise HTTPException(status_code=500, detail="Failed to create background job")
+        
+        logger.info(f"Job {job_id} verified, scheduling background task")
+        
+        # Use FastAPI BackgroundTasks to ensure the task runs
+        background_tasks.add_task(_run_zoning_update_job, job_id, limit)
+        logger.info(f"Scheduled background task for zoning update job {job_id}")
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Zoning-only update started",
+            "job_id": job_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error starting zoning update job: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error starting zoning update: {str(e)}")
+
+async def _run_zoning_update_job(job_id: str, limit: Optional[int] = None):
+    """Run the zoning-only update job in the background."""
+    try:
+        from ai.tools.simple_business_cache import SimpleBusinessCache
+        import asyncio
+        
+        logger.info(f"Starting zoning-only update job {job_id} with limit {limit}")
+        
+        # Mark job as running
+        job = job_manager.get_job(job_id)
+        if job:
+            job.start()
+            logger.info(f"Job {job_id} started")
+        else:
+            logger.error(f"Job {job_id} not found when trying to start!")
+            return
+        
+        # Run the zoning update in a thread pool to avoid blocking
+        def run_zoning_update():
+            try:
+                logger.info(f"[Thread] Creating SimpleBusinessCache instance...")
+                cache = SimpleBusinessCache()
+                logger.info(f"[Thread] Calling refresh_zoning_only with limit={limit}...")
+                result = cache.refresh_zoning_only(limit)
+                logger.info(f"[Thread] refresh_zoning_only completed with result: {result.get('status', 'unknown')}")
+                return result
+            except Exception as e:
+                logger.error(f"[Thread] Error in run_zoning_update: {e}", exc_info=True)
+                raise
+        
+        # Execute in thread pool to prevent blocking
+        logger.info(f"Executing zoning update in thread pool...")
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, run_zoning_update)
+        logger.info(f"Zoning update thread completed, result status: {result.get('status', 'unknown')}")
+        
+        # Add a small delay to ensure database transaction is committed
+        await asyncio.sleep(0.5)
+        
+        # Complete the job with results
+        job = job_manager.get_job(job_id)
+        if job:
+            job.complete({
+                "zoning_polygons": result.get('zoning_cache', {}).get('successful', 0),
+                "zoning_district_matches": result.get('zoning_district_matches', 0),
+                "duration_seconds": result.get('elapsed_time', 0)
+            })
+            logger.info(f"✅ Zoning-only update job {job_id} completed successfully")
+            logger.info(f"   Zoning polygons: {result.get('zoning_cache', {}).get('successful', 0):,}")
+            logger.info(f"   Zoning matches: {result.get('zoning_district_matches', 0):,}")
+        else:
+            logger.error(f"Job {job_id} not found when trying to complete")
+        
+    except Exception as e:
+        logger.error(f"Error in zoning update job {job_id}: {e}", exc_info=True)
+        job = job_manager.get_job(job_id)
+        if job:
+            await job_manager.fail_job(job_id, str(e))
 
 async def _run_business_cache_refresh_job(job_id: str, limit: Optional[int] = None):
     """Run the business cache refresh job in the background."""
@@ -1502,15 +1794,28 @@ async def _run_business_cache_refresh_job(job_id: str, limit: Optional[int] = No
         if job:
             job.start()
             logger.info(f"Marked job {job_id} as running")
+        else:
+            logger.error(f"Job {job_id} not found when trying to start!")
+            return
         
         # Run the cache refresh in a thread pool to avoid blocking
         def run_cache_refresh():
-            cache = SimpleBusinessCache()
-            return cache.refresh_cache(limit)
+            try:
+                logger.info(f"[Thread] Creating SimpleBusinessCache instance...")
+                cache = SimpleBusinessCache()
+                logger.info(f"[Thread] Calling refresh_cache with limit={limit}...")
+                result = cache.refresh_cache(limit)
+                logger.info(f"[Thread] refresh_cache completed with result: {result.get('status', 'unknown')}")
+                return result
+            except Exception as e:
+                logger.error(f"[Thread] Error in run_cache_refresh: {e}", exc_info=True)
+                raise
         
         # Execute in thread pool to prevent blocking
+        logger.info(f"Executing cache refresh in thread pool...")
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, run_cache_refresh)
+        logger.info(f"Cache refresh thread completed, result status: {result.get('status', 'unknown')}")
         
         # Add a small delay to ensure database transaction is committed
         await asyncio.sleep(0.5)
@@ -1521,14 +1826,20 @@ async def _run_business_cache_refresh_job(job_id: str, limit: Optional[int] = No
             job.complete({
                 "business_records": result.get('business_cache', {}).get('successful', 0),
                 "tax_records": result.get('tax_cache', {}).get('successful', 0),
+                "zoning_polygons": result.get('zoning_cache', {}).get('successful', 0),
+                "zoning_district_matches": result.get('zoning_district_matches', 0),
                 "duration_seconds": result.get('elapsed_time', 0)
             })
-            logger.info(f"Simple cache refresh job {job_id} completed successfully")
+            logger.info(f"✅ Simple cache refresh job {job_id} completed successfully")
+            logger.info(f"   Business records: {result.get('business_cache', {}).get('successful', 0):,}")
+            logger.info(f"   Tax records: {result.get('tax_cache', {}).get('successful', 0):,}")
+            logger.info(f"   Zoning polygons: {result.get('zoning_cache', {}).get('successful', 0):,}")
+            logger.info(f"   Zoning matches: {result.get('zoning_district_matches', 0):,}")
         else:
             logger.error(f"Job {job_id} not found when trying to complete")
         
     except Exception as e:
-        logger.error(f"Simple cache refresh job {job_id} failed: {str(e)}", exc_info=True)
+        logger.error(f"❌ Simple cache refresh job {job_id} failed: {str(e)}", exc_info=True)
         job = job_manager.get_job(job_id)
         if job:
             job.fail(str(e))
@@ -1580,6 +1891,8 @@ async def get_cache_stats():
             'open_businesses': status_counts['open'],
             'closed_businesses': status_counts['closed'],
             'tax_records': raw_stats['commercial_tax']['count'],
+            'zoning_polygons': raw_stats.get('zoning_polygons', {}).get('count', 0),
+            'businesses_with_zoning': raw_stats.get('businesses_with_zoning', 0),
             'last_updated': raw_stats['business_registrations']['last_updated']
         }
         
@@ -1670,19 +1983,148 @@ async def get_filter_options():
         if district_result and 'data' in district_result:
             districts = [str(row['supervisor_district']) for row in district_result['data']]
         
+        # Get unique zoning districts from cache table
+        zoning_districts = []
+        try:
+            from ai.tools.db_utils import execute_with_connection
+            
+            def get_zoning_districts(conn):
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT DISTINCT zoning_district
+                    FROM business_registrations_cache
+                    WHERE zoning_district IS NOT NULL
+                    AND zoning_district != ''
+                    ORDER BY zoning_district
+                """)
+                return [row[0] for row in cursor.fetchall()]
+            
+            db_result = execute_with_connection(get_zoning_districts)
+            if db_result["status"] == "success":
+                zoning_districts = db_result["result"]
+        except Exception as e:
+            logger.warning(f"Could not fetch zoning districts from cache: {e}")
+        
         return JSONResponse({
             "status": "success",
             "filters": {
                 "industry_types": industry_types,
                 "license_types": license_types,
                 "business_corridors": business_corridors,
-                "districts": districts
+                "districts": districts,
+                "zoning_districts": zoning_districts
             }
         })
         
     except Exception as e:
         logger.error(f"Error in get_filter_options: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting filter options: {str(e)}")
+
+@router.get("/api/vacancy/zoning-polygons")
+async def get_zoning_polygons():
+    """
+    Fetch zoning district polygons from the database cache for choropleth overlay.
+    
+    Returns:
+        JSON response containing GeoJSON FeatureCollection of zoning district polygons
+    """
+    try:
+        from ai.tools.db_utils import execute_with_connection
+        import json
+        
+        logger.info("Fetching zoning district polygons from cache...")
+        
+        def get_zoning_polygons_from_db(conn):
+            cursor = conn.cursor()
+            try:
+                # Check if PostGIS geometry column exists
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'zoning_polygons_cache' 
+                    AND column_name = 'geometry'
+                """)
+                has_geometry = cursor.fetchone() is not None
+                
+                if has_geometry:
+                    # Use PostGIS to convert geometry to GeoJSON
+                    cursor.execute("""
+                        SELECT 
+                            zoning,
+                            ST_AsGeoJSON(geometry)::json as geometry_json,
+                            raw_data
+                        FROM zoning_polygons_cache
+                        WHERE geometry IS NOT NULL
+                        AND zoning IS NOT NULL
+                        AND zoning != ''
+                        ORDER BY zoning
+                    """)
+                else:
+                    # Fall back to geometry_data column (JSON stored as text)
+                    cursor.execute("""
+                        SELECT 
+                            zoning,
+                            geometry_data,
+                            raw_data
+                        FROM zoning_polygons_cache
+                        WHERE geometry_data IS NOT NULL
+                        AND zoning IS NOT NULL
+                        AND zoning != ''
+                        ORDER BY zoning
+                    """)
+                
+                features = []
+                for row in cursor.fetchall():
+                    zoning = row[0]
+                    if has_geometry:
+                        geometry_json = row[1]
+                    else:
+                        # Parse geometry_data if it's a string
+                        geometry_data = row[1]
+                        if isinstance(geometry_data, str):
+                            geometry_json = json.loads(geometry_data)
+                        else:
+                            geometry_json = geometry_data
+                    
+                    # Create GeoJSON feature
+                    feature = {
+                        "type": "Feature",
+                        "properties": {
+                            "zoning": zoning,
+                            "name": zoning
+                        },
+                        "geometry": geometry_json
+                    }
+                    features.append(feature)
+                
+                cursor.close()
+                return {
+                    "type": "FeatureCollection",
+                    "features": features
+                }
+            except Exception as e:
+                cursor.close()
+                raise e
+        
+        db_result = execute_with_connection(get_zoning_polygons_from_db)
+        
+        if db_result["status"] == "success":
+            geojson_data = db_result["result"]
+            return JSONResponse({
+                "status": "success",
+                "count": len(geojson_data.get("features", [])),
+                "geojson": geojson_data
+            })
+        else:
+            logger.error(f"Error fetching zoning polygons: {db_result.get('error')}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Error fetching zoning polygons: {db_result.get('error')}"
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in get_zoning_polygons: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting zoning polygons: {str(e)}")
 
 @router.get("/api/vacancy/tax-filings")
 async def get_commercial_tax_filings():

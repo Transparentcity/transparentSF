@@ -82,6 +82,11 @@ def is_upper_floor_address(full_address: str) -> bool:
     if re.search(r'\s[0-9]+[A-Z]\s*$', s):
         return True
     
+    # Addresses ending with hyphenated numbers (e.g., "2443 FILLMORE ST 380-1331")
+    # This pattern indicates unit/apartment numbers, not street-level addresses
+    if re.search(r'\s\d+-\d+\s*$', s):
+        return True
+    
     return False
 
 

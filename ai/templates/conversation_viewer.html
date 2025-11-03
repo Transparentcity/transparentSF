@@ -333,6 +333,16 @@
                 
                 sessionData = await response.json();
                 
+                // Debug: Log raw session data structure
+                console.log('Raw session data:', {
+                    has_intermediate_responses: !!sessionData.intermediate_responses,
+                    intermediate_responses_count: sessionData.intermediate_responses?.length || 0,
+                    has_tool_calls: !!sessionData.tool_calls,
+                    tool_calls_count: sessionData.tool_calls?.length || 0,
+                    sample_intermediate_response: sessionData.intermediate_responses?.[0],
+                    sample_tool_call: sessionData.tool_calls?.[0]
+                });
+                
                 // Extract first line from first user message for title
                 let conversationTitle = `Session ${sessionId}`;
                 if (sessionData.conversation && sessionData.conversation.length > 0) {

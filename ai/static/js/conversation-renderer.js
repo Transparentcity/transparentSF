@@ -135,9 +135,10 @@ class ConversationRenderer {
                 });
             }
             
-            // Add each intermediate response as a separate message (to preserve interleaving)
+            // Collect all intermediate responses as events
+            const responseEvents = [];
             sessionData.intermediate_responses.forEach((response, index) => {
-                events.push({
+                responseEvents.push({
                     type: 'message',
                     content: response.content,
                     sender: 'assistant',
@@ -145,15 +146,20 @@ class ConversationRenderer {
                 });
             });
             
-            // Add tool calls - will be properly sorted with responses by timestamp
+            // Collect all tool calls as events
+            const toolCallEvents = [];
             if (sessionData.tool_calls && Array.isArray(sessionData.tool_calls)) {
                 sessionData.tool_calls.forEach((toolCall, index) => {
-                    // Use start_time if available (Unix timestamp), convert to ISO
-                    const timestamp = toolCall.start_time ? 
-                        new Date(toolCall.start_time * 1000).toISOString() : 
-                        sessionData.start_time || new Date().toISOString();
+                    // Keep timestamp in original format for proper sorting
+                    // Convert to ISO only when needed for display
+                    let timestamp = toolCall.start_time;
+                    if (!timestamp) {
+                        timestamp = sessionData.start_time || new Date().toISOString();
+                    }
                     
-                    events.push({
+                    console.log(`Tool call ${index} (${toolCall.tool_name}): raw=${toolCall.start_time}, type=${typeof toolCall.start_time}`);
+                    
+                    toolCallEvents.push({
                         type: 'tool_call_end',  // Show completed tool calls
                         tool_name: toolCall.tool_name,
                         tool_id: `tool_${toolCall.tool_name}_${index}`,
@@ -165,6 +171,25 @@ class ConversationRenderer {
                     });
                 });
             }
+            
+            // Debug: Log intermediate response timestamps
+            console.log('Intermediate responses:', responseEvents.map((e, i) => ({
+                index: i,
+                timestamp: e.timestamp,
+                content_preview: e.content.substring(0, 50)
+            })));
+            
+            // Merge tool calls and responses into events array with indices for stable sorting
+            responseEvents.forEach((e, i) => { e._originalIndex = i; events.push(e); });
+            toolCallEvents.forEach((e, i) => { e._originalIndex = i + responseEvents.length; events.push(e); });
+            
+            // Debug: Log before sorting
+            console.log('Before sorting:', events.map(e => ({
+                type: e.type,
+                timestamp: e.timestamp,
+                tool_name: e.tool_name,
+                originalIndex: e._originalIndex
+            })));
         } else {
             // Fallback to conversation array approach (for sessions without intermediate_responses)
             if (sessionData.conversation && Array.isArray(sessionData.conversation)) {
@@ -224,12 +249,60 @@ class ConversationRenderer {
         // Sort events by timestamp if available
         events.sort((a, b) => {
             if (a.timestamp && b.timestamp) {
-                const timeA = typeof a.timestamp === 'number' ? a.timestamp * 1000 : new Date(a.timestamp).getTime();
-                const timeB = typeof b.timestamp === 'number' ? b.timestamp * 1000 : new Date(b.timestamp).getTime();
-                return timeA - timeB;
+                // Convert all timestamps to milliseconds for comparison
+                let timeA, timeB;
+                
+                // Handle timestamp A
+                if (typeof a.timestamp === 'number') {
+                    // Assume Unix timestamp in seconds if < large number, otherwise milliseconds
+                    timeA = a.timestamp < 1e10 ? a.timestamp * 1000 : a.timestamp;
+                } else if (typeof a.timestamp === 'string') {
+                    // ISO string
+                    timeA = new Date(a.timestamp).getTime();
+                } else {
+                    timeA = 0;
+                }
+                
+                // Handle timestamp B
+                if (typeof b.timestamp === 'number') {
+                    // Assume Unix timestamp in seconds if < large number, otherwise milliseconds
+                    timeB = b.timestamp < 1e10 ? b.timestamp * 1000 : b.timestamp;
+                } else if (typeof b.timestamp === 'string') {
+                    // ISO string
+                    timeB = new Date(b.timestamp).getTime();
+                } else {
+                    timeB = 0;
+                }
+                
+                // If dates are invalid (NaN), put them at the end
+                if (isNaN(timeA) && isNaN(timeB)) {
+                    // Use original index as tiebreaker on reload
+                    return (a._originalIndex || 0) - (b._originalIndex || 0);
+                }
+                if (isNaN(timeA)) return 1;
+                if (isNaN(timeB)) return -1;
+                
+                // If timestamps are equal (within 1 second), preserve original order
+                const diff = timeA - timeB;
+                if (Math.abs(diff) < 1000) {
+                    return (a._originalIndex || 0) - (b._originalIndex || 0);
+                }
+                
+                return diff;
             }
+            // If one has timestamp and other doesn't, timestamp comes first
+            if (a.timestamp && !b.timestamp) return -1;
+            if (!a.timestamp && b.timestamp) return 1;
             return 0;
         });
+        
+        // Debug: Log event order (uncomment to debug)
+        console.log('Sorted events:', events.map(e => ({
+            type: e.type,
+            timestamp: e.timestamp,
+            tool_name: e.tool_name,
+            content_preview: e.content ? e.content.substring(0, 50) : null
+        })));
         
         return events;
     }
@@ -245,7 +318,15 @@ class ConversationRenderer {
             const timestampDiv = document.createElement('div');
             timestampDiv.className = 'conversation-timestamp';
             if (timestamp) {
-                timestampDiv.textContent = new Date(timestamp).toLocaleTimeString();
+                // Handle Unix timestamp (seconds) vs ISO string
+                let date;
+                if (typeof timestamp === 'number') {
+                    // Assume Unix timestamp in seconds if < large number
+                    date = new Date(timestamp < 1e10 ? timestamp * 1000 : timestamp);
+                } else {
+                    date = new Date(timestamp);
+                }
+                timestampDiv.textContent = date.toLocaleTimeString();
             } else {
                 timestampDiv.textContent = new Date().toLocaleTimeString();
             }

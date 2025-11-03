@@ -2212,8 +2212,85 @@
                 }
             });
             
+            // Create and display caption if available
+            createCaption(metadata);
+            
+            // Ensure caption visibility is correct based on fullView (in case handleChartSection ran before caption creation)
+            setTimeout(() => {
+                const chartCaption = document.querySelector('.chart-caption');
+                if (chartCaption) {
+                    if (fullView) {
+                        chartCaption.style.display = 'block';
+                    } else {
+                        chartCaption.style.display = 'none';
+                    }
+                }
+            }, 100);
+            
             // Display metadata after rendering chart
             displayMetadata(data);
+        }
+        
+        // Function to create and display caption
+        function createCaption(metadata) {
+            // Remove any existing caption element
+            const existingCaption = document.querySelector('.chart-caption');
+            if (existingCaption) {
+                existingCaption.remove();
+            }
+            
+            // Extract caption from metadata - check multiple possible fields
+            const captionText = metadata.caption || 
+                              metadata.notes || 
+                              metadata.description || 
+                              metadata.chart_description || 
+                              metadata.chart_caption || '';
+            
+            console.log('Creating caption - fullView:', fullView, 'captionText:', captionText ? captionText.substring(0, 100) + '...' : 'none');
+            
+            // Only create caption if we have text
+            if (!captionText || captionText.trim() === '') {
+                console.log('No caption text found in metadata');
+                return;
+            }
+            
+            // Get the chart section container
+            const chartSection = document.getElementById('chart-section');
+            if (!chartSection) {
+                return;
+            }
+            
+            // Create caption element
+            const captionDiv = document.createElement('div');
+            captionDiv.className = 'chart-caption';
+            // Use innerHTML to support HTML tags like <br>, <strong>, <em>, etc.
+            // Also normalize <BR> to <br> for consistency
+            const normalizedCaption = captionText.trim().replace(/<BR>/gi, '<br>');
+            captionDiv.innerHTML = normalizedCaption;
+            
+            // Insert caption after the chart-section div (before the buttons)
+            // This ensures it doesn't overlap with the back button
+            if (chartSection.parentNode) {
+                // Insert after chart-section but before the buttons div
+                const buttonsDiv = chartSection.nextElementSibling;
+                if (buttonsDiv && buttonsDiv.classList.contains('mt-3')) {
+                    // Insert before buttons
+                    chartSection.parentNode.insertBefore(captionDiv, buttonsDiv);
+                } else {
+                    // Fallback: insert after chart-section
+                    chartSection.parentNode.insertBefore(captionDiv, chartSection.nextSibling);
+                }
+            } else {
+                // Last resort: append to chart section
+                chartSection.appendChild(captionDiv);
+            }
+            
+            // Show caption in full view mode, hide in embedded mode
+            if (!fullView) {
+                captionDiv.style.display = 'none';
+            } else {
+                captionDiv.style.display = 'block';
+            }
         }
         
         // Function to calculate mean

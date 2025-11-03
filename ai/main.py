@@ -218,6 +218,7 @@ from routes.legal_code import router as legal_code_router, set_templates as set_
 from routes.settings import router as settings_router, set_templates as set_settings_templates
 from routes.vacancy_analysis import router as vacancy_analysis_router, set_templates as set_vacancy_analysis_templates
 from routes.dual_map import router as dual_map_router, set_templates as set_dual_map_templates
+from routes.active_businesses import router as active_businesses_router, set_templates as set_active_businesses_templates
 
 app = FastAPI()
 
@@ -977,6 +978,11 @@ logger.debug("Included vacancy analysis router")
 set_dual_map_templates(templates)
 app.include_router(dual_map_router, tags=["dual-map"])
 logger.debug("Included dual map router")
+
+# Mount active businesses router
+set_active_businesses_templates(templates)
+app.include_router(active_businesses_router, tags=["active-businesses"])
+logger.debug("Included active businesses router")
 
 # Add direct routes for API endpoints that need to be accessible without the /backend prefix
 @app.post("/api/add_subscriber")

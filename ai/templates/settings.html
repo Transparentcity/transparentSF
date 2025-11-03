@@ -514,6 +514,32 @@
             }
         }
         
+        async function refreshZoningOnly() {
+            const s = document.getElementById('cache-status');
+            const statsDiv = document.getElementById('cache-stats');
+            
+            if (!confirm('Update zoning data only? This will fetch zoning polygons and match them to businesses, without refreshing business/tax data.')) return;
+            
+            try {
+                show(s, 'Starting zoning-only update job...', true);
+                statsDiv.style.display = 'none';
+                
+                const data = await fetchJSON('/api/vacancy/refresh-zoning', { method: 'POST' });
+                
+                if (data.status === 'success') {
+                    show(s, `Zoning-only update job started! Job ID: ${data.job_id}. Check the jobs page to monitor progress.`, true);
+                    // Auto-refresh stats after a delay to allow job to complete
+                    setTimeout(getCacheStats, 5000);
+                    // Also refresh the jobs badge
+                    checkActiveJobs();
+                } else {
+                    show(s, 'Failed to start zoning update: ' + (data.message || 'Unknown error'), false);
+                }
+            } catch (e) {
+                show(s, 'Failed to start zoning update: ' + e.message, false);
+            }
+        }
+        
         async function getCacheStats() {
             const s = document.getElementById('cache-status');
             const statsDiv = document.getElementById('cache-stats');
@@ -529,6 +555,8 @@
                     document.getElementById('cache-open-count').textContent = (stats.open_businesses || 0).toLocaleString();
                     document.getElementById('cache-closed-count').textContent = (stats.closed_businesses || 0).toLocaleString();
                     document.getElementById('cache-tax-count').textContent = (stats.tax_records || 0).toLocaleString();
+                    document.getElementById('cache-zoning-polygons').textContent = (stats.zoning_polygons || 0).toLocaleString();
+                    document.getElementById('cache-businesses-with-zoning').textContent = (stats.businesses_with_zoning || 0).toLocaleString();
                     document.getElementById('cache-last-updated').textContent = stats.last_updated ? new Date(stats.last_updated).toLocaleString() : 'Never';
                     
                     statsDiv.style.display = 'block';
@@ -625,6 +653,7 @@
                     <p>Manage the raw business data cache for fast vacancy map searches. The cache mirrors DataSF data without processing - all analysis happens on-demand. Cache refresh runs as a background job.</p>
                     <div class="row">
                         <button class="btn primary" onclick="refreshBusinessCache()">Refresh Business Cache</button>
+                        <button class="btn secondary" onclick="refreshZoningOnly()">Update Zoning Only</button>
                         <button class="btn secondary" onclick="getCacheStats()">Check Cache Status</button>
                         <button class="btn secondary" onclick="window.open('/backend/jobs', '_blank')">View Jobs</button>
                     </div>
@@ -635,6 +664,8 @@
                         <div>├─ Open: <span id="cache-open-count">-</span></div>
                         <div>└─ Closed: <span id="cache-closed-count">-</span></div>
                         <div>Commercial Tax Records: <span id="cache-tax-count">-</span></div>
+                        <div>Zoning Districts: <span id="cache-zoning-polygons">-</span> polygons cached</div>
+                        <div>├─ Businesses with zoning: <span id="cache-businesses-with-zoning">-</span></div>
                         <div>Last Updated: <span id="cache-last-updated">-</span></div>
                         <div style="margin-top: 8px; font-size: 0.9em; color: #666;">
                             <em>Note: Individual unit data (2139 A, 2139 B, etc.) is preserved in raw cache and processed on-demand in queries.</em>

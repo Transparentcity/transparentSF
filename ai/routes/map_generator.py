@@ -222,6 +222,9 @@ async def generate_map_endpoint(request: Request):
         # Check if this is a preview request
         preview_mode = data.get("preview", False)
         
+        # Check if this should be saved to database
+        save_to_database = data.get("save_to_database", False)
+        
         # Ensure metric_id is an integer
         try:
             metric_id = int(metric_id) if metric_id else None
@@ -347,7 +350,8 @@ async def generate_map_endpoint(request: Request):
                 },
                 metric_id=metric_id,
                 map_provider="mapbox",  # Use Mapbox instead of Datawrapper
-                preview_mode=preview_mode  # Pass preview mode flag
+                preview_mode=preview_mode,  # Pass preview mode flag
+                save_to_database=save_to_database  # Pass save_to_database flag
             )
             
             # For preview mode, return location_data instead of creating a map
@@ -430,7 +434,8 @@ async def generate_map_endpoint(request: Request):
                     "anomaly_field_name": anomaly_field_name
                 },
                 metric_id=metric_id,
-                map_provider="mapbox"
+                map_provider="mapbox",
+                save_to_database=save_to_database
             )
         
         cursor.close()

@@ -89,13 +89,13 @@ async def get_active_businesses_data(restaurant_only: bool = False):
             # Build restaurant filter if needed
             restaurant_filter = ""
             if restaurant_only:
-                # Filter for restaurants using only license codes (H24, H25, H26)
+                # Filter for restaurants using license codes (H24, H25, H26)
                 restaurant_filter = """
                     AND (
-                        lic_code_description IS NOT NULL AND (
-                            lic_code_description LIKE '%%H24%%' 
-                            OR lic_code_description LIKE '%%H25%%' 
-                            OR lic_code_description LIKE '%%H26%%'
+                        lic_code IS NOT NULL AND (
+                            lic_code LIKE '%%H24%%' 
+                            OR lic_code LIKE '%%H25%%' 
+                            OR lic_code LIKE '%%H26%%'
                         )
                     )
                 """
@@ -104,44 +104,49 @@ async def get_active_businesses_data(restaurant_only: bool = False):
                 month_start = month_data['month_start']
                 month_end = month_data['month_end']
                 
-                # Query for new businesses (started within month AND (no end date OR end date after month end))
-                new_query = f"""
-                    SELECT COUNT(*)
+                # Combined query: Get new and closed counts in a single query for better performance
+                # This reduces 2 separate queries to 1 per month
+                combined_query = f"""
+                    SELECT 
+                        -- New businesses (started within month AND (no end date OR end date after month end))
+                        COUNT(*) FILTER (
+                            WHERE location_start_date >= %s
+                            AND location_start_date <= %s
+                            AND (
+                                location_end_date IS NULL 
+                                OR location_end_date > %s
+                            )
+                        ) as new_count,
+                        -- Closed businesses (closed within month)
+                        COUNT(*) FILTER (
+                            WHERE location_end_date >= %s
+                            AND location_end_date <= %s
+                        ) as closed_count
                     FROM business_registrations_cache
-                    WHERE location_start_date >= %s
-                    AND location_start_date <= %s
-                    AND (
-                        location_end_date IS NULL 
-                        OR location_end_date > %s
+                    WHERE 1=1
+                    {restaurant_filter}
+                """
+                try:
+                    # Execute combined query
+                    cursor.execute(
+                        combined_query, 
+                        (month_start, month_end, month_end,  # For new_count FILTER
+                         month_start, month_end)              # For closed_count FILTER
                     )
-                    {restaurant_filter}
-                """
-                try:
-                    cursor.execute(new_query, (month_start, month_end, month_end))
-                    new_result = cursor.fetchone()
-                    new_count = int(new_result[0]) if new_result and new_result[0] is not None else 0
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        new_count = int(result[0]) if result[0] is not None else 0
+                        closed_count = int(result[1]) if result[1] is not None else 0
+                    else:
+                        new_count = 0
+                        closed_count = 0
+                        
                 except Exception as e:
-                    logger.error(f"Error executing new query for {month_data['label']}: {e}")
-                    logger.error(f"Query: {new_query}")
-                    logger.error(f"Params: {(month_start, month_end, month_end)}")
+                    logger.error(f"Error executing combined query for {month_data['label']}: {e}")
+                    logger.error(f"Query: {combined_query}")
+                    logger.error(f"Params: {(month_start, month_end, month_end, month_start, month_end, month_start, month_end, month_end, month_start, month_end)}")
                     new_count = 0
-                
-                # Query for closed businesses (closed within month)
-                closed_query = f"""
-                    SELECT COUNT(*)
-                    FROM business_registrations_cache
-                    WHERE location_end_date >= %s
-                    AND location_end_date <= %s
-                    {restaurant_filter}
-                """
-                try:
-                    cursor.execute(closed_query, (month_start, month_end))
-                    closed_result = cursor.fetchone()
-                    closed_count = int(closed_result[0]) if closed_result and closed_result[0] is not None else 0
-                except Exception as e:
-                    logger.error(f"Error executing closed query for {month_data['label']}: {e}")
-                    logger.error(f"Query: {closed_query}")
-                    logger.error(f"Params: {(month_start, month_end)}")
                     closed_count = 0
                 
                 # For the first month, calculate initial active businesses

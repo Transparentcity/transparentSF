@@ -423,34 +423,41 @@ async def update_anomaly_metadata(request: Request):
 async def get_chart_metadata(chart_id: int):
     """
     Get chart metadata including DW URL if available.
+    Uses connection pooling via execute_with_connection.
     """
     try:
         logger.info(f"Getting chart metadata for chart_id: {chart_id}")
         
         # Import database utilities
-        import psycopg2
         import psycopg2.extras
-        import os
         import json
         
-        # Connect to PostgreSQL
-        conn = get_postgres_connection()
+        def get_chart_metadata_operation(conn):
+            """Database operation to get chart metadata."""
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            
+            # Get chart metadata
+            cursor.execute("""
+                SELECT chart_id, metadata, object_name, field_name, period_type, district
+                FROM time_series_metadata 
+                WHERE chart_id = %s
+            """, (chart_id,))
+            
+            result = cursor.fetchone()
+            cursor.close()
+            
+            if not result:
+                raise HTTPException(status_code=404, detail=f"Chart with ID {chart_id} not found")
+            
+            return result
         
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Use connection pooling
+        db_result = execute_with_connection(get_chart_metadata_operation)
         
-        # Get chart metadata
-        cursor.execute("""
-            SELECT chart_id, metadata, object_name, field_name, period_type, district
-            FROM time_series_metadata 
-            WHERE chart_id = %s
-        """, (chart_id,))
+        if db_result["status"] == "error":
+            raise HTTPException(status_code=500, detail=f"Database error: {db_result['message']}")
         
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        
-        if not result:
-            raise HTTPException(status_code=404, detail=f"Chart with ID {chart_id} not found")
+        result = db_result["result"]
         
         # Parse metadata
         metadata = result['metadata'] or {}
@@ -470,6 +477,8 @@ async def get_chart_metadata(chart_id: int):
             "district": result['district']
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting chart metadata: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error getting chart metadata: {str(e)}")
@@ -479,34 +488,41 @@ async def get_chart_metadata(chart_id: int):
 async def get_anomaly_metadata(anomaly_id: int):
     """
     Get anomaly metadata including DW URL if available.
+    Uses connection pooling via execute_with_connection.
     """
     try:
         logger.info(f"Getting anomaly metadata for anomaly_id: {anomaly_id}")
         
         # Import database utilities
-        import psycopg2
         import psycopg2.extras
-        import os
         import json
         
-        # Connect to PostgreSQL
-        conn = get_postgres_connection()
+        def get_anomaly_metadata_operation(conn):
+            """Database operation to get anomaly metadata."""
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            
+            # Get anomaly metadata
+            cursor.execute("""
+                SELECT id, metadata, object_name, field_name, period_type, district
+                FROM anomalies 
+                WHERE id = %s
+            """, (anomaly_id,))
+            
+            result = cursor.fetchone()
+            cursor.close()
+            
+            if not result:
+                raise HTTPException(status_code=404, detail=f"Anomaly with ID {anomaly_id} not found")
+            
+            return result
         
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Use connection pooling
+        db_result = execute_with_connection(get_anomaly_metadata_operation)
         
-        # Get anomaly metadata
-        cursor.execute("""
-            SELECT id, metadata, object_name, field_name, period_type, district
-            FROM anomalies 
-            WHERE id = %s
-        """, (anomaly_id,))
+        if db_result["status"] == "error":
+            raise HTTPException(status_code=500, detail=f"Database error: {db_result['message']}")
         
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        
-        if not result:
-            raise HTTPException(status_code=404, detail=f"Anomaly with ID {anomaly_id} not found")
+        result = db_result["result"]
         
         # Parse metadata
         metadata = result['metadata'] or {}
@@ -526,6 +542,8 @@ async def get_anomaly_metadata(anomaly_id: int):
             "district": result['district']
         })
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting anomaly metadata: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error getting anomaly metadata: {str(e)}")

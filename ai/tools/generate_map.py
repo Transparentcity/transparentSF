@@ -1841,7 +1841,7 @@ def get_db_connection():
     from .db_utils import get_postgres_connection
     return get_postgres_connection()
 
-def generate_mapbox_map(context_variables, map_title, map_type, location_data=None, map_metadata=None, metric_id=None, group_field=None, series_field=None, color_palette=None, series_info=None, map_config=None, preview_mode=False, scale_dots=True):
+def generate_mapbox_map(context_variables, map_title, map_type, location_data=None, map_metadata=None, metric_id=None, group_field=None, series_field=None, color_palette=None, series_info=None, map_config=None, preview_mode=False, scale_dots=True, save_to_database=True):
     """
     Generates a map using Mapbox and stores its metadata in the database.
     
@@ -2070,63 +2070,78 @@ def generate_mapbox_map(context_variables, map_title, map_type, location_data=No
         # Determine map subtype (density or delta)
         map_subtype = "delta" if map_metadata and map_metadata.get("map_type") == "delta" else "density"
         
-        # Before inserting, deactivate previous maps of the same type for this metric
-        # BUT: Skip deactivation for point/symbol maps - keep all point maps active
-        if metric_id and map_type != "symbol":
-            try:
-                cursor.execute("""
-                    UPDATE maps 
-                    SET active = FALSE, updated_at = CURRENT_TIMESTAMP
-                    WHERE metric_id::text = %s 
-                    AND type = %s
-                    AND (metadata->>'map_type' = %s OR (metadata->>'map_type' IS NULL AND %s = 'density'))
-                    AND active = TRUE
-                """, (str(metric_id), map_type, map_subtype, map_subtype))
-                
-                deactivated_count = cursor.rowcount
-                if deactivated_count > 0:
-                    logger.info(f"Deactivated {deactivated_count} previous {map_subtype} map(s) for metric_id={metric_id}, type={map_type}")
-            except Exception as e:
-                logger.warning(f"Failed to deactivate previous maps: {str(e)}")
-        elif map_type == "symbol":
-            logger.info(f"Keeping all previous point maps active for metric_id={metric_id}")
-        
-        # Insert into database and get the auto-generated ID
-        cursor.execute("""
-            INSERT INTO maps (
-                title, type, location_data, metadata, active, created_at, updated_at, metric_id, group_field
-            ) VALUES (
-                %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s
-            ) RETURNING id
-        """, (
-            map_title,
-            map_type,
-            json.dumps(location_data),
-            json.dumps(metadata),
-            True,
-            metric_id,
-            group_field
-        ))
-        
-        # Get the auto-generated map ID
-        map_id = cursor.fetchone()[0]
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        # Generate view URL
-        view_url = f"/map/{map_id}"
-        
-        logger.info(f"Mapbox map generation complete for '{map_title}'. Map ID: {map_id}")
-        logger.info(f"View URL: {view_url}")
-        
-        return {
-            "map_id": map_id,
-            "view_url": view_url,
-            "data_points": len(location_data) if location_data else 0,
-            "location_data": location_data  # Include location_data for preview mode
-        }
+        # Only save to database if save_to_database is True
+        if save_to_database:
+            # Before inserting, deactivate previous maps of the same type for this metric
+            # BUT: Skip deactivation for point/symbol maps - keep all point maps active
+            if metric_id and map_type != "symbol":
+                try:
+                    cursor.execute("""
+                        UPDATE maps 
+                        SET active = FALSE, updated_at = CURRENT_TIMESTAMP
+                        WHERE metric_id::text = %s 
+                        AND type = %s
+                        AND (metadata->>'map_type' = %s OR (metadata->>'map_type' IS NULL AND %s = 'density'))
+                        AND active = TRUE
+                    """, (str(metric_id), map_type, map_subtype, map_subtype))
+                    
+                    deactivated_count = cursor.rowcount
+                    if deactivated_count > 0:
+                        logger.info(f"Deactivated {deactivated_count} previous {map_subtype} map(s) for metric_id={metric_id}, type={map_type}")
+                except Exception as e:
+                    logger.warning(f"Failed to deactivate previous maps: {str(e)}")
+            elif map_type == "symbol":
+                logger.info(f"Keeping all previous point maps active for metric_id={metric_id}")
+            
+            # Insert into database and get the auto-generated ID
+            cursor.execute("""
+                INSERT INTO maps (
+                    title, type, location_data, metadata, active, created_at, updated_at, metric_id, group_field
+                ) VALUES (
+                    %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s
+                ) RETURNING id
+            """, (
+                map_title,
+                map_type,
+                json.dumps(location_data),
+                json.dumps(metadata),
+                True,
+                metric_id,
+                group_field
+            ))
+            
+            # Get the auto-generated map ID
+            map_id = cursor.fetchone()[0]
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            # Generate view URL
+            view_url = f"/map/{map_id}"
+            
+            logger.info(f"Mapbox map generation complete for '{map_title}'. Map ID: {map_id}")
+            logger.info(f"View URL: {view_url}")
+            
+            return {
+                "map_id": map_id,
+                "view_url": view_url,
+                "data_points": len(location_data) if location_data else 0,
+                "location_data": location_data  # Include location_data for preview mode
+            }
+        else:
+            # Don't save to database, just return location_data
+            cursor.close()
+            conn.close()
+            
+            logger.info(f"Mapbox map generation complete for '{map_title}' (preview mode - not saved to database)")
+            
+            return {
+                "map_id": None,  # No map ID since not saved
+                "view_url": None,  # No view URL since not saved
+                "data_points": len(location_data) if location_data else 0,
+                "location_data": location_data  # Include location_data for preview mode
+            }
         
     except Exception as e:
         logger.error(f"An error occurred during Mapbox map generation for '{map_title}': {str(e)}", exc_info=True)
@@ -2817,7 +2832,7 @@ def process_dataset_for_map(dataset, map_type, series_field=None, color_palette=
     
     return location_data
 
-def generate_map(context_variables, map_title, map_type, location_data=None, map_metadata=None, reference_chart_id=None, metric_id=None, group_field=None, series_field=None, color_palette=None, map_provider="datawrapper", preview_mode=False):
+def generate_map(context_variables, map_title, map_type, location_data=None, map_metadata=None, reference_chart_id=None, metric_id=None, group_field=None, series_field=None, color_palette=None, map_provider="datawrapper", preview_mode=False, save_to_database=True):
     """
     Generates a map using Datawrapper, stores its metadata, and returns relevant URLs.
     
@@ -2835,6 +2850,9 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
         group_field (str, optional): Field used for grouping/aggregation (for storage).
         series_field (str, optional): Field name to use for series grouping (e.g., 'series', 'category', 'type').
         color_palette (list or str, optional): Color palette for series. Can be list of colors or palette name.
+        map_provider (str, optional): Map provider to use ("datawrapper" or "mapbox"). Defaults to "datawrapper".
+        preview_mode (bool, optional): If True, returns location_data instead of creating a map. Defaults to False.
+        save_to_database (bool, optional): If True, saves the map to the database. If False, only returns location_data. Defaults to True.
         
     Returns:
         dict: Contains map_id, edit_url, and publish_url, or None on failure.
@@ -2847,7 +2865,7 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
         map_config = context_variables.get("map_config")
         # Get scale_dots from map_metadata if available
         scale_dots = map_metadata.get("scale_dots", True) if map_metadata else True
-        return generate_mapbox_map(context_variables, map_title, map_type, location_data, map_metadata, metric_id, group_field, series_field, color_palette, None, map_config, preview_mode, scale_dots)
+        return generate_mapbox_map(context_variables, map_title, map_type, location_data, map_metadata, metric_id, group_field, series_field, color_palette, None, map_config, preview_mode, scale_dots, save_to_database)
     
     # Check if we should use dataset from context_variables
     if location_data is None or location_data == "from_context":
@@ -3545,140 +3563,143 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
 
         # Store map metadata in the database
         map_id = None  # Initialize map_id
-        try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # Create maps table if it doesn't exist
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS maps (
-                    id SERIAL PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    type TEXT NOT NULL,
-                    chart_id TEXT UNIQUE NOT NULL,
-                    edit_url TEXT NOT NULL,
-                    published_url TEXT NOT NULL,
-                    location_data JSONB,
-                    metadata JSONB,
-                    metric_id TEXT,
-                    group_field TEXT,
-                    active BOOLEAN DEFAULT TRUE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    CONSTRAINT maps_type_check CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol'))
-                )
-            """)
-            
-            # Update existing constraint to include analysis_neighborhood if it exists
+        if save_to_database:
             try:
-                cursor.execute("""
-                    ALTER TABLE maps 
-                    DROP CONSTRAINT IF EXISTS maps_type_check
-                """)
-                cursor.execute("""
-                    ALTER TABLE maps 
-                    ADD CONSTRAINT maps_type_check 
-                    CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol'))
-                """)
-                logger.info("Updated maps_type_check constraint to include analysis_neighborhood")
-            except Exception as e:
-                logger.warning(f"Could not update constraint (table might not exist yet): {str(e)}")
-            
-            # Prepare location data for storage
-            if isinstance(location_data, str):
-                # For CSV data, store as text in a wrapper object
-                location_data_json = {"csv_data": location_data, "type": "csv"}
-            elif isinstance(location_data, list):
-                # For list data, clean and store
-                cleaned_data = clean_data_for_json(location_data)
-                location_data_json = {"data": cleaned_data, "type": "list"}
-            else:
-                # For other types, convert to string
-                location_data_json = {"data": str(location_data), "type": "other"}
-            
-            # Prepare metadata for storage
-            # Ensure map_metadata is a dictionary
-            if isinstance(map_metadata, str):
-                try:
-                    metadata_json = json.loads(map_metadata)
-                except json.JSONDecodeError:
-                    # Try parsing as Python dict string representation (e.g., "{'key': 'value'}")
-                    try:
-                        metadata_json = ast.literal_eval(map_metadata)
-                        logger.info(f"Successfully parsed map_metadata as Python dict for storage: {metadata_json}")
-                    except (ValueError, SyntaxError):
-                        logger.warning(f"Invalid JSON and Python dict in map_metadata, treating as empty dict: {map_metadata}")
-                        metadata_json = {}
-            elif map_metadata is None:
-                metadata_json = {}
-            else:
-                # If it's already a dict, make a copy to avoid modifying the original
-                metadata_json = dict(map_metadata)
+                conn = get_db_connection()
+                cursor = conn.cursor()
                 
-            # Add the executed query URL to metadata if available
-            if executed_url:
-                metadata_json['executed_query_url'] = executed_url
+                # Create maps table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS maps (
+                        id SERIAL PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        chart_id TEXT UNIQUE NOT NULL,
+                        edit_url TEXT NOT NULL,
+                        published_url TEXT NOT NULL,
+                        location_data JSONB,
+                        metadata JSONB,
+                        metric_id TEXT,
+                        group_field TEXT,
+                        active BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT maps_type_check CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol'))
+                    )
+                """)
                 
-            metadata_json.update({
-                "creation_timestamp": datetime.now().isoformat(),
-                "datawrapper_chart_id": chart_id
-            })
-            
-            # Determine map subtype for management purposes
-            map_subtype = "density"  # Default to density
-            if metadata_json.get("map_type") == "delta":
-                map_subtype = "delta"
-            elif map_type == "symbol":
-                map_subtype = "symbol"
-            
-            # Before inserting, deactivate previous maps of the same type for this metric/group_field
-            if metric_id and group_field:
+                # Update existing constraint to include analysis_neighborhood if it exists
                 try:
-                    # Deactivate previous maps of the same subtype (density or delta) for this metric/group_field
                     cursor.execute("""
-                        UPDATE maps 
-                        SET active = FALSE, updated_at = CURRENT_TIMESTAMP
-                        WHERE metric_id = %s 
-                        AND group_field = %s 
-                        AND type = %s
-                        AND (metadata->>'map_type' = %s OR (metadata->>'map_type' IS NULL AND %s = 'density'))
-                        AND active = TRUE
-                    """, (metric_id, group_field, map_type, map_subtype, map_subtype))
-                    
-                    deactivated_count = cursor.rowcount
-                    if deactivated_count > 0:
-                        logger.info(f"Deactivated {deactivated_count} previous {map_subtype} map(s) for metric_id={metric_id}, group_field={group_field}")
+                        ALTER TABLE maps 
+                        DROP CONSTRAINT IF EXISTS maps_type_check
+                    """)
+                    cursor.execute("""
+                        ALTER TABLE maps 
+                        ADD CONSTRAINT maps_type_check 
+                        CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol'))
+                    """)
+                    logger.info("Updated maps_type_check constraint to include analysis_neighborhood")
                 except Exception as e:
-                    logger.warning(f"Failed to deactivate previous maps: {str(e)}")
-                    # Continue with insertion even if deactivation fails
-            
-            # Insert map record
-            cursor.execute("""
-                INSERT INTO maps (title, type, chart_id, edit_url, published_url, location_data, metadata, metric_id, group_field)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-            """, (
-                map_title,
-                map_type,
-                chart_id,
-                edit_url,
-                public_url,
-                json.dumps(location_data_json),
-                json.dumps(metadata_json, default=str),
-                metric_id,
-                group_field
-            ))
-            
-            map_id = cursor.fetchone()[0]
-            conn.commit()
-            cursor.close()
-            conn.close()
-            
-            logger.info(f"Stored map metadata in database with ID: {map_id}")
-            
-        except Exception as e:
-            logger.error(f"Failed to store map metadata in database: {str(e)}", exc_info=True)
-            # Don't fail the whole operation if database storage fails
+                    logger.warning(f"Could not update constraint (table might not exist yet): {str(e)}")
+                
+                # Prepare location data for storage
+                if isinstance(location_data, str):
+                    # For CSV data, store as text in a wrapper object
+                    location_data_json = {"csv_data": location_data, "type": "csv"}
+                elif isinstance(location_data, list):
+                    # For list data, clean and store
+                    cleaned_data = clean_data_for_json(location_data)
+                    location_data_json = {"data": cleaned_data, "type": "list"}
+                else:
+                    # For other types, convert to string
+                    location_data_json = {"data": str(location_data), "type": "other"}
+                
+                # Prepare metadata for storage
+                # Ensure map_metadata is a dictionary
+                if isinstance(map_metadata, str):
+                    try:
+                        metadata_json = json.loads(map_metadata)
+                    except json.JSONDecodeError:
+                        # Try parsing as Python dict string representation (e.g., "{'key': 'value'}")
+                        try:
+                            metadata_json = ast.literal_eval(map_metadata)
+                            logger.info(f"Successfully parsed map_metadata as Python dict for storage: {metadata_json}")
+                        except (ValueError, SyntaxError):
+                            logger.warning(f"Invalid JSON and Python dict in map_metadata, treating as empty dict: {map_metadata}")
+                            metadata_json = {}
+                elif map_metadata is None:
+                    metadata_json = {}
+                else:
+                    # If it's already a dict, make a copy to avoid modifying the original
+                    metadata_json = dict(map_metadata)
+                    
+                # Add the executed query URL to metadata if available
+                if executed_url:
+                    metadata_json['executed_query_url'] = executed_url
+                    
+                metadata_json.update({
+                    "creation_timestamp": datetime.now().isoformat(),
+                    "datawrapper_chart_id": chart_id
+                })
+                
+                # Determine map subtype for management purposes
+                map_subtype = "density"  # Default to density
+                if metadata_json.get("map_type") == "delta":
+                    map_subtype = "delta"
+                elif map_type == "symbol":
+                    map_subtype = "symbol"
+                
+                # Before inserting, deactivate previous maps of the same type for this metric/group_field
+                if metric_id and group_field:
+                    try:
+                        # Deactivate previous maps of the same subtype (density or delta) for this metric/group_field
+                        cursor.execute("""
+                            UPDATE maps 
+                            SET active = FALSE, updated_at = CURRENT_TIMESTAMP
+                            WHERE metric_id = %s 
+                            AND group_field = %s 
+                            AND type = %s
+                            AND (metadata->>'map_type' = %s OR (metadata->>'map_type' IS NULL AND %s = 'density'))
+                            AND active = TRUE
+                        """, (metric_id, group_field, map_type, map_subtype, map_subtype))
+                        
+                        deactivated_count = cursor.rowcount
+                        if deactivated_count > 0:
+                            logger.info(f"Deactivated {deactivated_count} previous {map_subtype} map(s) for metric_id={metric_id}, group_field={group_field}")
+                    except Exception as e:
+                        logger.warning(f"Failed to deactivate previous maps: {str(e)}")
+                        # Continue with insertion even if deactivation fails
+                
+                # Insert map record
+                cursor.execute("""
+                    INSERT INTO maps (title, type, chart_id, edit_url, published_url, location_data, metadata, metric_id, group_field)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    map_title,
+                    map_type,
+                    chart_id,
+                    edit_url,
+                    public_url,
+                    json.dumps(location_data_json),
+                    json.dumps(metadata_json, default=str),
+                    metric_id,
+                    group_field
+                ))
+                
+                map_id = cursor.fetchone()[0]
+                conn.commit()
+                cursor.close()
+                conn.close()
+                
+                logger.info(f"Stored map metadata in database with ID: {map_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to store map metadata in database: {str(e)}", exc_info=True)
+                # Don't fail the whole operation if database storage fails
+        else:
+            logger.info(f"Map generation complete for '{map_title}' (preview mode - not saved to database)")
             
         logger.info(f"Map generation complete for '{map_title}'. Chart ID: {chart_id}")
         logger.info(f"Edit URL: {edit_url}")
