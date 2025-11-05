@@ -8,8 +8,10 @@ and calculates vacancy rates with filtering by license type and business corrido
 
 import logging
 import os
+import csv
+import io
 from fastapi import APIRouter, Request, HTTPException, Query, BackgroundTasks
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from typing import Dict, Any, Optional, List
 import json
@@ -2415,3 +2417,453 @@ async def match_ban_data(
     except Exception as e:
         logger.exception(f"Error in BAN matching: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error in BAN matching: {str(e)}")
+
+
+@router.get("/api/vacancy/export-csv")
+async def export_vacancy_csv(
+    district: Optional[str] = Query(None, description="Supervisor district number (0-11)"),
+    zoning_district: Optional[str] = Query(None, description="Zoning district name"),
+    street_level_only: bool = Query(True, description="Export only street-level units")
+):
+    """
+    Export vacancy data as CSV filtered by district or zoning district.
+    Returns ground-level units with address, status, and active businesses.
+    """
+    try:
+        # Get the cached vacancy data with appropriate filters
+        district_list = [district] if district else None
+        zoning_list = [zoning_district] if zoning_district else None
+        
+        # Call the cached endpoint with filters (reuse the logic)
+        # We need to get the data directly from the cache
+        from ai.tools.simple_business_cache import SimpleBusinessCache
+        from ai.tools.db_utils import execute_with_connection
+        from collections import defaultdict
+        from decimal import Decimal
+        from datetime import datetime, date
+        
+        cache = SimpleBusinessCache()
+        
+        # Build query to get cached data
+        def get_cached_businesses(conn):
+            cursor = conn.cursor()
+            
+            # Base query
+            query = """
+                SELECT 
+                    location_lat, location_lon,
+                    dba_name, certificate_number,
+                    naic_code_description, lic_code_description,
+                    business_corridor, supervisor_district, zoning_district,
+                    dba_start_date, dba_end_date,
+                    location_start_date, location_end_date,
+                    administratively_closed,
+                    full_business_address,
+                    normalized_address,
+                    is_street_level
+                FROM business_registrations_cache
+                WHERE location_lat IS NOT NULL AND location_lon IS NOT NULL
+            """
+            
+            params = []
+            
+            # Add filters
+            if district_list:
+                placeholders = ','.join(['%s'] * len(district_list))
+                query += f" AND supervisor_district IN ({placeholders})"
+                params.extend([int(d) if d.isdigit() else d for d in district_list])
+            
+            if zoning_list:
+                placeholders = ','.join(['%s'] * len(zoning_list))
+                query += f" AND zoning_district IN ({placeholders})"
+                params.extend(zoning_list)
+            
+            query += " LIMIT 250000"
+            
+            cursor.execute(query, params)
+            
+            # Get column names
+            if not cursor.description:
+                cursor.close()
+                return []
+            
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            cursor.close()
+            
+            # Convert rows to dictionaries
+            result = []
+            for row in rows:
+                if isinstance(row, dict):
+                    # Already a dict (RealDictCursor)
+                    result.append(row)
+                else:
+                    # Tuple/list - convert to dict
+                    try:
+                        result.append(dict(zip(columns, row)))
+                    except Exception as e:
+                        logger.error(f"Error converting row to dict: {e}, row type: {type(row)}, row: {row}")
+                        continue
+            
+            return result
+        
+        result = execute_with_connection(get_cached_businesses)
+        
+        # Check if operation was successful
+        if result.get('status') != 'success':
+            logger.error(f"Failed to get cached businesses: {result.get('message', 'Unknown error')}")
+            raise HTTPException(status_code=500, detail=f"Failed to fetch data: {result.get('message', 'Unknown error')}")
+        
+        raw_data = result.get('result', [])
+        
+        if not raw_data:
+            logger.warning("No data returned from database query")
+            raw_data = []
+        
+        # Validate that all records are dictionaries
+        if raw_data:
+            # Check first record to ensure it's a dict
+            if not isinstance(raw_data[0], dict):
+                logger.error(f"Expected dict records, got {type(raw_data[0])}. First record: {raw_data[0]}")
+                raise HTTPException(status_code=500, detail="Data format error: records are not dictionaries")
+        
+        # Process data similar to get_cached_vacancy_data
+        # Helper function to determine business status
+        def determine_status(record):
+            """Determine if a business is Open or Closed based on dates"""
+            dba_start_date = record.get('dba_start_date')
+            dba_end_date = record.get('dba_end_date')
+            location_start_date = record.get('location_start_date')
+            location_end_date = record.get('location_end_date')
+            administratively_closed = record.get('administratively_closed', False)
+            
+            if administratively_closed:
+                return 'Closed'
+            
+            if dba_start_date and dba_end_date and dba_start_date == dba_end_date:
+                return 'Closed'
+            
+            if location_start_date and location_end_date and location_start_date == location_end_date:
+                return 'Closed'
+            
+            all_start_dates = [d for d in [dba_start_date, location_start_date] if d is not None]
+            all_end_dates = [d for d in [dba_end_date, location_end_date] if d is not None]
+            
+            most_recent_start = max(all_start_dates) if all_start_dates else None
+            most_recent_end = max(all_end_dates) if all_end_dates else None
+            
+            if most_recent_end:
+                if most_recent_start is None or most_recent_end >= most_recent_start:
+                    return 'Closed'
+                else:
+                    return 'Open'
+            
+            if most_recent_start:
+                return 'Open'
+            
+            return 'Open'
+        
+        # Group by building address (use normalized_address from DB if available)
+        def canonicalize_unit_address(full_address):
+            """
+            Canonicalize unit addresses to handle variations like:
+            - '2139 Polk St A' and '2139 A Polk St' -> '2139 POLK ST A'
+            - '2139 Polk St #C' -> '2139 POLK ST C'
+            """
+            import re
+            if not full_address:
+                return ''
+            
+            addr = full_address.strip().upper()
+            
+            # Extract street number at the start
+            match = re.match(r'^(\d+(?:-\d+)?)', addr)
+            if not match:
+                return addr
+            
+            street_number = match.group(1)
+            rest = addr[len(street_number):].strip()
+            
+            # Try to extract unit identifier
+            unit_letters = []
+            
+            # Pattern 1: Unit letter at beginning
+            unit_match = re.match(r'^([A-Z]|#[A-Z0-9]+)\s+(.+)$', rest)
+            if unit_match:
+                unit = unit_match.group(1).replace('#', '').strip()
+                rest = unit_match.group(2)
+                unit_letters.append(unit)
+            
+            # Pattern 2: Unit letter at end
+            unit_match = re.search(r'\s+([A-Z]|#[A-Z0-9]+)$', rest)
+            if unit_match:
+                unit = unit_match.group(1).replace('#', '').strip()
+                rest = rest[:unit_match.start()]
+                unit_letters.append(unit)
+            
+            street_name = rest.strip()
+            street_name = re.sub(r'\s+', ' ', street_name)
+            
+            if unit_letters:
+                canonical = f"{street_number} {street_name} {unit_letters[-1]}"
+            else:
+                canonical = f"{street_number} {street_name}"
+            
+            return canonical.strip()
+        
+        building_groups = defaultdict(list)
+        for record in raw_data:
+            # Ensure record is a dictionary
+            if not isinstance(record, dict):
+                logger.error(f"Record is not a dict: {type(record)}, value: {record}")
+                continue
+            
+            # Use normalized_address from DB if available, otherwise canonicalize
+            normalized = record.get('normalized_address', '')
+            if not normalized:
+                address = record.get('full_business_address', '')
+                normalized = canonicalize_unit_address(address)
+            building_groups[normalized].append(record)
+        
+        # Process buildings
+        processed_data = []
+        for normalized_address, business_records in building_groups.items():
+            # Group by distinct addresses within building
+            individual_address_groups = defaultdict(list)
+            for record in business_records:
+                canonical_address = canonicalize_unit_address(record.get('full_business_address', ''))
+                individual_address_groups[canonical_address].append(record)
+            
+            # Process each distinct address
+            addresses_data_formatted = []
+            for distinct_address, address_businesses in individual_address_groups.items():
+                if not address_businesses:
+                    continue
+                
+                # Check if ANY business is open
+                address_has_open_business = False
+                address_has_closed_business = False
+                
+                for business in address_businesses:
+                    business_status = determine_status(business)
+                    if business_status == 'Open':
+                        address_has_open_business = True
+                    else:
+                        address_has_closed_business = True
+                
+                # Determine address status
+                if address_has_open_business:
+                    unit_status = 'Open'
+                elif address_has_closed_business:
+                    unit_status = 'Closed'
+                else:
+                    unit_status = 'Unknown'
+                
+                # Get street level status
+                most_recent_business = max(address_businesses,
+                    key=lambda r: max(
+                        r.get('dba_start_date') or datetime.min,
+                        r.get('location_start_date') or datetime.min
+                    ))
+                street_level = most_recent_business.get('is_street_level', True)
+                
+                # Convert businesses to serializable format
+                businesses_serializable = []
+                for biz in address_businesses:
+                    biz_data = {
+                        'dba_name': biz.get('dba_name', 'Unknown Business'),
+                        'certificate_number': biz.get('certificate_number'),
+                        'naic_code_description': biz.get('naic_code_description'),
+                        'lic_code_description': biz.get('lic_code_description'),
+                        'status': determine_status(biz),
+                        'dba_start_date': biz.get('dba_start_date'),
+                        'location_start_date': biz.get('location_start_date'),
+                        'dba_end_date': biz.get('dba_end_date'),
+                        'location_end_date': biz.get('location_end_date')
+                    }
+                    businesses_serializable.append(biz_data)
+                
+                formatted_unit = {
+                    'address': distinct_address,
+                    'status': unit_status,
+                    'is_street_level': street_level,
+                    'businesses': businesses_serializable
+                }
+                addresses_data_formatted.append(formatted_unit)
+            
+            # Get first record for building-level data
+            first_record = business_records[0]
+            
+            building_record = {
+                'full_business_address': normalized_address,
+                'supervisor_district': first_record.get('supervisor_district'),
+                'zoning_district': first_record.get('zoning_district'),
+                'business_corridor': first_record.get('business_corridor'),
+                'addresses_data': addresses_data_formatted
+            }
+            processed_data.append(building_record)
+        
+        # Create CSV content
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Address',
+            'Status',
+            'Ground Level',
+            'Occupied Business Name(s)',
+            'Most Recent Closed Business',
+            'Close Date',
+            'Certificate Numbers',
+            'Industry Type',
+            'License Type',
+            'Corridor',
+            'Supervisor District',
+            'Zoning District'
+        ])
+        
+        # Extract ground-level units from buildings
+        for building in processed_data:
+            addresses_data = building.get('addresses_data', [])
+            
+            # Handle string JSON if needed
+            if isinstance(addresses_data, str):
+                try:
+                    addresses_data = json.loads(addresses_data)
+                except:
+                    addresses_data = []
+            
+            if not isinstance(addresses_data, list):
+                continue
+            
+            # Filter to street-level units only
+            for addr in addresses_data:
+                is_street_level = addr.get('is_street_level') or addr.get('street_level', False)
+                
+                if street_level_only and not is_street_level:
+                    continue
+                
+                # Get address
+                address = addr.get('address') or addr.get('distinct_address') or building.get('full_business_address', '')
+                
+                # Get status
+                status = addr.get('status') or addr.get('unit_status', 'Unknown')
+                
+                # Get all businesses at this address
+                businesses = addr.get('businesses', [])
+                
+                # Separate open and closed businesses
+                open_businesses = [b for b in businesses if b.get('status') == 'Open']
+                closed_businesses = [b for b in businesses if b.get('status') == 'Closed']
+                
+                # Format occupied business names (most recent open business if multiple)
+                occupied_business_names = ''
+                if open_businesses:
+                    if len(open_businesses) == 1:
+                        # Single open business
+                        occupied_business_names = open_businesses[0].get('dba_name', 'Unknown')
+                    else:
+                        # Multiple open businesses - find the one with most recent start date
+                        def get_most_recent_start_date(biz):
+                            """Get the most recent start date from a business record"""
+                            dba_start = biz.get('dba_start_date')
+                            location_start = biz.get('location_start_date')
+                            if dba_start and location_start:
+                                return max(dba_start, location_start)
+                            return dba_start or location_start or datetime.min
+                        
+                        most_recent_open = max(open_businesses, key=get_most_recent_start_date)
+                        occupied_business_names = most_recent_open.get('dba_name', 'Unknown')
+                
+                # Get most recent closed business and close date
+                most_recent_closed_business = ''
+                close_date = ''
+                
+                if closed_businesses:
+                    # Find the business with the most recent end date
+                    def get_most_recent_end_date(biz):
+                        """Get the most recent end date from a business record"""
+                        dba_end = biz.get('dba_end_date')
+                        location_end = biz.get('location_end_date')
+                        if dba_end and location_end:
+                            return max(dba_end, location_end)
+                        return dba_end or location_end or datetime.min
+                    
+                    most_recent_closed = max(closed_businesses, key=get_most_recent_end_date)
+                    most_recent_closed_business = most_recent_closed.get('dba_name', 'Unknown')
+                    
+                    # Get the most recent end date
+                    dba_end = most_recent_closed.get('dba_end_date')
+                    location_end = most_recent_closed.get('location_end_date')
+                    if dba_end and location_end:
+                        close_date = max(dba_end, location_end)
+                    else:
+                        close_date = dba_end or location_end
+                    
+                    # Format date as string if it's a date object
+                    if close_date and isinstance(close_date, (datetime, date)):
+                        close_date = close_date.strftime('%Y-%m-%d')
+                    elif close_date:
+                        close_date = str(close_date)
+                
+                # Get certificate numbers from all businesses (open and closed)
+                all_certificate_numbers = []
+                for b in businesses:
+                    cert_num = b.get('certificate_number')
+                    if cert_num:
+                        all_certificate_numbers.append(str(cert_num))
+                certificate_numbers = '; '.join(all_certificate_numbers) if all_certificate_numbers else ''
+                
+                # Get industry and license types from all businesses (prioritize open)
+                all_industry_types = set()
+                all_license_types = set()
+                for b in businesses:
+                    naic = b.get('naic_code_description')
+                    lic = b.get('lic_code_description')
+                    if naic:
+                        all_industry_types.add(naic)
+                    if lic:
+                        all_license_types.add(lic)
+                
+                industry_types = '; '.join(sorted(all_industry_types)) if all_industry_types else ''
+                license_types = '; '.join(sorted(all_license_types)) if all_license_types else ''
+                
+                # Write row
+                writer.writerow([
+                    address,
+                    status,
+                    'Yes' if is_street_level else 'No',
+                    occupied_business_names or 'None',
+                    most_recent_closed_business or 'N/A',
+                    close_date or 'N/A',
+                    certificate_numbers or 'None',
+                    industry_types or 'None',
+                    license_types or 'None',
+                    building.get('business_corridor') or 'None',
+                    building.get('supervisor_district') or 'Unknown',
+                    building.get('zoning_district') or 'Unknown'
+                ])
+        
+        # Prepare filename
+        if district:
+            filename = f"vacancy_district_{district}_ground_level.csv"
+        elif zoning_district:
+            safe_zoning = zoning_district.replace(' ', '_').replace('/', '_')
+            filename = f"vacancy_zoning_{safe_zoning}_ground_level.csv"
+        else:
+            filename = "vacancy_all_ground_level.csv"
+        
+        # Create response
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except Exception as e:
+        logger.exception(f"Error exporting vacancy CSV: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error exporting CSV: {str(e)}")
