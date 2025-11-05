@@ -1033,16 +1033,29 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                         # Determine which period to look for second_last_month data
                         # If period_type column exists, use it for filtering, otherwise filter by month_period only
                         if 'period_type' in dataset.columns:
-                            # If second_last_month is in recent_months, look in recent period, otherwise look in comparison
-                            if second_last_month in recent_months:
-                                second_last_month_data = dataset[(dataset['month_period'] == second_last_month) & 
-                                                               (dataset['period_type'] == 'recent')]
-                            else:
+                            # First try to find in 'recent' period, then try 'comparison' if not found
+                            second_last_month_data = dataset[(dataset['month_period'] == second_last_month) & 
+                                                           (dataset['period_type'] == 'recent')]
+                            
+                            # If not found in 'recent', try 'comparison'
+                            if second_last_month_data.empty:
+                                logging.info(f"Second last month {second_last_month} not found in 'recent' period, trying 'comparison' period")
                                 second_last_month_data = dataset[(dataset['month_period'] == second_last_month) & 
                                                                (dataset['period_type'] == 'comparison')]
+                            
+                            # If still not found, try without period_type filter (fallback)
+                            if second_last_month_data.empty:
+                                logging.warning(f"Second last month {second_last_month} not found in either 'recent' or 'comparison' period, trying without period_type filter")
+                                second_last_month_data = dataset[dataset['month_period'] == second_last_month]
                         else:
                             # If period_type column is missing, just filter by month_period
                             second_last_month_data = dataset[dataset['month_period'] == second_last_month]
+                        
+                        # Log whether we found data for the second last month
+                        if second_last_month_data.empty:
+                            logging.warning(f"No data found for second_last_month ({second_last_month}). Cannot generate delta map.")
+                        else:
+                            logging.info(f"Found {len(second_last_month_data)} records for second_last_month ({second_last_month})")
                         
                         if not second_last_month_data.empty:
                             # Log data for debugging
@@ -1073,15 +1086,28 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                             logging.info(f"Current month aggregated values: {last_month_grouped.head().to_dict()}")
                             logging.info(f"Previous month aggregated values: {second_last_month_grouped.head().to_dict()}")
                             
+                            # Log district lists for debugging
+                            current_districts = set(last_month_grouped['supervisor_district'].dropna().unique())
+                            previous_districts = set(second_last_month_grouped['supervisor_district'].dropna().unique())
+                            logging.info(f"Current month districts ({len(current_districts)}): {sorted([str(d) for d in current_districts])}")
+                            logging.info(f"Previous month districts ({len(previous_districts)}): {sorted([str(d) for d in previous_districts])}")
+                            
                             # Merge the data to calculate percent change
                             merged_data = pd.merge(
                                 last_month_grouped, 
                                 second_last_month_grouped,
                                 on='supervisor_district', 
-                                suffixes=('_current', '_previous')
+                                suffixes=('_current', '_previous'),
+                                how='inner'
                             )
                             
-                            logging.info(f"Merged data for percent change calculation: {merged_data.to_dict()}")
+                            logging.info(f"Merged data for percent change calculation: {len(merged_data)} districts with data in both periods")
+                            if len(merged_data) == 0:
+                                common_districts = current_districts & previous_districts
+                                logging.warning(f"No overlapping districts found! Common districts: {sorted([str(d) for d in common_districts])}")
+                                logging.warning(f"Only in current: {sorted([str(d) for d in (current_districts - previous_districts)])}")
+                                logging.warning(f"Only in previous: {sorted([str(d) for d in (previous_districts - current_districts)])}")
+                            logging.info(f"Merged data sample: {merged_data.head().to_dict()}")
                             
                             delta_map_data = []
                             for _, row in merged_data.iterrows():
@@ -1130,7 +1156,11 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                                     logging.warning(f"Skipping invalid district for percent change: {row['supervisor_district']} - {e}")
                             
                             # Log the final delta map data
-                            logging.info(f"Final delta map data: {delta_map_data}")
+                            logging.info(f"Final delta map data: {len(delta_map_data)} districts")
+                            if delta_map_data:
+                                logging.info(f"Sample delta map data: {delta_map_data[:3]}")
+                            else:
+                                logging.warning("No delta map data generated - this will result in an empty map!")
                             
                             # Generate delta map
                             if delta_map_data:
@@ -1281,15 +1311,30 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                     
                     # Generate delta map for neighborhoods
                     if second_last_month and not last_month_data.empty:
+                        # Determine which period to look for second_last_month data
                         if 'period_type' in dataset.columns:
-                            if second_last_month in recent_months:
-                                second_last_month_data = dataset[(dataset['month_period'] == second_last_month) & 
-                                                               (dataset['period_type'] == 'recent')]
-                            else:
+                            # First try to find in 'recent' period, then try 'comparison' if not found
+                            second_last_month_data = dataset[(dataset['month_period'] == second_last_month) & 
+                                                           (dataset['period_type'] == 'recent')]
+                            
+                            # If not found in 'recent', try 'comparison'
+                            if second_last_month_data.empty:
+                                logging.info(f"Second last month {second_last_month} not found in 'recent' period for neighborhoods, trying 'comparison' period")
                                 second_last_month_data = dataset[(dataset['month_period'] == second_last_month) & 
                                                                (dataset['period_type'] == 'comparison')]
+                            
+                            # If still not found, try without period_type filter (fallback)
+                            if second_last_month_data.empty:
+                                logging.warning(f"Second last month {second_last_month} not found in either 'recent' or 'comparison' period for neighborhoods, trying without period_type filter")
+                                second_last_month_data = dataset[dataset['month_period'] == second_last_month]
                         else:
                             second_last_month_data = dataset[dataset['month_period'] == second_last_month]
+                        
+                        # Log whether we found data for the second last month
+                        if second_last_month_data.empty:
+                            logging.warning(f"No data found for second_last_month ({second_last_month}) for neighborhoods. Cannot generate neighborhood delta map.")
+                        else:
+                            logging.info(f"Found {len(second_last_month_data)} records for second_last_month ({second_last_month}) for neighborhoods")
                         
                         if not second_last_month_data.empty:
                             last_month_copy = last_month_data.copy()
@@ -1305,8 +1350,21 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                                 current_neighborhood = last_month_copy.groupby('analysis_neighborhood')[value_field].sum().reset_index()
                                 previous_neighborhood = second_month_copy.groupby('analysis_neighborhood')[value_field].sum().reset_index()
                             
+                            # Log neighborhood lists for debugging
+                            current_neighborhood_names = set(current_neighborhood['analysis_neighborhood'].dropna().unique())
+                            previous_neighborhood_names = set(previous_neighborhood['analysis_neighborhood'].dropna().unique())
+                            logging.info(f"Current month neighborhoods ({len(current_neighborhood_names)}): {sorted(current_neighborhood_names)}")
+                            logging.info(f"Previous month neighborhoods ({len(previous_neighborhood_names)}): {sorted(previous_neighborhood_names)}")
+                            
                             merged_neighborhood = pd.merge(current_neighborhood, previous_neighborhood, 
-                                                         on='analysis_neighborhood', suffixes=('_current', '_previous'))
+                                                         on='analysis_neighborhood', suffixes=('_current', '_previous'), how='inner')
+                            
+                            logging.info(f"Merged neighborhood data: {len(merged_neighborhood)} neighborhoods with data in both periods")
+                            if len(merged_neighborhood) == 0:
+                                common_neighborhoods = current_neighborhood_names & previous_neighborhood_names
+                                logging.warning(f"No overlapping neighborhoods found! Common neighborhoods: {sorted(common_neighborhoods)}")
+                                logging.warning(f"Only in current: {sorted(current_neighborhood_names - previous_neighborhood_names)}")
+                                logging.warning(f"Only in previous: {sorted(previous_neighborhood_names - current_neighborhood_names)}")
                             
                             neighborhood_delta_data = []
                             for _, row in merged_neighborhood.iterrows():
@@ -1322,6 +1380,8 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                                         "percent_change": pct_change,
                                         "value": pct_change
                                     })
+                            
+                            logging.info(f"Generated neighborhood_delta_data with {len(neighborhood_delta_data)} neighborhoods")
                             
                             if neighborhood_delta_data:
                                 map_result = generate_map(

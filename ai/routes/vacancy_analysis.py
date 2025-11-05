@@ -722,7 +722,7 @@ async def get_vacancy_data(
                 "open_upper_floor_addresses": open_upper_floor_addresses,
                 "closed_upper_floor_addresses": closed_upper_floor_addresses,
                 "streetfront_vacancy_rate": round(streetfront_vacancy_rate, 2),
-                "total_businesses": sum(d['business_count'] for d in processed_data)
+                "total_businesses": total_streetfront_addresses + total_upper_floor_addresses  # Businesses = Storefronts + Upper Floor
             },
             "district_stats": district_stats,
             "filters_applied": {
@@ -1475,7 +1475,7 @@ async def get_cached_vacancy_data(
                 "open_upper_floor_addresses": open_upper_floor_addresses,
                 "closed_upper_floor_addresses": closed_upper_floor_addresses,
                 "streetfront_vacancy_rate": round(streetfront_vacancy_rate, 2),
-                "total_businesses": sum(d['business_count'] for d in processed_data)
+                "total_businesses": total_streetfront_addresses + total_upper_floor_addresses  # Businesses = Storefronts + Upper Floor
             },
             "district_stats": district_stats,
             "filters_applied": {

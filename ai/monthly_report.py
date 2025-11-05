@@ -2116,6 +2116,10 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
         report_date = datetime.now().date()
     
     def generate_report_operation(connection):
+        # Ensure os and re modules are accessible in this nested function scope
+        import os as _os_module
+        import re as _re_module
+        
         cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
         # Prefer selecting items by report_id if we can resolve it from the provided original filename
@@ -2383,7 +2387,7 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
                 try:
                     # Find all citation references in the format [n]
                     citation_pattern = r'\[(\d+)\]'
-                    citation_refs = re.findall(citation_pattern, perplexity_context)
+                    citation_refs = _re_module.findall(citation_pattern, perplexity_context)
                     
                     # Sort and deduplicate the citation references
                     unique_refs = sorted(set(citation_refs), key=int)
@@ -2500,11 +2504,11 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
             )
             
             # Create logs directory if it doesn't exist
-            logs_dir = os.path.join(script_dir, 'logs')
-            os.makedirs(logs_dir, exist_ok=True)
+            logs_dir = _os_module.path.join(script_dir, 'logs')
+            _os_module.makedirs(logs_dir, exist_ok=True)
             
             # Save the complete prompt to a log file (overwrite for each run)
-            prompt_log_path = os.path.join(logs_dir, 'monthly_report_prompt.txt')
+            prompt_log_path = _os_module.path.join(logs_dir, 'monthly_report_prompt.txt')
             try:
                 with open(prompt_log_path, 'w', encoding='utf-8') as f:
                     f.write(f"System Message:\n{system_message}\n\n")
@@ -2712,6 +2716,7 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
             # Use GCS output manager for storage with proper template rendering
             try:
                 from tools.output_manager import get_output_manager
+                output_manager = get_output_manager()
                 from jinja2 import Environment, FileSystemLoader
                 import os
                 
@@ -3620,14 +3625,14 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
         def get_report_items_operation(connection):
             cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
             
-            # Get all report items for this district, ordered by priority
+            # Get report items for this specific report only, ordered by priority
             cursor.execute("""
                 SELECT mr.*, r.id as report_id 
                 FROM monthly_reporting mr
                 JOIN reports r ON mr.report_id = r.id
-                WHERE r.district = %s
+                WHERE mr.report_id = %s
                 ORDER BY mr.priority
-            """, (district,))
+            """, (report_id,))
             
             items = cursor.fetchall()
             
@@ -3654,7 +3659,7 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
             return report_data
         
         # Step 4: Get report items for context enrichment
-        logger.info("Step 4: Getting report items for Perplexity context enrichment")
+        logger.info(f"Step 4: Getting report items for Perplexity context enrichment (report_id: {report_id})")
         result = execute_with_connection(
             operation=get_report_items_operation,
             db_host=DB_HOST,
@@ -3669,6 +3674,7 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
             report_items = []
         else:
             report_items = result["result"]
+            logger.info(f"Found {len(report_items)} items for Perplexity context enrichment (report_id: {report_id})")
             
         # Step 5: Get additional context for each report item
         if report_items:
@@ -3689,7 +3695,7 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
                             perplexity_context = item["metadata"]["perplexity_context"]
                             logger.info(f"Updating perplexity_context for {metric_name} - {group_value} (length: {len(perplexity_context)})")
                             
-                            # Find the item in the database by metric_name and group_value
+                            # Find the item in the database by metric_name, group_value, and report_id
                             cursor.execute("""
                                 UPDATE monthly_reporting
                                 SET metadata = jsonb_set(
@@ -3697,13 +3703,13 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
                                     '{perplexity_context}', 
                                     %s::jsonb
                                 )
-                                WHERE metric_name = %s AND group_value = %s AND district = %s
+                                WHERE metric_name = %s AND group_value = %s AND report_id = %s
                                 RETURNING id
                             """, (
                                 json.dumps(perplexity_context),
                                 metric_name,
                                 group_value,
-                                district
+                                report_id
                             ))
                             updated_ids = cursor.fetchall()
                             updated_count += len(updated_ids)
@@ -3732,13 +3738,13 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
                                         '{perplexity_response}', 
                                         %s::jsonb
                                     )
-                                    WHERE metric_name = %s AND group_value = %s AND district = %s
+                                    WHERE metric_name = %s AND group_value = %s AND report_id = %s
                                     RETURNING id
                                 """, (
                                     perplexity_response_json,
                                     metric_name,
                                     group_value,
-                                    district
+                                    report_id
                                 ))
                                 response_updated_ids = cursor.fetchall()
                                 logger.info(f"Updated {len(response_updated_ids)} records for perplexity_response ({metric_name} - {group_value})")
@@ -3747,9 +3753,9 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
                                 cursor.execute("""
                                     SELECT metadata->'perplexity_response' 
                                     FROM monthly_reporting 
-                                    WHERE metric_name = %s AND group_value = %s AND district = %s
+                                    WHERE metric_name = %s AND group_value = %s AND report_id = %s
                                     LIMIT 1
-                                """, (metric_name, group_value, district))
+                                """, (metric_name, group_value, report_id))
                                 result = cursor.fetchone()
                                 if result and result[0]:
                                     logger.info(f"Verification successful! perplexity_response was stored for {metric_name}: {json.dumps(result[0])[:100]}...")
@@ -3766,9 +3772,9 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
                                     # First get the current metadata
                                     cursor.execute("""
                                         SELECT metadata FROM monthly_reporting
-                                        WHERE metric_name = %s AND group_value = %s AND district = %s
+                                        WHERE metric_name = %s AND group_value = %s AND report_id = %s
                                         LIMIT 1
-                                    """, (metric_name, group_value, district))
+                                    """, (metric_name, group_value, report_id))
                                     
                                     current_metadata = cursor.fetchone()[0] or {}
                                     if not isinstance(current_metadata, dict):
@@ -3781,13 +3787,13 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
                                     cursor.execute("""
                                         UPDATE monthly_reporting
                                         SET metadata = %s::jsonb
-                                        WHERE metric_name = %s AND group_value = %s AND district = %s
+                                        WHERE metric_name = %s AND group_value = %s AND report_id = %s
                                         RETURNING id
                                     """, (
                                         json.dumps(current_metadata),
                                         metric_name,
                                         group_value,
-                                        district
+                                        report_id
                                     ))
                                     
                                     fallback_updated_ids = cursor.fetchall()

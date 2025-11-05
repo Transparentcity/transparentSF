@@ -857,6 +857,11 @@
                     const groupedData = {};
                     timeSeriesData.forEach(item => {
                         const year = item.group_value;
+                        // Skip items with invalid group_value
+                        if (!year || year === null || year === undefined) {
+                            console.warn('Skipping item with invalid group_value:', item);
+                            return;
+                        }
                         if (!groupedData[year]) {
                             groupedData[year] = [];
                         }
@@ -865,50 +870,103 @@
                     
                     // Create traces for each year
                     Object.entries(groupedData).forEach(([year, yearItems]) => {
+                        // Safety check: ensure yearItems is an array
+                        if (!yearItems || !Array.isArray(yearItems)) {
+                            console.warn(`Invalid yearItems for year ${year}:`, yearItems);
+                            return; // Skip to next year
+                        }
+                        
                         // Convert dates to day-of-year (1-365)
-                        const dayOfYearData = yearItems.map(item => {
-                            // More robust date parsing
-                            let date;
-                            const dateStr = item.time_period;
-                            
-                            // Handle different date formats
-                            if (dateStr.includes('T')) {
-                                // ISO format with time
-                                date = new Date(dateStr);
-                            } else if (dateStr.includes('-')) {
-                                // YYYY-MM-DD format
-                                const [year, month, day] = dateStr.split('-').map(Number);
-                                date = new Date(year, month - 1, day); // month is 0-indexed
-                            } else {
-                                // Fallback to default parsing
-                                date = new Date(dateStr);
-                            }
-                            
-                            const startOfYear = new Date(date.getFullYear(), 0, 1);
-                            const dayOfYear = Math.floor((date - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
-                            
-                            // Debug logging
-                            console.log(`Date: ${item.time_period}, Parsed: ${date}, DayOfYear: ${dayOfYear}, Value: ${item.numeric_value}`);
-                            
-                            return {
-                                dayOfYear: dayOfYear,
-                                value: item.numeric_value,
-                                originalDate: date
-                            };
-                        });
+                        const dayOfYearData = yearItems
+                            .filter(item => item.time_period != null && item.time_period !== undefined)
+                            .map(item => {
+                                // More robust date parsing
+                                let date;
+                                const dateStr = item.time_period;
+                                
+                                // Validate dateStr is a string before processing
+                                if (!dateStr || typeof dateStr !== 'string') {
+                                    console.warn(`Invalid time_period for item:`, item);
+                                    return null;
+                                }
+                                
+                                // Handle different date formats
+                                if (dateStr.includes('T')) {
+                                    // ISO format with time
+                                    date = new Date(dateStr);
+                                } else if (dateStr.includes('-')) {
+                                    // YYYY-MM-DD format
+                                    const dateParts = dateStr.split('-');
+                                    if (dateParts.length >= 3) {
+                                        const yearVal = parseInt(dateParts[0], 10);
+                                        const month = parseInt(dateParts[1], 10);
+                                        const day = parseInt(dateParts[2], 10);
+                                        date = new Date(yearVal, month - 1, day); // month is 0-indexed
+                                    } else {
+                                        console.warn(`Invalid date format: ${dateStr}`);
+                                        date = new Date(dateStr);
+                                    }
+                                } else {
+                                    // Fallback to default parsing
+                                    date = new Date(dateStr);
+                                }
+                                
+                                // Validate date is valid
+                                if (isNaN(date.getTime())) {
+                                    console.warn(`Invalid date parsed from: ${dateStr}`);
+                                    return null;
+                                }
+                                
+                                const startOfYear = new Date(date.getFullYear(), 0, 1);
+                                const dayOfYear = Math.floor((date - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
+                                
+                                // Debug logging
+                                console.log(`Date: ${item.time_period}, Parsed: ${date}, DayOfYear: ${dayOfYear}, Value: ${item.numeric_value}`);
+                                
+                                return {
+                                    dayOfYear: dayOfYear,
+                                    value: item.numeric_value,
+                                    originalDate: date
+                                };
+                            })
+                            .filter(item => item != null); // Remove null entries
+                        
+                        // Safety check: ensure dayOfYearData is an array
+                        if (!Array.isArray(dayOfYearData)) {
+                            console.error(`Invalid dayOfYearData for year ${year}:`, dayOfYearData);
+                            return; // Skip to next year
+                        }
                         
                         // Sort by day of year
                         dayOfYearData.sort((a, b) => a.dayOfYear - b.dayOfYear);
                         
                         // Filter out any invalid day-of-year values
-                        const validDayOfYearData = dayOfYearData.filter(d => d.dayOfYear >= 1 && d.dayOfYear <= 366 && !isNaN(d.dayOfYear));
+                        const validDayOfYearData = dayOfYearData.filter(d => d && d.dayOfYear >= 1 && d.dayOfYear <= 366 && !isNaN(d.dayOfYear));
+                        
+                        // Safety check: ensure validDayOfYearData is an array
+                        if (!Array.isArray(validDayOfYearData)) {
+                            console.error(`Invalid validDayOfYearData for year ${year}:`, validDayOfYearData);
+                            return; // Skip to next year
+                        }
                         
                         // Debug: Log the sorted data
                         console.log(`Valid dayOfYearData for ${year}:`, validDayOfYearData.map(d => ({ dayOfYear: d.dayOfYear, value: d.value, date: d.originalDate })));
                         
+                        // Skip if no valid data for this year
+                        if (validDayOfYearData.length === 0) {
+                            console.warn(`No valid day-of-year data for year ${year}, skipping trace creation`);
+                            return; // Skip to next year
+                        }
+                        
                         // Use the valid data
                         const dailyX = validDayOfYearData.map(d => d.dayOfYear);
                         const dailyY = validDayOfYearData.map(d => d.value);
+                        
+                        // Safety check: ensure dailyX and dailyY are arrays
+                        if (!Array.isArray(dailyX) || !Array.isArray(dailyY)) {
+                            console.error(`Invalid dailyX or dailyY for year ${year}:`, { dailyX, dailyY });
+                            return; // Skip to next year
+                        }
                         
                         // Choose color based on year - use purple for current year, grey for previous
                         const isCurrentYear = year === new Date().getFullYear().toString();
@@ -934,6 +992,12 @@
                         // Log the detection for debugging
                         if (shouldUseMonthlyTreatment) {
                             console.log(`YTD Chart: Using monthly treatment for ${year} - period_type: ${metadata.period_type}, unique days: ${uniqueDayValues.length}, isMonthlyData: ${isMonthlyData}, isSparseData: ${isSparseData}`);
+                        }
+                        
+                        // Ensure traces is defined before pushing
+                        if (!traces || !Array.isArray(traces)) {
+                            console.error('traces array is not properly initialized');
+                            return; // Skip to next year
                         }
                         
                         if (shouldUseMonthlyTreatment) {
@@ -1400,15 +1464,24 @@
             if (isYtdTrendChart) {
                 // Calculate the actual range from the data for YTD charts
                 const allDayOfYearValues = [];
-                timeSeriesData.forEach(item => {
-                    const date = new Date(item.time_period);
-                    const startOfYear = new Date(date.getFullYear(), 0, 1);
-                    const dayOfYear = Math.floor((date - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
-                    allDayOfYearValues.push(dayOfYear);
-                });
+                if (Array.isArray(timeSeriesData)) {
+                    timeSeriesData.forEach(item => {
+                        if (item && item.time_period) {
+                            const date = new Date(item.time_period);
+                            if (!isNaN(date.getTime())) {
+                                const startOfYear = new Date(date.getFullYear(), 0, 1);
+                                const dayOfYear = Math.floor((date - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
+                                if (dayOfYear >= 1 && dayOfYear <= 366) {
+                                    allDayOfYearValues.push(dayOfYear);
+                                }
+                            }
+                        }
+                    });
+                }
                 
-                const minDay = Math.min(...allDayOfYearValues);
-                const maxDay = Math.max(...allDayOfYearValues);
+                // Safety check: ensure we have valid day values
+                const minDay = allDayOfYearValues.length > 0 ? Math.min(...allDayOfYearValues) : 1;
+                const maxDay = allDayOfYearValues.length > 0 ? Math.max(...allDayOfYearValues) : 365;
                 
                 // Special layout for YTD trend charts
                 layout = {
@@ -1450,7 +1523,7 @@
                         linewidth: 1,
                         ticklen: 3,
                         tickcolor: '#222222',
-                        rangeslider: { visible: true, thickness: 0.1 }
+                        rangeslider: { visible: false } // Disable zoom slider
                     },
                     yaxis: {
                         title: {
@@ -1498,7 +1571,7 @@
                     paper_bgcolor: 'transparent',
                     plot_bgcolor: 'transparent',
                     hovermode: 'closest',
-                    dragmode: 'zoom', // Always enable drag zoom for YTD charts to handle spikes
+                    dragmode: 'zoom', // Enable drag-to-zoom
                     responsive: true,
                     hoverlabel: {
                         bgcolor: '#F6F1EA',
@@ -1508,7 +1581,8 @@
                             size: 9,
                             color: '#222222' 
                         }
-                    }
+                    },
+                    annotations: [] // Initialize annotations array for YTD charts
                 };
             } else {
                 // Regular layout for other charts
@@ -1784,6 +1858,11 @@
                     }
                 }
                 
+                // Ensure annotations array exists before pushing
+                if (!layout.annotations) {
+                    layout.annotations = [];
+                }
+                
                 // This will be pushed as annotations[1] (or later if more are added)
                 layout.annotations.push({
                     text: `<b>Filters:</b> ${filterText}`,
@@ -2037,8 +2116,8 @@
             const config = {
                 responsive: true,
                 displayModeBar: fullView, // Show modebar only in full view mode
-                // For YTD charts, allow scroll zoom and double-click reset even when not in full view
-                scrollZoom: (typeof metadata !== 'undefined' && metadata && metadata.group_field === 'year') ? true : fullView,
+                // Disable scroll zoom for YTD charts
+                scrollZoom: false,
                 doubleClick: (typeof metadata !== 'undefined' && metadata && metadata.group_field === 'year') ? 'reset' : (fullView ? 'reset' : false),
                 modeBarButtonsToRemove: fullView ? [] : ['toImage', 'pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'lasso2d', 'select2d'], // Remove all buttons except in full view
                 toImageButtonOptions: {

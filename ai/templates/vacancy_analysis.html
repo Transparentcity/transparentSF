@@ -635,9 +635,52 @@
             
             .summary-overlay {
                 top: 70px !important;
-                right: 10px !important;
                 left: 10px !important;
-                max-width: none !important;
+                right: auto !important;
+                max-width: calc(50% - 15px) !important;
+                min-width: auto !important;
+                padding: 0 !important;
+            }
+            
+            .summary-overlay #summaryStatsBar {
+                padding: 6px 8px !important;
+                font-size: 0.65rem !important;
+                gap: 2px !important;
+            }
+            
+            .summary-overlay #summaryStatsBar .d-flex {
+                font-size: 0.65rem !important;
+            }
+            
+            .summary-overlay #summaryStatsBar strong {
+                font-size: 0.7rem !important;
+            }
+            
+            .summary-overlay #summaryHeaderToggle {
+                padding: 4px 6px !important;
+                font-size: 0.7rem !important;
+            }
+            
+            .map-overlay-controls {
+                top: 70px !important;
+                right: 10px !important;
+                left: auto !important;
+                max-width: calc(50% - 15px) !important;
+                min-width: auto !important;
+                padding: 6px 8px !important;
+            }
+            
+            .map-overlay-controls h6 {
+                font-size: 0.7rem !important;
+                margin-bottom: 4px !important;
+            }
+            
+            .map-overlay-controls .form-check {
+                margin-bottom: 2px !important;
+            }
+            
+            .map-overlay-controls .form-check-label {
+                font-size: 0.65rem !important;
             }
         }
         
@@ -843,7 +886,7 @@
             </div>
             
             <!-- Summary Statistics Overlay -->
-            <div class="summary-overlay" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px); margin-top: 120px;">
+            <div class="summary-overlay" style="position: absolute; top: 10px; left: 10px; z-index: 1000; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px);">
                 <div id="summaryHeaderToggle" class="d-flex align-items-center justify-content-between px-2 py-1 border-bottom" style="cursor: pointer; transition: background-color 0.2s ease;" role="button" tabindex="0" aria-expanded="true" onmouseover="this.style.backgroundColor='var(--bg-tertiary, rgba(0,0,0,0.05))'" onmouseout="this.style.backgroundColor='transparent'">
                     <span class="small fw-bold">Overview</span>
                     <i id="summaryChevron" class="fas fa-chevron-up small"></i>
@@ -854,11 +897,11 @@
                         <strong id="totalBuildings">-</strong>
                     </div>
                     <div class="d-flex justify-content-between street-level-row">
-                        <span><i class="fas fa-home"></i> Street Level:</span>
-                        <strong id="totalAddresses">-</strong>
+                        <span><i class="fas fa-store"></i> Businesses:</span>
+                        <strong id="totalBusinesses">-</strong>
                     </div>
                     <div class="d-flex justify-content-between">
-                        <span><i class="fas fa-store"></i> Storefronts:</span>
+                        <span><i class="fas fa-home"></i> Storefronts:</span>
                         <strong id="totalStorefronts">-</strong>
                     </div>
                     <div class="d-flex justify-content-between">
@@ -2405,34 +2448,31 @@
             
             console.log('Valid coordinates:', validData.length, 'of', data.length, 'items');
             
-            // If street-level only filter is active, filter to only buildings with street-level addresses
+            // If street-level only filter is active, filter out upper-floor units (storefronts are street level by default)
             if (streetLevelOnly) {
-                console.log('Street-level filter is active, filtering data...');
+                console.log('Street-level filter is active, filtering out upper-floor units...');
                 console.log('Before street-level filter:', validData.length, 'items');
                 validData = validData.filter(item => {
-                    // Check if building has any street-level addresses
-                    // Option 1: Check building-level streetfront count
-                    const hasStreetfront = (item.total_streetfront_addresses || 0) > 0;
-                    
-                    // Option 2: Check addresses_data array for street-level units
-                    let hasStreetLevelInAddresses = false;
+                    // Check if this is a street-level unit or building with street-front addresses
+                    // Option 1: Direct is_street_level field (for individual units)
+                    if (item.is_street_level === true) {
+                        return true;
+                    }
+                    // Option 2: Building has street-front addresses (storefronts are street level by default)
+                    if ((item.total_streetfront_addresses || 0) > 0) {
+                        return true;
+                    }
+                    // Option 3: Check addresses_data array for street-level units
                     if (item.addresses_data && Array.isArray(item.addresses_data)) {
-                        hasStreetLevelInAddresses = item.addresses_data.some(addr => 
+                        const hasStreetLevel = item.addresses_data.some(addr => 
                             addr.is_street_level === true || addr.street_level === true
                         );
+                        if (hasStreetLevel) {
+                            return true;
+                        }
                     }
-                    
-                    // Option 3: Check is_street_level field directly (for individual unit records)
-                    const isStreetLevelDirect = item.is_street_level === true;
-                    
-                    // Keep if ANY of these conditions are true
-                    const keep = hasStreetfront || hasStreetLevelInAddresses || isStreetLevelDirect;
-                    
-                    if (!keep) {
-                        console.log('Filtering out building:', item.full_business_address, 'hasStreetfront:', hasStreetfront, 'hasStreetLevelInAddresses:', hasStreetLevelInAddresses, 'isStreetLevelDirect:', isStreetLevelDirect);
-                    }
-                    
-                    return keep;
+                    // Filter out if none of the above conditions are met
+                    return false;
                 });
                 console.log('After street-level filter:', validData.length, 'items');
             }
@@ -2456,10 +2496,11 @@
                 let upperFloorClosed = (!isStreetLevel && !isOpen) ? 1 : 0;
                 let upperFloorTotal = !isStreetLevel ? 1 : 0;
                 
-                // Determine which counts to use for coloring based on filter  
-                const displayOpenCount = streetLevelOnly ? streetLevelOpen : (streetLevelOpen + upperFloorOpen);
-                const displayClosedCount = streetLevelOnly ? streetLevelClosed : (streetLevelClosed + upperFloorClosed);
-                const displayTotalCount = streetLevelOnly ? streetLevelTotal : (streetLevelTotal + upperFloorTotal);
+                // Always use storefront counts for display (storefronts are street level by default)
+                // The street level only filter only affects what's shown on the map, not the counts
+                const displayOpenCount = streetLevelOpen;  // Always use street level counts
+                const displayClosedCount = streetLevelClosed;  // Always use street level counts
+                const displayTotalCount = streetLevelTotal;  // Always use street level counts
                 
                 const coordinates = unitData.location.coordinates; // Already in GeoJSON format [lon, lat]
                 
@@ -2785,12 +2826,9 @@
                         'circle-radius': [
                             'interpolate',
                             ['linear'],
-                            // Scale by total_streetfront_addresses AND buildings_at_location
-                            [
-                                '*',
-                                ['get', 'total_streetfront_addresses'],
-                                ['coalesce', ['get', 'buildings_at_location'], 1]  // Multiply by buildings at location (default 1)
-                            ],
+                            // Scale by total_streetfront_addresses only (not total businesses)
+                            // Use coalesce to ensure we always have a value (default to 1 if missing)
+                            ['coalesce', ['get', 'total_streetfront_addresses'], 1],
                             1, 4,     // 1 storefront: 4px (reduced from 5px)
                             2, 7,     // 2 storefronts: 7px (reduced from 8px)
                             5, 12,    // 5 storefronts: 12px (reduced from 13px)
@@ -3653,7 +3691,10 @@
             try { console.debug('updateStats summary:', summary); } catch(e) {}
             // Update map overlay summary statistics
             document.getElementById('totalBuildings').textContent = summary.total_buildings.toLocaleString();
-            document.getElementById('totalAddresses').textContent = summary.total_streetfront_addresses.toLocaleString();
+            // Total businesses = all businesses (street level + upper floor)
+            if (document.getElementById('totalBusinesses')) {
+                document.getElementById('totalBusinesses').textContent = (summary.total_businesses || 0).toLocaleString();
+            }
             if (document.getElementById('upperFloorCount')) {
                 document.getElementById('upperFloorCount').textContent = (summary.upper_floor_addresses || 0).toLocaleString();
             }

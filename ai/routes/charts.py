@@ -273,12 +273,39 @@ async def get_active_charts(
 @router.get("/api/chart-by-metric")
 async def get_chart_by_metric(
     metric_id: str,
-    district: int = 0,
+    district: Optional[str] = None,
     chart_type: str = "time_series"
 ):
-    """Get charts for a specific metric and district."""
+    """Get charts for a specific metric and district.
+    
+    Args:
+        metric_id: The metric ID to query
+        district: District ID (0-11), "All", or None for citywide. Can be string or int.
+        chart_type: Type of chart to return (time_series, anomaly, map)
+    """
     try:
         from tools.get_charts_for_review import get_charts_for_review
+        
+        # Handle district parameter - convert "All" or None to None for citywide
+        district_value = None
+        if district is not None:
+            district_str = str(district).strip()
+            # Handle "All" or empty strings as citywide (None)
+            if district_str.lower() in ['all', '', 'null', 'none']:
+                district_value = None
+            else:
+                # Try to parse as integer, but keep as string for district_filter
+                try:
+                    # Validate it's a valid district number
+                    district_num = int(float(district_str))
+                    if district_num < 0 or district_num > 11:
+                        logger.warning(f"Invalid district number: {district_num}, defaulting to citywide")
+                        district_value = None
+                    else:
+                        district_value = str(district_num)
+                except (ValueError, TypeError):
+                    logger.warning(f"Could not parse district '{district_str}', defaulting to citywide")
+                    district_value = None
         
         # Determine which chart types to include based on chart_type parameter
         include_time_series = chart_type == "time_series"
@@ -289,7 +316,7 @@ async def get_chart_by_metric(
             context_variables={},
             limit=10,
             days_back=90,  # Look back 3 months
-            district_filter=str(district),
+            district_filter=district_value,  # Can be None for citywide
             metric_id=metric_id,
             include_time_series=include_time_series,
             include_anomalies=include_anomalies,
