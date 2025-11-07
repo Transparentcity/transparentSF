@@ -1668,8 +1668,9 @@ class SimpleBusinessCache:
                 logger.error(f"Error fetching/storing zoning data: {e}", exc_info=True)
                 zoning_stats = {'total': 0, 'successful': 0, 'errors': 0}
             
-            # Update has_commercial_tax_filing flags
-            tax_filing_count = self.update_tax_filing_flags()
+            # Skip tax filing flag update - not using vacancy tax data anymore
+            # tax_filing_count = self.update_tax_filing_flags()
+            tax_filing_count = 0
             
             # Update zoning_district using spatial matching
             try:
@@ -1687,7 +1688,7 @@ class SimpleBusinessCache:
                 'business_cache': business_stats,
                 'tax_cache': tax_stats,
                 'zoning_cache': zoning_stats,
-                'tax_filing_matches': tax_filing_count,
+                'tax_filing_matches': tax_filing_count,  # Skipped - not using vacancy tax data
                 'zoning_district_matches': zoning_match_count,
                 'elapsed_time': elapsed_time
             }
