@@ -57,7 +57,12 @@ def extract_building_address(full_address):
 
 
 def is_upper_floor_address(full_address: str) -> bool:
-    """Return True if the address indicates an upper-floor/unit (non-storefront)."""
+    """
+    Return True if the address indicates an upper-floor/unit (non-storefront).
+    
+    Updated logic: All units with numbers are considered upper floor.
+    Letters (A, B, C, etc.) are considered ground floor.
+    """
     if not full_address:
         return False
     
@@ -73,18 +78,45 @@ def is_upper_floor_address(full_address: str) -> bool:
     if re.search(r'\b(2ND|3RD|4TH|5TH|6TH|7TH|8TH|9TH|10TH|11TH|12TH)\b', s):
         return True
     
+    # Parse address to extract unit component
+    number_match = re.match(r'^(\d+(?:-\d+)?)', s)
+    if number_match:
+        street_number = number_match.group(1)
+        rest = s[len(street_number):].strip()
+        
+        # Try to extract unit identifier
+        unit = ""
+        unit_patterns = [
+            (r'^([A-Z]|#[A-Z0-9]+)\s+(.+)$', 1, 2),  # Unit at beginning
+            (r'\s+([A-Z]|#[A-Z0-9]+)$', 1, None),   # Unit at end
+            (r'\s+(?:APT|APARTMENT|UNIT|STE|SUITE|RM|ROOM|FL|FLOOR)\s*([A-Z0-9]+)', 1, None),
+            (r'\s+(\d+[A-Z]?)$', 1, None),  # Trailing number
+        ]
+        
+        for pattern, unit_group, street_group in unit_patterns:
+            match = re.search(pattern, rest) if street_group is None else re.match(pattern, rest)
+            if match:
+                unit = match.group(unit_group).replace('#', '').strip()
+                break
+        
+        # If unit exists and contains any digits, it's upper floor
+        if unit:
+            if re.search(r'\d', unit):
+                return True
+            if re.search(r'[A-Z]\d|\d[A-Z]', unit):
+                return True
+    
+    # Trailing numeric token - all numeric units are now considered upper floor
     trailing_number_match = re.search(r'\s([0-9]+)\s*$', s)
     if trailing_number_match:
-        trailing_number = int(trailing_number_match.group(1))
-        if trailing_number >= 200:
-            return True
+        return True
     
     if re.search(r'\s[0-9]+[A-Z]\s*$', s):
         return True
     
     # Addresses ending with hyphenated numbers (e.g., "2443 FILLMORE ST 380-1331")
     # This pattern indicates unit/apartment numbers, not street-level addresses
-    if re.search(r'\s\d+-\d+\s*$', s):
+    if re.search(r'\s\d+[-_]\d+', s):
         return True
     
     return False
