@@ -750,35 +750,24 @@ def generate_anomaly_chart_from_id(anomaly_id, chart_title=None, output_dir='sta
     
     logger.info(f"Generating Datawrapper chart for anomaly ID: {anomaly_id}")
     
-    # Get API base URL from environment
-    api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
-    
     try:
-        # Make a request to the API to get anomaly details
-        anomaly_details_url = f"{api_base_url}/anomaly-analyzer/api/anomaly-details/{anomaly_id}"
-        logger.info(f"Requesting anomaly data from: {anomaly_details_url}")
+        # Get anomaly details directly from database instead of HTTP request
+        # This avoids circular dependency/deadlock when called from the same FastAPI server
+        logger.info(f"Fetching anomaly details from database for ID: {anomaly_id}")
         
         try:
-            response = requests.get(anomaly_details_url, timeout=30)
-            if response.status_code != 200:
-                logger.error(f"Failed to fetch anomaly details: {response.status_code} - {response.text}")
-                return None
-        except requests.exceptions.ReadTimeout:
-            logger.error(f"Timeout fetching anomaly details for ID {anomaly_id}. Backend service may be overloaded.")
-            return None
-        except requests.exceptions.ConnectionError:
-            logger.error(f"Connection error fetching anomaly details for ID {anomaly_id}. Backend service may be down.")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error fetching anomaly details for ID {anomaly_id}: {str(e)}")
-            return None
+            from tools.store_anomalies import get_anomaly_details as get_anomaly_details_from_db
             
-        # Parse the response
-        anomaly_response = response.json()
-        
-        # Check if the response was successful
-        if anomaly_response.get("status") != "success":
-            logger.error(f"API returned error: {anomaly_response.get('message', 'Unknown error')}")
+            # Call database function directly - much faster than HTTP request
+            anomaly_response = get_anomaly_details_from_db(anomaly_id=anomaly_id)
+            
+            if anomaly_response.get("status") != "success":
+                logger.error(f"Database query returned error: {anomaly_response.get('message', 'Unknown error')}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error fetching anomaly details from database for ID {anomaly_id}: {str(e)}")
+            logger.exception("Full traceback:")
             return None
             
         # Extract the anomaly data from the response

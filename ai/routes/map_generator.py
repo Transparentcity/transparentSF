@@ -223,7 +223,8 @@ async def generate_map_endpoint(request: Request):
         preview_mode = data.get("preview", False)
         
         # Check if this should be saved to database
-        save_to_database = data.get("save_to_database", False)
+        # If not explicitly set, save to database when NOT in preview mode
+        save_to_database = data.get("save_to_database", not preview_mode)
         
         # Ensure metric_id is an integer
         try:

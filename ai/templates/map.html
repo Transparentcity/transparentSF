@@ -354,8 +354,10 @@
             border: 1px solid var(--border-primary);
             border-radius: 6px;
             padding: 15px;
-            cursor: pointer;
             transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         .map-card:hover {
@@ -385,6 +387,47 @@
             justify-content: space-between;
             font-size: 0.8em;
             color: var(--text-secondary);
+        }
+
+        .dw-version-btn {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: auto;
+        }
+
+        .dw-version-btn:hover:not(:disabled) {
+            background-color: #8a2fcf;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(173, 53, 250, 0.3);
+        }
+
+        .dw-version-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .dw-version-btn i {
+            font-size: 0.9em;
+        }
+
+        .dw-version-btn.dw-exists {
+            background-color: #10b981;
+            text-decoration: none;
+        }
+
+        .dw-version-btn.dw-exists:hover {
+            background-color: #059669;
         }
 
         .toggle-nav-btn {
@@ -2400,15 +2443,35 @@
                 const isCurrent = map.id === currentMapId;
                 const createdDate = new Date(map.created_at).toLocaleDateString();
                 const mapType = map.type || 'Unknown';
+                const hasDatawrapperUrl = map.published_url && map.published_url.includes('datawrapper');
+                
+                // Button HTML based on whether DW version exists
+                let buttonHtml;
+                if (hasDatawrapperUrl) {
+                    buttonHtml = `
+                        <a href="${map.published_url}" target="_blank" class="dw-version-btn dw-exists" onclick="event.stopPropagation()" title="View DataWrapper Version">
+                            <i class="fas fa-external-link-alt"></i> View DW
+                        </a>
+                    `;
+                } else {
+                    buttonHtml = `
+                        <button class="dw-version-btn" onclick="event.stopPropagation(); createDatawrapperVersion('${map.id}')" title="Create DataWrapper Version">
+                            <i class="fas fa-chart-area"></i> Create DW
+                        </button>
+                    `;
+                }
                 
                 return `
-                    <div class="map-card ${isCurrent ? 'current' : ''}" onclick="navigateToMap('${map.id}')">
-                        <h4>${map.title || 'Untitled Map'}</h4>
-                        <p>Type: ${mapType}</p>
-                        <div class="meta">
-                            <span>${createdDate}</span>
-                            <span>${mapType}</span>
+                    <div class="map-card ${isCurrent ? 'current' : ''}">
+                        <div onclick="navigateToMap('${map.id}')" style="cursor: pointer; flex: 1;">
+                            <h4>${map.title || 'Untitled Map'}</h4>
+                            <p>Type: ${mapType}</p>
+                            <div class="meta">
+                                <span>${createdDate}</span>
+                                <span>${mapType}</span>
+                            </div>
                         </div>
+                        ${buttonHtml}
                     </div>
                 `;
             }).join('');
@@ -2423,6 +2486,78 @@
             
             // Navigate to the new map
             window.location.href = `/map/${mapId}`;
+        }
+
+        async function createDatawrapperVersion(mapId) {
+            // Show loading state
+            const button = event.target.closest('button');
+            const originalContent = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+            
+            try {
+                const response = await fetch(`/backend/generate-dw-map?map_id=${mapId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.map_url) {
+                    // Success - show link and open in new tab
+                    button.innerHTML = '<i class="fas fa-check"></i> Created!';
+                    button.style.backgroundColor = '#10b981';
+                    
+                    // Show success message with link
+                    const mapCard = button.closest('.map-card');
+                    const notification = document.createElement('div');
+                    notification.style.cssText = `
+                        background: #10b981;
+                        color: white;
+                        padding: 8px;
+                        border-radius: 4px;
+                        margin-top: 8px;
+                        font-size: 12px;
+                        text-align: center;
+                    `;
+                    notification.innerHTML = `
+                        DataWrapper map created!<br>
+                        <a href="${data.map_url}" target="_blank" style="color: white; text-decoration: underline;">
+                            <i class="fas fa-external-link-alt"></i> Open Map
+                        </a>
+                    `;
+                    mapCard.appendChild(notification);
+                    
+                    // Open the DW map in a new tab
+                    window.open(data.map_url, '_blank');
+                    
+                    // Remove notification after 5 seconds
+                    setTimeout(() => {
+                        notification.remove();
+                        button.innerHTML = originalContent;
+                        button.disabled = false;
+                        button.style.backgroundColor = '';
+                    }, 5000);
+                } else {
+                    throw new Error(data.message || 'Failed to create DataWrapper version');
+                }
+            } catch (error) {
+                console.error('Error creating DataWrapper version:', error);
+                button.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
+                button.style.backgroundColor = '#ef4444';
+                
+                // Show error message
+                alert(`Failed to create DataWrapper version: ${error.message}`);
+                
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    button.innerHTML = originalContent;
+                    button.disabled = false;
+                    button.style.backgroundColor = '';
+                }, 3000);
+            }
         }
 
         // Embedded mode detection and handling

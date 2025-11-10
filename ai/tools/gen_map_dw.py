@@ -167,6 +167,8 @@ def create_datawrapper_map(map_id):
     Returns:
         The public URL of the existing or newly created Datawrapper map, or None if failed
     """
+    import uuid
+    
     logger.info(f"Creating Datawrapper map for map_id: {map_id}")
     
     if not DATAWRAPPER_API_KEY:
@@ -449,11 +451,11 @@ def create_datawrapper_map(map_id):
             customize_response.raise_for_status()
             logger.info(f"Map {chart_id} customized")
             
-        elif map_type in ["intersection", "point"]:
-            # Point maps work as expected - no major changes needed
+        elif map_type in ["intersection", "point", "symbol"]:
+            # Use locator-map type for point/intersection/symbol maps (more reliable than d3-maps-symbols)
             create_payload = {
                 "title": map_title,
-                "type": "d3-maps-symbols",
+                "type": "locator-map",
                 "metadata": {
                     "describe": {
                         "intro": metadata.get("intro", f"Map of San Francisco locations"),
@@ -468,65 +470,238 @@ def create_datawrapper_map(map_id):
             create_response.raise_for_status()
             chart_data = create_response.json()
             chart_id = chart_data["id"]
-            logger.info(f"Point/intersection map created with ID: {chart_id}")
+            logger.info(f"Point/intersection/symbol map created with ID: {chart_id}")
             
-            # Prepare CSV data with latitude, longitude, and values
-            csv_rows = ["name,latitude,longitude,value,color"]
+            # Prepare markers data in the format Datawrapper locator maps expect
+            markers = []
             for item in location_data:
-                name = item.get("name", "Location")
-                lat = str(item.get("latitude"))
-                lon = str(item.get("longitude"))
-                value = str(item.get("value", 100))
-                color = item.get("color", "#e41a1c")
-                csv_rows.append(f"{name},{lat},{lon},{value},{color}")
+                # Get lat/lon - try multiple fields and handle string/float types
+                lat = item.get("latitude") or item.get("lat")
+                lon = item.get("longitude") or item.get("lon")
+                
+                # Convert to float if they're strings
+                try:
+                    if lat is not None:
+                        lat = float(lat)
+                    if lon is not None:
+                        lon = float(lon)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Skipping item with invalid coordinates (lat={lat}, lon={lon}): {e}")
+                    continue
+                
+                # Check if we have valid coordinates
+                if lat is None or lon is None:
+                    logger.warning(f"Skipping item with missing coordinates")
+                    continue
+                
+                # Validate SF coordinates range
+                if not (37.6 <= lat <= 37.9 and -122.6 <= lon <= -122.2):
+                    logger.warning(f"Skipping item with coordinates outside SF: lat={lat}, lon={lon}")
+                    continue
+                
+                # Create complete marker structure matching working DataWrapper example
+                # Important: title="" and markerSymbol="" means no label shows by default (only on hover)
+                marker_title = item.get("title") or item.get("name", "Location")
+                marker = {
+                    "type": "point",
+                    "title": "",  # Empty title = no label displayed on map by default
+                    "icon": {
+                        "id": "circle",
+                        "path": "M1000 350a500 500 0 0 0-500-500 500 500 0 0 0-500 500 500 500 0 0 0 500 500 500 500 0 0 0 500-500z",
+                        "height": 700,
+                        "width": 1000,
+                        "horiz-adv-x": 1000,
+                        "scale": 1,
+                        "enabled": True  # Required for markers to show
+                    },
+                    "scale": item.get("scale", 0.4),  # Default scale like working example
+                    "markerColor": item.get("color", "#6B46C1"),  # Use working example color
+                    "opacity": item.get("opacity", 1),
+                    "text": {
+                        "color": "#333333",
+                        "fontSize": 14,
+                        "halo": "#f2f3f0",
+                        "bold": False,
+                        "italic": False,
+                        "uppercase": False,
+                        "space": False,
+                        "enabled": True  # Required for text rendering
+                    },
+                    "id": str(uuid.uuid4())[:10],  # Shorter ID like working example
+                    "markerSymbol": "",  # Empty = no text label on marker
+                    "markerTextColor": "#333333",
+                    "anchor": "bottom-center",
+                    "offsetY": 0,
+                    "offsetX": 0,
+                    "labelStyle": "plain",
+                    "class": "",
+                    "rotate": 0,
+                    "visible": True,
+                    "locked": False,
+                    "preset": "-",
+                    "alpha": item.get("opacity", 1),
+                    "visibility": {
+                        "mobile": True,
+                        "desktop": True
+                    },
+                    "connectorLine": {
+                        "enabled": False,
+                        "arrowHead": "lines",
+                        "type": "curveRight",
+                        "targetPadding": 3,
+                        "stroke": 1,
+                        "lineLength": 0
+                    },
+                    "coordinates": [lon, lat],  # [longitude, latitude]
+                    "tooltip": {
+                        "text": item.get("description") or item.get("tooltip") or marker_title,  # Tooltip shows on hover
+                        "enabled": True  # Required for tooltip to show
+                    },
+                    "name": ""  # Required empty field in working example
+                }
+                markers.append(marker)
             
-            csv_data = "\n".join(csv_rows)
+            logger.info(f"Prepared {len(markers)} markers for locator map")
             
-            # Upload CSV data
+            # Check if we have any valid markers
+            if not markers:
+                logger.error(f"No valid markers found for map {map_id}. All {len(location_data)} items were skipped.")
+                cursor.close()
+                conn.close()
+                return None
+            
+            # Upload markers as JSON - wrap in "markers" object like generate_map.py does
             upload_url = f"https://api.datawrapper.de/v3/charts/{chart_id}/data"
             upload_headers = {
                 "Authorization": f"Bearer {DATAWRAPPER_API_KEY}",
-                "Content-Type": "text/csv"
+                "Content-Type": "application/json"  # DataWrapper expects application/json for locator maps
             }
             
-            upload_response = requests.put(upload_url, headers=upload_headers, data=csv_data)
+            # Wrap markers array in object with "markers" key (required by DataWrapper API)
+            marker_data = {
+                "markers": markers
+            }
+            markers_json = json.dumps(marker_data)
+            upload_response = requests.put(upload_url, headers=upload_headers, data=markers_json)
             upload_response.raise_for_status()
-            logger.info(f"CSV data uploaded to map {chart_id}")
+            logger.info(f"Markers uploaded to map {chart_id}")
             
-            # Customize the map
+            # Set comprehensive metadata and styling for the map
             customize_url = f"https://api.datawrapper.de/v3/charts/{chart_id}"
             customize_headers = {
                 "Authorization": f"Bearer {DATAWRAPPER_API_KEY}",
                 "Content-Type": "application/json"
             }
             
+            # Calculate bounding box from markers and fit map view
+            lats = [m["coordinates"][1] for m in markers]
+            lons = [m["coordinates"][0] for m in markers]
+            
+            min_lat, max_lat = min(lats), max(lats)
+            min_lon, max_lon = min(lons), max(lons)
+            
+            # Calculate center
+            center_lat = (min_lat + max_lat) / 2
+            center_lon = (min_lon + max_lon) / 2
+            
+            # Calculate appropriate zoom level based on bounds
+            lat_diff = max_lat - min_lat
+            lon_diff = max_lon - min_lon
+            max_diff = max(lat_diff, lon_diff)
+            
+            # Zoom level calculation matching working generate_map.py
+            if max_diff > 0.5:
+                zoom_level = 9
+            elif max_diff > 0.2:
+                zoom_level = 10
+            elif max_diff > 0.1:
+                zoom_level = 11
+            elif max_diff > 0.05:
+                zoom_level = 12
+            elif max_diff > 0.02:
+                zoom_level = 13
+            elif max_diff > 0.01:
+                zoom_level = 14
+            else:
+                zoom_level = 15
+            
+            # Add some padding by reducing zoom slightly
+            zoom_level = max(10, zoom_level - 1)
+            
+            # Add padding to bounds (10% on each side)
+            padding_factor = 0.1
+            lon_padding = lon_diff * padding_factor
+            lat_padding = lat_diff * padding_factor
+            
+            logger.info(f"Calculated bounds: lat [{min_lat:.4f}, {max_lat:.4f}], lon [{min_lon:.4f}, {max_lon:.4f}], zoom {zoom_level}")
+            
+            # Use the proper view structure with fit coordinates (matches working generate_map.py)
             customize_payload = {
                 "metadata": {
-                    "visualize": {
-                        "basemap": "streets",
-                        "map-type": "symbol",
-                        "symbol-type": "circle",
-                        "symbol-size": "value",
-                        "symbol-min-size": metadata.get("min_size", 4),
-                        "symbol-max-size": metadata.get("max_size", 4),
-                        "symbol-color": "color",
-                        "tooltip": {
-                            "enabled": True,
-                            "template": "<b>{{name}}</b><br>Value: {{value}}"
-                        },
-                        "zoom-level": metadata.get("zoom", 13),
-                        "initial-lat": metadata.get("initial_lat", 37.7749),
-                        "initial-lon": metadata.get("initial_lon", -122.4194)
+                    "data": {
+                        "json": True
                     },
-                    "axes": {
-                        "keys": ["longitude", "latitude"]
+                    "visualize": {
+                        "map-type-set": True,
+                        "basemap": "osm-3",  # OpenStreetMap basemap
+                        "mapLabel": False,  # Disable map labels to avoid clutter
+                        "scale": False,
+                        "compass": False,
+                        "style": "dw-light",
+                        "visibility": {
+                            "green": True,
+                            "roads": True,
+                            "urban": True,
+                            "water": True,
+                            "building": True,
+                            "glaciers": False,
+                            "mountains": False,
+                            "building3d": False,
+                            "boundary_state": False,
+                            "boundary_country": False
+                        },
+                        "miniMap": {
+                            "enabled": False
+                        },
+                        # Use proper view structure to fit map to markers
+                        "view": {
+                            "fit": {
+                                "top": [center_lon, max_lat + lat_padding],
+                                "left": [min_lon - lon_padding, center_lat],
+                                "right": [max_lon + lon_padding, center_lat],
+                                "bottom": [center_lon, min_lat - lat_padding]
+                            },
+                            "zoom": zoom_level,
+                            "pitch": 0,
+                            "center": [center_lon, center_lat],
+                            "height": 75,
+                            "bearing": 0
+                        }
+                    },
+                    "publish": {
+                        "embed-width": 600,
+                        "embed-height": 400,
+                        "autoDarkMode": True,
+                        "blocks": {
+                            "logo": {"enabled": False},
+                            "embed": False,
+                            "download-pdf": False,
+                            "download-svg": False,
+                            "get-the-data": True,
+                            "download-image": False
+                        }
+                    },
+                    "describe": {
+                        "source-name": "DataSF",
+                        "source-url": "https://data.sfgov.org",
+                        "byline": "Chart: TransparentSF"
                     }
                 }
             }
             
             customize_response = requests.patch(customize_url, headers=customize_headers, json=customize_payload)
             customize_response.raise_for_status()
-            logger.info(f"Map {chart_id} customized")
+            logger.info(f"Map {chart_id} fitted to markers: center [{center_lon:.4f}, {center_lat:.4f}], zoom {zoom_level}")
             
         else:
             logger.error(f"Unsupported map type: {map_type}")
