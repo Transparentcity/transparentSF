@@ -159,7 +159,7 @@ def get_district_shapes(district_type="supervisor", district_ids=None):
 
 def create_datawrapper_map(map_id):
     """
-    Creates a Datawrapper map for the specified map ID, or returns existing published URL if available.
+    Creates a Datawrapper map for the specified map ID using copy-from-template approach.
     
     Args:
         map_id: The ID of the map to generate
@@ -174,6 +174,10 @@ def create_datawrapper_map(map_id):
     if not DATAWRAPPER_API_KEY:
         logger.error("Cannot create map: DATAWRAPPER_API_KEY is not set.")
         return None
+    
+    # Get default template chart IDs
+    DEFAULT_DISTRICT_CHART = os.getenv("DATAWRAPPER_REFERENCE_CHART", "j5vON")
+    DEFAULT_SYMBOL_CHART = "K8LoR"
     
     try:
         # Fetch map data from database
@@ -193,18 +197,25 @@ def create_datawrapper_map(map_id):
         # Convert to dictionary and process JSON fields
         map_data = dict(map_record)
         
-        # Check if map already has a published URL
-        if map_data.get("published_url"):
-            logger.info(f"Map {map_id} already has published URL: {map_data['published_url']}")
-            cursor.close()
-            conn.close()
-            return map_data["published_url"]
-        
-        # If no published URL, proceed with creating a new map
-        logger.info(f"No published URL found for map {map_id}, creating new Datawrapper chart")
-        
         map_data["location_data"] = json.loads(map_data["location_data"]) if isinstance(map_data["location_data"], str) else map_data["location_data"]
         map_data["metadata"] = json.loads(map_data["metadata"]) if map_data["metadata"] and isinstance(map_data["metadata"], str) else map_data["metadata"] or {}
+        
+        # Check if map already has a DataWrapper URL in metadata
+        existing_dw_url = map_data["metadata"].get("dw_url")
+        if existing_dw_url:
+            logger.info(f"Map {map_id} already has DataWrapper URL in metadata: {existing_dw_url}")
+            cursor.close()
+            conn.close()
+            return existing_dw_url
+        
+        # Check if published_url contains a datawrapper URL (legacy format)
+        # If so, we'll create a new one and store it in metadata properly
+        if map_data.get("published_url") and "datawrapper" in map_data["published_url"]:
+            logger.info(f"Map {map_id} has legacy DataWrapper URL in published_url: {map_data['published_url']}")
+            logger.info(f"Will create new DataWrapper version and store in metadata")
+        
+        # Proceed with creating a new Datawrapper map
+        logger.info(f"Creating new Datawrapper chart for map {map_id} using copy-from-template")
         
         map_title = map_data["title"]
         map_type = map_data["type"]
@@ -213,513 +224,281 @@ def create_datawrapper_map(map_id):
         
         logger.info(f"Processing map: {map_title}, type: {map_type}")
         
-        # If location_data is stored as a wrapper dict with csv_data, unpack it
+        # Check if this is a delta map (change map)
+        is_delta_map = metadata.get("map_type") == "delta"
+        logger.info(f"Map is delta map: {is_delta_map}")
+        
+        # Convert location_data to CSV format if needed
+        csv_data = None
         if isinstance(location_data, dict) and location_data.get("type") == "csv":
-            csv_str = location_data.get("csv_data", "").strip()
-            if csv_str:
-                import csv
-                import io
-                reader = csv.DictReader(io.StringIO(csv_str))
-                location_data = [row for row in reader]
-                # ensure numeric where appropriate (district kept as str)
-                for row in location_data:
-                    for k in row:
-                        try:
-                            # attempt float conversion
-                            row[k] = float(row[k]) if row[k] not in ["", None] and k != "district" else row[k]
-                        except ValueError:
-                            pass
-            else:
+            csv_data = location_data.get("csv_data", "").strip()
+            if not csv_data:
                 logger.error("location_data csv_data is empty – cannot create map")
-                return None
-        
-        chart_id = None
-        create_url = "https://api.datawrapper.de/v3/charts"
-        create_headers = {
-            "Authorization": f"Bearer {DATAWRAPPER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        # Handle different map types with different approaches
-        if map_type == "supervisor_district":
-            # Since we don't have a SF-specific built-in map for supervisorial districts,
-            # we'll use a point map with labeled locations instead of a choropleth
-            create_payload = {
-                "title": map_title,
-                "type": "d3-maps-symbols",  # Use symbol map instead of choropleth
-                "metadata": {
-                    "describe": {
-                        "intro": metadata.get("intro", f"Map of San Francisco supervisor districts"),
-                        "byline": metadata.get("byline", "TransparentSF"),
-                        "source-name": metadata.get("source", "SF Open Data")
-                    }
-                }
-            }
-            
-            # Create the chart
-            create_response = requests.post(create_url, headers=create_headers, json=create_payload)
-            create_response.raise_for_status()
-            chart_data = create_response.json()
-            chart_id = chart_data["id"]
-            logger.info(f"Supervisor district map created with ID: {chart_id}")
-            
-            # Get district center coordinates - these are approximate
-            district_centers = {
-                "1": {"lat": 37.7850, "lon": -122.4874},  # Richmond
-                "2": {"lat": 37.7991, "lon": -122.4367},  # Marina
-                "3": {"lat": 37.7977, "lon": -122.4142},  # North Beach
-                "4": {"lat": 37.7818, "lon": -122.4608},  # Sunset
-                "5": {"lat": 37.7734, "lon": -122.4400},  # Haight/Western Addition
-                "6": {"lat": 37.7762, "lon": -122.4121},  # SOMA/Tenderloin
-                "7": {"lat": 37.7293, "lon": -122.4539},  # West of Twin Peaks
-                "8": {"lat": 37.7536, "lon": -122.4300},  # Mission
-                "9": {"lat": 37.7447, "lon": -122.4198},  # Bernal Heights
-                "10": {"lat": 37.7308, "lon": -122.3998},  # Bayview
-                "11": {"lat": 37.7096, "lon": -122.4483}   # Oceanview/Ingleside
-            }
-            
-            # Prepare CSV with district points
-            csv_rows = ["name,latitude,longitude,value,color,label"]
-            for item in location_data:
-                district_id = str(item["district"])
-                district_name = f"District {district_id}"
-                value = item.get("value", 0)
-                color = item.get("color", "#de2d26")
-                
-                # Use district center coordinates
-                if district_id in district_centers:
-                    lat = district_centers[district_id]["lat"]
-                    lon = district_centers[district_id]["lon"]
-                    csv_rows.append(f"{district_name},{lat},{lon},{value},{color},{district_id}")
-            
-            csv_data = "\n".join(csv_rows)
-            
-            # Upload CSV data
-            upload_url = f"https://api.datawrapper.de/v3/charts/{chart_id}/data"
-            upload_headers = {
-                "Authorization": f"Bearer {DATAWRAPPER_API_KEY}",
-                "Content-Type": "text/csv"
-            }
-            
-            upload_response = requests.put(upload_url, headers=upload_headers, data=csv_data)
-            upload_response.raise_for_status()
-            logger.info(f"CSV data uploaded to map {chart_id}")
-            
-            # Customize the map
-            customize_url = f"https://api.datawrapper.de/v3/charts/{chart_id}"
-            customize_headers = {
-                "Authorization": f"Bearer {DATAWRAPPER_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            
-            # Get colors from metadata if provided
-            colors = metadata.get("colors", ["#fee5d9", "#fcae91", "#fb6a4a", "#de2d26", "#a50f15"])
-            
-            customize_payload = {
-                "metadata": {
-                    "visualize": {
-                        "basemap": "streets",  # Use streets basemap
-                        "map-type": "symbol",
-                        "symbol-type": "circle",
-                        "symbol-size": "value",
-                        "symbol-min-size": 4,
-                        "symbol-max-size": 4,
-                        "symbol-color": "color",
-                        "tooltip": {
-                            "enabled": True,
-                            "template": "<b>District {{label}}</b><br>Value: {{value}}"
-                        },
-                        "labels": {
-                            "enabled": True,
-                            "column": "label"
-                        },
-                        "zoom-level": 12,
-                        "initial-lat": 37.7749,
-                        "initial-lon": -122.4194
-                    },
-                    "axes": {
-                        "keys": ["longitude", "latitude"]
-                    }
-                }
-            }
-            
-            customize_response = requests.patch(customize_url, headers=customize_headers, json=customize_payload)
-            customize_response.raise_for_status()
-            logger.info(f"Map {chart_id} customized")
-            
-        elif map_type == "police_district":
-            # Similar approach for police districts - use points instead of choropleth
-            create_payload = {
-                "title": map_title,
-                "type": "d3-maps-symbols",  # Use symbol map instead of choropleth
-                "metadata": {
-                    "describe": {
-                        "intro": metadata.get("intro", f"Map of San Francisco police districts"),
-                        "byline": metadata.get("byline", "TransparentSF"),
-                        "source-name": metadata.get("source", "SF Open Data")
-                    }
-                }
-            }
-            
-            # Create the chart
-            create_response = requests.post(create_url, headers=create_headers, json=create_payload)
-            create_response.raise_for_status()
-            chart_data = create_response.json()
-            chart_id = chart_data["id"]
-            logger.info(f"Police district map created with ID: {chart_id}")
-            
-            # Police district center coordinates (approximate)
-            district_centers = {
-                "Bayview": {"lat": 37.7336, "lon": -122.3918},
-                "Central": {"lat": 37.7981, "lon": -122.4071},
-                "Ingleside": {"lat": 37.7249, "lon": -122.4482},
-                "Mission": {"lat": 37.7597, "lon": -122.4214},
-                "Northern": {"lat": 37.7816, "lon": -122.4298},
-                "Park": {"lat": 37.7673, "lon": -122.4570},
-                "Richmond": {"lat": 37.7778, "lon": -122.4650},
-                "Southern": {"lat": 37.7815, "lon": -122.3975},
-                "Taraval": {"lat": 37.7432, "lon": -122.4781},
-                "Tenderloin": {"lat": 37.7838, "lon": -122.4141}
-            }
-            
-            # Prepare CSV with district points
-            csv_rows = ["name,latitude,longitude,value,color"]
-            for item in location_data:
-                district_id = str(item["district"])
-                district_name = district_id
-                value = item.get("value", 0)
-                color = item.get("color", "#3182bd")
-                
-                # Use district center coordinates
-                if district_id in district_centers:
-                    lat = district_centers[district_id]["lat"]
-                    lon = district_centers[district_id]["lon"]
-                    csv_rows.append(f"{district_name},{lat},{lon},{value},{color}")
-            
-            csv_data = "\n".join(csv_rows)
-            
-            # Upload CSV data
-            upload_url = f"https://api.datawrapper.de/v3/charts/{chart_id}/data"
-            upload_headers = {
-                "Authorization": f"Bearer {DATAWRAPPER_API_KEY}",
-                "Content-Type": "text/csv"
-            }
-            
-            upload_response = requests.put(upload_url, headers=upload_headers, data=csv_data)
-            upload_response.raise_for_status()
-            logger.info(f"CSV data uploaded to map {chart_id}")
-            
-            # Customize the map
-            customize_url = f"https://api.datawrapper.de/v3/charts/{chart_id}"
-            customize_headers = {
-                "Authorization": f"Bearer {DATAWRAPPER_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            
-            # Get colors from metadata if provided
-            colors = metadata.get("colors", ["#eff3ff", "#bdd7e7", "#6baed6", "#3182bd", "#08519c"])
-            
-            customize_payload = {
-                "metadata": {
-                    "visualize": {
-                        "basemap": "streets",  # Use streets basemap
-                        "map-type": "symbol",
-                        "symbol-type": "circle",
-                        "symbol-size": "value",
-                        "symbol-min-size": 20,
-                        "symbol-max-size": 50,
-                        "symbol-color": "color",
-                        "tooltip": {
-                            "enabled": True,
-                            "template": "<b>{{name}}</b><br>Value: {{value}}"
-                        },
-                        "labels": {
-                            "enabled": True,
-                            "column": "name"
-                        },
-                        "zoom-level": 12,
-                        "initial-lat": 37.7749,
-                        "initial-lon": -122.4194
-                    },
-                    "axes": {
-                        "keys": ["longitude", "latitude"]
-                    }
-                }
-            }
-            
-            customize_response = requests.patch(customize_url, headers=customize_headers, json=customize_payload)
-            customize_response.raise_for_status()
-            logger.info(f"Map {chart_id} customized")
-            
-        elif map_type in ["intersection", "point", "symbol"]:
-            # Use locator-map type for point/intersection/symbol maps (more reliable than d3-maps-symbols)
-            create_payload = {
-                "title": map_title,
-                "type": "locator-map",
-                "metadata": {
-                    "describe": {
-                        "intro": metadata.get("intro", f"Map of San Francisco locations"),
-                        "byline": metadata.get("byline", "TransparentSF"),
-                        "source-name": metadata.get("source", "SF Open Data")
-                    }
-                }
-            }
-            
-            # Create the chart
-            create_response = requests.post(create_url, headers=create_headers, json=create_payload)
-            create_response.raise_for_status()
-            chart_data = create_response.json()
-            chart_id = chart_data["id"]
-            logger.info(f"Point/intersection/symbol map created with ID: {chart_id}")
-            
-            # Prepare markers data in the format Datawrapper locator maps expect
-            markers = []
-            for item in location_data:
-                # Get lat/lon - try multiple fields and handle string/float types
-                lat = item.get("latitude") or item.get("lat")
-                lon = item.get("longitude") or item.get("lon")
-                
-                # Convert to float if they're strings
-                try:
-                    if lat is not None:
-                        lat = float(lat)
-                    if lon is not None:
-                        lon = float(lon)
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Skipping item with invalid coordinates (lat={lat}, lon={lon}): {e}")
-                    continue
-                
-                # Check if we have valid coordinates
-                if lat is None or lon is None:
-                    logger.warning(f"Skipping item with missing coordinates")
-                    continue
-                
-                # Validate SF coordinates range
-                if not (37.6 <= lat <= 37.9 and -122.6 <= lon <= -122.2):
-                    logger.warning(f"Skipping item with coordinates outside SF: lat={lat}, lon={lon}")
-                    continue
-                
-                # Create complete marker structure matching working DataWrapper example
-                # Important: title="" and markerSymbol="" means no label shows by default (only on hover)
-                marker_title = item.get("title") or item.get("name", "Location")
-                marker = {
-                    "type": "point",
-                    "title": "",  # Empty title = no label displayed on map by default
-                    "icon": {
-                        "id": "circle",
-                        "path": "M1000 350a500 500 0 0 0-500-500 500 500 0 0 0-500 500 500 500 0 0 0 500 500 500 500 0 0 0 500-500z",
-                        "height": 700,
-                        "width": 1000,
-                        "horiz-adv-x": 1000,
-                        "scale": 1,
-                        "enabled": True  # Required for markers to show
-                    },
-                    "scale": item.get("scale", 0.4),  # Default scale like working example
-                    "markerColor": item.get("color", "#6B46C1"),  # Use working example color
-                    "opacity": item.get("opacity", 1),
-                    "text": {
-                        "color": "#333333",
-                        "fontSize": 14,
-                        "halo": "#f2f3f0",
-                        "bold": False,
-                        "italic": False,
-                        "uppercase": False,
-                        "space": False,
-                        "enabled": True  # Required for text rendering
-                    },
-                    "id": str(uuid.uuid4())[:10],  # Shorter ID like working example
-                    "markerSymbol": "",  # Empty = no text label on marker
-                    "markerTextColor": "#333333",
-                    "anchor": "bottom-center",
-                    "offsetY": 0,
-                    "offsetX": 0,
-                    "labelStyle": "plain",
-                    "class": "",
-                    "rotate": 0,
-                    "visible": True,
-                    "locked": False,
-                    "preset": "-",
-                    "alpha": item.get("opacity", 1),
-                    "visibility": {
-                        "mobile": True,
-                        "desktop": True
-                    },
-                    "connectorLine": {
-                        "enabled": False,
-                        "arrowHead": "lines",
-                        "type": "curveRight",
-                        "targetPadding": 3,
-                        "stroke": 1,
-                        "lineLength": 0
-                    },
-                    "coordinates": [lon, lat],  # [longitude, latitude]
-                    "tooltip": {
-                        "text": item.get("description") or item.get("tooltip") or marker_title,  # Tooltip shows on hover
-                        "enabled": True  # Required for tooltip to show
-                    },
-                    "name": ""  # Required empty field in working example
-                }
-                markers.append(marker)
-            
-            logger.info(f"Prepared {len(markers)} markers for locator map")
-            
-            # Check if we have any valid markers
-            if not markers:
-                logger.error(f"No valid markers found for map {map_id}. All {len(location_data)} items were skipped.")
                 cursor.close()
                 conn.close()
                 return None
+        elif isinstance(location_data, list):
+            # Convert list to CSV format
+            logger.info(f"Converting list location_data to CSV format for {map_type} map")
             
-            # Upload markers as JSON - wrap in "markers" object like generate_map.py does
-            upload_url = f"https://api.datawrapper.de/v3/charts/{chart_id}/data"
-            upload_headers = {
-                "Authorization": f"Bearer {DATAWRAPPER_API_KEY}",
-                "Content-Type": "application/json"  # DataWrapper expects application/json for locator maps
-            }
+            # Determine the key field based on map type
+            key_field = "neighborhood" if map_type == "analysis_neighborhood" else "district"
             
-            # Wrap markers array in object with "markers" key (required by DataWrapper API)
-            marker_data = {
-                "markers": markers
-            }
-            markers_json = json.dumps(marker_data)
-            upload_response = requests.put(upload_url, headers=upload_headers, data=markers_json)
-            upload_response.raise_for_status()
-            logger.info(f"Markers uploaded to map {chart_id}")
+            # Check if this has change data
+            sample_item = location_data[0] if location_data else {}
+            has_change_data = any(key in sample_item for key in ['current_value', 'previous_value', 'delta', 'percent_change'])
             
-            # Set comprehensive metadata and styling for the map
-            customize_url = f"https://api.datawrapper.de/v3/charts/{chart_id}"
-            customize_headers = {
-                "Authorization": f"Bearer {DATAWRAPPER_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            
-            # Calculate bounding box from markers and fit map view
-            lats = [m["coordinates"][1] for m in markers]
-            lons = [m["coordinates"][0] for m in markers]
-            
-            min_lat, max_lat = min(lats), max(lats)
-            min_lon, max_lon = min(lons), max(lons)
-            
-            # Calculate center
-            center_lat = (min_lat + max_lat) / 2
-            center_lon = (min_lon + max_lon) / 2
-            
-            # Calculate appropriate zoom level based on bounds
-            lat_diff = max_lat - min_lat
-            lon_diff = max_lon - min_lon
-            max_diff = max(lat_diff, lon_diff)
-            
-            # Zoom level calculation matching working generate_map.py
-            if max_diff > 0.5:
-                zoom_level = 9
-            elif max_diff > 0.2:
-                zoom_level = 10
-            elif max_diff > 0.1:
-                zoom_level = 11
-            elif max_diff > 0.05:
-                zoom_level = 12
-            elif max_diff > 0.02:
-                zoom_level = 13
-            elif max_diff > 0.01:
-                zoom_level = 14
+            if has_change_data and is_delta_map:
+                # Delta map CSV format
+                csv_data = f"{key_field},value,current_value,previous_value,delta,percent_change\n"
+                for item in location_data:
+                    key_value = item.get(key_field, '')
+                    current = item.get('current_value', item.get('value', 0))
+                    previous = item.get('previous_value', 0)
+                    delta = item.get('delta', current - previous)
+                    percent_change = item.get('percent_change', 0)
+                    
+                    # For delta maps, the value column should be percent_change * 100
+                    value_for_coloring = max(min(round(percent_change * 100), 100), -100)
+                    
+                    # Apply greendirection logic
+                    greendirection = metadata.get("greendirection", "up")
+                    if greendirection == "down":
+                        value_for_coloring = -value_for_coloring
+                    
+                    csv_data += f"{key_value},{value_for_coloring},{current},{previous},{delta},{percent_change}\n"
             else:
-                zoom_level = 15
+                # Regular density map CSV format
+                csv_data = f"{key_field},value\n"
+                for item in location_data:
+                    if isinstance(item, dict) and key_field in item and "value" in item:
+                        csv_data += f"{item[key_field]},{item['value']}\n"
+                    else:
+                        logger.warning(f"Skipping invalid {key_field} data item: {item}")
             
-            # Add some padding by reducing zoom slightly
-            zoom_level = max(10, zoom_level - 1)
-            
-            # Add padding to bounds (10% on each side)
-            padding_factor = 0.1
-            lon_padding = lon_diff * padding_factor
-            lat_padding = lat_diff * padding_factor
-            
-            logger.info(f"Calculated bounds: lat [{min_lat:.4f}, {max_lat:.4f}], lon [{min_lon:.4f}, {max_lon:.4f}], zoom {zoom_level}")
-            
-            # Use the proper view structure with fit coordinates (matches working generate_map.py)
-            customize_payload = {
-                "metadata": {
-                    "data": {
-                        "json": True
-                    },
-                    "visualize": {
-                        "map-type-set": True,
-                        "basemap": "osm-3",  # OpenStreetMap basemap
-                        "mapLabel": False,  # Disable map labels to avoid clutter
-                        "scale": False,
-                        "compass": False,
-                        "style": "dw-light",
-                        "visibility": {
-                            "green": True,
-                            "roads": True,
-                            "urban": True,
-                            "water": True,
-                            "building": True,
-                            "glaciers": False,
-                            "mountains": False,
-                            "building3d": False,
-                            "boundary_state": False,
-                            "boundary_country": False
-                        },
-                        "miniMap": {
-                            "enabled": False
-                        },
-                        # Use proper view structure to fit map to markers
-                        "view": {
-                            "fit": {
-                                "top": [center_lon, max_lat + lat_padding],
-                                "left": [min_lon - lon_padding, center_lat],
-                                "right": [max_lon + lon_padding, center_lat],
-                                "bottom": [center_lon, min_lat - lat_padding]
-                            },
-                            "zoom": zoom_level,
-                            "pitch": 0,
-                            "center": [center_lon, center_lat],
-                            "height": 75,
-                            "bearing": 0
-                        }
-                    },
-                    "publish": {
-                        "embed-width": 600,
-                        "embed-height": 400,
-                        "autoDarkMode": True,
-                        "blocks": {
-                            "logo": {"enabled": False},
-                            "embed": False,
-                            "download-pdf": False,
-                            "download-svg": False,
-                            "get-the-data": True,
-                            "download-image": False
-                        }
-                    },
-                    "describe": {
-                        "source-name": "DataSF",
-                        "source-url": "https://data.sfgov.org",
-                        "byline": "Chart: TransparentSF"
-                    }
-                }
-            }
-            
-            customize_response = requests.patch(customize_url, headers=customize_headers, json=customize_payload)
-            customize_response.raise_for_status()
-            logger.info(f"Map {chart_id} fitted to markers: center [{center_lon:.4f}, {center_lat:.4f}], zoom {zoom_level}")
-            
+            logger.info(f"Converted to CSV format: {csv_data[:200]}...")
         else:
-            logger.error(f"Unsupported map type: {map_type}")
+            logger.error(f"Unsupported location_data format: {type(location_data)}")
             cursor.close()
             conn.close()
             return None
         
-        # Publish the map
-        if chart_id:
-            publish_url = f"https://api.datawrapper.de/v3/charts/{chart_id}/publish"
-            publish_headers = {
-                "Authorization": f"Bearer {DATAWRAPPER_API_KEY}"
+        # Determine which template to use
+        if map_type == "symbol":
+            ref_chart_id = DEFAULT_SYMBOL_CHART
+        elif map_type in ["supervisor_district", "police_district", "analysis_neighborhood"]:
+            ref_chart_id = DEFAULT_DISTRICT_CHART
+        else:
+            logger.error(f"Unsupported map type for copy-from-template: {map_type}")
+            cursor.close()
+            conn.close()
+            return None
+        
+        logger.info(f"Using template chart ID: {ref_chart_id} for map type: {map_type}")
+        
+        # Step 1: Copy the reference chart
+        logger.info(f"Cloning chart from reference ID: {ref_chart_id}")
+        copy_response = _make_dw_request(
+            "POST",
+            f"/charts/{ref_chart_id}/copy"
+        )
+        if not copy_response or "id" not in copy_response:
+            logger.error(f"Failed to copy reference chart {ref_chart_id}")
+            cursor.close()
+            conn.close()
+            return None
+        
+        chart_id = copy_response["id"]
+        logger.info(f"Successfully copied chart. New chart ID: {chart_id}")
+        
+        # Step 2: Update the title
+        _make_dw_request(
+            "PATCH",
+            f"/charts/{chart_id}",
+            json_payload={"title": map_title}
+        )
+        logger.info(f"Updated title for chart ID {chart_id} to: {map_title}")
+        
+        # Step 3: Upload CSV data
+        _make_dw_request(
+            "PUT",
+            f"/charts/{chart_id}/data",
+            headers={"Content-Type": "text/csv"},
+            data=csv_data
+        )
+        logger.info(f"Uploaded CSV data to chart ID {chart_id}")
+        
+        # Step 4: Apply custom styling for district maps (using logic from generate_map.py)
+        if map_type in ["supervisor_district", "police_district", "analysis_neighborhood"]:
+            # Get metric info from metadata
+            metric_info = metadata.get('metric_info')
+            item_noun = metric_info.get('item_noun', 'Items') if metric_info else 'Items'
+            greendirection = metric_info.get('greendirection', 'up') if metric_info else metadata.get('greendirection', 'up')
+            
+            # Base configuration for choropleth maps
+            base_config = {
+                "basemap": "custom_upload",
+                "basemapFilename": "districts_geojson.json" if map_type in ["supervisor_district", "police_district"] else "analysis_neighborhoods_geojson.json",
+                "basemapProjection": "geoAzimuthalEqualArea",
+                "map-key-attr": "district" if map_type in ["supervisor_district", "police_district"] else "neighborhood",
+                "map-type-set": True,
+                "chart-type-set": True,
+                "zoomable": True,
+                "map-align": "center",
+                "map-padding": 0,
+                "hide-region-borders": True,
+                "hide-empty-regions": False,
+                "basemapRegions": "all",
+                "max-map-height": 650,
+                "min-label-zoom": 1,
+                "zoom-button-pos": "br",
+                "map-label-format": "0,0.[00]",
+                "avoid-label-overlap": True,
+                "mapViewCropPadding": 10,
+                "basemapShowExtraOptions": False
             }
             
-            publish_response = requests.post(publish_url, headers=publish_headers)
-            publish_response.raise_for_status()
-            logger.info(f"Map {chart_id} published")
+            styling_payload = {
+                "metadata": {
+                    "visualize": {},
+                    "describe": {
+                        "intro": metadata.get("description", ""),
+                        "source-name": "DataSF",
+                        "source-url": metadata.get("executed_url", ""),
+                        "byline": "Chart: TransparentSF"
+                    },
+                    "publish": {
+                        "autoDarkMode": True
+                    }
+                }
+            }
             
+            if is_delta_map:
+                # Delta map styling with choropleth colors
+                if greendirection == 'down':
+                    colors = [
+                        {"color": "#00dca6", "position": 0},      # Strong Green (for -100%)
+                        {"color": "#a7e9d8", "position": 0.25},   # Light Green
+                        {"color": "#eeeeee", "position": 0.5},    # Neutral Gray (for 0%)
+                        {"color": "#f87171", "position": 0.75},   # Light Red
+                        {"color": "#dc2626", "position": 1.0}     # Strong Red (for +100%)
+                    ]
+                else:
+                    colors = [
+                        {"color": "#dc2626", "position": 0},      # Strong Red (for -100%)
+                        {"color": "#f87171", "position": 0.25},   # Light Red
+                        {"color": "#eeeeee", "position": 0.5},    # Neutral Gray (for 0%)
+                        {"color": "#a7e9d8", "position": 0.75},   # Light Teal/Green
+                        {"color": "#00dca6", "position": 1.0}     # Strong Teal/Green (for +100%)
+                    ]
+                
+                styling_payload["metadata"]["visualize"] = {
+                    **base_config,
+                    "colorscale": {
+                        "mode": "continuous",
+                        "stops": "equidistant",
+                        "colors": colors,
+                        "palette": 0,
+                        "stopCount": 5,
+                        "interpolation": "equidistant",
+                        "min": -100,
+                        "max": 100,
+                        "domain": [-100, 100],
+                        "rangeMin": -100,
+                        "rangeMax": 100,
+                        "rangeCenter": 0,
+                        "customStops": []
+                    },
+                    "legends": {
+                        "color": {
+                            "size": 170,
+                            "title": f"CHANGE IN {item_noun.upper()}",
+                            "labels": "ranges",
+                            "enabled": True,
+                            "offsetX": 0,
+                            "offsetY": 0,
+                            "reverse": False,
+                            "labelMax": "100%",
+                            "labelMin": "-100%",
+                            "position": "above",
+                            "interactive": True,
+                            "labelCenter": "medium",
+                            "labelFormat": "0'%'",
+                            "orientation": "horizontal",
+                            "titleEnabled": False,
+                            "customLabels": []
+                        }
+                    },
+                    "tooltip": {
+                        "body": f"Current: {{{{current_value}}}} {item_noun}<br>Previous: {{{{previous_value}}}} {item_noun}<br>Change: {{{{delta}}}} {item_noun}<br>% Change: {{{{value}}}}%",
+                        "title": "District {{ district }}",
+                        "sticky": True,
+                        "enabled": True
+                    }
+                }
+            else:
+                # Regular density map styling
+                styling_payload["metadata"]["visualize"] = {
+                    **base_config,
+                    "colorscale": {
+                        "mode": "continuous",
+                        "stops": "equidistant",
+                        "colors": [
+                            {"color": "#E9D8FA", "position": 0},
+                            {"color": "#ad35fa", "position": 1.0}
+                        ],
+                        "palette": 0,
+                        "stopCount": 2,
+                        "interpolation": "linear"
+                    },
+                    "legends": {
+                        "color": {
+                            "size": 170,
+                            "title": f"NUMBER OF {item_noun.upper()}",
+                            "labels": "ranges",
+                            "enabled": True,
+                            "offsetX": 0,
+                            "offsetY": 0,
+                            "reverse": False,
+                            "labelMax": "",
+                            "labelMin": "",
+                            "position": "above",
+                            "interactive": True,
+                            "labelCenter": "medium",
+                            "labelFormat": "0,0.[00]",
+                            "orientation": "horizontal",
+                            "titleEnabled": False
+                        }
+                    },
+                    "tooltip": {
+                        "body": f"{{{{value}}}} {item_noun}",
+                        "title": "District {{ district }}",
+                        "sticky": True,
+                        "enabled": True
+                    }
+                }
+            
+            # Apply the styling
+            _make_dw_request(
+                "PATCH",
+                f"/charts/{chart_id}",
+                json_payload=styling_payload
+            )
+            logger.info(f"Applied custom choropleth styling to chart {chart_id} (delta={is_delta_map})")
+        
+        # Step 5: Publish the chart
+        logger.info(f"Publishing chart {chart_id}")
+        _make_dw_request(
+            "POST",
+            f"/charts/{chart_id}/publish"
+        )
+        logger.info(f"Chart {chart_id} published successfully")
+        
+        edit_url = f"https://app.datawrapper.de/edit/{chart_id}"
+        public_url = f"https://datawrapper.dwcdn.net/{chart_id}/"
+        
+        # Update database with Datawrapper chart URLs
+        if chart_id:
             # Get the published URL
             get_url = f"https://api.datawrapper.de/v3/charts/{chart_id}"
             get_headers = {
@@ -734,13 +513,25 @@ def create_datawrapper_map(map_id):
                 public_url = chart_info["publicUrl"]
                 
                 # Update the map record in the database
+                # Store DataWrapper URL in metadata instead of overwriting published_url
+                # Get current metadata
+                cursor.execute("SELECT metadata FROM maps WHERE id = %s", (map_id,))
+                current_metadata = cursor.fetchone()
+                metadata_dict = current_metadata[0] if current_metadata and current_metadata[0] else {}
+                
+                # Add dw_url to metadata
+                metadata_dict['dw_url'] = public_url
+                metadata_dict['dw_chart_id'] = chart_id
+                metadata_dict['dw_edit_url'] = edit_url
+                
+                # Update metadata and chart_id, but NOT published_url
                 cursor.execute(
-                    "UPDATE maps SET published_url = %s, chart_id = %s WHERE id = %s",
-                    (public_url, chart_id, map_id)
+                    "UPDATE maps SET metadata = %s, chart_id = %s WHERE id = %s",
+                    (json.dumps(metadata_dict), chart_id, map_id)
                 )
                 conn.commit()
                 
-                logger.info(f"Map {map_id} updated with publicUrl: {public_url} and chart_id: {chart_id}")
+                logger.info(f"Map {map_id} updated with DataWrapper URL in metadata: {public_url} and chart_id: {chart_id}")
                 cursor.close()
                 conn.close()
                 

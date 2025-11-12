@@ -219,6 +219,11 @@ async def generate_map_endpoint(request: Request):
         color_field = data.get("color_field")  # Optional: match preview coloring
         scale_dots = data.get("scale_dots", True)  # Default to True for scaling dots by count
         
+        # Location-aware filtering parameters
+        center_lat = data.get("center_lat")
+        center_lng = data.get("center_lng")
+        radius = data.get("radius")  # Radius in meters
+        
         # Check if this is a preview request
         preview_mode = data.get("preview", False)
         
@@ -241,7 +246,7 @@ async def generate_map_endpoint(request: Request):
                 content={"status": "error", "message": "Metric ID is required"}
             )
         
-        logger.info(f"Generating map for metric_id={metric_id}, anomaly_type={anomaly_type}, anomaly_field_name={anomaly_field_name}, district={district}, period_type={period_type}, time_periods={time_periods}")
+        logger.info(f"Generating map for metric_id={metric_id}, anomaly_type={anomaly_type}, anomaly_field_name={anomaly_field_name}, district={district}, period_type={period_type}, time_periods={time_periods}, center_lat={center_lat}, center_lng={center_lng}, radius={radius}")
         
         # Import the map generation function
         from tools.generate_map import generate_map
@@ -268,8 +273,8 @@ async def generate_map_endpoint(request: Request):
             # Import data fetching utilities
             from tools.data_fetcher import fetch_metric_data
             
-            # Fetch the actual data for this metric
-            data_result = fetch_metric_data(metric_id, district, period_type, time_periods, anomaly_type, anomaly_field_name)
+            # Fetch the actual data for this metric with location filtering if provided
+            data_result = fetch_metric_data(metric_id, district, period_type, time_periods, anomaly_type, anomaly_field_name, center_lat=center_lat, center_lng=center_lng, radius=radius)
             
             if not data_result or "error" in data_result:
                 cursor.close()
@@ -347,7 +352,10 @@ async def generate_map_endpoint(request: Request):
                     "anomaly_type": anomaly_type,
                     "anomaly_field_name": anomaly_field_name,
                     "color_field": color_field,
-                    "scale_dots": scale_dots
+                    "scale_dots": scale_dots,
+                    "center_lat": center_lat,
+                    "center_lng": center_lng,
+                    "radius": radius
                 },
                 metric_id=metric_id,
                 map_provider="mapbox",  # Use Mapbox instead of Datawrapper

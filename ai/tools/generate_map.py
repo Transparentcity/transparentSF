@@ -2206,18 +2206,18 @@ def extract_tooltip_fields(row, location_fields=None):
     for column, value in row.items():
         # Debug logging for media URL fields
         if 'media' in column.lower():
-            logger.info(f"Processing media field {column}: value={value}, type={type(value)}, is_none={value is None}, str_strip={str(value).strip() if value is not None else 'None'}")
+            logger.debug(f"Processing media field {column}: value={value}, type={type(value)}, is_none={value is None}, str_strip={str(value).strip() if value is not None else 'None'}")
         
         if column not in location_field_names and value is not None and str(value).strip():
             # Skip empty values and common metadata fields
             if column not in ['index', 'level_0', 'Unnamed: 0']:
                 # Special handling for media URLs - don't skip if it's 'nan' string
                 if 'media' in column.lower() and str(value).lower() == 'nan':
-                    logger.info(f"Skipping media field {column} with 'nan' value")
+                    logger.debug(f"Skipping media field {column} with 'nan' value")
                     continue
                 tooltip_fields[column] = str(value)
                 if 'media' in column.lower():
-                    logger.info(f"Added media field {column} to tooltip_fields: {str(value)}")
+                    logger.debug(f"Added media field {column} to tooltip_fields: {str(value)}")
     
     return tooltip_fields
 

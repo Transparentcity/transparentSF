@@ -304,7 +304,7 @@ def set_dataset(context_variables, *args, **kwargs):
         logger.exception("Unexpected error in set_dataset")
         return {'error': f'Unexpected error: {str(e)}', 'queryURL': None}
 
-def fetch_metric_data(metric_id, district="0", period_type="month", time_periods=2, anomaly_type=None, anomaly_field_name=None):
+def fetch_metric_data(metric_id, district="0", period_type="month", time_periods=2, anomaly_type=None, anomaly_field_name=None, center_lat=None, center_lng=None, radius=None):
     """
     Fetch data for a specific metric from the database and API using map configuration.
     
@@ -314,6 +314,9 @@ def fetch_metric_data(metric_id, district="0", period_type="month", time_periods
         period_type (str): Period type for the data (month, quarter, year)
         time_periods (int): Number of time periods to include (default: 2)
         anomaly_type (str): Anomaly type filter (group_value from anomalies table)
+        center_lat (float): Optional latitude for location-based filtering
+        center_lng (float): Optional longitude for location-based filtering
+        radius (float): Optional radius in meters for location-based filtering
         
     Returns:
         dict: Contains 'data' (DataFrame) or 'error' message
@@ -412,8 +415,8 @@ def fetch_metric_data(metric_id, district="0", period_type="month", time_periods
         cursor.close()
         conn.close()
         
-        # Build the query using map configuration
-        query = build_map_query(map_query, map_filters, map_config, district, period_type, time_periods, anomaly_type, anomaly_field_name)
+        # Build the query using map configuration with location filtering if provided
+        query = build_map_query(map_query, map_filters, map_config, district, period_type, time_periods, anomaly_type, anomaly_field_name, center_lat=center_lat, center_lng=center_lng, radius=radius)
         
         if not query:
             return {'error': f'Failed to build query for metric {metric_id}'}
@@ -443,7 +446,7 @@ def fetch_metric_data(metric_id, district="0", period_type="month", time_periods
         logger.exception(f"Error fetching metric data: {str(e)}")
         return {'error': f'Error fetching metric data: {str(e)}'}
 
-def build_map_query(map_query, map_filters, map_config, district, period_type, time_periods, anomaly_type=None, anomaly_field_name=None):
+def build_map_query(map_query, map_filters, map_config, district, period_type, time_periods, anomaly_type=None, anomaly_field_name=None, center_lat=None, center_lng=None, radius=None):
     """
     Build a query using map configuration and filters.
     
@@ -456,6 +459,9 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
         time_periods (int): Number of time periods
         anomaly_type (str): Anomaly type filter (group_value from anomalies table)
         anomaly_field_name (str): The field name to filter on for the anomaly
+        center_lat (float): Optional latitude for location-based filtering
+        center_lng (float): Optional longitude for location-based filtering
+        radius (float): Optional radius in meters for location-based filtering
         
     Returns:
         str: Built query string
@@ -472,8 +478,8 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
     target_date = date.today() - timedelta(days=1)
     
     # Debug logging
-    logger.info(f"DEBUG: period_type={period_type}, time_periods={time_periods}, type(time_periods)={type(time_periods)}")
-    logger.info(f"DEBUG: target_date={target_date}")
+    logger.debug(f"DEBUG: period_type={period_type}, time_periods={time_periods}, type(time_periods)={type(time_periods)}")
+    logger.debug(f"DEBUG: target_date={target_date}")
     
     if period_type == "month":
         # Get the last N months using proper month calculation
@@ -488,12 +494,12 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
             try:
                 time_periods_int = int(time_periods)
                 start_date = end_date - relativedelta(months=time_periods_int)
-                logger.info(f"DEBUG: Calculated start_date={start_date} for time_periods={time_periods_int}")
+                logger.debug(f"DEBUG: Calculated start_date={start_date} for time_periods={time_periods_int}")
             except (ValueError, TypeError) as e:
                 logger.error(f"ERROR: Invalid time_periods value '{time_periods}': {e}")
                 # Fallback to a reasonable default
                 start_date = end_date - relativedelta(months=2)
-                logger.info(f"DEBUG: Using fallback start_date={start_date}")
+                logger.debug(f"DEBUG: Using fallback start_date={start_date}")
     elif period_type == "week":
         # Get the last N weeks using proper week calculation
         end_date = target_date
@@ -507,33 +513,33 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
             try:
                 time_periods_int = int(time_periods)
                 start_date = end_date - timedelta(weeks=time_periods_int)
-                logger.info(f"DEBUG: Calculated start_date={start_date} for time_periods={time_periods_int} weeks")
+                logger.debug(f"DEBUG: Calculated start_date={start_date} for time_periods={time_periods_int} weeks")
             except (ValueError, TypeError) as e:
                 logger.error(f"ERROR: Invalid time_periods value '{time_periods}' for weeks: {e}")
                 start_date = end_date - timedelta(weeks=2)
-                logger.info(f"DEBUG: Using fallback start_date={start_date}")
+                logger.debug(f"DEBUG: Using fallback start_date={start_date}")
     elif period_type == "quarter":
         # Get the last N quarters using proper quarter calculation
         end_date = target_date
         try:
             time_periods_int = int(time_periods)
             start_date = end_date - relativedelta(months=3 * time_periods_int)
-            logger.info(f"DEBUG: Calculated start_date={start_date} for time_periods={time_periods_int} quarters")
+            logger.debug(f"DEBUG: Calculated start_date={start_date} for time_periods={time_periods_int} quarters")
         except (ValueError, TypeError) as e:
             logger.error(f"ERROR: Invalid time_periods value '{time_periods}' for quarters: {e}")
             start_date = end_date - relativedelta(months=6)
-            logger.info(f"DEBUG: Using fallback start_date={start_date}")
+            logger.debug(f"DEBUG: Using fallback start_date={start_date}")
     elif period_type == "year":
         # Get the last N years using proper year calculation
         end_date = target_date
         try:
             time_periods_int = int(time_periods)
             start_date = end_date - relativedelta(years=time_periods_int)
-            logger.info(f"DEBUG: Calculated start_date={start_date} for time_periods={time_periods_int} years")
+            logger.debug(f"DEBUG: Calculated start_date={start_date} for time_periods={time_periods_int} years")
         except (ValueError, TypeError) as e:
             logger.error(f"ERROR: Invalid time_periods value '{time_periods}' for years: {e}")
             start_date = end_date - relativedelta(years=1)
-            logger.info(f"DEBUG: Using fallback start_date={start_date}")
+            logger.debug(f"DEBUG: Using fallback start_date={start_date}")
     else:
         # Default to last 2 months
         end_date = target_date
@@ -546,8 +552,8 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
     date_field = map_config.get('date_field')
     if date_field:
         # Debug logging for date range
-        logger.info(f"DEBUG: Using date_field='{date_field}'")
-        logger.info(f"DEBUG: start_date={start_date}, end_date={end_date}")
+        logger.debug(f"DEBUG: Using date_field='{date_field}'")
+        logger.debug(f"DEBUG: start_date={start_date}, end_date={end_date}")
         
         # Check if the date_field is a complex case statement
         if 'CASE WHEN' in date_field.upper():
@@ -557,22 +563,22 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
                 # Use the same logic as the metric query - check both fields for openings
                 date_condition = f"((dba_start_date >= '{start_date.strftime('%Y-%m-%d')}' AND dba_start_date <= '{end_date.strftime('%Y-%m-%d')}') OR (location_start_date >= '{start_date.strftime('%Y-%m-%d')}' AND location_start_date <= '{end_date.strftime('%Y-%m-%d')}' AND dba_start_date < '{start_date.strftime('%Y-%m-%d')}'))"
                 where_conditions.append(date_condition)
-                logger.info(f"DEBUG: Added complex date condition: {date_condition}")
+                logger.debug(f"DEBUG: Added complex date condition: {date_condition}")
             elif 'dba_end_date' in date_field and 'location_end_date' in date_field:
                 # Use the same logic as the metric query - check both fields for closures
                 date_condition = f"((dba_end_date >= '{start_date.strftime('%Y-%m-%d')}' AND dba_end_date <= '{end_date.strftime('%Y-%m-%d')}') OR (location_end_date >= '{start_date.strftime('%Y-%m-%d')}' AND location_end_date <= '{end_date.strftime('%Y-%m-%d')}' AND dba_end_date < '{start_date.strftime('%Y-%m-%d')}'))"
                 where_conditions.append(date_condition)
-                logger.info(f"DEBUG: Added complex date condition: {date_condition}")
+                logger.debug(f"DEBUG: Added complex date condition: {date_condition}")
             else:
                 # Fallback to simple field usage
                 date_condition = f"{date_field} >= '{start_date.strftime('%Y-%m-%d')}' AND {date_field} <= '{end_date.strftime('%Y-%m-%d')}'"
                 where_conditions.append(date_condition)
-                logger.info(f"DEBUG: Added simple date condition: {date_condition}")
+                logger.debug(f"DEBUG: Added simple date condition: {date_condition}")
         else:
             # Simple field name
             date_condition = f"{date_field} >= '{start_date.strftime('%Y-%m-%d')}' AND {date_field} <= '{end_date.strftime('%Y-%m-%d')}'"
             where_conditions.append(date_condition)
-            logger.info(f"DEBUG: Added simple date condition: {date_condition}")
+            logger.debug(f"DEBUG: Added simple date condition: {date_condition}")
     
     # Add geometry filter if specified in map_filters
     if map_filters and 'geometry' in map_filters:
@@ -583,10 +589,17 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
             if value:
                 where_conditions.append(f"within_polygon({field}, '{value}')")
     
+    # Add direct filters if specified in map_filters (raw SQL conditions)
+    if map_filters and 'direct_filters' in map_filters:
+        direct_filters = map_filters['direct_filters']
+        if direct_filters and isinstance(direct_filters, str):
+            where_conditions.append(f"({direct_filters})")
+            logger.debug(f"Added direct filters: {direct_filters}")
+    
     # Add static filters if specified in map_filters
     if map_filters and 'static_filters' in map_filters:
         static_filters = map_filters['static_filters']
-        logger.info(f"Processing static filters: {static_filters}")
+        logger.debug(f"Processing static filters: {static_filters}")
         
         for filter_item in static_filters:
             field = filter_item.get('field')
@@ -601,18 +614,18 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
                         values_str = "', '".join(str(v) for v in values)
                         filter_clause = f"{field} IN ('{values_str}')"
                         where_conditions.append(filter_clause)
-                        logger.info(f"Added static IN filter: {filter_clause}")
+                        logger.debug(f"Added static IN filter: {filter_clause}")
                     elif len(values) == 1:
                         filter_clause = f"{field} {operator} '{values[0]}'"
                         where_conditions.append(filter_clause)
-                        logger.info(f"Added static filter: {filter_clause}")
+                        logger.debug(f"Added static filter: {filter_clause}")
                 elif value is not None:
                     if isinstance(value, str):
                         filter_clause = f"{field} {operator} '{value}'"
                     else:
                         filter_clause = f"{field} {operator} {value}"
                     where_conditions.append(filter_clause)
-                    logger.info(f"Added static filter: {filter_clause}")
+                    logger.debug(f"Added static filter: {filter_clause}")
     
     # Add direct filters from map_filters (like incident_category_filter)
     if map_filters:
@@ -632,15 +645,47 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
                         values_str = "', '".join(str(v) for v in values)
                         filter_clause = f"{field} IN ('{values_str}')"
                         where_conditions.append(filter_clause)
-                        logger.info(f"Added direct IN filter: {filter_clause}")
+                        logger.debug(f"Added direct IN filter: {filter_clause}")
                     elif len(values) == 1:
                         filter_clause = f"{field} {operator} '{values[0]}'"
                         where_conditions.append(filter_clause)
-                        logger.info(f"Added direct filter: {filter_clause}")
+                        logger.debug(f"Added direct filter: {filter_clause}")
     
     # Add district filter if specified
     if district != "0":
         where_conditions.append(f"supervisor_district = '{district}'")
+    
+    # Add location-based filter if center point and radius are provided
+    if center_lat is not None and center_lng is not None and radius is not None:
+        # Determine the location field name from map_config or use default
+        location_field = map_config.get('location_field', 'location')
+        
+        # Check if map_config specifies a different location field
+        if map_config and 'location_fields' in map_config:
+            location_fields = map_config['location_fields']
+            if isinstance(location_fields, list) and len(location_fields) > 0:
+                # Use the first location field
+                if isinstance(location_fields[0], dict):
+                    location_field = location_fields[0].get('fieldName', location_field)
+                elif isinstance(location_fields[0], str):
+                    location_field = location_fields[0]
+        
+        # Also check the base query to see if it uses 'point' instead of 'location'
+        # Some datasets use 'point' field (e.g., camera citations)
+        query_lower = query.lower()
+        if 'point' in query_lower and 'location' not in query_lower:
+            # Check if 'point' is in the SELECT clause
+            if 'select' in query_lower:
+                select_part = query_lower.split('where')[0] if 'where' in query_lower else query_lower
+                if 'point' in select_part:
+                    location_field = 'point'
+                    logger.info(f"Detected 'point' field in query, using it for location filter")
+        
+        # Use SoQL's within_circle function for location-based filtering
+        # Format: within_circle(location_field, latitude, longitude, radius_in_meters)
+        location_condition = f"within_circle({location_field}, {center_lat}, {center_lng}, {radius})"
+        where_conditions.append(location_condition)
+        logger.info(f"Adding location filter: {location_condition}")
     
     # Add anomaly filter if specified
     if anomaly_type and anomaly_field_name:
@@ -678,7 +723,7 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
         
         if anomaly_field:
             where_conditions.append(f"{anomaly_field} = '{anomaly_type}'")
-            logger.info(f"Added anomaly filter (fallback): {anomaly_field} = '{anomaly_type}'")
+            logger.debug(f"Added anomaly filter (fallback): {anomaly_field} = '{anomaly_type}'")
     
     # Add date range filter from map_filters if specified (only if not already added from map_config)
     if map_filters and 'date_range' in map_filters and not date_field:
@@ -711,7 +756,7 @@ def build_map_query(map_query, map_filters, map_config, district, period_type, t
     
     # Combine all conditions
     if where_conditions:
-        logger.info(f"WHERE conditions to apply: {where_conditions}")
+        logger.debug(f"WHERE conditions to apply: {where_conditions}")
         if "WHERE" in query.upper():
             query += f" AND {' AND '.join(where_conditions)}"
         else:

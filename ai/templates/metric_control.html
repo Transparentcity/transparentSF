@@ -644,6 +644,14 @@
             background-color: #6c757d;
             cursor: not-allowed;
         }
+        .chart-dw-btn.active {
+            background-color: #17a2b8;
+            box-shadow: 0 0 0 2px rgba(23, 162, 184, 0.3);
+            font-weight: 600;
+        }
+        .chart-dw-btn.active:hover {
+            background-color: #138496;
+        }
         .chart-dw-btn.loading {
             padding-right: 30px;
         }
@@ -1343,6 +1351,16 @@
         .chart-dw-btn:disabled {
             background-color: #6c757d;
             cursor: not-allowed;
+        }
+        
+        .chart-dw-btn.active {
+            background-color: #17a2b8;
+            box-shadow: 0 0 0 2px rgba(23, 162, 184, 0.3);
+            font-weight: 600;
+        }
+        
+        .chart-dw-btn.active:hover {
+            background-color: #138496;
         }
         
         .chart-dw-btn.loading {
@@ -4221,32 +4239,45 @@
             
             // Add embedded indicator for maps
             if (chartType === 'maps' && isEmbedded) {
-                additionalInfo += `<div class="anomaly-info" style="color: #17a2b8;"><i class="fas fa-code"></i> Embedded View</div>`;
+                additionalInfo += `<div class="anomaly-info" style="color: #17a2b8;"><i class="fas fa-code"></i> Native TSF View</div>`;
             }
             
             // Use onload event to adjust iframe height dynamically
             return `
-                <div class="${cardClass}">
+                <div class="${cardClass}" data-chart-id="${id}">
                     <div class="chart-card-header">
                         <h4>${title || `Chart ${id}`}</h4>
                         ${additionalInfo}
                     </div>
                     <div class="chart-card-body">
                         ${chartType === 'maps' ? 
-                            `<iframe src="${url}" frameborder="0" style="width:100%; min-height:600px; height:600px;"></iframe>` :
+                            `<iframe id="map-iframe-${id}" src="${url}" frameborder="0" style="width:100%; min-height:600px; height:600px;"></iframe>` :
                             `<iframe src="${url}" frameborder="0" onload="adjustIframeHeight(this)"></iframe>`}
                     </div>
                     <div class="chart-card-footer">
-                        ${dwUrl ? `
+                        ${dwUrl && chartType === 'maps' ? `
+                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                <span style="color: #6c757d; font-size: 14px;">View:</span>
+                                <button class="chart-dw-btn active" onclick="toggleMapView('${id}', 'tsf', '${url}')" id="tsf-btn-${id}">
+                                    <i class="fas fa-chart-area"></i> TSF Native
+                                </button>
+                                <button class="chart-dw-btn" onclick="toggleMapView('${id}', 'dw', '${dwUrl}')" id="dw-btn-${id}">
+                                    <i class="fas fa-external-link-alt"></i> DataWrapper
+                                </button>
+                                <button class="chart-dw-btn" onclick="window.open('/backend/map-chart?id=${id}', '_blank')" style="margin-left: auto;">
+                                    <i class="fas fa-expand"></i> Full Screen
+                                </button>
+                            </div>
+                        ` : dwUrl ? `
                             <button class="chart-dw-btn" onclick="window.open('${dwUrl}', '_blank')">
-                                View in Datawrapper
+                                <i class="fas fa-external-link-alt"></i> View in Datawrapper
                             </button>
                         ` : `
                             <button class="chart-dw-btn" onclick="generateDWChart('${chartType}', ${id})">
                                 Generate DW Version
                             </button>
                         `}
-                        ${chartType === 'maps' && isEmbedded ? `
+                        ${chartType === 'maps' && isEmbedded && !dwUrl ? `
                             <button class="chart-dw-btn" onclick="window.open('/backend/map-chart?id=${id}', '_blank')" style="margin-left: 8px;">
                                 <i class="fas fa-external-link-alt"></i> Full View
                             </button>
@@ -4280,6 +4311,31 @@
                     const height = width * 0.75; // 3/4 aspect ratio
                     iframe.style.height = height + 'px';
                 }
+            }
+        }
+        
+        // Toggle between TSF and DataWrapper map views
+        function toggleMapView(mapId, viewType, url) {
+            // Get the iframe and buttons
+            const iframe = document.getElementById(`map-iframe-${mapId}`);
+            const tsfBtn = document.getElementById(`tsf-btn-${mapId}`);
+            const dwBtn = document.getElementById(`dw-btn-${mapId}`);
+            
+            if (!iframe || !tsfBtn || !dwBtn) {
+                console.error('Map view toggle elements not found');
+                return;
+            }
+            
+            // Update iframe source
+            iframe.src = url;
+            
+            // Update button states
+            if (viewType === 'tsf') {
+                tsfBtn.classList.add('active');
+                dwBtn.classList.remove('active');
+            } else {
+                dwBtn.classList.add('active');
+                tsfBtn.classList.remove('active');
             }
         }
         
@@ -4479,25 +4535,20 @@
                         console.warn(`Failed to fetch metadata for map ${map.id}:`, error);
                     }
                     
-                    if (map.published_url) {
-                        // Use published URL if available
-                        return {
-                            id: map.id,
-                            title: map.title || `Map ${map.id}`,
-                            url: map.published_url,
-                            dwUrl: dwUrl,
-                            isEmbedded: false
-                        };
-                    } else {
-                        // Use embedded map template for maps without published URLs
-                        return {
-                            id: map.id,
-                            title: map.title || `Map ${map.id}`,
-                            url: `/backend/map-chart?id=${map.id}`,
-                            dwUrl: dwUrl,
-                            isEmbedded: true
-                        };
+                    // Check for DW URL in published_url if not found in metadata
+                    if (!dwUrl && map.published_url && map.published_url.includes('datawrapper')) {
+                        dwUrl = map.published_url;
                     }
+                    
+                    // Always use native TSF URL as the main display
+                    return {
+                        id: map.id,
+                        title: map.title || `Map ${map.id}`,
+                        url: `/backend/map-chart?id=${map.id}`,
+                        dwUrl: dwUrl,
+                        isEmbedded: true,
+                        tsfUrl: `/backend/map-chart?id=${map.id}`
+                    };
                 }));
                 
                 return mapsWithDW;
