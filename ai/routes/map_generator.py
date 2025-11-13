@@ -61,7 +61,8 @@ async def get_metrics():
             # Query to get all active metrics that have a map_query defined
             query = """
             SELECT id, metric_name, category, subcategory, endpoint,
-                   most_recent_data_date, display_order, map_query, map_filters, map_config
+                   most_recent_data_date, display_order, map_query, map_filters, map_config,
+                   show_on_dash
             FROM metrics
             WHERE is_active = TRUE
               AND map_query IS NOT NULL

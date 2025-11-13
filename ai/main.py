@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 import os
 import json
 import logging
@@ -223,6 +224,9 @@ from routes.active_businesses import router as active_businesses_router, set_tem
 app = FastAPI()
 
 # Note: Parcel cache will be initialized on-demand when needed
+
+# Add compression middleware (should be added before CORS for better performance)
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # Compress responses > 1KB
 
 # Add CORS middleware
 app.add_middleware(
