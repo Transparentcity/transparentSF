@@ -5617,10 +5617,10 @@ async def get_map_chart(request: Request, id: str):
             """, (id,))
         
         map_record = cursor.fetchone()
-        cursor.close()
-        conn.close()
         
         if not map_record:
+            cursor.close()
+            conn.close()
             logger.warning(f"Map with ID {id} not found")
             return JSONResponse({
                 "status": "error",
@@ -5629,21 +5629,83 @@ async def get_map_chart(request: Request, id: str):
         
         logger.info(f"Map record found - id={map_record['id']}, title={map_record['title']}, published_url={bool(map_record['published_url'])}, active={map_record.get('active', 'unknown')}")
         
+        # Check if this is a multi-layer map
+        map_metadata = map_record.get('metadata', {})
+        if isinstance(map_metadata, str):
+            try:
+                map_metadata = json.loads(map_metadata)
+            except:
+                map_metadata = {}
+        
+        is_multi_layer = map_metadata.get('is_multi_layer', False)
+        layer_map_ids = map_metadata.get('layer_map_ids', [])
+        
+        # If this is a multi-layer map, load all child maps
+        all_maps = [map_record]  # Start with the parent map
+        if is_multi_layer and layer_map_ids:
+            logger.info(f"Loading {len(layer_map_ids)} child maps for multi-layer map {id}")
+            placeholders = ','.join(['%s'] * len(layer_map_ids))
+            cursor.execute(f"""
+                SELECT id, title, type, location_data, metadata, active, metric_id
+                FROM maps 
+                WHERE id IN ({placeholders}) AND active = TRUE
+                ORDER BY id
+            """, layer_map_ids)
+            
+            child_maps = cursor.fetchall()
+            all_maps = [map_record] + list(child_maps)  # Parent first, then children
+            logger.info(f"Loaded {len(child_maps)} child maps")
+        
+        cursor.close()
+        conn.close()
+        
         # For embedded mode, always serve the template regardless of published URL
         if is_embedded:
             logger.info(f"Serving embedded map template for id={id}")
             logger.info(f"Map has published_url: {bool(map_record['published_url'])}, active: {map_record.get('active', 'unknown')}")
             
-            # Get location data
-            location_data = map_record.get('location_data', [])
-            if isinstance(location_data, str):
-                try:
-                    location_data = json.loads(location_data)
-                except:
-                    location_data = []
-            
             # Get Mapbox token
             mapbox_token = os.getenv("MAPBOX_ACCESS_TOKEN", "")
+            
+            # For multi-layer maps, process each layer separately
+            if is_multi_layer and len(all_maps) > 1:
+                # Process each child map's location_data separately
+                layer_maps = []
+                for child_map in all_maps[1:]:  # Skip parent (first map)
+                    child_location_data = child_map.get('location_data', [])
+                    if isinstance(child_location_data, str):
+                        try:
+                            child_location_data = json.loads(child_location_data)
+                        except:
+                            child_location_data = []
+                    
+                    # Parse child map metadata
+                    child_metadata = child_map.get('metadata', {})
+                    if isinstance(child_metadata, str):
+                        try:
+                            child_metadata = json.loads(child_metadata)
+                        except:
+                            child_metadata = {}
+                    
+                    layer_maps.append({
+                        "id": child_map.get('id'),
+                        "title": child_map.get('title', 'Untitled Layer'),
+                        "type": child_map.get('type', 'point'),
+                        "location_data": child_location_data if isinstance(child_location_data, list) else [],
+                        "metadata": child_metadata
+                    })
+                
+                # For multi-layer maps, use empty location_data for parent
+                location_data = []
+            else:
+                # Single layer map - use parent map's location_data
+                location_data = map_record.get('location_data', [])
+                if isinstance(location_data, str):
+                    try:
+                        location_data = json.loads(location_data)
+                    except:
+                        location_data = []
+                layer_maps = []
             
             # Create metadata for the template
             metadata = {
@@ -5656,7 +5718,8 @@ async def get_map_chart(request: Request, id: str):
                 "color_field": map_record.get('metadata', {}).get('color_field'),
             }
             
-            return templates.TemplateResponse("map.html", {
+            # Build template data
+            template_data = {
                 "request": request,
                 "map_data": map_record,
                 "metadata": metadata,
@@ -5664,7 +5727,14 @@ async def get_map_chart(request: Request, id: str):
                 "config": {
                     "MAPBOX_ACCESS_TOKEN": mapbox_token
                 }
-            })
+            }
+            
+            # Add multi-layer data if applicable
+            if is_multi_layer and len(layer_maps) > 0:
+                template_data["is_multi_layer"] = True
+                template_data["layer_maps"] = layer_maps  # Pass processed layer maps
+            
+            return templates.TemplateResponse("map.html", template_data)
         
         # For non-embedded mode, check if we have a published URL
         if map_record['published_url']:
@@ -5674,16 +5744,48 @@ async def get_map_chart(request: Request, id: str):
             # If no published URL, serve the embedded template instead of trying to create one
             logger.info(f"Map {id} doesn't have published URL, serving embedded template")
             
-            # Get location data
-            location_data = map_record.get('location_data', [])
-            if isinstance(location_data, str):
-                try:
-                    location_data = json.loads(location_data)
-                except:
-                    location_data = []
-            
             # Get Mapbox token
             mapbox_token = os.getenv("MAPBOX_ACCESS_TOKEN", "")
+            
+            # For multi-layer maps, process each layer separately
+            if is_multi_layer and len(all_maps) > 1:
+                # Process each child map's location_data separately
+                layer_maps = []
+                for child_map in all_maps[1:]:  # Skip parent (first map)
+                    child_location_data = child_map.get('location_data', [])
+                    if isinstance(child_location_data, str):
+                        try:
+                            child_location_data = json.loads(child_location_data)
+                        except:
+                            child_location_data = []
+                    
+                    # Parse child map metadata
+                    child_metadata = child_map.get('metadata', {})
+                    if isinstance(child_metadata, str):
+                        try:
+                            child_metadata = json.loads(child_metadata)
+                        except:
+                            child_metadata = {}
+                    
+                    layer_maps.append({
+                        "id": child_map.get('id'),
+                        "title": child_map.get('title', 'Untitled Layer'),
+                        "type": child_map.get('type', 'point'),
+                        "location_data": child_location_data if isinstance(child_location_data, list) else [],
+                        "metadata": child_metadata
+                    })
+                
+                # For multi-layer maps, use empty location_data for parent
+                location_data = []
+            else:
+                # Single layer map - use parent map's location_data
+                location_data = map_record.get('location_data', [])
+                if isinstance(location_data, str):
+                    try:
+                        location_data = json.loads(location_data)
+                    except:
+                        location_data = []
+                layer_maps = []
             
             # Create metadata for the template
             metadata = {
@@ -5696,7 +5798,8 @@ async def get_map_chart(request: Request, id: str):
                 "color_field": map_record.get('metadata', {}).get('color_field'),
             }
             
-            return templates.TemplateResponse("map.html", {
+            # Build template data
+            template_data = {
                 "request": request,
                 "map_data": map_record,
                 "metadata": metadata,
@@ -5704,7 +5807,14 @@ async def get_map_chart(request: Request, id: str):
                 "config": {
                     "MAPBOX_ACCESS_TOKEN": mapbox_token
                 }
-            })
+            }
+            
+            # Add multi-layer data if applicable
+            if is_multi_layer and len(layer_maps) > 0:
+                template_data["is_multi_layer"] = True
+                template_data["layer_maps"] = layer_maps  # Pass processed layer maps
+            
+            return templates.TemplateResponse("map.html", template_data)
         
     except Exception as e:
         logger.error(f"Error retrieving map chart: {str(e)}", exc_info=True)

@@ -1057,7 +1057,9 @@
             "title": "{{ map_data.title or "Untitled Map" }}",
             "type": "{{ map_data.type }}",
             "locationData": {{ (location_data | tojson) if location_data else '[]' }},
-            "metadata": {{ (metadata | tojson) if metadata else '{}' }}
+            "metadata": {{ (metadata | tojson) if metadata else '{}' }},
+            "isMultiLayer": {{ 'true' if is_multi_layer else 'false' }},
+            "layerMaps": {{ (layer_maps | tojson) if is_multi_layer and layer_maps else '[]' }}
         }
     </script>
     
@@ -1157,6 +1159,13 @@
             
             // Always show the map title, even if metadata is not available
             const mapTitle = mapData.title || "Untitled Map";
+            
+            // For multi-layer maps, show layer count
+            if (mapData.isMultiLayer && mapData.layerMaps && mapData.layerMaps.length > 0) {
+                const totalPoints = mapData.layerMaps.reduce((sum, layer) => sum + (layer.location_data || []).length, 0);
+                embeddedSubtitleElement.innerHTML = `<strong>${mapTitle}</strong> • ${mapData.layerMaps.length} layers • ${totalPoints} points`;
+                return;
+            }
             
             if (!mapData.metadata) {
                 console.log('No metadata available for embedded subtitle calculation');
@@ -1290,10 +1299,16 @@
         function loadMapData() {
             try {
                 console.log('Loading map data for type:', mapData.type);
-                if (mapData.type === 'supervisor_district' || mapData.type === 'analysis_neighborhood') {
+                
+                // Check if this is a multi-layer map
+                if (mapData.isMultiLayer && mapData.layerMaps && mapData.layerMaps.length > 0) {
+                    loadMultiLayerMap();
+                } else if (mapData.type === 'supervisor_district' || mapData.type === 'analysis_neighborhood') {
                     loadDistrictMap();
                 } else if (mapData.type === 'point' || mapData.type === 'symbol' || mapData.type === 'address') {
                     loadPointMap();
+                } else if (mapData.type === 'multi_layer') {
+                    loadMultiLayerMap();
                 } else {
                     showError('Unsupported map type: ' + mapData.type);
                 }
@@ -2119,7 +2134,267 @@
             return null;
         }
 
+        // Load multi-layer map
+        function loadMultiLayerMap() {
+            if (!mapData.layerMaps || mapData.layerMaps.length === 0) {
+                showError('No layer data available for this multi-layer map');
+                return;
+            }
+
+            console.log(`Loading multi-layer map with ${mapData.layerMaps.length} layers`);
+
+            // Wait for map to be ready
+            if (!map.loaded()) {
+                map.on('load', loadMultiLayerMap);
+                return;
+            }
+
+            // Define layer colors - use brand palette colors
+            const computedStyle = getComputedStyle(document.documentElement);
+            const layerColors = [
+                computedStyle.getPropertyValue('--bright-purple').trim() || '#ad35fa',
+                computedStyle.getPropertyValue('--warm-coral').trim() || '#FF6B5A',
+                computedStyle.getPropertyValue('--sky-blue').trim() || '#71B2CA',
+                computedStyle.getPropertyValue('--spruce-green').trim() || '#4A7463',
+                '#FFD93D', // Yellow
+                '#6BCF7F', // Green
+                '#FF8C42', // Orange
+                '#9B59B6'  // Purple
+            ];
+
+            // Create bounds to fit all datasets
+            const bounds = new mapboxgl.LngLatBounds();
+
+            // Process and add each layer
+            mapData.layerMaps.forEach((layerMap, index) => {
+                const layerId = `layer${index + 1}`;
+                const layerColor = layerColors[index % layerColors.length];
+                const layerTitle = layerMap.title || `Layer ${index + 1}`;
+
+                // Process layer data
+                const layerFeatures = processLayerData(layerMap, layerColor, bounds, layerTitle);
+                
+                if (layerFeatures.length > 0) {
+                    addMapLayer(layerId, layerFeatures, layerColor, layerTitle);
+                }
+            });
+
+            // Fit map to show all points
+            if (!bounds.isEmpty()) {
+                map.fitBounds(bounds, {
+                    padding: 50,
+                    maxZoom: 15
+                });
+            }
+
+            // Build layer legend
+            buildMultiLayerLegend();
+
+            hideLoading();
+        }
+
+        // Process layer data into GeoJSON features
+        function processLayerData(layerMap, defaultColor, bounds, layerTitle) {
+            const locationData = layerMap.location_data || [];
+            if (!Array.isArray(locationData) || locationData.length === 0) {
+                return [];
+            }
+
+            return locationData.map((item, idx) => {
+                let coordinates;
+                
+                // Handle different coordinate formats
+                if (item.lon && item.lat) {
+                    coordinates = [item.lon, item.lat];
+                } else if (item.location && item.location.coordinates) {
+                    coordinates = item.location.coordinates;
+                } else if (item.coordinates) {
+                    coordinates = item.coordinates;
+                } else {
+                    console.warn('No coordinates found for item:', item);
+                    return null;
+                }
+
+                bounds.extend(coordinates);
+
+                return {
+                    type: 'Feature',
+                    properties: {
+                        title: item.title || item.tooltip || `Point ${idx}`,
+                        description: item.description || '',
+                        value: item.value || 1,
+                        color: defaultColor, // Always use the layer's default color
+                        strokeColor: item.strokeColor || '#ffffff',
+                        tooltip_fields: item.tooltip_fields || {},
+                        scale: item.scale || 1,
+                        layer_title: layerTitle,
+                        layer_color: defaultColor
+                    },
+                    geometry: {
+                        type: 'Point',
+                        coordinates: coordinates
+                    }
+                };
+            }).filter(feature => feature !== null);
+        }
+
+        // Add a map layer to the map
+        function addMapLayer(layerId, features, color, layerTitle) {
+            // Add source
+            map.addSource(layerId, {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: features
+                }
+            });
+
+            // Add circle layer
+            map.addLayer({
+                id: `${layerId}-circles`,
+                type: 'circle',
+                source: layerId,
+                paint: {
+                    'circle-radius': [
+                        'case',
+                        ['has', 'scale'],
+                        ['max', ['*', ['get', 'scale'], 15], 4],
+                        6
+                    ],
+                    'circle-color': color,
+                    'circle-stroke-color': [
+                        'case',
+                        ['has', 'strokeColor'], ['get', 'strokeColor'],
+                        '#ffffff'
+                    ],
+                    'circle-stroke-width': 1,
+                    'circle-opacity': 0.8
+                }
+            });
+
+            // Add hover effect
+            map.on('mouseenter', `${layerId}-circles`, function() {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+
+            map.on('mouseleave', `${layerId}-circles`, function() {
+                map.getCanvas().style.cursor = '';
+            });
+
+            // Add click handler
+            map.on('click', `${layerId}-circles`, function(e) {
+                const properties = e.features[0].properties;
+                const tooltipFields = properties.tooltip_fields || {};
+                
+                let tooltipContent = `<h4>${properties.title}</h4>`;
+                if (properties.layer_title) {
+                    tooltipContent += `<p><strong>Layer:</strong> ${properties.layer_title}</p>`;
+                }
+                if (properties.description) {
+                    tooltipContent += `<p><strong>Description:</strong> ${properties.description}</p>`;
+                }
+                tooltipContent += `<p><strong>Value:</strong> ${properties.value}</p>`;
+                
+                // Add additional tooltip fields
+                if (Object.keys(tooltipFields).length > 0) {
+                    tooltipContent += '<hr><h5>Additional Details:</h5>';
+                    for (const [field, value] of Object.entries(tooltipFields)) {
+                        if (field !== 'title' && field !== 'description' && field !== 'value' && field !== 'scale') {
+                            const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            tooltipContent += `<p><strong>${fieldLabel}:</strong> ${value}</p>`;
+                        }
+                    }
+                }
+                
+                // Show tooltip (reuse existing tooltip mechanism if available)
+                if (typeof showTooltip === 'function') {
+                    showTooltip(e.lngLat, tooltipContent);
+                } else {
+                    new mapboxgl.Popup()
+                        .setLngLat(e.lngLat)
+                        .setHTML(tooltipContent)
+                        .addTo(map);
+                }
+            });
+        }
+
+        // Build legend for multi-layer maps
+        function buildMultiLayerLegend() {
+            const legendContainer = document.getElementById('legend-items');
+            const embeddedLegendContainer = document.getElementById('embedded-legend-items');
+            
+            if (!legendContainer) return;
+            legendContainer.innerHTML = '';
+            if (embeddedLegendContainer) {
+                embeddedLegendContainer.innerHTML = '';
+            }
+
+            // Get colors
+            const computedStyle = getComputedStyle(document.documentElement);
+            const layerColors = [
+                computedStyle.getPropertyValue('--bright-purple').trim() || '#ad35fa',
+                computedStyle.getPropertyValue('--warm-coral').trim() || '#FF6B5A',
+                computedStyle.getPropertyValue('--sky-blue').trim() || '#71B2CA',
+                computedStyle.getPropertyValue('--spruce-green').trim() || '#4A7463',
+                '#FFD93D', '#6BCF7F', '#FF8C42', '#9B59B6'
+            ];
+
+            // Create legend header
+            const headerEl = document.createElement('div');
+            headerEl.className = 'legend-item';
+            headerEl.innerHTML = '<span class="legend-label" style="font-weight: 600;">Map Layers</span>';
+            legendContainer.appendChild(headerEl);
+            if (embeddedLegendContainer) {
+                const embeddedHeader = headerEl.cloneNode(true);
+                embeddedLegendContainer.appendChild(embeddedHeader);
+            }
+
+            // Add toggle for each layer
+            mapData.layerMaps.forEach((layerMap, index) => {
+                const layerId = `layer${index + 1}`;
+                const layerColor = layerColors[index % layerColors.length];
+                const layerTitle = layerMap.title || `Layer ${index + 1}`;
+                const pointCount = (layerMap.location_data || []).length;
+
+                const layerEl = document.createElement('div');
+                layerEl.className = 'legend-item';
+                layerEl.innerHTML = `
+                    <div class="legend-label" onclick="toggleLayer('${layerId}', !document.getElementById('${layerId}-toggle').checked)" style="cursor: pointer;">
+                        <span style="display: inline-block; width: 12px; height: 12px; background-color: ${layerColor}; border-radius: 50%; margin-right: 8px; border: 1px solid #fff;"></span>
+                        ${layerTitle} (${pointCount} points)
+                    </div>
+                    <label class="legend-toggle">
+                        <input type="checkbox" id="${layerId}-toggle" checked onchange="toggleLayer('${layerId}', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                `;
+                legendContainer.appendChild(layerEl);
+                
+                if (embeddedLegendContainer) {
+                    const embeddedLayer = layerEl.cloneNode(true);
+                    embeddedLegendContainer.appendChild(embeddedLayer);
+                }
+            });
+        }
+
+        // Toggle layer visibility (make it globally accessible)
+        window.toggleLayer = function(layerId, visible) {
+            const layerName = `${layerId}-circles`;
+            if (map && map.getLayer(layerName)) {
+                if (visible) {
+                    map.setLayoutProperty(layerName, 'visibility', 'visible');
+                } else {
+                    map.setLayoutProperty(layerName, 'visibility', 'none');
+                }
+            }
+        };
+
         function buildLegendFromSavedData() {
+            // Skip legend building for multi-layer maps (handled by buildMultiLayerLegend)
+            if (mapData.isMultiLayer && mapData.layerMaps && mapData.layerMaps.length > 0) {
+                return;
+            }
+
             const legendContainer = document.getElementById('legend-items');
             const embeddedLegendContainer = document.getElementById('embedded-legend-items');
             if (!legendContainer) return;

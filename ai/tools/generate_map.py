@@ -3584,11 +3584,11 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
                         active BOOLEAN DEFAULT TRUE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        CONSTRAINT maps_type_check CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol'))
+                        CONSTRAINT maps_type_check CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol', 'multi_layer'))
                     )
                 """)
                 
-                # Update existing constraint to include analysis_neighborhood if it exists
+                # Update existing constraint to include analysis_neighborhood and multi_layer if it exists
                 try:
                     cursor.execute("""
                         ALTER TABLE maps 
@@ -3597,9 +3597,9 @@ def generate_map(context_variables, map_title, map_type, location_data=None, map
                     cursor.execute("""
                         ALTER TABLE maps 
                         ADD CONSTRAINT maps_type_check 
-                        CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol'))
+                        CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol', 'multi_layer'))
                     """)
-                    logger.info("Updated maps_type_check constraint to include analysis_neighborhood")
+                    logger.info("Updated maps_type_check constraint to include analysis_neighborhood and multi_layer")
                 except Exception as e:
                     logger.warning(f"Could not update constraint (table might not exist yet): {str(e)}")
                 
