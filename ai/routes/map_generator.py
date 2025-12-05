@@ -61,7 +61,8 @@ async def get_metrics():
             # Query to get all active metrics that have a map_query defined
             query = """
             SELECT id, metric_name, category, subcategory, endpoint,
-                   most_recent_data_date, display_order, map_query, map_filters, map_config
+                   most_recent_data_date, display_order, map_query, map_filters, map_config,
+                   show_on_dash
             FROM metrics
             WHERE is_active = TRUE
               AND map_query IS NOT NULL
@@ -219,11 +220,17 @@ async def generate_map_endpoint(request: Request):
         color_field = data.get("color_field")  # Optional: match preview coloring
         scale_dots = data.get("scale_dots", True)  # Default to True for scaling dots by count
         
+        # Location-aware filtering parameters
+        center_lat = data.get("center_lat")
+        center_lng = data.get("center_lng")
+        radius = data.get("radius")  # Radius in meters
+        
         # Check if this is a preview request
         preview_mode = data.get("preview", False)
         
         # Check if this should be saved to database
-        save_to_database = data.get("save_to_database", False)
+        # If not explicitly set, save to database when NOT in preview mode
+        save_to_database = data.get("save_to_database", not preview_mode)
         
         # Ensure metric_id is an integer
         try:
@@ -240,7 +247,7 @@ async def generate_map_endpoint(request: Request):
                 content={"status": "error", "message": "Metric ID is required"}
             )
         
-        logger.info(f"Generating map for metric_id={metric_id}, anomaly_type={anomaly_type}, anomaly_field_name={anomaly_field_name}, district={district}, period_type={period_type}, time_periods={time_periods}")
+        logger.info(f"Generating map for metric_id={metric_id}, anomaly_type={anomaly_type}, anomaly_field_name={anomaly_field_name}, district={district}, period_type={period_type}, time_periods={time_periods}, center_lat={center_lat}, center_lng={center_lng}, radius={radius}")
         
         # Import the map generation function
         from tools.generate_map import generate_map
@@ -267,8 +274,8 @@ async def generate_map_endpoint(request: Request):
             # Import data fetching utilities
             from tools.data_fetcher import fetch_metric_data
             
-            # Fetch the actual data for this metric
-            data_result = fetch_metric_data(metric_id, district, period_type, time_periods, anomaly_type, anomaly_field_name)
+            # Fetch the actual data for this metric with location filtering if provided
+            data_result = fetch_metric_data(metric_id, district, period_type, time_periods, anomaly_type, anomaly_field_name, center_lat=center_lat, center_lng=center_lng, radius=radius)
             
             if not data_result or "error" in data_result:
                 cursor.close()
@@ -346,7 +353,10 @@ async def generate_map_endpoint(request: Request):
                     "anomaly_type": anomaly_type,
                     "anomaly_field_name": anomaly_field_name,
                     "color_field": color_field,
-                    "scale_dots": scale_dots
+                    "scale_dots": scale_dots,
+                    "center_lat": center_lat,
+                    "center_lng": center_lng,
+                    "radius": radius
                 },
                 metric_id=metric_id,
                 map_provider="mapbox",  # Use Mapbox instead of Datawrapper
@@ -459,6 +469,261 @@ async def generate_map_endpoint(request: Request):
         
     except Exception as e:
         logger.error(f"Error generating map: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"Internal server error: {str(e)}"}
+        )
+
+@router.post("/api/generate-multi-layer-map")
+async def generate_multi_layer_map_endpoint(request: Request):
+    """Generate a multi-layer map with multiple metrics."""
+    try:
+        data = await request.json()
+        
+        metric_ids = data.get("metric_ids")  # Array of metric IDs
+        anomaly_type = data.get("anomaly_type")
+        anomaly_field_name = data.get("anomaly_field_name")
+        district = data.get("district", "0")
+        period_type = data.get("period_type", "month")
+        time_periods = data.get("time_periods", 2)
+        color_field = data.get("color_field")
+        scale_dots = data.get("scale_dots", True)
+        
+        # Location-aware filtering parameters
+        center_lat = data.get("center_lat")
+        center_lng = data.get("center_lng")
+        radius = data.get("radius")
+        
+        # Check if this should be saved to database
+        save_to_database = data.get("save_to_database", True)
+        preview_mode = data.get("preview", False)
+        
+        # Validate metric_ids
+        if not metric_ids or not isinstance(metric_ids, list) or len(metric_ids) == 0:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "metric_ids array is required and must not be empty"}
+            )
+        
+        # Ensure all metric_ids are integers
+        try:
+            metric_ids = [int(mid) for mid in metric_ids]
+        except (ValueError, TypeError):
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "All metric_ids must be valid integers"}
+            )
+        
+        logger.info(f"Generating multi-layer map with {len(metric_ids)} metrics: {metric_ids}")
+        
+        # Import the map generation function
+        from tools.generate_map import generate_map
+        from tools.data_fetcher import fetch_metric_data
+        
+        # Get database connection
+        conn = get_postgres_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Generate maps for each metric
+        generated_map_ids = []
+        generated_maps = []
+        total_data_points = 0
+        
+        for metric_id in metric_ids:
+            try:
+                # Get metric information
+                cursor.execute("SELECT * FROM metrics WHERE id = %s", [metric_id])
+                metric = cursor.fetchone()
+                
+                if not metric:
+                    logger.warning(f"Metric {metric_id} not found, skipping")
+                    continue
+                
+                # Fetch data for this metric
+                data_result = fetch_metric_data(
+                    metric_id, district, period_type, time_periods, 
+                    anomaly_type, anomaly_field_name, 
+                    center_lat=center_lat, center_lng=center_lng, radius=radius
+                )
+                
+                if not data_result or "error" in data_result:
+                    logger.warning(f"Failed to fetch data for metric {metric_id}: {data_result.get('error', 'Unknown error')}")
+                    continue
+                
+                dataset = data_result.get("data")
+                executed_query_url = data_result.get("executed_query_url")
+                
+                if dataset is None or dataset.empty:
+                    logger.warning(f"No data available for metric {metric_id}")
+                    continue
+                
+                # Determine map type
+                map_type = "point"
+                if metric.get("map_config") and metric["map_config"].get("chart_type_preference"):
+                    map_type = metric["map_config"]["chart_type_preference"]
+                elif metric.get("location_fields") and len(metric["location_fields"]) > 0:
+                    if any("lat" in str(field).lower() or "lon" in str(field).lower() for field in metric["location_fields"]):
+                        map_type = "point"
+                    elif any("address" in str(field).lower() for field in metric["location_fields"]):
+                        map_type = "address"
+                
+                # Generate map title
+                map_title = f"{metric['metric_name']}"
+                if district != "0":
+                    map_title += f" - District {district}"
+                if anomaly_type:
+                    map_title += f" - {anomaly_type}"
+                
+                # Generate the map
+                map_result = generate_map(
+                    context_variables={
+                        "dataset": dataset,
+                        "map_config": metric.get("map_config"),
+                        "executed_query_url": executed_query_url
+                    },
+                    map_title=map_title,
+                    map_type=map_type,
+                    location_data="from_context",
+                    map_metadata={
+                        "description": f"Map showing {metric['metric_name']} data",
+                        "metric_id": metric_id,
+                        "district": district,
+                        "period_type": period_type,
+                        "time_periods": time_periods,
+                        "anomaly_type": anomaly_type,
+                        "anomaly_field_name": anomaly_field_name,
+                        "color_field": color_field,
+                        "scale_dots": scale_dots,
+                        "center_lat": center_lat,
+                        "center_lng": center_lng,
+                        "radius": radius
+                    },
+                    metric_id=metric_id,
+                    map_provider="mapbox",
+                    preview_mode=preview_mode,
+                    save_to_database=save_to_database
+                )
+                
+                if map_result and "error" not in map_result:
+                    if save_to_database and map_result.get("map_id"):
+                        generated_map_ids.append(map_result["map_id"])
+                        generated_maps.append({
+                            "map_id": map_result["map_id"],
+                            "metric_id": metric_id,
+                            "metric_name": metric['metric_name'],
+                            "data_points": map_result.get("data_points", 0)
+                        })
+                        total_data_points += map_result.get("data_points", 0)
+                    elif preview_mode:
+                        # In preview mode, store location_data for later use
+                        generated_maps.append({
+                            "metric_id": metric_id,
+                            "metric_name": metric['metric_name'],
+                            "location_data": map_result.get("location_data", []),
+                            "data_points": len(map_result.get("location_data", []))
+                        })
+                        total_data_points += len(map_result.get("location_data", []))
+                else:
+                    logger.warning(f"Failed to generate map for metric {metric_id}: {map_result.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                logger.error(f"Error generating map for metric {metric_id}: {str(e)}", exc_info=True)
+                continue
+        
+        cursor.close()
+        conn.close()
+        
+        if len(generated_map_ids) == 0 and not preview_mode:
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": "Failed to generate any maps"}
+            )
+        
+        # If saving to database, create a parent multi-layer map entry
+        if save_to_database and len(generated_map_ids) > 0:
+            # Create a parent map entry that references all child maps
+            parent_title = f"Multi-Layer Map ({len(generated_map_ids)} layers)"
+            if district != "0":
+                parent_title += f" - District {district}"
+            
+            parent_metadata = {
+                "is_multi_layer": True,
+                "layer_map_ids": generated_map_ids,
+                "metric_ids": metric_ids,
+                "district": district,
+                "period_type": period_type,
+                "time_periods": time_periods,
+                "anomaly_type": anomaly_type,
+                "center_lat": center_lat,
+                "center_lng": center_lng,
+                "radius": radius,
+                "description": f"Multi-layer map with {len(generated_map_ids)} metrics"
+            }
+            
+            # Insert parent map
+            # First, ensure the constraint allows 'multi_layer' type
+            conn = get_postgres_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    ALTER TABLE maps 
+                    DROP CONSTRAINT IF EXISTS maps_type_check
+                """)
+                cursor.execute("""
+                    ALTER TABLE maps 
+                    ADD CONSTRAINT maps_type_check 
+                    CHECK (type IN ('supervisor_district', 'police_district', 'analysis_neighborhood', 'intersection', 'point', 'address', 'symbol', 'multi_layer'))
+                """)
+                conn.commit()
+                logger.info("Updated maps_type_check constraint to include multi_layer")
+            except Exception as e:
+                logger.warning(f"Could not update constraint (may already be updated): {str(e)}")
+                conn.rollback()
+            
+            # Now insert the parent map
+            cursor.execute("""
+                INSERT INTO maps (
+                    title, type, location_data, metadata, active, created_at, updated_at, metric_id
+                ) VALUES (
+                    %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s
+                ) RETURNING id
+            """, (
+                parent_title,
+                "multi_layer",
+                json.dumps([]),  # Empty location_data for parent
+                json.dumps(parent_metadata),
+                True,
+                str(metric_ids[0]) if metric_ids else None  # Use first metric_id as reference
+            ))
+            
+            parent_map_id = cursor.fetchone()[0]
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            logger.info(f"Created parent multi-layer map with ID {parent_map_id}, containing {len(generated_map_ids)} layers")
+            
+            return JSONResponse(content={
+                "status": "success",
+                "message": f"Successfully generated multi-layer map with {len(generated_map_ids)} layers",
+                "map_id": parent_map_id,
+                "layer_map_ids": generated_map_ids,
+                "view_url": f"/backend/map-chart?id={parent_map_id}&embedded=true",
+                "data_points": total_data_points,
+                "layers": generated_maps
+            })
+        else:
+            # Preview mode - return location_data for all maps
+            return JSONResponse(content={
+                "status": "success",
+                "message": f"Preview generated for {len(generated_maps)} metrics",
+                "location_data": [m.get("location_data", []) for m in generated_maps],
+                "data_points": total_data_points,
+                "layers": generated_maps
+            })
+        
+    except Exception as e:
+        logger.error(f"Error generating multi-layer map: {str(e)}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": f"Internal server error: {str(e)}"}

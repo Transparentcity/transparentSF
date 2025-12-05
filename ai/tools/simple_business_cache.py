@@ -98,6 +98,9 @@ class SimpleBusinessCache:
         """
         Return True if the address indicates an upper-floor/unit (non-storefront).
         This helps identify street-level commercial spaces vs upper floor units.
+        
+        Updated logic: All units with numbers are considered upper floor.
+        Letters (A, B, C, etc.) are considered ground floor.
         """
         if not full_address:
             return False
@@ -115,14 +118,43 @@ class SimpleBusinessCache:
         if re.search(r'\b(2ND|3RD|4TH|5TH|6TH|7TH|8TH|9TH|10TH|11TH|12TH)\b', s):
             return True
         
+        # Parse address to extract unit component
+        # Extract street number at the start
+        number_match = re.match(r'^(\d+(?:-\d+)?)', s)
+        if number_match:
+            street_number = number_match.group(1)
+            rest = s[len(street_number):].strip()
+            
+            # Try to extract unit identifier
+            unit = ""
+            unit_patterns = [
+                (r'^([A-Z]|#[A-Z0-9]+)\s+(.+)$', 1, 2),  # Unit at beginning
+                (r'\s+([A-Z]|#[A-Z0-9]+)$', 1, None),   # Unit at end
+                (r'\s+(?:APT|APARTMENT|UNIT|STE|SUITE|RM|ROOM|FL|FLOOR)\s*([A-Z0-9]+)', 1, None),
+                (r'\s+(\d+[A-Z]?)$', 1, None),  # Trailing number
+            ]
+            
+            for pattern, unit_group, street_group in unit_patterns:
+                match = re.search(pattern, rest) if street_group is None else re.match(pattern, rest)
+                if match:
+                    unit = match.group(unit_group).replace('#', '').strip()
+                    break
+            
+            # If unit exists and contains any digits, it's upper floor
+            if unit:
+                # Check if unit contains any numeric digits
+                if re.search(r'\d', unit):
+                    return True
+                # Units with letter+number combo (e.g., "2A", "23W") are upper floor
+                if re.search(r'[A-Z]\d|\d[A-Z]', unit):
+                    return True
+        
         # Trailing numeric token (e.g., "945 TARAVAL ST 1045")
-        # But exclude 100s addresses which are typically ground floor
+        # All numeric units are now considered upper floor (changed from >= 200)
         trailing_number_match = re.search(r'\s([0-9]+)\s*$', s)
         if trailing_number_match:
-            trailing_number = int(trailing_number_match.group(1))
-            # Only consider it upper floor if it's 200 or higher
-            if trailing_number >= 200:
-                return True
+            # Any trailing number is upper floor (not just >= 200)
+            return True
         
         # Addresses ending with letter+number combo (e.g., "101 LOMBARD ST 23W")
         if re.search(r'\s[0-9]+[A-Z]\s*$', s):
@@ -1636,8 +1668,9 @@ class SimpleBusinessCache:
                 logger.error(f"Error fetching/storing zoning data: {e}", exc_info=True)
                 zoning_stats = {'total': 0, 'successful': 0, 'errors': 0}
             
-            # Update has_commercial_tax_filing flags
-            tax_filing_count = self.update_tax_filing_flags()
+            # Skip tax filing flag update - not using vacancy tax data anymore
+            # tax_filing_count = self.update_tax_filing_flags()
+            tax_filing_count = 0
             
             # Update zoning_district using spatial matching
             try:
@@ -1655,7 +1688,7 @@ class SimpleBusinessCache:
                 'business_cache': business_stats,
                 'tax_cache': tax_stats,
                 'zoning_cache': zoning_stats,
-                'tax_filing_matches': tax_filing_count,
+                'tax_filing_matches': tax_filing_count,  # Skipped - not using vacancy tax data
                 'zoning_district_matches': zoning_match_count,
                 'elapsed_time': elapsed_time
             }

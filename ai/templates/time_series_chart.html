@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Time Series Chart | TransparentSF</title>
+    <title id="page-title">San Francisco Data | TransparentSF</title>
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -28,14 +28,26 @@
             --warm-coral: #FF6B5A;
             --sky-blue: #71B2CA;
             --ink-black: #222222;
+            --accent-color: #ad35fa;
+            --accent-hover: #9625e0;
+        }
+        
+        [data-theme="dark"] {
+            --accent-color: #c44dff;
+            --accent-hover: #ad35fa;
         }
         
         body {
             font-family: 'IBM Plex Sans', Arial, sans-serif;
             color: var(--ink-black);
             background-color: white;
-            padding: 0; /* Remove default padding to allow full width */
+            padding: 20px; /* Default padding for full view */
             font-size: 14px;
+        }
+        
+        /* Remove padding in chart-section-mode (embedded) */
+        body.chart-section-mode {
+            padding: 0;
         }
         
         [data-theme="dark"] body {
@@ -45,11 +57,18 @@
         
         .chart-container {
             background-color: white;
-            border-radius: 8px;
-            padding: 10px;
-            margin: 0; /* Remove auto centering */
+            border-radius: 4px;
+            padding: 16px;
+            margin: 0 auto;
             box-shadow: none;
-            max-width: 600px; /* Cap width at 600px */
+            max-width: 100%;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        
+        /* In chart-section-mode (embedded), limit width */
+        body.chart-section-mode .chart-container {
+            max-width: 600px;
+            margin: 0;
         }
         
         [data-theme="dark"] .chart-container {
@@ -57,68 +76,23 @@
             overflow: visible;
             position: relative;
             display: flex;
-            justify-content: flex-start; /* Left justify instead of center */
+            justify-content: flex-start;
             align-items: center;
             width: 100%;
-            max-width: 600px; /* Cap width at 600px */
-            border: none;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             box-sizing: border-box;
         }
         
-        /* Add corner shading elements */
-        .chart-container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 61.8%;
-            height: 61.8%;
-            border-top: 2px solid rgba(0, 0, 0, 0.2);
-            border-right: 2px solid rgba(0, 0, 0, 0.2);
-            border-top-right-radius: 8px;
-            display: block;
-            pointer-events: none;
-            z-index: 1; /* Ensure framing appears above chart content */
-            box-sizing: border-box;
-            /* Use CSS custom properties for dynamic sizing with fallback */
-            max-width: calc(var(--container-width, 61.8%) * 0.618);
-            max-height: calc(var(--container-height, 61.8%) * 0.618);
-        }
-        
-        .chart-container::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 61.8%;
-            height: 61.8%;
-            border-bottom: 2px solid rgba(0, 0, 0, 0.2);
-            border-left: 2px solid rgba(0, 0, 0, 0.2);
-            border-bottom-left-radius: 8px;
-            display: block;
-            pointer-events: none;
-            z-index: 1; /* Ensure framing appears above chart content */
-            box-sizing: border-box;
-            /* Use CSS custom properties for dynamic sizing with fallback */
-            max-width: calc(var(--container-width, 61.8%) * 0.618);
-            max-height: calc(var(--container-height, 61.8%) * 0.618);
-        }
-
-        /* Dark mode corner frames */
-        [data-theme="dark"] .chart-container::before {
-            border-top: 2px solid rgba(255, 255, 255, 0.3);
-            border-right: 2px solid rgba(255, 255, 255, 0.3);
-        }
-
-        [data-theme="dark"] .chart-container::after {
-            border-bottom: 2px solid rgba(255, 255, 255, 0.3);
-            border-left: 2px solid rgba(255, 255, 255, 0.3);
+        /* In chart-section-mode (embedded), limit dark mode width */
+        [data-theme="dark"] body.chart-section-mode .chart-container {
+            max-width: 600px;
         }
         
         .header {
-            color: var(--spruce-green);
-            margin-bottom: 15px;
+            color: var(--accent-color);
+            margin-bottom: 16px;
             font-size: 1.5rem;
+            font-weight: 600;
         }
         
         .loading {
@@ -138,17 +112,19 @@
         }
         
         .metadata {
-            background-color: rgba(246, 241, 234, 0.7);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 15px;
+            background-color: rgba(173, 53, 250, 0.05);
+            border-radius: 4px;
+            padding: 16px;
+            margin-bottom: 16px;
             font-size: 0.9rem;
+            border: 1px solid rgba(173, 53, 250, 0.1);
         }
         
         /* Dark mode support for metadata */
         [data-theme="dark"] .metadata {
-            background-color: rgba(30, 30, 30, 0.8);
+            background-color: rgba(196, 77, 255, 0.08);
             color: #ffffff;
+            border-color: rgba(196, 77, 255, 0.15);
         }
         
         .chart-caption {
@@ -160,11 +136,12 @@
         }
         
         .badge {
-            background-color: var(--spruce-green);
+            background-color: var(--accent-color);
             color: white;
             font-weight: normal;
-            padding: 3px 8px;
+            padding: 4px 10px;
             font-size: 0.75rem;
+            border-radius: 4px;
         }
         
         #time-series-chart {
@@ -211,12 +188,17 @@
         
         /* Responsive adjustments */
         @media (max-width: 576px) {
-            body {
-                padding: 10px;
+            body:not(.chart-section-mode) {
+                padding: 15px;
+            }
+            
+            .container {
+                padding-left: 15px;
+                padding-right: 15px;
             }
             
             .chart-container {
-                padding: 8px;
+                padding: 12px;
             }
             
             .metadata {
@@ -272,8 +254,8 @@
                 max-width: 100%;
             }
             
-            body {
-                padding: 5px;
+            body:not(.chart-section-mode) {
+                padding: 10px;
             }
         }
         
@@ -495,11 +477,20 @@
             height: auto;
         }
         
-        /* Remove Bootstrap container constraints for all modes to allow full width */
+        /* Container defaults for full view mode */
         .container {
+            max-width: 1200px !important;
+            margin: 0 auto;
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+        
+        /* Remove Bootstrap container constraints in chart-section-mode to allow full width */
+        body.chart-section-mode .container {
             max-width: none !important;
             padding-left: 0 !important;
             padding-right: 0 !important;
+            margin: 0;
         }
         
         body.chart-section-mode .row,
@@ -608,7 +599,7 @@
     <div class="container">
         <div class="row">
             <div class="col-12">
-                <h1 class="header">Time Series Chart</h1>
+                <h1 class="header" id="page-header">San Francisco Data</h1>
                 
                 <!-- Metadata will be displayed here -->
                 <div id="metadata" class="metadata"></div>
@@ -2389,6 +2380,29 @@
             return Math.sqrt(avgSquareDiff);
         }
         
+        // Function to update page title with San Francisco format
+        function updatePageTitle(metricName, latestPeriod, districtName) {
+            // Format the title as "San Francisco [Metric Name] [Month Year]"
+            let title = `San Francisco ${metricName}`;
+            
+            // Add district if not citywide
+            if (districtName && districtName !== 'Citywide') {
+                title += ` ${districtName}`;
+            }
+            
+            // Add the latest period
+            if (latestPeriod) {
+                title += ` ${latestPeriod}`;
+            }
+            
+            // Update both the page title and header
+            document.title = title;
+            const pageHeader = document.getElementById('page-header');
+            if (pageHeader) {
+                pageHeader.textContent = title;
+            }
+        }
+        
         // Function to display metadata
         function displayMetadata(data) {
             // Get metadata fields
@@ -2402,6 +2416,32 @@
                 metadataEl.innerHTML = '<p>No data available</p>';
                 return;
             }
+            
+            // Get the latest period for the title
+            const latestPeriodStr = timeSeriesData[timeSeriesData.length - 1].time_period;
+            const latestDate = (() => {
+                if (latestPeriodStr.includes('W') && latestPeriodStr.includes('-')) {
+                    const [yearPart, weekPart] = latestPeriodStr.split('-');
+                    const year = parseInt(yearPart);
+                    const weekNum = parseInt(weekPart.replace('W', ''));
+                    const jan1 = new Date(year, 0, 1);
+                    const daysUntilMonday = (7 - jan1.getDay()) % 7;
+                    const firstMonday = new Date(jan1.getTime() + daysUntilMonday * 24 * 60 * 60 * 1000);
+                    return new Date(firstMonday.getTime() + (weekNum - 1) * 7 * 24 * 60 * 60 * 1000);
+                } else {
+                    return new Date(latestPeriodStr);
+                }
+            })();
+            
+            const latestPeriodFormatted = (() => {
+                const month = latestDate.getMonth();
+                const year = latestDate.getFullYear();
+                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                return `${months[month]} ${year}`;
+            })();
+            
+            // Update the page title with the new format
+            updatePageTitle(metricName, latestPeriodFormatted, districtName);
             
             // Check if we have grouped data
             const hasGroups = timeSeriesData.some(item => item.group_value);

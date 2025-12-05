@@ -1180,7 +1180,12 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                                     map_metadata={
                                         "period": f"{second_last_month_display} to {last_month_display}",
                                         "description": f"Percent change in {query_name} by supervisor district",
-                                        "map_type": "delta"
+                                        "map_type": "delta",
+                                        "greendirection": metric_info.get('greendirection', 'up'),  # Critical for color scheme!
+                                        "metric_info": {
+                                            "item_noun": metric_info.get('item_noun', 'Items'),
+                                            "greendirection": metric_info.get('greendirection', 'up')
+                                        }
                                     },
                                     metric_id=metric_id,
                                     group_field="supervisor_district",
@@ -1392,7 +1397,12 @@ def process_metric_analysis(metric_info, period_type='month', process_districts=
                                     map_metadata={
                                         "period": f"{last_month_display}",
                                         "description": f"Percent change in {query_name} by analysis neighborhood",
-                                        "map_type": "delta"
+                                        "map_type": "delta",
+                                        "greendirection": metric_info.get('greendirection', 'up'),  # Critical for color scheme!
+                                        "metric_info": {
+                                            "item_noun": metric_info.get('item_noun', 'Items'),
+                                            "greendirection": metric_info.get('greendirection', 'up')
+                                        }
                                     },
                                     metric_id=metric_id,
                                     group_field="analysis_neighborhood",

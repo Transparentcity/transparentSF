@@ -133,14 +133,15 @@ def _create_previous_period_query(query: str, period_type: str = "month") -> str
     
     # Handle hardcoded date ranges for month/year/quarter comparisons
     if period_type in ["month", "year", "quarter"]:
-        # Pattern to match hardcoded date ranges like "2025-09-01" AND "2025-09-30"
-        def modify_date_range(match):
-            start_year = int(match.group(1))
-            start_month = int(match.group(2))
-            start_day = int(match.group(3))
-            end_year = int(match.group(4))
-            end_month = int(match.group(5))
-            end_day = int(match.group(6))
+        # Pattern to match hardcoded date ranges like "field >= '2025-09-01' AND field <= '2025-09-30'"
+        def create_modified_range(match):
+            start_year = int(match.group(2))
+            start_month = int(match.group(3))
+            start_day = int(match.group(4))
+            field_name_end = match.group(5)  # Capture end field name
+            end_year = int(match.group(6))
+            end_month = int(match.group(7))
+            end_day = int(match.group(8))
             
             # Create datetime objects
             start_date = datetime(start_year, start_month, start_day)
@@ -173,18 +174,11 @@ def _create_previous_period_query(query: str, period_type: str = "month") -> str
             prev_start_str = prev_start_date.strftime("%Y-%m-%d")
             prev_end_str = prev_end_date.strftime("%Y-%m-%d")
             
-            return f"'{prev_start_str}' AND {match.group(7)} <= '{prev_end_str}'"
+            return f"{match.group(1)} >= '{prev_start_str}' AND {field_name_end} <= '{prev_end_str}'"
         
-        # Pattern to match: field >= 'YYYY-MM-DD' AND field <= 'YYYY-MM-DD'
         pattern = r"(\w+)\s*>=\s*'(\d{4})-(\d{2})-(\d{2})'\s*AND\s*(\w+)\s*<=\s*'(\d{4})-(\d{2})-(\d{2})'"
         
-        previous_query = re.sub(pattern, modify_date_range, query, flags=re.IGNORECASE)
-        
-        # If no pattern matched, try simpler patterns
-        if previous_query == query:
-            # Try pattern: field >= 'YYYY-MM-DD' AND field <= 'YYYY-MM-DD' (same field)
-            pattern2 = r"(\w+)\s*>=\s*'(\d{4})-(\d{2})-(\d{2})'\s*AND\s*\1\s*<=\s*'(\d{4})-(\d{2})-(\d{2})'"
-            previous_query = re.sub(pattern2, modify_date_range, query, flags=re.IGNORECASE)
+        previous_query = re.sub(pattern, create_modified_range, query, flags=re.IGNORECASE)
         
         if previous_query != query:
             logger.info(f"Created {period_type} previous period query: {previous_query}")
@@ -219,7 +213,18 @@ def _create_previous_period_query(query: str, period_type: str = "month") -> str
     for pattern, replacement in patterns:
         previous_query = re.sub(pattern, replacement, previous_query, flags=re.IGNORECASE)
     
-    logger.info(f"Created previous period query: {previous_query}")
+    # Check if query was actually modified
+    if previous_query == query:
+        logger.error(f"⚠️  DELTA MAP ERROR: Query was NOT modified for previous period!")
+        logger.error(f"Original query: {query}")
+        logger.error(f"This will result in identical current/previous values (white map)")
+        logger.error(f"Query must contain one of these patterns:")
+        logger.error(f"  - date_trunc_ym(field) = date_trunc_ym(CURRENT_DATE)")
+        logger.error(f"  - field >= CURRENT_DATE")
+        logger.error(f"  - field >= 'YYYY-MM-DD' AND field <= 'YYYY-MM-DD'")
+    else:
+        logger.info(f"✅ Successfully created previous period query: {previous_query}")
+    
     return previous_query
 
 def generate_map_tool(context_variables: Dict[str, Any], map_title: str, map_type: str, 

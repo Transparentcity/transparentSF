@@ -354,8 +354,10 @@
             border: 1px solid var(--border-primary);
             border-radius: 6px;
             padding: 15px;
-            cursor: pointer;
             transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         .map-card:hover {
@@ -385,6 +387,47 @@
             justify-content: space-between;
             font-size: 0.8em;
             color: var(--text-secondary);
+        }
+
+        .dw-version-btn {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: auto;
+        }
+
+        .dw-version-btn:hover:not(:disabled) {
+            background-color: #8a2fcf;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(173, 53, 250, 0.3);
+        }
+
+        .dw-version-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .dw-version-btn i {
+            font-size: 0.9em;
+        }
+
+        .dw-version-btn.dw-exists {
+            background-color: #10b981;
+            text-decoration: none;
+        }
+
+        .dw-version-btn.dw-exists:hover {
+            background-color: #059669;
         }
 
         .toggle-nav-btn {
@@ -1014,7 +1057,9 @@
             "title": "{{ map_data.title or "Untitled Map" }}",
             "type": "{{ map_data.type }}",
             "locationData": {{ (location_data | tojson) if location_data else '[]' }},
-            "metadata": {{ (metadata | tojson) if metadata else '{}' }}
+            "metadata": {{ (metadata | tojson) if metadata else '{}' }},
+            "isMultiLayer": {{ 'true' if is_multi_layer else 'false' }},
+            "layerMaps": {{ (layer_maps | tojson) if is_multi_layer and layer_maps else '[]' }}
         }
     </script>
     
@@ -1114,6 +1159,13 @@
             
             // Always show the map title, even if metadata is not available
             const mapTitle = mapData.title || "Untitled Map";
+            
+            // For multi-layer maps, show layer count
+            if (mapData.isMultiLayer && mapData.layerMaps && mapData.layerMaps.length > 0) {
+                const totalPoints = mapData.layerMaps.reduce((sum, layer) => sum + (layer.location_data || []).length, 0);
+                embeddedSubtitleElement.innerHTML = `<strong>${mapTitle}</strong> • ${mapData.layerMaps.length} layers • ${totalPoints} points`;
+                return;
+            }
             
             if (!mapData.metadata) {
                 console.log('No metadata available for embedded subtitle calculation');
@@ -1247,10 +1299,16 @@
         function loadMapData() {
             try {
                 console.log('Loading map data for type:', mapData.type);
-                if (mapData.type === 'supervisor_district' || mapData.type === 'analysis_neighborhood') {
+                
+                // Check if this is a multi-layer map
+                if (mapData.isMultiLayer && mapData.layerMaps && mapData.layerMaps.length > 0) {
+                    loadMultiLayerMap();
+                } else if (mapData.type === 'supervisor_district' || mapData.type === 'analysis_neighborhood') {
                     loadDistrictMap();
                 } else if (mapData.type === 'point' || mapData.type === 'symbol' || mapData.type === 'address') {
                     loadPointMap();
+                } else if (mapData.type === 'multi_layer') {
+                    loadMultiLayerMap();
                 } else {
                     showError('Unsupported map type: ' + mapData.type);
                 }
@@ -2076,7 +2134,267 @@
             return null;
         }
 
+        // Load multi-layer map
+        function loadMultiLayerMap() {
+            if (!mapData.layerMaps || mapData.layerMaps.length === 0) {
+                showError('No layer data available for this multi-layer map');
+                return;
+            }
+
+            console.log(`Loading multi-layer map with ${mapData.layerMaps.length} layers`);
+
+            // Wait for map to be ready
+            if (!map.loaded()) {
+                map.on('load', loadMultiLayerMap);
+                return;
+            }
+
+            // Define layer colors - use brand palette colors
+            const computedStyle = getComputedStyle(document.documentElement);
+            const layerColors = [
+                computedStyle.getPropertyValue('--bright-purple').trim() || '#ad35fa',
+                computedStyle.getPropertyValue('--warm-coral').trim() || '#FF6B5A',
+                computedStyle.getPropertyValue('--sky-blue').trim() || '#71B2CA',
+                computedStyle.getPropertyValue('--spruce-green').trim() || '#4A7463',
+                '#FFD93D', // Yellow
+                '#6BCF7F', // Green
+                '#FF8C42', // Orange
+                '#9B59B6'  // Purple
+            ];
+
+            // Create bounds to fit all datasets
+            const bounds = new mapboxgl.LngLatBounds();
+
+            // Process and add each layer
+            mapData.layerMaps.forEach((layerMap, index) => {
+                const layerId = `layer${index + 1}`;
+                const layerColor = layerColors[index % layerColors.length];
+                const layerTitle = layerMap.title || `Layer ${index + 1}`;
+
+                // Process layer data
+                const layerFeatures = processLayerData(layerMap, layerColor, bounds, layerTitle);
+                
+                if (layerFeatures.length > 0) {
+                    addMapLayer(layerId, layerFeatures, layerColor, layerTitle);
+                }
+            });
+
+            // Fit map to show all points
+            if (!bounds.isEmpty()) {
+                map.fitBounds(bounds, {
+                    padding: 50,
+                    maxZoom: 15
+                });
+            }
+
+            // Build layer legend
+            buildMultiLayerLegend();
+
+            hideLoading();
+        }
+
+        // Process layer data into GeoJSON features
+        function processLayerData(layerMap, defaultColor, bounds, layerTitle) {
+            const locationData = layerMap.location_data || [];
+            if (!Array.isArray(locationData) || locationData.length === 0) {
+                return [];
+            }
+
+            return locationData.map((item, idx) => {
+                let coordinates;
+                
+                // Handle different coordinate formats
+                if (item.lon && item.lat) {
+                    coordinates = [item.lon, item.lat];
+                } else if (item.location && item.location.coordinates) {
+                    coordinates = item.location.coordinates;
+                } else if (item.coordinates) {
+                    coordinates = item.coordinates;
+                } else {
+                    console.warn('No coordinates found for item:', item);
+                    return null;
+                }
+
+                bounds.extend(coordinates);
+
+                return {
+                    type: 'Feature',
+                    properties: {
+                        title: item.title || item.tooltip || `Point ${idx}`,
+                        description: item.description || '',
+                        value: item.value || 1,
+                        color: defaultColor, // Always use the layer's default color
+                        strokeColor: item.strokeColor || '#ffffff',
+                        tooltip_fields: item.tooltip_fields || {},
+                        scale: item.scale || 1,
+                        layer_title: layerTitle,
+                        layer_color: defaultColor
+                    },
+                    geometry: {
+                        type: 'Point',
+                        coordinates: coordinates
+                    }
+                };
+            }).filter(feature => feature !== null);
+        }
+
+        // Add a map layer to the map
+        function addMapLayer(layerId, features, color, layerTitle) {
+            // Add source
+            map.addSource(layerId, {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: features
+                }
+            });
+
+            // Add circle layer
+            map.addLayer({
+                id: `${layerId}-circles`,
+                type: 'circle',
+                source: layerId,
+                paint: {
+                    'circle-radius': [
+                        'case',
+                        ['has', 'scale'],
+                        ['max', ['*', ['get', 'scale'], 15], 4],
+                        6
+                    ],
+                    'circle-color': color,
+                    'circle-stroke-color': [
+                        'case',
+                        ['has', 'strokeColor'], ['get', 'strokeColor'],
+                        '#ffffff'
+                    ],
+                    'circle-stroke-width': 1,
+                    'circle-opacity': 0.8
+                }
+            });
+
+            // Add hover effect
+            map.on('mouseenter', `${layerId}-circles`, function() {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+
+            map.on('mouseleave', `${layerId}-circles`, function() {
+                map.getCanvas().style.cursor = '';
+            });
+
+            // Add click handler
+            map.on('click', `${layerId}-circles`, function(e) {
+                const properties = e.features[0].properties;
+                const tooltipFields = properties.tooltip_fields || {};
+                
+                let tooltipContent = `<h4>${properties.title}</h4>`;
+                if (properties.layer_title) {
+                    tooltipContent += `<p><strong>Layer:</strong> ${properties.layer_title}</p>`;
+                }
+                if (properties.description) {
+                    tooltipContent += `<p><strong>Description:</strong> ${properties.description}</p>`;
+                }
+                tooltipContent += `<p><strong>Value:</strong> ${properties.value}</p>`;
+                
+                // Add additional tooltip fields
+                if (Object.keys(tooltipFields).length > 0) {
+                    tooltipContent += '<hr><h5>Additional Details:</h5>';
+                    for (const [field, value] of Object.entries(tooltipFields)) {
+                        if (field !== 'title' && field !== 'description' && field !== 'value' && field !== 'scale') {
+                            const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            tooltipContent += `<p><strong>${fieldLabel}:</strong> ${value}</p>`;
+                        }
+                    }
+                }
+                
+                // Show tooltip (reuse existing tooltip mechanism if available)
+                if (typeof showTooltip === 'function') {
+                    showTooltip(e.lngLat, tooltipContent);
+                } else {
+                    new mapboxgl.Popup()
+                        .setLngLat(e.lngLat)
+                        .setHTML(tooltipContent)
+                        .addTo(map);
+                }
+            });
+        }
+
+        // Build legend for multi-layer maps
+        function buildMultiLayerLegend() {
+            const legendContainer = document.getElementById('legend-items');
+            const embeddedLegendContainer = document.getElementById('embedded-legend-items');
+            
+            if (!legendContainer) return;
+            legendContainer.innerHTML = '';
+            if (embeddedLegendContainer) {
+                embeddedLegendContainer.innerHTML = '';
+            }
+
+            // Get colors
+            const computedStyle = getComputedStyle(document.documentElement);
+            const layerColors = [
+                computedStyle.getPropertyValue('--bright-purple').trim() || '#ad35fa',
+                computedStyle.getPropertyValue('--warm-coral').trim() || '#FF6B5A',
+                computedStyle.getPropertyValue('--sky-blue').trim() || '#71B2CA',
+                computedStyle.getPropertyValue('--spruce-green').trim() || '#4A7463',
+                '#FFD93D', '#6BCF7F', '#FF8C42', '#9B59B6'
+            ];
+
+            // Create legend header
+            const headerEl = document.createElement('div');
+            headerEl.className = 'legend-item';
+            headerEl.innerHTML = '<span class="legend-label" style="font-weight: 600;">Map Layers</span>';
+            legendContainer.appendChild(headerEl);
+            if (embeddedLegendContainer) {
+                const embeddedHeader = headerEl.cloneNode(true);
+                embeddedLegendContainer.appendChild(embeddedHeader);
+            }
+
+            // Add toggle for each layer
+            mapData.layerMaps.forEach((layerMap, index) => {
+                const layerId = `layer${index + 1}`;
+                const layerColor = layerColors[index % layerColors.length];
+                const layerTitle = layerMap.title || `Layer ${index + 1}`;
+                const pointCount = (layerMap.location_data || []).length;
+
+                const layerEl = document.createElement('div');
+                layerEl.className = 'legend-item';
+                layerEl.innerHTML = `
+                    <div class="legend-label" onclick="toggleLayer('${layerId}', !document.getElementById('${layerId}-toggle').checked)" style="cursor: pointer;">
+                        <span style="display: inline-block; width: 12px; height: 12px; background-color: ${layerColor}; border-radius: 50%; margin-right: 8px; border: 1px solid #fff;"></span>
+                        ${layerTitle} (${pointCount} points)
+                    </div>
+                    <label class="legend-toggle">
+                        <input type="checkbox" id="${layerId}-toggle" checked onchange="toggleLayer('${layerId}', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                `;
+                legendContainer.appendChild(layerEl);
+                
+                if (embeddedLegendContainer) {
+                    const embeddedLayer = layerEl.cloneNode(true);
+                    embeddedLegendContainer.appendChild(embeddedLayer);
+                }
+            });
+        }
+
+        // Toggle layer visibility (make it globally accessible)
+        window.toggleLayer = function(layerId, visible) {
+            const layerName = `${layerId}-circles`;
+            if (map && map.getLayer(layerName)) {
+                if (visible) {
+                    map.setLayoutProperty(layerName, 'visibility', 'visible');
+                } else {
+                    map.setLayoutProperty(layerName, 'visibility', 'none');
+                }
+            }
+        };
+
         function buildLegendFromSavedData() {
+            // Skip legend building for multi-layer maps (handled by buildMultiLayerLegend)
+            if (mapData.isMultiLayer && mapData.layerMaps && mapData.layerMaps.length > 0) {
+                return;
+            }
+
             const legendContainer = document.getElementById('legend-items');
             const embeddedLegendContainer = document.getElementById('embedded-legend-items');
             if (!legendContainer) return;
@@ -2400,15 +2718,35 @@
                 const isCurrent = map.id === currentMapId;
                 const createdDate = new Date(map.created_at).toLocaleDateString();
                 const mapType = map.type || 'Unknown';
+                const hasDatawrapperUrl = map.published_url && map.published_url.includes('datawrapper');
+                
+                // Button HTML based on whether DW version exists
+                let buttonHtml;
+                if (hasDatawrapperUrl) {
+                    buttonHtml = `
+                        <a href="${map.published_url}" target="_blank" class="dw-version-btn dw-exists" onclick="event.stopPropagation()" title="View DataWrapper Version">
+                            <i class="fas fa-external-link-alt"></i> View DW
+                        </a>
+                    `;
+                } else {
+                    buttonHtml = `
+                        <button class="dw-version-btn" onclick="event.stopPropagation(); createDatawrapperVersion('${map.id}')" title="Create DataWrapper Version">
+                            <i class="fas fa-chart-area"></i> Create DW
+                        </button>
+                    `;
+                }
                 
                 return `
-                    <div class="map-card ${isCurrent ? 'current' : ''}" onclick="navigateToMap('${map.id}')">
-                        <h4>${map.title || 'Untitled Map'}</h4>
-                        <p>Type: ${mapType}</p>
-                        <div class="meta">
-                            <span>${createdDate}</span>
-                            <span>${mapType}</span>
+                    <div class="map-card ${isCurrent ? 'current' : ''}">
+                        <div onclick="navigateToMap('${map.id}')" style="cursor: pointer; flex: 1;">
+                            <h4>${map.title || 'Untitled Map'}</h4>
+                            <p>Type: ${mapType}</p>
+                            <div class="meta">
+                                <span>${createdDate}</span>
+                                <span>${mapType}</span>
+                            </div>
                         </div>
+                        ${buttonHtml}
                     </div>
                 `;
             }).join('');
@@ -2423,6 +2761,78 @@
             
             // Navigate to the new map
             window.location.href = `/map/${mapId}`;
+        }
+
+        async function createDatawrapperVersion(mapId) {
+            // Show loading state
+            const button = event.target.closest('button');
+            const originalContent = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+            
+            try {
+                const response = await fetch(`/backend/generate-dw-map?map_id=${mapId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.map_url) {
+                    // Success - show link and open in new tab
+                    button.innerHTML = '<i class="fas fa-check"></i> Created!';
+                    button.style.backgroundColor = '#10b981';
+                    
+                    // Show success message with link
+                    const mapCard = button.closest('.map-card');
+                    const notification = document.createElement('div');
+                    notification.style.cssText = `
+                        background: #10b981;
+                        color: white;
+                        padding: 8px;
+                        border-radius: 4px;
+                        margin-top: 8px;
+                        font-size: 12px;
+                        text-align: center;
+                    `;
+                    notification.innerHTML = `
+                        DataWrapper map created!<br>
+                        <a href="${data.map_url}" target="_blank" style="color: white; text-decoration: underline;">
+                            <i class="fas fa-external-link-alt"></i> Open Map
+                        </a>
+                    `;
+                    mapCard.appendChild(notification);
+                    
+                    // Open the DW map in a new tab
+                    window.open(data.map_url, '_blank');
+                    
+                    // Remove notification after 5 seconds
+                    setTimeout(() => {
+                        notification.remove();
+                        button.innerHTML = originalContent;
+                        button.disabled = false;
+                        button.style.backgroundColor = '';
+                    }, 5000);
+                } else {
+                    throw new Error(data.message || 'Failed to create DataWrapper version');
+                }
+            } catch (error) {
+                console.error('Error creating DataWrapper version:', error);
+                button.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
+                button.style.backgroundColor = '#ef4444';
+                
+                // Show error message
+                alert(`Failed to create DataWrapper version: ${error.message}`);
+                
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    button.innerHTML = originalContent;
+                    button.disabled = false;
+                    button.style.backgroundColor = '';
+                }, 3000);
+            }
         }
 
         // Embedded mode detection and handling

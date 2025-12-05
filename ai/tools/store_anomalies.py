@@ -682,6 +682,27 @@ def _original_get_anomaly_details(
         item = dict(anomaly)
         if 'created_at' in item and isinstance(item['created_at'], datetime.datetime):
             item['created_at'] = item['created_at'].isoformat()
+        
+        # Build chart_data from the database fields for compatibility with chart generation
+        # Combine comparison and recent data into a single chart_data structure
+        comparison_dates = item.get('comparison_dates', [])
+        comparison_counts = item.get('comparison_counts', [])
+        recent_dates = item.get('recent_dates', [])
+        recent_counts = item.get('recent_counts', [])
+        
+        # Create combined dates and values arrays
+        all_dates = list(comparison_dates) + list(recent_dates)
+        all_values = list(comparison_counts) + list(recent_counts)
+        
+        # Create periods array to indicate which period each data point belongs to
+        periods = ['historical'] * len(comparison_dates) + ['recent'] * len(recent_dates)
+        
+        # Add chart_data to the item
+        item['chart_data'] = {
+            'dates': all_dates,
+            'values': all_values,
+            'periods': periods
+        }
 
         cursor.close()
         return item

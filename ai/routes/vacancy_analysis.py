@@ -20,6 +20,63 @@ from background_jobs import job_manager
 # Configure logging
 logger = logging.getLogger(__name__)
 
+def parse_address_components(full_address):
+    """
+    Parse address into components: street_number, street_name, unit.
+    
+    Returns a tuple: (street_number, street_name, unit)
+    - street_number: The numeric part at the start (e.g., "2139", "123-125")
+    - street_name: The street name without unit (e.g., "POLK ST")
+    - unit: The unit identifier if present (e.g., "A", "101", "2B"), empty string if none
+    
+    Examples:
+        "2139 POLK ST A" -> ("2139", "POLK ST", "A")
+        "123 MAIN ST #101" -> ("123", "MAIN ST", "101")
+        "2139 A POLK ST" -> ("2139", "POLK ST", "A")
+        "456 MARKET ST" -> ("456", "MARKET ST", "")
+    """
+    import re
+    if not full_address:
+        return ("", "", "")
+    
+    addr = full_address.strip().upper()
+    
+    # Extract street number at the start (may include hyphens like "123-125")
+    number_match = re.match(r'^(\d+(?:-\d+)?)', addr)
+    if not number_match:
+        # No number found, return the whole thing as street name
+        return ("", addr, "")
+    
+    street_number = number_match.group(1)
+    rest = addr[len(street_number):].strip()
+    
+    # Try to extract unit identifier
+    unit = ""
+    unit_patterns = [
+        (r'^([A-Z]|#[A-Z0-9]+)\s+(.+)$', 1, 2),  # Unit at beginning: "A POLK ST" or "#101 POLK ST"
+        (r'\s+([A-Z]|#[A-Z0-9]+)$', 1, None),   # Unit at end: "POLK ST A" or "POLK ST #101"
+        (r'\s+(?:APT|APARTMENT|UNIT|STE|SUITE|RM|ROOM|FL|FLOOR)\s*([A-Z0-9]+)', 1, None),  # "POLK ST APT 101"
+        (r'\s+(\d+[A-Z]?)$', 1, None),  # Trailing number: "POLK ST 101" or "POLK ST 2A"
+    ]
+    
+    for pattern, unit_group, street_group in unit_patterns:
+        match = re.search(pattern, rest) if street_group is None else re.match(pattern, rest)
+        if match:
+            unit = match.group(unit_group).replace('#', '').strip()
+            if street_group:
+                rest = match.group(street_group)
+            else:
+                # Remove the matched unit from rest
+                rest = rest[:match.start()].strip()
+            break
+    
+    # Clean up street name
+    street_name = rest.strip()
+    street_name = re.sub(r'\s+', ' ', street_name)
+    
+    return (street_number, street_name, unit)
+
+
 def extract_building_address(full_address):
     """Extract building address without unit letters/numbers"""
     if not full_address:
@@ -399,11 +456,17 @@ async def get_vacancy_data(
             return address.strip()
 
         def is_upper_floor_address(full_address: str) -> bool:
-            """Return True if the address indicates an upper-floor/unit (non-storefront)."""
+            """
+            Return True if the address indicates an upper-floor/unit (non-storefront).
+            
+            Updated logic: All units with numbers are considered upper floor.
+            Letters (A, B, C, etc.) are considered ground floor.
+            """
             if not full_address:
                 return False
             import re
             s = full_address.upper()
+            
             # Indicators of units/floors: #digits (allow optional space), APT/UNIT/STE/SUITE/RM/ROOM, FL/FLOOR with optional digits, ordinals
             if re.search(r'#\s*[0-9]+', s):
                 return True
@@ -413,22 +476,36 @@ async def get_vacancy_data(
                 return True
             if re.search(r'\b(2ND|3RD|4TH|5TH|6TH|7TH|8TH|9TH|10TH|11TH|12TH)\b', s):
                 return True
+            
+            # Parse address to get unit component
+            street_number, street_name, unit = parse_address_components(full_address)
+            
+            # If unit exists and contains any digits, it's upper floor
+            if unit:
+                # Check if unit contains any numeric digits
+                if re.search(r'\d', unit):
+                    return True
+                # Units with letter+number combo (e.g., "2A", "23W") are upper floor
+                if re.search(r'[A-Z]\d|\d[A-Z]', unit):
+                    return True
+            
             # Trailing numeric token (e.g., "945 TARAVAL ST 1045")
-            # But exclude 100s addresses which are typically ground floor (e.g., "2001 UNION ST 107")
+            # All numeric units are now considered upper floor (changed from >= 200)
             trailing_number_match = re.search(r'\s([0-9]+)\s*$', s)
             if trailing_number_match:
-                trailing_number = int(trailing_number_match.group(1))
-                # Only consider it upper floor if it's 200 or higher (100s are typically ground floor)
-                if trailing_number >= 200:
-                    return True
-            # Addresses ending with letter (e.g., "101 LOMBARD ST 23W", "101 LOMBARD ST 409W")
+                # Any trailing number is upper floor (not just >= 200)
+                return True
+            
+            # Addresses ending with letter+number combo (e.g., "101 LOMBARD ST 23W", "101 LOMBARD ST 409W")
             if re.search(r'\s[0-9]+[A-Z]\s*$', s):
                 return True
+            
             # Addresses with unit/apartment numbers using hyphen or underscore
             # (e.g., "2443 FILLMORE ST 380-2710", "2443 FILLMORE ST 380_2266")
             # This pattern indicates unit/apartment numbers, not street-level addresses
             if re.search(r'\s\d+[-_]\d+', s):
                 return True
+            
             return False
 
         for record in raw_data:
@@ -982,21 +1059,46 @@ async def get_cached_vacancy_data(
         
         # Helper function to check if address is street level
         def is_street_level(address):
-            """Check if address is street-level (not upper floor)"""
+            """
+            Check if address is street-level (not upper floor).
+            Uses updated logic: all units with numbers are upper floor.
+            Letters (A, B, C, etc.) are ground floor.
+            """
             if not address:
                 return True
             import re
-            # Look for indicators of upper floor units
-            upper_floor_patterns = [
-                r'#\s*\d+',  # #123
-                r'(?:APT|APARTMENT|UNIT|STE|SUITE|RM|ROOM|FL|FLOOR)\s*[A-Z0-9]+',  # APT 2, SUITE 100
-                r'\d{2,}[A-Z]?\s*$',  # 123, 123A at end
-                r'\s\d+[-_]\d+',  # Hyphenated or underscored numbers (e.g., "380-2710", "380_2266") - indicates unit/apartment
-            ]
-            address_upper = address.upper()
-            for pattern in upper_floor_patterns:
-                if re.search(pattern, address_upper):
+            s = address.upper()
+            
+            # Indicators of units/floors
+            if re.search(r'#\s*[0-9]+', s):
+                return False
+            if re.search(r'\b(APT|APARTMENT|UNIT|STE|SUITE|RM|ROOM)\b\s*[A-Z0-9]*', s):
+                return False
+            if re.search(r'\b(FL|FLOOR)\b\s*[0-9A-Z]*', s):
+                return False
+            if re.search(r'\b(2ND|3RD|4TH|5TH|6TH|7TH|8TH|9TH|10TH|11TH|12TH)\b', s):
+                return False
+            
+            # Parse address to extract unit component
+            street_number, street_name, unit = parse_address_components(address)
+            
+            # If unit exists and contains any digits, it's upper floor
+            if unit:
+                if re.search(r'\d', unit):
                     return False
+                if re.search(r'[A-Z]\d|\d[A-Z]', unit):
+                    return False
+            
+            # Trailing numeric token - all numeric units are now considered upper floor
+            if re.search(r'\s([0-9]+)\s*$', s):
+                return False
+            
+            if re.search(r'\s[0-9]+[A-Z]\s*$', s):
+                return False
+            
+            if re.search(r'\s\d+[-_]\d+', s):
+                return False
+            
             return True
         
         def canonicalize_unit_address(full_address):
@@ -2441,6 +2543,7 @@ async def export_vacancy_csv(
         from collections import defaultdict
         from decimal import Decimal
         from datetime import datetime, date
+        import re
         
         cache = SimpleBusinessCache()
         
@@ -2477,6 +2580,10 @@ async def export_vacancy_csv(
                 placeholders = ','.join(['%s'] * len(zoning_list))
                 query += f" AND zoning_district IN ({placeholders})"
                 params.extend(zoning_list)
+            
+            # Apply street_level_only filter at SQL level for consistency with page display
+            if street_level_only:
+                query += " AND is_street_level = true"
             
             query += " LIMIT 250000"
             
@@ -2703,13 +2810,37 @@ async def export_vacancy_csv(
             }
             processed_data.append(building_record)
         
-        # Create CSV content
+        # Helper function to determine even/odd side of street
+        def get_street_side(street_number_str):
+            """
+            Determine if street number is even (one side) or odd (other side).
+            Returns 'Even', 'Odd', or 'Unknown' if can't determine.
+            """
+            if not street_number_str:
+                return 'Unknown'
+            
+            # Extract first number from range (e.g., "123-125" -> "123")
+            first_num_str = street_number_str.split('-')[0].strip()
+            
+            try:
+                first_num = int(first_num_str)
+                return 'Even' if first_num % 2 == 0 else 'Odd'
+            except (ValueError, AttributeError):
+                return 'Unknown'
+        
+        # Create CSV content with parsed address components
         output = io.StringIO()
         writer = csv.writer(output)
         
-        # Write header
+        # Write header with feedback columns first, then parsed address components
         writer.writerow([
-            'Address',
+            'Correct/Incorrect',  # 1 = correct, 0 = incorrect (for QA feedback)
+            'Reason Code',  # Code for explanation (e.g., "can't find address", "business incorrect")
+            'Even/Odd',  # Side of street (Even or Odd)
+            'Street Number',
+            'Street Name',
+            'Unit',
+            'Canonical Address',
             'Status',
             'Ground Level',
             'Occupied Business Name(s)',
@@ -2722,6 +2853,9 @@ async def export_vacancy_csv(
             'Supervisor District',
             'Zoning District'
         ])
+        
+        # Collect all rows for sorting
+        csv_rows = []
         
         # Extract ground-level units from buildings
         for building in processed_data:
@@ -2739,7 +2873,56 @@ async def export_vacancy_csv(
             
             # Filter to street-level units only
             for addr in addresses_data:
-                is_street_level = addr.get('is_street_level') or addr.get('street_level', False)
+                # Use database value but validate with runtime check (same as cached endpoint)
+                db_street_level = addr.get('is_street_level') or addr.get('street_level', False)
+                address_string = addr.get('address') or addr.get('distinct_address') or building.get('full_business_address', '')
+                
+                # Validate with runtime check using updated logic
+                # Import the is_upper_floor_address logic
+                def is_upper_floor_address_check(full_address: str) -> bool:
+                    """Check if address is upper floor using updated logic"""
+                    if not full_address:
+                        return False
+                    import re
+                    s = full_address.upper()
+                    
+                    # Indicators of units/floors
+                    if re.search(r'#\s*[0-9]+', s):
+                        return True
+                    if re.search(r'\b(APT|APARTMENT|UNIT|STE|SUITE|RM|ROOM)\b\s*[A-Z0-9]*', s):
+                        return True
+                    if re.search(r'\b(FL|FLOOR)\b\s*[0-9A-Z]*', s):
+                        return True
+                    if re.search(r'\b(2ND|3RD|4TH|5TH|6TH|7TH|8TH|9TH|10TH|11TH|12TH)\b', s):
+                        return True
+                    
+                    # Parse address to extract unit component
+                    street_number, street_name, unit = parse_address_components(full_address)
+                    
+                    # If unit exists and contains any digits, it's upper floor
+                    if unit:
+                        if re.search(r'\d', unit):
+                            return True
+                        if re.search(r'[A-Z]\d|\d[A-Z]', unit):
+                            return True
+                    
+                    # Trailing numeric token - all numeric units are now considered upper floor
+                    if re.search(r'\s([0-9]+)\s*$', s):
+                        return True
+                    
+                    if re.search(r'\s[0-9]+[A-Z]\s*$', s):
+                        return True
+                    
+                    if re.search(r'\s\d+[-_]\d+', s):
+                        return True
+                    
+                    return False
+                
+                # Validate street level (inverse of upper floor)
+                validated_street_level = not is_upper_floor_address_check(address_string)
+                
+                # Use validated value (override database if different)
+                is_street_level = validated_street_level
                 
                 if street_level_only and not is_street_level:
                     continue
@@ -2829,21 +3012,86 @@ async def export_vacancy_csv(
                 industry_types = '; '.join(sorted(all_industry_types)) if all_industry_types else ''
                 license_types = '; '.join(sorted(all_license_types)) if all_license_types else ''
                 
-                # Write row
-                writer.writerow([
-                    address,
-                    status,
-                    'Yes' if is_street_level else 'No',
-                    occupied_business_names or 'None',
-                    most_recent_closed_business or 'N/A',
-                    close_date or 'N/A',
-                    certificate_numbers or 'None',
-                    industry_types or 'None',
-                    license_types or 'None',
-                    building.get('business_corridor') or 'None',
-                    building.get('supervisor_district') or 'Unknown',
-                    building.get('zoning_district') or 'Unknown'
-                ])
+                # Parse address into components for sorting
+                street_number, street_name, unit = parse_address_components(address)
+                
+                # Determine even/odd side of street
+                street_side = get_street_side(street_number)
+                
+                # Convert street number to integer for numeric sorting (handle ranges like "123-125")
+                street_number_for_sort = street_number.split('-')[0] if street_number else ""
+                try:
+                    street_number_int = int(street_number_for_sort) if street_number_for_sort.isdigit() else 0
+                except (ValueError, AttributeError):
+                    street_number_int = 0
+                
+                # Convert unit to sortable format (letters first, then numbers)
+                # For sorting: empty < letters < numbers
+                if not unit:
+                    unit_sort_key = (0, "")  # Empty units sort first
+                elif unit.isalpha():
+                    unit_sort_key = (1, unit)  # Letters sort after empty, before numbers
+                else:
+                    # Extract numeric part for sorting
+                    unit_num_match = re.search(r'\d+', unit)
+                    unit_num = int(unit_num_match.group(0)) if unit_num_match else 999999
+                    unit_sort_key = (2, unit_num, unit)  # Numbers sort last
+                
+                # Store row data for sorting
+                csv_rows.append({
+                    'correct_incorrect': '',  # Empty for user to fill (1 = correct, 0 = incorrect)
+                    'reason_code': '',  # Empty for user to fill (e.g., "can't find address", "business incorrect")
+                    'even_odd': street_side,  # Calculated: Even, Odd, or Unknown
+                    'street_number': street_number,
+                    'street_name': street_name,
+                    'unit': unit,
+                    'canonical_address': address,
+                    'status': status,
+                    'is_street_level': is_street_level,
+                    'occupied_business_names': occupied_business_names or 'None',
+                    'most_recent_closed_business': most_recent_closed_business or 'N/A',
+                    'close_date': close_date or 'N/A',
+                    'certificate_numbers': certificate_numbers or 'None',
+                    'industry_types': industry_types or 'None',
+                    'license_types': license_types or 'None',
+                    'corridor': building.get('business_corridor') or 'None',
+                    'supervisor_district': building.get('supervisor_district') or 'Unknown',
+                    'zoning_district': building.get('zoning_district') or 'Unknown',
+                    # Sort keys
+                    'sort_street_name': street_name,
+                    'sort_street_number': street_number_int,
+                    'sort_unit': unit_sort_key
+                })
+        
+        # Sort rows: street name (alphabetical), then street number (numeric), then unit (empty < letters < numbers)
+        csv_rows.sort(key=lambda x: (
+            x['sort_street_name'],
+            x['sort_street_number'],
+            x['sort_unit']
+        ))
+        
+        # Write sorted rows
+        for row in csv_rows:
+            writer.writerow([
+                row['correct_incorrect'],  # Empty for user to fill (1 = correct, 0 = incorrect)
+                row['reason_code'],  # Empty for user to fill
+                row['even_odd'],  # Even, Odd, or Unknown
+                row['street_number'],
+                row['street_name'],
+                row['unit'],
+                row['canonical_address'],
+                row['status'],
+                'Yes' if row['is_street_level'] else 'No',
+                row['occupied_business_names'],
+                row['most_recent_closed_business'],
+                row['close_date'],
+                row['certificate_numbers'],
+                row['industry_types'],
+                row['license_types'],
+                row['corridor'],
+                row['supervisor_district'],
+                row['zoning_district']
+            ])
         
         # Prepare filename
         if district:
