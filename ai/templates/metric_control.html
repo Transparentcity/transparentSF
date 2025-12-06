@@ -1007,6 +1007,82 @@
             font-size: 14px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: grab;
+            transition: all 0.3s ease;
+        }
+        
+        .reorder-category-header:hover {
+            background-color: var(--accent-hover);
+            box-shadow: 0 2px 8px rgba(173, 53, 250, 0.3);
+        }
+        
+        .reorder-category-header.dragging {
+            opacity: 0.6;
+            cursor: grabbing;
+            transform: scale(1.02);
+        }
+        
+        .category-header-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .category-drag-handle {
+            cursor: grab;
+            opacity: 0.8;
+            font-size: 16px;
+        }
+        
+        .category-drag-handle:active {
+            cursor: grabbing;
+        }
+        
+        .category-name {
+            flex: 1;
+        }
+        
+        .category-order {
+            font-size: 11px;
+            font-weight: normal;
+            background-color: rgba(255,255,255,0.2);
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 10px;
+        }
+        
+        .category-controls {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .category-btn {
+            background-color: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s ease;
+        }
+        
+        .category-btn:hover:not(:disabled) {
+            background-color: rgba(255,255,255,0.4);
+        }
+        
+        .category-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .category-metrics-count {
+            font-size: 11px;
+            font-weight: normal;
+            opacity: 0.9;
         }
         
         .reorder-item.active {
@@ -1882,8 +1958,12 @@
     <div id="metricReorderModal" class="metric-reorder-modal">
         <div class="metric-reorder-content">
             <button type="button" class="close-modal-btn" onclick="closeMetricReorderModal()">&times;</button>
-            <h2>Reorder Metrics</h2>
-            <p>Drag and drop metrics to reorder them, or use the arrow buttons. The order will affect how they appear in the dashboard and metric selection.</p>
+            <h2>Reorder Categories & Metrics</h2>
+            <p>
+                <strong>Categories:</strong> Use the arrow buttons on category headers to reorder entire categories.<br>
+                <strong>Metrics:</strong> Use the arrow buttons on metrics to reorder within a category.<br>
+                The unified order (Category × 1000 + Position) ensures consistent display everywhere.
+            </p>
             
             <div id="reorderLoadingState" style="display: none; text-align: center; padding: 20px;">
                 <div class="spinner"></div>
@@ -2890,6 +2970,9 @@
         }
         
         // Metric reordering functionality
+        // Store category order for unified display_order calculation
+        let categoryOrder = [];
+        
         async function loadMetricsForReordering() {
             try {
                 const loadingState = document.getElementById('reorderLoadingState');
@@ -2910,10 +2993,10 @@
                     throw new Error(`API error: ${data.message}`);
                 }
                 
-                const metrics = data.metrics || [];
+                const allMetrics = data.metrics || [];
                 
                 // Group metrics by category
-                const groupedMetrics = metrics.reduce((acc, metric) => {
+                const groupedMetrics = allMetrics.reduce((acc, metric) => {
                     if (!acc[metric.category]) {
                         acc[metric.category] = [];
                     }
@@ -2921,9 +3004,24 @@
                     return acc;
                 }, {});
                 
-                // Build the reorder list HTML
+                // Determine category order from existing display_order values
+                // Categories are ordered by the minimum display_order of their metrics
+                const categoryMinOrder = {};
+                Object.entries(groupedMetrics).forEach(([category, metrics]) => {
+                    const minOrder = Math.min(...metrics.map(m => m.display_order || 999));
+                    categoryMinOrder[category] = minOrder;
+                });
+                
+                // Sort categories by their minimum display_order
+                categoryOrder = Object.keys(groupedMetrics).sort((a, b) => {
+                    return (categoryMinOrder[a] || 999) - (categoryMinOrder[b] || 999);
+                });
+                
+                // Build the reorder list HTML with category controls
                 let reorderHtml = '';
-                Object.entries(groupedMetrics).forEach(([category, categoryMetrics]) => {
+                categoryOrder.forEach((category, categoryIndex) => {
+                    const categoryMetrics = groupedMetrics[category];
+                    
                     // Sort metrics within category by display_order, then by ID
                     categoryMetrics.sort((a, b) => {
                         const orderA = a.display_order || 999;
@@ -2934,15 +3032,35 @@
                         return a.id - b.id;
                     });
                     
-                    reorderHtml += `<li class="reorder-category-header">${category}</li>`;
+                    // Category header with controls
+                    reorderHtml += `
+                        <li class="reorder-category-header" data-category="${category}" data-category-index="${categoryIndex}">
+                            <div class="category-header-content">
+                                <span class="category-drag-handle">☰</span>
+                                <span class="category-name">${category}</span>
+                                <span class="category-order">Cat #${categoryIndex + 1}</span>
+                                <span class="category-metrics-count">(${categoryMetrics.length} metrics)</span>
+                            </div>
+                            <div class="category-controls">
+                                <button type="button" class="category-btn" onclick="event.stopPropagation(); moveCategoryUp('${category}')" ${categoryIndex === 0 ? 'disabled' : ''} title="Move category up">
+                                    ↑
+                                </button>
+                                <button type="button" class="category-btn" onclick="event.stopPropagation(); moveCategoryDown('${category}')" ${categoryIndex === categoryOrder.length - 1 ? 'disabled' : ''} title="Move category down">
+                                    ↓
+                                </button>
+                            </div>
+                        </li>
+                    `;
                     
+                    // Metrics within the category
                     categoryMetrics.forEach((metric, index) => {
                         const isActive = metric.is_active ? 'active' : 'inactive';
                         const statusText = metric.is_active ? 'Active' : 'Inactive';
-                        const displayOrder = metric.display_order || 999;
+                        // Calculate unified display order: category_index * 1000 + position_in_category
+                        const unifiedOrder = categoryIndex * 1000 + index + 1;
                         
                         reorderHtml += `
-                            <li class="reorder-item ${isActive}" data-metric-id="${metric.id}" data-display-order="${displayOrder}">
+                            <li class="reorder-item ${isActive}" data-metric-id="${metric.id}" data-category="${category}" data-position="${index}">
                                 <div class="reorder-item-info">
                                     <div class="reorder-item-title">
                                         <strong>${metric.name}</strong>
@@ -2952,7 +3070,7 @@
                                         <span class="metric-id">ID: ${metric.id}</span>
                                         <span class="metric-subcategory">${metric.subcategory}</span>
                                         <span class="metric-endpoint">${metric.endpoint}</span>
-                                        <span class="metric-order">Order: ${displayOrder}</span>
+                                        <span class="metric-order">Order: ${unifiedOrder}</span>
                                     </div>
                                 </div>
                                 <div class="reorder-item-controls">
@@ -2994,18 +3112,36 @@
                 saveBtn.disabled = true;
                 saveBtn.textContent = 'Saving...';
                 
-                // Collect all metrics with their current display_order
-                const metricItems = document.querySelectorAll('#metricReorderList .reorder-item');
+                // Calculate unified display_order based on category position and item position
+                // Formula: category_index * 1000 + position_within_category
                 const metrics = [];
+                const categoryHeaders = document.querySelectorAll('#metricReorderList .reorder-category-header');
                 
-                metricItems.forEach((item, index) => {
-                    const metricId = parseInt(item.dataset.metricId);
-                    const displayOrder = parseInt(item.dataset.displayOrder);
-                    metrics.push({
-                        id: metricId,
-                        display_order: displayOrder
-                    });
+                categoryHeaders.forEach((categoryHeader, categoryIndex) => {
+                    const categoryName = categoryHeader.dataset.category;
+                    
+                    // Find all metrics for this category (following items until next category header)
+                    let nextElement = categoryHeader.nextElementSibling;
+                    let positionInCategory = 1;
+                    
+                    while (nextElement && !nextElement.classList.contains('reorder-category-header')) {
+                        if (nextElement.classList.contains('reorder-item')) {
+                            const metricId = parseInt(nextElement.dataset.metricId);
+                            // Unified order: category_index * 1000 + position (1-999)
+                            const unifiedOrder = categoryIndex * 1000 + positionInCategory;
+                            
+                            metrics.push({
+                                id: metricId,
+                                display_order: unifiedOrder
+                            });
+                            
+                            positionInCategory++;
+                        }
+                        nextElement = nextElement.nextElementSibling;
+                    }
                 });
+                
+                console.log('Saving metrics with unified display_order:', metrics);
                 
                 // Send update request to backend
                 const response = await fetch('/api/update-metric-order', {
@@ -3027,7 +3163,7 @@
                 
                 if (result.status === 'success') {
                     // Show success message
-                    alert(`✅ Successfully updated display order for ${metrics.length} metrics!`);
+                    alert(`✅ Successfully updated display order for ${metrics.length} metrics!\n\nCategories and metrics are now in unified order.`);
                     
                     // Reload the main metrics list to reflect changes
                     await loadMetrics();
@@ -3049,121 +3185,160 @@
             }
         }
         
+        // Move an entire category up in the list
+        function moveCategoryUp(categoryName) {
+            const categoryHeader = document.querySelector(`.reorder-category-header[data-category="${categoryName}"]`);
+            if (!categoryHeader) return;
+            
+            // Find the previous category header
+            let prevElement = categoryHeader.previousElementSibling;
+            while (prevElement && !prevElement.classList.contains('reorder-category-header')) {
+                prevElement = prevElement.previousElementSibling;
+            }
+            
+            if (!prevElement) return; // Already at top
+            
+            // Collect all elements belonging to current category (header + items)
+            const currentCategoryElements = [categoryHeader];
+            let nextElement = categoryHeader.nextElementSibling;
+            while (nextElement && !nextElement.classList.contains('reorder-category-header')) {
+                currentCategoryElements.push(nextElement);
+                nextElement = nextElement.nextElementSibling;
+            }
+            
+            // Insert all current category elements before the previous category header
+            const parent = categoryHeader.parentNode;
+            currentCategoryElements.forEach(el => {
+                parent.insertBefore(el, prevElement);
+            });
+            
+            // Update category indices and order displays
+            updateCategoryIndices();
+        }
+        
+        // Move an entire category down in the list
+        function moveCategoryDown(categoryName) {
+            const categoryHeader = document.querySelector(`.reorder-category-header[data-category="${categoryName}"]`);
+            if (!categoryHeader) return;
+            
+            // Find the next category header
+            let nextCategoryHeader = categoryHeader.nextElementSibling;
+            while (nextCategoryHeader && !nextCategoryHeader.classList.contains('reorder-category-header')) {
+                nextCategoryHeader = nextCategoryHeader.nextElementSibling;
+            }
+            
+            if (!nextCategoryHeader) return; // Already at bottom
+            
+            // Find all elements belonging to the next category
+            const nextCategoryElements = [nextCategoryHeader];
+            let element = nextCategoryHeader.nextElementSibling;
+            while (element && !element.classList.contains('reorder-category-header')) {
+                nextCategoryElements.push(element);
+                element = element.nextElementSibling;
+            }
+            
+            // Insert the next category elements before the current category header
+            const parent = categoryHeader.parentNode;
+            nextCategoryElements.forEach(el => {
+                parent.insertBefore(el, categoryHeader);
+            });
+            
+            // Update category indices and order displays
+            updateCategoryIndices();
+        }
+        
+        // Update category indices and recalculate display orders after reordering
+        function updateCategoryIndices() {
+            const categoryHeaders = document.querySelectorAll('#metricReorderList .reorder-category-header');
+            
+            categoryHeaders.forEach((header, categoryIndex) => {
+                // Update the category index attribute
+                header.dataset.categoryIndex = categoryIndex;
+                
+                // Update the category order display
+                const orderSpan = header.querySelector('.category-order');
+                if (orderSpan) {
+                    orderSpan.textContent = `Cat #${categoryIndex + 1}`;
+                }
+                
+                // Update up/down button states
+                const upBtn = header.querySelector('.category-btn:first-of-type');
+                const downBtn = header.querySelector('.category-btn:last-of-type');
+                if (upBtn) upBtn.disabled = categoryIndex === 0;
+                if (downBtn) downBtn.disabled = categoryIndex === categoryHeaders.length - 1;
+                
+                // Update the display order for all metrics in this category
+                let nextElement = header.nextElementSibling;
+                let positionInCategory = 1;
+                
+                while (nextElement && !nextElement.classList.contains('reorder-category-header')) {
+                    if (nextElement.classList.contains('reorder-item')) {
+                        nextElement.dataset.position = positionInCategory - 1;
+                        const unifiedOrder = categoryIndex * 1000 + positionInCategory;
+                        const orderSpan = nextElement.querySelector('.metric-order');
+                        if (orderSpan) {
+                            orderSpan.textContent = `Order: ${unifiedOrder}`;
+                        }
+                        positionInCategory++;
+                    }
+                    nextElement = nextElement.nextElementSibling;
+                }
+            });
+            
+            // Update metric up/down button states
+            updateReorderButtonStates();
+        }
+        
         function moveMetricUp(metricId) {
             const currentItem = document.querySelector(`[data-metric-id="${metricId}"]`);
+            if (!currentItem) return;
+            
             const prevItem = currentItem.previousElementSibling;
             
-            // Skip category headers
+            // Can only move up if previous item is a metric (not a category header)
             if (prevItem && !prevItem.classList.contains('reorder-category-header')) {
-                // Get all items in the same category to reassign order values
-                const categoryItems = [];
-                let item = prevItem;
+                // Move the DOM element
+                currentItem.parentNode.insertBefore(currentItem, prevItem);
                 
-                // Collect all items in the same category (until we hit a category header)
-                while (item && !item.classList.contains('reorder-category-header')) {
-                    categoryItems.unshift(item);
-                    item = item.previousElementSibling;
-                }
-                
-                // Add current item and all following items in the same category
-                item = currentItem;
-                while (item && !item.classList.contains('reorder-category-header')) {
-                    categoryItems.push(item);
-                    item = item.nextElementSibling;
-                }
-                
-                // Find the current item's position in the category
-                const currentIndex = categoryItems.indexOf(currentItem);
-                if (currentIndex > 0) {
-                    // Move the item up by swapping positions
-                    [categoryItems[currentIndex], categoryItems[currentIndex - 1]] = 
-                    [categoryItems[currentIndex - 1], categoryItems[currentIndex]];
-                    
-                    // Reassign sequential order values starting from the first item's original order
-                    const baseOrder = parseInt(categoryItems[0].dataset.displayOrder);
-                    categoryItems.forEach((item, index) => {
-                        const newOrder = baseOrder + index;
-                        item.dataset.displayOrder = newOrder;
-                        item.querySelector('.metric-order').textContent = `Order: ${newOrder}`;
-                    });
-                    
-                    // Move the DOM elements
-                    currentItem.parentNode.insertBefore(currentItem, prevItem);
-                    
-                    // Update button states
-                    updateReorderButtonStates();
-                }
+                // Update category indices and order displays
+                updateCategoryIndices();
             }
         }
         
         function moveMetricDown(metricId) {
             const currentItem = document.querySelector(`[data-metric-id="${metricId}"]`);
+            if (!currentItem) return;
+            
             const nextItem = currentItem.nextElementSibling;
             
-            // Skip category headers
+            // Can only move down if next item is a metric (not a category header or end of list)
             if (nextItem && !nextItem.classList.contains('reorder-category-header')) {
-                // Get all items in the same category to reassign order values
-                const categoryItems = [];
-                let item = currentItem;
+                // Move the DOM element (insert next item before current item)
+                currentItem.parentNode.insertBefore(nextItem, currentItem);
                 
-                // Collect all items in the same category (until we hit a category header)
-                while (item && !item.classList.contains('reorder-category-header')) {
-                    categoryItems.push(item);
-                    item = item.previousElementSibling;
-                }
-                
-                // Add all following items in the same category
-                item = nextItem;
-                while (item && !item.classList.contains('reorder-category-header')) {
-                    categoryItems.push(item);
-                    item = item.nextElementSibling;
-                }
-                
-                // Find the current item's position in the category
-                const currentIndex = categoryItems.indexOf(currentItem);
-                if (currentIndex < categoryItems.length - 1) {
-                    // Move the item down by swapping positions
-                    [categoryItems[currentIndex], categoryItems[currentIndex + 1]] = 
-                    [categoryItems[currentIndex + 1], categoryItems[currentIndex]];
-                    
-                    // Reassign sequential order values starting from the first item's original order
-                    const baseOrder = parseInt(categoryItems[0].dataset.displayOrder);
-                    categoryItems.forEach((item, index) => {
-                        const newOrder = baseOrder + index;
-                        item.dataset.displayOrder = newOrder;
-                        item.querySelector('.metric-order').textContent = `Order: ${newOrder}`;
-                    });
-                    
-                    // Move the DOM elements
-                    currentItem.parentNode.insertBefore(nextItem, currentItem);
-                    
-                    // Update button states
-                    updateReorderButtonStates();
-                }
+                // Update category indices and order displays
+                updateCategoryIndices();
             }
         }
         
         function updateReorderButtonStates() {
             const metricItems = document.querySelectorAll('#metricReorderList .reorder-item');
             
-            metricItems.forEach((item, index) => {
+            metricItems.forEach((item) => {
                 const upBtn = item.querySelector('.reorder-btn:first-child');
                 const downBtn = item.querySelector('.reorder-btn:last-child');
                 
-                // Find the previous and next items (skipping category headers)
-                let prevItem = item.previousElementSibling;
-                while (prevItem && prevItem.classList.contains('reorder-category-header')) {
-                    prevItem = prevItem.previousElementSibling;
-                }
+                if (!upBtn || !downBtn) return;
                 
-                let nextItem = item.nextElementSibling;
-                while (nextItem && nextItem.classList.contains('reorder-category-header')) {
-                    nextItem = nextItem.nextElementSibling;
-                }
+                // Check if previous sibling is a metric (can move up)
+                const prevItem = item.previousElementSibling;
+                const canMoveUp = prevItem && !prevItem.classList.contains('reorder-category-header');
+                upBtn.disabled = !canMoveUp;
                 
-                // Update button states
-                upBtn.disabled = !prevItem;
-                downBtn.disabled = !nextItem;
+                // Check if next sibling is a metric (can move down)
+                const nextItem = item.nextElementSibling;
+                const canMoveDown = nextItem && !nextItem.classList.contains('reorder-category-header');
+                downBtn.disabled = !canMoveDown;
             });
         }
         

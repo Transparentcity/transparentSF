@@ -360,7 +360,8 @@ def _create_fallback_prioritization(response_content, combined_changes, max_item
     if mentioned_metrics:
         logger.info(f"Found {len(mentioned_metrics)} mentioned metrics in response")
         prioritized_items = []
-        for i, change in enumerate(mentioned_metrics[:max_items]):  # Limit to max_items
+        # Safety cap of 50 items to prevent runaway cases, but no strict max_items limit
+        for i, change in enumerate(mentioned_metrics[:50]):
             prioritized_items.append({
                 "metric": change.get("metric"),
                 "group": change.get("group", "All"),
@@ -378,7 +379,8 @@ def _create_fallback_prioritization(response_content, combined_changes, max_item
                           reverse=True)
     
     prioritized_items = []
-    for i, change in enumerate(sorted_changes[:max_items]):  # Limit to max_items
+    # Safety cap of 50 items to prevent runaway cases, but no strict max_items limit
+    for i, change in enumerate(sorted_changes[:50]):
         prioritized_items.append({
             "metric": change.get("metric"),
             "group": change.get("group", "All"),
@@ -410,11 +412,15 @@ def _extract_any_valid_json(text):
     logger.debug(f"_extract_any_valid_json: Text preview: {repr(text[:200])}")
     
     # Strategy 1: Try to find JSON in code blocks (most reliable)
+    # Prioritize JSON blocks that contain "newsletter" field
     json_patterns = [
         r'```json\s*([\s\S]*?)\s*```',  # ```json ... ```
         r'```\s*([\s\S]*?)\s*```',      # ``` ... ``` (generic code block)
         r'`([^`]*\{[^`]*\}[^`]*)`',     # `...` (inline code with braces)
     ]
+    
+    newsletter_json = None
+    other_json = None
     
     for pattern in json_patterns:
         json_match = re.search(pattern, text)
@@ -423,28 +429,47 @@ def _extract_any_valid_json(text):
             logger.debug(f"_extract_any_valid_json: Found code block content: {repr(json_str[:100])}")
             if json_str and json_str.strip() != "":
                 try:
-                    json.loads(json_str)
-                    logger.info(f"Found valid JSON in code block: {json_str[:100]}...")
-                    return json_str
+                    parsed_data = json.loads(json_str)
+                    # Prioritize JSON with "newsletter" field
+                    if isinstance(parsed_data, dict) and 'newsletter' in parsed_data:
+                        logger.info(f"Found valid JSON in code block with 'newsletter' field: {json_str[:100]}...")
+                        newsletter_json = json_str
+                        break  # Found newsletter, no need to continue
+                    elif isinstance(parsed_data, dict):
+                        # Store as fallback
+                        if not other_json:
+                            other_json = json_str
                 except json.JSONDecodeError as e:
                     logger.debug(f"Code block JSON parsing failed: {e}, attempting to fix control characters")
                     # Try to fix control characters and retry
                     try:
                         fixed_json = _fix_common_json_issues(json_str)
-                        json.loads(fixed_json)  # Test if it's now valid
-                        logger.info(f"Successfully fixed control characters in code block JSON")
-                        return fixed_json
+                        parsed_data = json.loads(fixed_json)  # Test if it's now valid
+                        if isinstance(parsed_data, dict) and 'newsletter' in parsed_data:
+                            logger.info(f"Successfully fixed control characters in code block JSON with 'newsletter' field")
+                            newsletter_json = fixed_json
+                            break  # Found newsletter, no need to continue
+                        elif isinstance(parsed_data, dict) and not other_json:
+                            other_json = fixed_json
                     except json.JSONDecodeError as fix_error:
                         logger.debug(f"Control character fixing also failed: {fix_error}")
                         continue
     
+    # If we found JSON with newsletter, return it; otherwise return any valid JSON
+    if newsletter_json:
+        return newsletter_json
+    if other_json:
+        logger.info(f"Found valid JSON in code block (without 'newsletter'): {other_json[:100]}...")
+        return other_json
+    
     # Strategy 2: Look for JSON objects that start and end with braces
     # More comprehensive pattern that handles nested objects better
+    # Prioritize patterns that look for "newsletter" field first
     brace_patterns = [
-        r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Basic nested braces
-        r'\{.*?"newsletter".*?\}',           # Look for newsletter field specifically
+        r'\{.*?"newsletter".*?\}',           # Look for newsletter field specifically (HIGHEST PRIORITY)
         r'\{.*?"proofread_feedback".*?\}',   # Look for feedback field specifically
         r'\{[^{}]*"headlines"[^{}]*\}',      # Look for headlines field
+        r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Basic nested braces (LOWEST PRIORITY)
     ]
     
     all_matches = []
@@ -456,27 +481,69 @@ def _extract_any_valid_json(text):
     unique_matches = list(set(all_matches))
     unique_matches.sort(key=len, reverse=True)
     
-    # Try each match to see if it's valid JSON
+    # First pass: prioritize JSON objects with "newsletter" field
+    newsletter_matches = []
+    other_matches = []
+    
     for match in unique_matches:
         try:
             # Try to parse it
             test_data = json.loads(match)
-            # Additional validation: check if it has expected fields
-            if isinstance(test_data, dict) and ('newsletter' in test_data or 'proofread_feedback' in test_data):
-                logger.info(f"Found valid JSON with expected fields: {match[:100]}...")
+            if isinstance(test_data, dict):
+                if 'newsletter' in test_data:
+                    newsletter_matches.append(match)
+                else:
+                    other_matches.append(match)
+        except json.JSONDecodeError:
+            continue
+    
+    # Return newsletter matches first (prefer longest)
+    if newsletter_matches:
+        newsletter_matches.sort(key=len, reverse=True)
+        logger.info(f"Found valid JSON with 'newsletter' field: {newsletter_matches[0][:100]}...")
+        return newsletter_matches[0]
+    
+    # Second pass: try other matches with expected fields
+    for match in other_matches:
+        try:
+            test_data = json.loads(match)
+            if isinstance(test_data, dict) and 'proofread_feedback' in test_data:
+                logger.info(f"Found valid JSON with 'proofread_feedback' field: {match[:100]}...")
                 return match
-            elif isinstance(test_data, dict):
+        except json.JSONDecodeError:
+            continue
+    
+    # Third pass: return any valid JSON dict
+    for match in other_matches:
+        try:
+            test_data = json.loads(match)
+            if isinstance(test_data, dict):
                 logger.info(f"Found valid JSON: {match[:100]}...")
                 return match
         except json.JSONDecodeError:
             continue
     
-    # Strategy 3: Try to fix common issues and retry
+    # Strategy 3: Try to fix common issues and retry (prioritize newsletter)
     for match in unique_matches:
         try:
             fixed_json = _fix_common_json_issues(match)
             test_data = json.loads(fixed_json)
-            if isinstance(test_data, dict) and ('newsletter' in test_data or 'proofread_feedback' in test_data):
+            if isinstance(test_data, dict):
+                if 'newsletter' in test_data:
+                    logger.info(f"Found valid JSON after fixing with 'newsletter' field: {fixed_json[:100]}...")
+                    return fixed_json
+                elif 'proofread_feedback' in test_data:
+                    logger.info(f"Found valid JSON after fixing with 'proofread_feedback' field: {fixed_json[:100]}...")
+                    return fixed_json
+        except json.JSONDecodeError:
+            continue
+    
+    # Last resort: return any fixed JSON
+    for match in unique_matches:
+        try:
+            fixed_json = _fix_common_json_issues(match)
+            test_data = json.loads(fixed_json)
+            if isinstance(test_data, dict):
                 logger.info(f"Found valid JSON after fixing: {fixed_json[:100]}...")
                 return fixed_json
         except json.JSONDecodeError:
@@ -628,18 +695,33 @@ def initialize_monthly_reporting_table():
                         original_filename TEXT,
                         revised_filename TEXT,
                         published_url TEXT,
+                        metadata JSONB,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+                # Create index on created_at for faster ordering in list queries
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS reports_created_at_idx ON reports (created_at DESC)
+                """)
                 connection.commit()
-                logger.info("Reports table created successfully")
+                logger.info("Reports table created successfully with indexes")
             except Exception as e:
                 logger.error(f"Error creating reports table: {e}")
                 connection.rollback()
                 return False
         else:
             logger.info("Reports table already exists")
+            # Ensure index exists even if table already exists
+            try:
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS reports_created_at_idx ON reports (created_at DESC)
+                """)
+                connection.commit()
+                logger.info("Ensured reports_created_at_idx index exists")
+            except Exception as e:
+                logger.warning(f"Could not create reports_created_at_idx index: {e}")
+                # Non-fatal, continue
             
             # Check if the published_url column exists in the reports table
             cursor.execute("""
@@ -689,7 +771,7 @@ def initialize_monthly_reporting_table():
                 WHERE table_name = 'reports' AND column_name = 'headlines'
             """)
             headlines_exists = cursor.fetchone()
-
+            
             if not headlines_exists:
                 logger.info("Adding headlines column to reports table")
                 try:
@@ -700,6 +782,26 @@ def initialize_monthly_reporting_table():
                     logger.info("Added headlines column to reports table")
                 except Exception as e:
                     logger.error(f"Error adding headlines column: {e}")
+                    connection.rollback()
+            
+            # Check if the metadata column exists in the reports table
+            cursor.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'reports' AND column_name = 'metadata'
+            """)
+            metadata_exists = cursor.fetchone()
+            
+            if not metadata_exists:
+                logger.info("Adding metadata column to reports table")
+                try:
+                    cursor.execute("""
+                        ALTER TABLE reports ADD COLUMN metadata JSONB
+                    """)
+                    connection.commit()
+                    logger.info("Added metadata column to reports table")
+                except Exception as e:
+                    logger.error(f"Error adding metadata column: {e}")
                     connection.rollback()
         
         # Now check if the monthly_reporting table exists and get its columns
@@ -980,20 +1082,163 @@ def select_deltas_to_discuss(period_type='month', top_n=20, bottom_n=20, distric
         logger.error(error_msg, exc_info=True)
         return {"status": "error", "message": error_msg}
 
-def prioritize_deltas(deltas, max_items=10, model_key=None):
+def select_anomalies_to_discuss(period_type='month', district="", limit=20):
+    """
+    Select anomalies to discuss from the anomalies table.
+    Uses the API endpoint to match what's shown in anomaly_analyzer.html,
+    filtering by recent_date for the previous month.
+    
+    Args:
+        period_type: The time period type (month, quarter, year)
+        district: District number to analyze (empty string for citywide)
+        limit: Maximum number of anomalies to return
+        
+    Returns:
+        List of formatted anomalies matching metric change structure
+    """
+    logger.info(f"Selecting top {limit} anomalies for {period_type}ly report, district: {district}")
+    
+    try:
+        # Calculate the previous month in YYYY-MM format (matching what anomaly_analyzer.html uses)
+        current_date = datetime.now()
+        previous_month_date = current_date - relativedelta(months=1)
+        recent_month = previous_month_date.strftime("%Y-%m")
+        
+        # Calculate comparison month (month before the previous month)
+        comparison_month_date = previous_month_date - relativedelta(months=1)
+        comparison_month = comparison_month_date.strftime("%Y-%m")
+        
+        logger.info(f"Querying anomalies for recent_month={recent_month}, comparison_month={comparison_month}")
+        
+        # Use the API endpoint to match what anomaly_analyzer.html shows
+        # This filters by recent_date field, not created_at
+        url = f"{API_BASE_URL}/anomaly-analyzer/api/query-anomalies"
+        params = {
+            'period_type': period_type,
+            'limit': limit,
+            'only_active': 'true',
+            'query_type': 'by_anomaly_severity',
+            'recent_month': recent_month,
+            'comparison_month': comparison_month
+        }
+        
+        if district and district.strip():
+            params['district'] = district
+        
+        logger.info(f"Requesting anomalies from: {url} with params: {params}")
+        response = requests.get(url, params=params)
+        logger.info(f"Anomalies API response status code: {response.status_code}")
+        
+        if response.status_code != 200:
+            error_msg = f"Failed to get anomalies: Status code {response.status_code} - {response.text}"
+            logger.error(error_msg)
+            return []
+        
+        try:
+            result = response.json()
+            logger.info(f"Received anomalies data: {json.dumps(result)[:200]}...")
+        except Exception as e:
+            logger.error(f"Error parsing anomalies response as JSON: {str(e)}")
+            logger.error(f"Raw response content: {response.text[:500]}")
+            return []
+        
+        if result.get("status") != "success":
+            logger.error(f"Failed to get anomalies: {result.get('message', 'Unknown error')}")
+            return []
+        
+        # The API returns results in a 'results' array
+        anomalies_list = result.get("results", [])
+        logger.info(f"Found {len(anomalies_list)} anomalies from API")
+        
+        # Format anomalies to match metric change structure
+        formatted_anomalies = []
+        for anomaly in anomalies_list:
+            try:
+                # Get metric name from metadata or object_name
+                metric_name = None
+                if anomaly.get("metadata") and isinstance(anomaly["metadata"], dict):
+                    metric_name = anomaly["metadata"].get("object_name")
+                if not metric_name:
+                    # Try to get from object_id by querying metrics table
+                    object_id = anomaly.get("object_id")
+                    if object_id:
+                        try:
+                            from tools.db_utils import get_pooled_connection
+                            with get_pooled_connection() as conn:
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    "SELECT metric_name FROM metrics WHERE id = %s",
+                                    (int(object_id),)
+                                )
+                                row = cursor.fetchone()
+                                if row:
+                                    metric_name = row[0]
+                                cursor.close()
+                        except Exception as e:
+                            logger.warning(f"Could not fetch metric name for object_id {object_id}: {e}")
+                
+                if not metric_name:
+                    metric_name = f"Metric {anomaly.get('object_id', 'Unknown')}"
+                
+                # Calculate percent change
+                comparison_mean = float(anomaly.get("comparison_mean", 0))
+                recent_mean = float(anomaly.get("recent_mean", 0))
+                difference = float(anomaly.get("difference", 0))
+                
+                if comparison_mean != 0:
+                    percent_change = (difference / comparison_mean) * 100
+                else:
+                    percent_change = 0.0
+                
+                formatted_anomalies.append({
+                    "type": "anomaly",
+                    "anomaly_id": anomaly.get("id"),
+                    "metric": metric_name,
+                    "metric_id": anomaly.get("object_id"),
+                    "group": anomaly.get("group_value") or "All",
+                    "group_field_name": anomaly.get("group_field_name"),
+                    "recent_mean": recent_mean,
+                    "comparison_mean": comparison_mean,
+                    "difference": difference,
+                    "percent_change": percent_change,
+                    "district": anomaly.get("district"),
+                    "out_of_bounds": anomaly.get("out_of_bounds", False),
+                    "std_dev": anomaly.get("std_dev"),
+                    "period_type": anomaly.get("period_type", period_type),
+                    "change_type": "anomaly"  # Mark as anomaly
+                })
+            except (ValueError, TypeError) as e:
+                logger.error(f"Error processing anomaly: {e}")
+                logger.error(f"Problematic anomaly data: {json.dumps(anomaly)}")
+                continue
+        
+        logger.info(f"Formatted {len(formatted_anomalies)} anomalies")
+        return formatted_anomalies
+        
+    except Exception as e:
+        error_msg = f"Error in select_anomalies_to_discuss: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return []
+
+def prioritize_deltas(deltas, anomalies=None, max_items=10, model_key=None, period_type='month'):
     """
     Step 2: Prioritize the deltas for discussion based on their importance.
     This uses the LangChain explainer agent to determine which changes are most significant.
+    Now includes anomalies and causal graph analysis.
     
     Args:
         deltas: Dictionary with top and bottom changes from select_deltas_to_discuss
+        anomalies: Optional list of anomalies from select_anomalies_to_discuss
         max_items: Maximum number of items to prioritize
         model_key: Model to use for the LangChain agent (defaults to default model)
+        period_type: Time period type (month, quarter, year) - used to determine report month
         
     Returns:
-        List of prioritized items with explanations
+        Dictionary with prioritized items, causal graph analysis, and research agendas
     """
     from tools.notes_manager import load_and_combine_notes
+    from services.causal_graph_service import CausalGraphService
+    import calendar
     
     logger.info(f"Prioritizing deltas for discussion (max {max_items} items)")
     
@@ -1001,59 +1246,227 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
         if deltas.get("status") != "success":
             return {"status": "error", "message": "Invalid deltas input"}
         
-        # Combine top and bottom changes
-        combined_changes = deltas.get("top_changes", []) + deltas.get("bottom_changes", [])
+        # Get the previous month name for the report (reports are typically for the month that just ended)
+        current_date = datetime.now()
+        previous_month_date = current_date - relativedelta(months=1)
+        month_name = calendar.month_name[previous_month_date.month]
+        report_year = previous_month_date.year
+        period_type_from_deltas = deltas.get("period_type", period_type)
+        
+        # Separate monthly deltas and anomalies from combined changes
+        top_changes = deltas.get("top_changes", [])
+        bottom_changes = deltas.get("bottom_changes", [])
+        monthly_deltas = top_changes + bottom_changes
+        
+        # Separate anomalies if provided
+        monthly_anomalies = []
+        if anomalies:
+            monthly_anomalies = anomalies
+            logger.info(f"Found {len(monthly_anomalies)} monthly anomalies to include")
+        
+        # Combine all for causal analysis
+        combined_changes = monthly_deltas + monthly_anomalies
+        
+        # Initialize causal graph service and detect causal chains
+        causal_graph_service = CausalGraphService()
+        causal_analysis = causal_graph_service.detect_causal_chains(
+            combined_changes, 
+            anomalies if anomalies else None
+        )
+        logger.info(f"Detected {len(causal_analysis.get('detected_chains', []))} causal chains")
+        logger.info(f"Found {len(causal_analysis.get('unexpected_relationships', []))} unexpected relationships")
         
         # Get combined notes with YTD metrics for reference
         notes_text = load_and_combine_notes()
         logger.info(f"Loaded {len(notes_text)} characters of combined notes for context")
         
-        # Format changes for the agent to analyze
-        changes_text = "Here are the metrics with significant changes:\n\n"
-        for idx, change in enumerate(combined_changes, 1):
+        # Build the structured data presentation
+        # Section 1: Month indicator and most recent monthly data
+        changes_text = f"=== REPORT PERIOD: {month_name} {report_year} ===\n\n"
+        
+        # Section 1a: Most Recent Monthly Deltas (with metric IDs)
+        changes_text += "=== MOST RECENT MONTHLY DELTAS ===\n"
+        changes_text += "These are the most significant metric changes for this reporting period:\n\n"
+        
+        delta_index = 1
+        for change in monthly_deltas:
             metric = change.get("metric", "Unknown")
             metric_id = change.get("metric_id", "Unknown")
             group = change.get("group", "Unknown")
             # Safely handle None values for group
             if group is None:
                 group = "All"
-            diff = change.get("difference_value", 0)
+            diff = change.get("difference_value") or change.get("difference", 0)
             recent = change.get("recent_mean", 0)
             comparison = change.get("comparison_mean", 0)
             district = change.get("district", "0")
             citywide_changes = change.get("citywide_changes", "")
             greendirection = change.get("greendirection", "neutral")
+            change_type = change.get("change_type", "metric")
+            percent_change = change.get("percent_change")
             
             # Add an index field to each change for reference
-            change["index"] = idx
+            change["index"] = delta_index
             
-            # Calculate percent change
-            if comparison != 0:
-                pct_change = (diff / comparison) * 100
-                pct_text = f"{pct_change:+.1f}%"
+            # Calculate percent change if not already present
+            if percent_change is None:
+                if comparison != 0:
+                    pct_change = (diff / comparison) * 100
+                    pct_text = f"{pct_change:+.1f}%"
+                else:
+                    pct_text = "N/A"
             else:
-                pct_text = "N/A"
+                pct_text = f"{percent_change:+.1f}%"
             
-            # Format the change text with additional context
-            changes_text += f"{idx}. {metric} for {group}: {recent:.1f} vs {comparison:.1f} ({pct_text}), District: {district}\n"
-            changes_text += f"   Direction: {greendirection}, Citywide Changes: {citywide_changes}\n\n"
+            # Format the change text with metric_id prominently displayed
+            changes_text += f"{delta_index}. [METRIC] {metric} (metric_id: {metric_id}) for {group}: {recent:.1f} vs {comparison:.1f} ({pct_text}), District: {district}\n"
+            if citywide_changes:
+                changes_text += f"   Direction: {greendirection}, Citywide Changes: {citywide_changes}\n"
+            changes_text += "\n"
+            delta_index += 1
+        
+        if not monthly_deltas:
+            changes_text += "No monthly deltas found for this period.\n\n"
+        
+        # Section 1b: Most Recent Monthly Anomalies (with anomaly IDs and metric IDs)
+        changes_text += "\n=== MOST RECENT MONTHLY ANOMALIES ===\n"
+        changes_text += "These are the most significant anomalies detected for this reporting period:\n\n"
+        
+        anomaly_start_index = delta_index
+        for anomaly in monthly_anomalies:
+            metric = anomaly.get("metric", "Unknown")
+            metric_id = anomaly.get("metric_id", "Unknown")
+            anomaly_id = anomaly.get("anomaly_id", "Unknown")
+            group = anomaly.get("group", "Unknown")
+            # Safely handle None values for group
+            if group is None:
+                group = "All"
+            diff = anomaly.get("difference_value") or anomaly.get("difference", 0)
+            recent = anomaly.get("recent_mean", 0)
+            comparison = anomaly.get("comparison_mean", 0)
+            district = anomaly.get("district", "0")
+            percent_change = anomaly.get("percent_change")
+            out_of_bounds = anomaly.get("out_of_bounds", False)
+            std_dev = anomaly.get("std_dev")
+            
+            # Add an index field to each anomaly for reference
+            anomaly["index"] = anomaly_start_index
+            
+            # Calculate percent change if not already present
+            if percent_change is None:
+                if comparison != 0:
+                    pct_change = (diff / comparison) * 100
+                    pct_text = f"{pct_change:+.1f}%"
+                else:
+                    pct_text = "N/A"
+            else:
+                pct_text = f"{percent_change:+.1f}%"
+            
+            # Format the anomaly text with anomaly_id and metric_id prominently displayed
+            changes_text += f"{anomaly_start_index}. [ANOMALY] {metric} (metric_id: {metric_id}, anomaly_id: {anomaly_id}) for {group}: {recent:.1f} vs {comparison:.1f} ({pct_text}), District: {district}\n"
+            if std_dev is not None:
+                changes_text += f"   Standard Deviation: {std_dev:.2f}, Out of Bounds: {out_of_bounds}\n"
+            changes_text += "\n"
+            anomaly_start_index += 1
+        
+        if not monthly_anomalies:
+            changes_text += "No monthly anomalies found for this period.\n\n"
+        
+        # Section 2: YTD Metrics Summary and Notes (below the monthly data)
+        changes_text += "\n=== YEAR-TO-DATE METRICS SUMMARY AND NOTES ===\n"
+        changes_text += "The following year-to-date context and notes are provided for reference when prioritizing:\n\n"
+        
+        # Format causal graph analysis for prompt
+        causal_graph_text = ""
+        if causal_analysis.get("detected_chains"):
+            causal_graph_text += "\n\n=== CAUSAL CHAIN ANALYSIS ===\n"
+            causal_graph_text += "The following causal chains were detected from the metric changes:\n\n"
+            for chain in causal_analysis["detected_chains"]:
+                causal_graph_text += f"Chain: {chain.get('chain_name', 'Unknown')}\n"
+                causal_graph_text += f"Description: {chain.get('description', '')}\n"
+                causal_graph_text += f"Matches Expectation: {chain.get('matches_expectation', False)}\n"
+                causal_graph_text += "Metrics in chain:\n"
+                for metric_info in chain.get("metrics", []):
+                    causal_graph_text += f"  - {metric_info.get('metric_name')}: {metric_info.get('change_direction')} ({metric_info.get('percent_change', 0):+.1f}%)\n"
+                causal_graph_text += "\n"
+        
+        if causal_analysis.get("unexpected_relationships"):
+            causal_graph_text += "\n=== UNEXPECTED RELATIONSHIPS ===\n"
+            causal_graph_text += "The following relationships were unexpected based on the causal graph:\n\n"
+            for rel in causal_analysis["unexpected_relationships"]:
+                causal_graph_text += f"- {rel.get('metric1_name')} ({rel.get('expected')}) vs {rel.get('metric2_name')} ({rel.get('observed')})\n"
+                causal_graph_text += f"  Reasoning: {rel.get('reasoning', '')}\n\n"
         
         # Load prompt from JSON file
         prompts = load_prompts()
         prompt_template = prompts['monthly_report']['prioritize_deltas']['prompt']
         system_message = prompts['monthly_report']['prioritize_deltas']['system']
         
+        logger.info(f"Loaded prompt template (length: {len(prompt_template)})")
+        logger.info(f"Prompt template includes 'research_agendas': {'research_agendas' in prompt_template.lower()}")
+        
+        # Load example JSON file
+        example_json = ""
+        try:
+            example_path = Path(__file__).parent / 'data' / 'prioritize_deltas_example.json'
+            logger.info(f"Looking for example JSON at: {example_path}")
+            logger.info(f"Example path exists: {example_path.exists()}")
+            if example_path.exists():
+                with open(example_path, 'r', encoding='utf-8') as f:
+                    example_data = json.load(f)
+                    example_json = json.dumps(example_data, indent=2)
+                    logger.info(f"✅ Loaded example JSON (length: {len(example_json)} chars)")
+                    logger.info(f"Example includes research_question: {'research_question' in example_json}")
+            else:
+                logger.error(f"❌ Example JSON file not found: {example_path}")
+                logger.error(f"   Current working directory: {os.getcwd()}")
+                logger.error(f"   File parent: {Path(__file__).parent}")
+        except Exception as e:
+            logger.error(f"❌ Failed to load example JSON: {e}", exc_info=True)
+        
+        # Note: The prompt template now includes research agenda instructions, so we don't need to enhance system message
+        # But we'll keep it for backward compatibility and emphasis
+        enhanced_system = system_message
+        
         # Truncate notes_text for the prompt
         notes_text_short = notes_text
         
-        # Format the prompt with the required variables
-        plural = "s" if max_items > 1 else ""
+        # If example didn't load, add a clear fallback message
+        if not example_json or len(example_json) < 100:
+            example_json = """
+NOTE: Example not available, but here is the REQUIRED structure for suggested_metrics:
+
+Each suggested_metric MUST have these 4 fields:
+{
+  "metric_name": "Drug Crime Incidents",
+  "metric_id": "4",
+  "reason": "Primary metric showing 58.6% increase",
+  "research_question": "What geographic areas and neighborhoods are driving the 58.6% increase in drug crime incidents, and are there specific patterns in the types of drug-related incidents?"
+}
+
+CRITICAL: The "research_question" field is MANDATORY for every suggested_metric.
+"""
+            logger.warning("⚠️ Example JSON not loaded, using fallback message")
+        
+        # Format the prompt - max_items removed, research agenda determines count
+        # The changes_text now includes: month indicator, monthly deltas, monthly anomalies, and YTD section
+        # The notes_text_short contains the detailed YTD metrics and notes
         prompt = prompt_template.format(
-            max_items=max_items,
-            plural=plural,
-            changes_text=changes_text,
-            notes_text_short=notes_text_short
+            changes_text=changes_text + causal_graph_text,
+            notes_text_short=notes_text_short,
+            example_json=example_json
         )
+        
+        # Log a snippet of the final prompt to verify it includes research_question
+        if "research_question" in prompt:
+            logger.info("✅ Prompt includes 'research_question' requirement")
+        else:
+            logger.error("❌ Prompt does NOT include 'research_question' requirement!")
+        
+        if example_json and len(example_json) > 100:
+            logger.info("✅ Example JSON included in prompt")
+        else:
+            logger.warning("⚠️ Example JSON not properly included in prompt")
 
         # Create logs directory if it doesn't exist
         logs_dir = os.path.join(project_root,'ai', 'logs')
@@ -1082,11 +1495,12 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
             model_to_use = model_key or get_default_model()
             logger.info(f"Using LangChain agent with model: {model_to_use}")
             
-            # Create the agent with additional tool groups for better analysis
+            # Create the agent with NO tool groups for debugging/prioritization only
+            # We want the agent to focus purely on prioritization logic without getting distracted by tools
             agent = LangChainExplainerAgent(
                 model_key=model_to_use,
                 enable_session_logging=True,
-                tool_groups=[ToolGroup.CORE, ToolGroup.ANALYSIS, ToolGroup.METRICS]
+                tool_groups=[]  # Remove all tools
             )
             
             # Create metric details for the agent
@@ -1105,6 +1519,8 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
             
             response_content = response.get('explanation', '')
             logger.info(f"Received response from LangChain agent (length: {len(response_content)})")
+            logger.info(f"Response contains 'research_agendas': {'research_agendas' in response_content.lower()}")
+            logger.info(f"Response contains 'causal_graph_analysis': {'causal_graph_analysis' in response_content.lower()}")
             
             # Try to extract JSON from the response with better error handling
             try:
@@ -1126,52 +1542,105 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
                         prioritized_json = json.loads(json_str)
                 else:
                     # Try to find JSON without code block markers
-                    # Look for content between { and }
-                    brace_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
-                    brace_match = re.search(brace_pattern, response_content)
+                    # Use a better approach: find the outermost JSON object by counting braces
+                    # This handles nested structures properly
+                    json_str = None
+                    start_idx = response_content.find('{')
+                    if start_idx != -1:
+                        brace_count = 0
+                        in_string = False
+                        escape_next = False
+                        
+                        for i in range(start_idx, len(response_content)):
+                            char = response_content[i]
+                            
+                            if escape_next:
+                                escape_next = False
+                                continue
+                            
+                            if char == '\\':
+                                escape_next = True
+                                continue
+                            
+                            if char == '"' and not escape_next:
+                                in_string = not in_string
+                                continue
+                            
+                            if not in_string:
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        # Found the complete JSON object
+                                        json_str = response_content[start_idx:i+1]
+                                        logger.info(f"✅ Extracted complete JSON object (length: {len(json_str)})")
+                                        break
                     
-                    if brace_match:
-                        json_str = brace_match.group(0)
-                        logger.info(f"Found JSON with braces: {json_str[:200]}...")
+                    if json_str:
+                        logger.info(f"Found JSON with balanced braces (length: {len(json_str)}): {json_str[:200]}...")
                         try:
                             prioritized_json = json.loads(json_str)
+                            # Verify it has the expected structure
+                            if isinstance(prioritized_json, dict):
+                                has_items = "items" in prioritized_json
+                                has_causal = "causal_graph_analysis" in prioritized_json
+                                has_agendas = "research_agendas" in prioritized_json
+                                logger.info(f"✅ Parsed JSON structure check: items={has_items}, causal_graph={has_causal}, research_agendas={has_agendas}")
                         except json.JSONDecodeError as e:
-                            logger.warning(f"JSON with braces is malformed: {e}")
+                            logger.warning(f"JSON with balanced braces is malformed: {e}")
                             # Try to fix common JSON issues
                             json_str = _fix_common_json_issues(json_str)
                             prioritized_json = json.loads(json_str)
                     else:
-                        # Try to find any JSON-like structure in the response
-                        # Look for patterns that might be JSON
-                        potential_json_patterns = [
-                            r'\{[^{}]*"items"[^{}]*\[[^\]]*\][^{}]*\}',  # JSON with "items" array
-                            r'\{[^{}]*"priority"[^{}]*\}',  # JSON with "priority" field
-                            r'\{[^{}]*"metric"[^{}]*\}',  # JSON with "metric" field
-                        ]
+                        # Fallback to simple brace pattern for backward compatibility
+                        logger.warning("⚠️ Could not extract JSON with balanced braces, trying fallback")
+                        brace_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+                        brace_match = re.search(brace_pattern, response_content)
                         
-                        for pattern in potential_json_patterns:
-                            match = re.search(pattern, response_content, re.DOTALL)
-                            if match:
-                                json_str = match.group(0)
-                                logger.info(f"Found potential JSON with pattern: {json_str[:200]}...")
-                                try:
-                                    prioritized_json = json.loads(json_str)
-                                    break
-                                except json.JSONDecodeError:
-                                    continue
-                        else:
-                            # Try to parse the entire response as JSON
-                            logger.info("Attempting to parse entire response as JSON")
+                        if brace_match:
+                            json_str = brace_match.group(0)
+                            logger.info(f"Found JSON with simple braces (fallback): {json_str[:200]}...")
+                            logger.warning("⚠️ This may only capture a partial JSON object - check if full structure is present")
                             try:
-                                prioritized_json = json.loads(response_content)
-                            except json.JSONDecodeError:
-                                # If all else fails, try to extract any valid JSON from the response
-                                logger.info("Attempting to extract any valid JSON from response")
-                                json_str = _extract_any_valid_json(response_content)
-                                if json_str:
-                                    prioritized_json = json.loads(json_str)
+                                prioritized_json = json.loads(json_str)
+                            except json.JSONDecodeError as e:
+                                logger.warning(f"JSON with braces is malformed: {e}")
+                                # Try to fix common JSON issues
+                                json_str = _fix_common_json_issues(json_str)
+                                prioritized_json = json.loads(json_str)
+                            else:
+                                # Try to find any JSON-like structure in the response
+                                # Look for patterns that might be JSON
+                                potential_json_patterns = [
+                                    r'\{[^{}]*"items"[^{}]*\[[^\]]*\][^{}]*\}',  # JSON with "items" array
+                                    r'\{[^{}]*"priority"[^{}]*\}',  # JSON with "priority" field
+                                    r'\{[^{}]*"metric"[^{}]*\}',  # JSON with "metric" field
+                                ]
+                                
+                                for pattern in potential_json_patterns:
+                                    match = re.search(pattern, response_content, re.DOTALL)
+                                    if match:
+                                        json_str = match.group(0)
+                                        logger.info(f"Found potential JSON with pattern: {json_str[:200]}...")
+                                        try:
+                                            prioritized_json = json.loads(json_str)
+                                            break
+                                        except json.JSONDecodeError:
+                                            continue
                                 else:
-                                    raise json.JSONDecodeError("No valid JSON found in response", response_content, 0)
+                                    # Try to parse the entire response as JSON
+                                    logger.info("Attempting to parse entire response as JSON")
+                                    try:
+                                        prioritized_json = json.loads(response_content)
+                                    except json.JSONDecodeError:
+                                        # If all else fails, try to extract any valid JSON from the response
+                                        logger.info("Attempting to extract any valid JSON from response")
+                                        json_str = _extract_any_valid_json(response_content)
+                                        if json_str:
+                                            prioritized_json = json.loads(json_str)
+                                        else:
+                                            raise json.JSONDecodeError("No valid JSON found in response", response_content, 0)
                         
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse JSON from LangChain agent response: {e}")
@@ -1185,6 +1654,86 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
                     logger.error(f"Fallback prioritization also failed: {fallback_error}")
                     return {"status": "error", "message": "Failed to parse JSON response from agent and fallback failed"}
             logger.info(f"Parsed JSON: {json.dumps(prioritized_json)[:200]}...")
+            logger.info(f"Full parsed JSON keys: {list(prioritized_json.keys()) if isinstance(prioritized_json, dict) else 'Not a dict'}")
+            
+            # Extract causal graph analysis and research agendas if present
+            causal_graph_analysis = prioritized_json.get("causal_graph_analysis", {})
+            research_agendas = prioritized_json.get("research_agendas", [])
+            
+            # Log what we found
+            logger.info(f"Found causal_graph_analysis: {bool(causal_graph_analysis)}, keys: {list(causal_graph_analysis.keys()) if isinstance(causal_graph_analysis, dict) else 'Not a dict'}")
+            logger.info(f"Found research_agendas: {bool(research_agendas)}, type: {type(research_agendas)}, length: {len(research_agendas) if isinstance(research_agendas, list) else 'N/A'}")
+            
+            # Validate research agendas structure
+            if research_agendas:
+                if not isinstance(research_agendas, list):
+                    logger.warning(f"⚠️ research_agendas is not a list, converting or skipping")
+                    research_agendas = []
+                else:
+                    validated_agendas = []
+                    for idx, agenda in enumerate(research_agendas):
+                        if not isinstance(agenda, dict):
+                            logger.warning(f"⚠️ Research agenda {idx + 1} is not a dict, skipping")
+                            continue
+                        
+                        # Validate required fields
+                        if "suggested_metrics" not in agenda:
+                            logger.warning(f"⚠️ Research agenda {idx + 1} missing 'suggested_metrics' field")
+                            continue
+                        
+                        suggested_metrics = agenda.get("suggested_metrics", [])
+                        if not isinstance(suggested_metrics, list):
+                            logger.warning(f"⚠️ Research agenda {idx + 1} 'suggested_metrics' is not a list")
+                            continue
+                        
+                        # Validate each suggested metric has research_question
+                        valid_metrics = []
+                        for metric_idx, metric in enumerate(suggested_metrics):
+                            if not isinstance(metric, dict):
+                                logger.warning(f"⚠️ Research agenda {idx + 1}, metric {metric_idx + 1} is not a dict, skipping")
+                                continue
+                            
+                            if "research_question" not in metric or not metric.get("research_question", "").strip():
+                                logger.warning(f"⚠️ Research agenda {idx + 1}, metric '{metric.get('metric_name', 'Unknown')}' missing or empty 'research_question' field")
+                                continue
+                            
+                            if "metric_id" not in metric or not metric.get("metric_id"):
+                                logger.warning(f"⚠️ Research agenda {idx + 1}, metric '{metric.get('metric_name', 'Unknown')}' missing 'metric_id' field")
+                                continue
+                            
+                            valid_metrics.append(metric)
+                        
+                        if valid_metrics:
+                            agenda["suggested_metrics"] = valid_metrics
+                            validated_agendas.append(agenda)
+                            logger.info(f"✅ Research agenda {idx + 1} validated: {len(valid_metrics)} metrics with research questions")
+                        else:
+                            logger.warning(f"⚠️ Research agenda {idx + 1} has no valid metrics with research questions, skipping")
+                    
+                    research_agendas = validated_agendas
+                    logger.info(f"Validated {len(research_agendas)} research agendas with {sum(len(a.get('suggested_metrics', [])) for a in research_agendas)} total metrics")
+                    
+                    if research_agendas:
+                        logger.info(f"Research agendas content: {json.dumps(research_agendas)[:500]}...")
+            
+            # Merge detected chains from service with agent analysis
+            if causal_analysis.get("detected_chains"):
+                if "detected_chains" not in causal_graph_analysis:
+                    causal_graph_analysis["detected_chains"] = []
+                causal_graph_analysis["detected_chains"].extend(causal_analysis["detected_chains"])
+            
+            if causal_analysis.get("unexpected_relationships"):
+                if "unexpected_relationships" not in causal_graph_analysis:
+                    causal_graph_analysis["unexpected_relationships"] = []
+                causal_graph_analysis["unexpected_relationships"].extend(causal_analysis["unexpected_relationships"])
+            
+            if causal_analysis.get("expected_downstream"):
+                if "expected_downstream" not in causal_graph_analysis:
+                    causal_graph_analysis["expected_downstream"] = []
+                causal_graph_analysis["expected_downstream"].extend(causal_analysis["expected_downstream"])
+            
+            logger.info(f"Extracted causal graph analysis: {len(causal_graph_analysis)} keys")
+            logger.info(f"Extracted {len(research_agendas)} research agendas")
             
             # Extract the array if the response is wrapped in an object
             prioritized_items_raw = []
@@ -1215,12 +1764,22 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
                 logger.warning(f"Unexpected JSON structure: {type(prioritized_json)}")
                 
             # Print what we found for debugging
-            logger.info(f"Extracted {len(prioritized_items_raw)} items from JSON")
-            for i, item in enumerate(prioritized_items_raw[:3]):  # Print first 3 for debugging
-                logger.info(f"  Item {i+1}: {json.dumps(item)[:100]}...")
+            logger.info(f"Extracted {len(prioritized_items_raw)} items from JSON (research agenda determines count)")
+            logger.info(f"Total combined_changes available: {len(combined_changes)}")
+            
+            # Research agenda determines the number of items - no artificial limits
+            if len(prioritized_items_raw) == 0:
+                logger.warning(f"Agent returned 0 items, this is an error")
+            else:
+                logger.info(f"Agent selected {len(prioritized_items_raw)} items based on research agenda requirements")
+            
+            for i, item in enumerate(prioritized_items_raw):
+                logger.info(f"  Item {i+1}: index={item.get('index')}, metric={item.get('metric')}, metric_id={item.get('metric_id')}, group={item.get('group')}")
             
             # Process each item to match with original data
             prioritized_items = []
+            items_matched = 0
+            items_failed = 0
             for item in prioritized_items_raw:
                 # Get the item index to match with original data
                 item_index = item.get("index")
@@ -1241,7 +1800,8 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
                             break
                     
                     if original_change:
-                        logger.info(f"Found original data for item index {item_index}: {original_change.get('metric')}")
+                        logger.info(f"✅ Found original data for item index {item_index}: {original_change.get('metric')}")
+                        items_matched += 1
                         # Create prioritized item with data from both the AI response and original change
                         prioritized_items.append({
                             "metric": original_change.get("metric"),
@@ -1261,7 +1821,11 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
                             "citywide_changes": original_change.get("citywide_changes", "")  # Include citywide changes
                         })
                     else:
-                        logger.warning(f"Could not find original data for item index {item_index}")
+                        logger.warning(f"❌ Could not find original data for item index {item_index}")
+                        items_failed += 1
+                        # Log available indices for debugging
+                        available_indices = [c.get('index') for c in combined_changes if c.get('index') is not None]
+                        logger.warning(f"   Available indices in combined_changes: {available_indices[:10]}...")
                         # Try to find by metric name and group as fallback
                         metric_name = item.get("metric", "").strip()
                         group_value = item.get("group", "All").strip()
@@ -1274,7 +1838,9 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
                                 break
                         
                         if original_change:
-                            logger.info(f"Found original data for metric: {metric_name} by name matching")
+                            logger.info(f"✅ Found original data for metric: {metric_name} by name matching (fallback)")
+                            items_matched += 1
+                            items_failed -= 1  # Don't count as failed if we found it by name
                             prioritized_items.append({
                                 "metric": metric_name,
                                 "metric_id": original_change.get("metric_id", "Unknown"),
@@ -1307,7 +1873,8 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
                             break
                     
                     if original_change:
-                        logger.info(f"Found original data for metric: {metric_name} by name matching")
+                        logger.info(f"✅ Found original data for metric: {metric_name} by name matching (no index)")
+                        items_matched += 1
                         prioritized_items.append({
                             "metric": metric_name,
                             "metric_id": original_change.get("metric_id", "Unknown"),
@@ -1331,14 +1898,77 @@ def prioritize_deltas(deltas, max_items=10, model_key=None):
             # Sort by priority
             prioritized_items.sort(key=lambda x: x.get("priority", 999))
             
+            # Log matching summary
+            logger.info(f"📊 Matching Summary: {len(prioritized_items_raw)} items from agent, {items_matched} successfully matched, {items_failed} failed to match")
+            if items_failed > 0:
+                logger.warning(f"⚠️ {items_failed} items from agent could not be matched to original data - these will not be stored")
+            
+            # NEW: Map research agendas to items based on suggested_metrics
+            # Each item gets research context from matching research agenda
+            if research_agendas:
+                logger.info(f"Mapping {len(research_agendas)} research agendas to {len(prioritized_items)} items")
+                
+                for item in prioritized_items:
+                    item_metric_name = item.get("metric", "").lower()
+                    item_metric_id = str(item.get("metric_id", "")).lower()
+                    
+                    # Find matching research agenda(s) for this item
+                    matching_agendas = []
+                    for agenda in research_agendas:
+                        # Check if this item's metric is in the agenda's suggested_metrics
+                        suggested_metrics = agenda.get("suggested_metrics", [])
+                        for suggested_metric in suggested_metrics:
+                            suggested_name = str(suggested_metric.get("metric_name", "")).lower()
+                            suggested_id = str(suggested_metric.get("metric_id", "")).lower()
+                            
+                            # Match by name or ID
+                            if (item_metric_name and suggested_name and item_metric_name in suggested_name) or \
+                               (item_metric_id and suggested_id and item_metric_id == suggested_id) or \
+                               (item_metric_name == suggested_name):
+                                matching_agendas.append(agenda)
+                                break
+                    
+                    # If no direct match, assign the first/primary research agenda
+                    # (items are part of the same research investigation)
+                    if not matching_agendas and research_agendas:
+                        matching_agendas = [research_agendas[0]]  # Use primary agenda
+                    
+                    # Store research context for this item
+                    if matching_agendas:
+                        primary_agenda = matching_agendas[0]
+                        item["research_context"] = {
+                            "narrative_thread": primary_agenda.get("narrative_thread", ""),
+                            "research_questions": primary_agenda.get("research_questions", []),
+                            "suggested_metrics": primary_agenda.get("suggested_metrics", []),
+                            "causal_inferences": primary_agenda.get("causal_inferences", [])
+                        }
+                        logger.info(f"  Mapped research agenda to item: {item.get('metric')}")
+                    else:
+                        # No matching agenda, but still include general research context if available
+                        if research_agendas:
+                            primary_agenda = research_agendas[0]
+                            item["research_context"] = {
+                                "narrative_thread": primary_agenda.get("narrative_thread", ""),
+                                "research_questions": primary_agenda.get("research_questions", []),
+                                "suggested_metrics": primary_agenda.get("suggested_metrics", []),
+                                "causal_inferences": primary_agenda.get("causal_inferences", [])
+                            }
+            
             # Log prioritized items
             for item in prioritized_items:
                 logger.info(f"Prioritized item: {item.get('metric')} - {item.get('group')} (Priority: {item.get('priority')})")
                 logger.info(f"  Explanation length: {len(item.get('rationale', ''))}")
                 logger.info(f"  Trend analysis: {item.get('trend_analysis', '')[:50]}...")
+                if item.get("research_context"):
+                    logger.info(f"  Research questions: {len(item['research_context'].get('research_questions', []))}")
             
             logger.info(f"Prioritized {len(prioritized_items)} items for the report")
-            return {"status": "success", "prioritized_items": prioritized_items}
+            return {
+                "status": "success", 
+                "prioritized_items": prioritized_items,
+                "causal_graph_analysis": causal_graph_analysis,
+                "research_agendas": research_agendas
+            }
             
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response: {e}")
@@ -1479,13 +2109,15 @@ def store_prioritized_items_with_filename(prioritized_items, period_type='month'
         logger.error(error_msg)
         return {"status": "error", "message": error_msg}
 
-def store_prioritized_items(prioritized_items, period_type='month', district=None):
+def store_prioritized_items(prioritized_items, period_type='month', district=None, causal_graph_analysis=None, research_agendas=None):
     """
     Store prioritized items in the monthly_reporting table.
     Args:
         prioritized_items: List of prioritized items to store
         period_type: Type of period (month, quarter, year)
         district: District number
+        causal_graph_analysis: Optional causal graph analysis to store in report metadata
+        research_agendas: Optional research agendas to store in report metadata
     Returns:
         Status dictionary
     """
@@ -1515,35 +2147,93 @@ def store_prioritized_items(prioritized_items, period_type='month', district=Non
         original_filename = f"monthly_report_{report_district}_{report_date.strftime('%Y_%m')}.html"
         revised_filename = f"monthly_report_{report_district}_{report_date.strftime('%Y_%m')}_revised.html"
         
+        # Prepare report metadata with causal graph analysis and research agendas
+        report_metadata = {}
+        if causal_graph_analysis:
+            report_metadata["causal_graph_analysis"] = causal_graph_analysis
+            logger.info(f"Adding causal_graph_analysis to report metadata: {len(causal_graph_analysis)} keys")
+        
+        # DEBUG: Log research_agendas before storing
+        logger.info(f"🔍 DEBUG: research_agendas parameter value: {research_agendas}")
+        logger.info(f"🔍 DEBUG: research_agendas type: {type(research_agendas)}")
+        logger.info(f"🔍 DEBUG: research_agendas is None? {research_agendas is None}")
+        logger.info(f"🔍 DEBUG: research_agendas is empty list? {research_agendas == []}")
+        if research_agendas:
+            logger.info(f"✅ Adding {len(research_agendas)} research agendas to report metadata")
+            logger.info(f"Research agendas content: {json.dumps(research_agendas)[:500]}...")
+            report_metadata["research_agendas"] = research_agendas
+        else:
+            logger.warning("⚠️ No research_agendas to store in report metadata (research_agendas is None or empty)")
+        
+        logger.info(f"Final report_metadata keys: {list(report_metadata.keys())}")
+        logger.info(f"Final report_metadata JSON length: {len(json.dumps(report_metadata))}")
+        
         # Create a record in the reports table first
         cursor.execute("""
             INSERT INTO reports (
                 max_items, district, period_type, original_filename, revised_filename,
-                created_at, updated_at
+                metadata, created_at, updated_at
             ) VALUES (
-                %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING id
         """, (
-            len(prioritized_items),
+            len(prioritized_items),  # Store actual count - research agenda determines this
             report_district,
             period_type,
             original_filename,
-            revised_filename
+            revised_filename,
+            json.dumps(report_metadata) if report_metadata else '{}'
         ))
         
         report_id = cursor.fetchone()[0]
-        logger.info(f"Created report record with ID: {report_id}")
+        logger.info(f"Created report record with ID: {report_id} for {len(prioritized_items)} items")
+        logger.info(f"About to store {len(prioritized_items)} prioritized items with report_id {report_id}")
+        if causal_graph_analysis:
+            logger.info(f"Stored causal graph analysis with {len(causal_graph_analysis.get('detected_chains', []))} chains")
+        if research_agendas:
+            logger.info(f"Stored {len(research_agendas)} research agendas")
+            
+            # NEW: Store research agendas in Research Service
+            try:
+                # Try to import research service from transparentcity-platform
+                import sys
+                import os
+                # Add transparentcity-platform to path if not already there
+                transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'transparentcity-platform', 'src')
+                if transparentcity_path not in sys.path:
+                    sys.path.insert(0, transparentcity_path)
+                
+                from transparentcity.services import get_research_service
+                research_service = get_research_service()
+                
+                # Convert research agendas to ResearchAgenda objects
+                created_agendas = research_service.from_monthly_report_data(
+                    research_agendas_data=research_agendas,
+                    city_id=1,  # San Francisco
+                    district=report_district,
+                    period_type=period_type
+                )
+                
+                logger.info(f"✅ Created {len(created_agendas)} research agendas in Research Service")
+                logger.info(f"   Research agendas will now guide agent analysis")
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to store research agendas in Research Service: {e}")
+                logger.warning(f"   Research agendas still stored in report metadata")
+                # Continue anyway - research agendas still stored in report metadata
         
         # Insert each prioritized item
         inserted_ids = []
-        for item in prioritized_items:
+        logger.info(f"Starting to insert {len(prioritized_items)} items into monthly_reporting table")
+        for i, item in enumerate(prioritized_items):
             # Create metadata dictionary with citywide changes
             metadata = {
                 "trend_analysis": item.get("trend_analysis", ""),
                 "follow_up": item.get("follow_up", ""),
                 "change_type": item.get("change_type", "neutral"),  # Store change_type
                 "greendirection": item.get("greendirection"),  # Store greendirection
-                "citywide_changes": item.get("citywide_changes", "")  # Store citywide changes
+                "citywide_changes": item.get("citywide_changes", ""),  # Store citywide changes
+                "research_context": item.get("research_context", {})  # NEW: Store research context per item
             }
             
             # Create item title from metric name and group
@@ -1551,6 +2241,8 @@ def store_prioritized_items(prioritized_items, period_type='month', district=Non
             metric_id = item.get("metric_id", "Unknown")
             group_value = item.get("group") or "All"  # Handle None values properly
             item_title = f"{metric_name} - {group_value}" if group_value != "All" else metric_name
+            
+            logger.debug(f"Inserting item {i+1}/{len(prioritized_items)}: {item_title} (metric_id: {metric_id}, report_id: {report_id})")
             
             cursor.execute("""
                 INSERT INTO monthly_reporting (
@@ -1583,9 +2275,226 @@ def store_prioritized_items(prioritized_items, period_type='month', district=Non
             inserted_id = cursor.fetchone()[0]
             inserted_ids.append(inserted_id)
             stored_count += 1
+            logger.debug(f"Successfully inserted item {i+1}/{len(prioritized_items)} with id {inserted_id} and report_id {report_id}")
             
+        # Process research agendas to insert/update metrics with research questions
+        if research_agendas:
+            logger.info(f"Processing {len(research_agendas)} research agendas to create/update metrics with research questions")
+            
+            # Create a map of existing items by (metric_id, group_value) for quick lookup
+            existing_items_map = {}
+            # Also create a metric_id-only lookup for fallback matching
+            metric_id_to_items = {}
+            for item in prioritized_items:
+                metric_id = str(item.get("metric_id", ""))
+                group = item.get("group") or "All"
+                key = (metric_id, group)
+                existing_items_map[key] = item
+                # Track all items for this metric_id
+                if metric_id not in metric_id_to_items:
+                    metric_id_to_items[metric_id] = []
+                metric_id_to_items[metric_id].append((group, item))
+            
+            # Track which items we've updated/inserted from research agendas
+            agenda_updated_count = 0
+            agenda_inserted_count = 0
+            
+            for agenda_idx, agenda in enumerate(research_agendas):
+                suggested_metrics = agenda.get("suggested_metrics", [])
+                logger.info(f"Processing agenda {agenda_idx + 1}: {len(suggested_metrics)} suggested metrics")
+                
+                for suggested_metric in suggested_metrics:
+                    metric_id = str(suggested_metric.get("metric_id", ""))
+                    metric_name = suggested_metric.get("metric_name", "")
+                    research_question = suggested_metric.get("research_question", "")
+                    reason = suggested_metric.get("reason", "")
+                    
+                    # DEBUG: Log each suggested metric being processed
+                    logger.info(f"  - Processing metric: {metric_name} (ID: {metric_id})")
+                    logger.info(f"    Has research question? {'✅' if research_question else '❌'}")
+                    if research_question:
+                        logger.info(f"    Question: {research_question[:100]}...")
+                    
+                    if not metric_id or not metric_name:
+                        logger.warning(f"Skipping suggested metric with missing metric_id or metric_name: {suggested_metric}")
+                        continue
+                    
+                    if not research_question:
+                        logger.warning(f"Skipping suggested metric '{metric_name}' (ID: {metric_id}) - missing research_question")
+                        continue
+                    
+                    # Try to find existing item in prioritized_items first
+                    # Check all possible group values for this metric_id
+                    existing_item = None
+                    matched_group = None
+                    db_row = None
+                    metric_id_str = str(metric_id)
+                    
+                    # First, check in prioritized_items map
+                    if metric_id_str in metric_id_to_items:
+                        # Found items for this metric_id - use the first one
+                        matched_group, existing_item = metric_id_to_items[metric_id_str][0]
+                        logger.info(f"    Found existing item in prioritized_items for metric_id {metric_id_str} with group: {matched_group}")
+                    else:
+                        # Not in prioritized_items, but might exist in DB from previous run
+                        # Query database directly to find existing items
+                        logger.info(f"    Metric {metric_id_str} not in prioritized_items, checking database...")
+                        cursor.execute("""
+                            SELECT id, group_value 
+                            FROM monthly_reporting 
+                            WHERE report_id = %s AND metric_id = %s
+                            LIMIT 1
+                        """, (report_id, metric_id))
+                        db_row = cursor.fetchone()
+                        if db_row:
+                            matched_group = db_row[1] or "All"
+                            logger.info(f"    Found existing DB item with group: {matched_group}")
+                    
+                    # DEBUG: Log lookup result
+                    logger.info(f"    Looking up metric_id: {metric_id_str}")
+                    logger.info(f"    Found existing item? {'✅' if (existing_item or db_row) else '❌'}")
+                    if matched_group:
+                        logger.info(f"    Will use group: {matched_group}")
+                    
+                    if existing_item or db_row:
+                        # Update existing item's rationale with research question
+                        # Use the matched group value from the existing item
+                        update_group = matched_group or "All"
+                        logger.info(f"Updating rationale for existing item: {metric_name} (ID: {metric_id}, Group: {update_group})")
+                        try:
+                            cursor.execute("""
+                                UPDATE monthly_reporting
+                                SET rationale = %s
+                                WHERE report_id = %s
+                                  AND metric_id = %s
+                                  AND group_value = %s
+                            """, (
+                                research_question,
+                                report_id,
+                                metric_id,
+                                update_group
+                            ))
+                            # Check if update actually affected any rows
+                            if cursor.rowcount > 0:
+                                agenda_updated_count += 1
+                                logger.info(f"✅ Updated rationale for {metric_name} (ID: {metric_id}, Group: {update_group}) - Rows affected: {cursor.rowcount}")
+                            else:
+                                logger.warning(f"⚠️ Update executed but NO rows affected for {metric_name} (ID: {metric_id}, Group: {update_group})")
+                                logger.warning(f"   Params: report_id={report_id}, metric_id={metric_id}, group={update_group}")
+                                # Try updating by metric_id only (ignore group) as fallback
+                                logger.info(f"   Attempting fallback: updating by metric_id only (ignoring group)")
+                                cursor.execute("""
+                                    UPDATE monthly_reporting
+                                    SET rationale = %s
+                                    WHERE report_id = %s
+                                      AND metric_id = %s
+                                    LIMIT 1
+                                """, (
+                                    research_question,
+                                    report_id,
+                                    metric_id
+                                ))
+                                if cursor.rowcount > 0:
+                                    agenda_updated_count += 1
+                                    logger.info(f"✅ Fallback update succeeded - Rows affected: {cursor.rowcount}")
+                                else:
+                                    logger.warning(f"⚠️ Fallback update also failed - No rows found for metric_id={metric_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to update rationale for {metric_name} (ID: {metric_id}): {e}")
+                    else:
+                        # Create new monthly_reporting entry for this metric
+                        logger.info(f"Creating new entry for suggested metric: {metric_name} (ID: {metric_id})")
+                        
+                        # Fetch basic metric info from metrics table
+                        try:
+                            cursor.execute("""
+                                SELECT metric_name, category, subcategory, category_fields
+                                FROM metrics
+                                WHERE id = %s AND is_active = TRUE
+                            """, (metric_id,))
+                            metric_info = cursor.fetchone()
+                            
+                            if not metric_info:
+                                logger.warning(f"Metric ID {metric_id} not found in metrics table or not active - skipping")
+                                continue
+                            
+                            # Use metric name from database if available, otherwise use suggested name
+                            db_metric_name = metric_info[0] if metric_info[0] else metric_name
+                            item_title = db_metric_name
+                            
+                            # Extract group_field_name from category_fields JSONB
+                            # Default to "group" if not available
+                            group_field_name = "group"  # Default value
+                            category_fields = metric_info[3] if len(metric_info) > 3 else None
+                            if category_fields:
+                                try:
+                                    if isinstance(category_fields, str):
+                                        category_fields = json.loads(category_fields)
+                                    if isinstance(category_fields, list) and len(category_fields) > 0:
+                                        # Get the "name" from the first category field
+                                        first_field = category_fields[0]
+                                        if isinstance(first_field, dict):
+                                            group_field_name = first_field.get("name", "group")
+                                        elif isinstance(first_field, str):
+                                            group_field_name = first_field
+                                except (json.JSONDecodeError, TypeError, AttributeError) as e:
+                                    logger.warning(f"Could not parse category_fields for metric {metric_id}: {e}")
+                            
+                            # Create metadata for the new item
+                            agenda_metadata = {
+                                "from_research_agenda": True,
+                                "agenda_index": agenda_idx,
+                                "narrative_thread": agenda.get("narrative_thread", ""),
+                                "reason": reason,
+                                "research_question": research_question
+                            }
+                            
+                            # Insert new item with research question as rationale
+                            cursor.execute("""
+                                INSERT INTO monthly_reporting (
+                                    report_id, report_date, item_title, metric_name, metric_id, 
+                                    group_value, group_field_name, period_type, 
+                                    comparison_mean, recent_mean, difference, 
+                                    percent_change, rationale, explanation, priority, district, metadata
+                                ) VALUES (
+                                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                ) RETURNING id
+                            """, (
+                                report_id,
+                                report_date,
+                                item_title,
+                                db_metric_name,
+                                metric_id,
+                                group_value,
+                                group_field_name,
+                                period_type,
+                                0,  # comparison_mean - will be filled by explainer if needed
+                                0,  # recent_mean - will be filled by explainer if needed
+                                0,  # difference
+                                0,  # percent_change
+                                research_question,  # rationale - the research question
+                                "",  # explanation - will be filled by generate_explanations
+                                999,  # priority - lower than prioritized items
+                                district,
+                                json.dumps(agenda_metadata)
+                            ))
+                            
+                            inserted_id = cursor.fetchone()[0]
+                            inserted_ids.append(inserted_id)
+                            agenda_inserted_count += 1
+                            stored_count += 1
+                            logger.info(f"✅ Created new entry for {db_metric_name} (ID: {metric_id}) with research question")
+                            
+                        except Exception as e:
+                            logger.error(f"Failed to create entry for {metric_name} (ID: {metric_id}): {e}")
+                            continue
+            
+            logger.info(f"Research agenda processing complete: {agenda_updated_count} updated, {agenda_inserted_count} inserted")
+        
         connection.commit()
         cursor.close()
+        logger.info(f"Successfully stored {stored_count} total items (prioritized + research agenda) for report_id {report_id}")
+        logger.info(f"Inserted IDs: {inserted_ids}")
         return {"status": "success", "inserted_ids": inserted_ids, "report_id": report_id}
     
     # Execute the operation with proper connection handling
@@ -1656,6 +2565,16 @@ def generate_explanations(report_ids, model_key=None):
             district = item["district"]
             period_type = item["period_type"]
             
+            # NEW: Extract metadata (which contains research_context)
+            item_metadata_raw = item.get("metadata", {})
+            if isinstance(item_metadata_raw, str):
+                try:
+                    item_metadata = json.loads(item_metadata_raw)
+                except:
+                    item_metadata = {}
+            else:
+                item_metadata = item_metadata_raw or {}
+            
             # Calculate time periods for context - check the report date
             report_date = item.get("report_date") or datetime.now().date()
             if isinstance(report_date, str):
@@ -1703,7 +2622,98 @@ def generate_explanations(report_ids, model_key=None):
             if group_field_name and group_value and group_value != "All":
                 group_context = f" in {group_field_name} '{group_value}'"
             
-            prompt = f"""Please explain why the metric '{metric_name}' (ID: {metric_id}){group_context} {direction} from {comparison_mean} to {recent_mean} ({percent_change_str}) between {previous_month} and {recent_month} for {district_display}.
+            # PRIORITY: Get research question from rationale field (set by research agendas)
+            rationale = item.get("rationale", "")
+            research_question = None
+            if rationale and rationale.strip():
+                research_question = rationale.strip()
+                logger.info(f"📋 Found research question in rationale field: {research_question[:100]}...")
+            
+            # NEW: Get research context from item metadata (stored during prioritization)
+            # item_metadata was already extracted above
+            research_context = None
+            item_research_context = item_metadata.get("research_context", {})
+            
+            if item_research_context:
+                # Build research context string from item's research context
+                narrative = item_research_context.get("narrative_thread", "")
+                questions = item_research_context.get("research_questions", [])
+                suggested_metrics = item_research_context.get("suggested_metrics", [])
+                causal_inferences = item_research_context.get("causal_inferences", [])
+                
+                research_context_parts = []
+                if narrative:
+                    research_context_parts.append(f"NARRATIVE: {narrative}")
+                if questions:
+                    research_context_parts.append(f"RESEARCH QUESTIONS:\n" + "\n".join([f"  - {q}" for q in questions]))
+                if suggested_metrics:
+                    metric_list = [m.get("metric_name", m) if isinstance(m, dict) else m for m in suggested_metrics]
+                    research_context_parts.append(f"SUGGESTED METRICS TO INVESTIGATE: {', '.join(metric_list)}")
+                if causal_inferences:
+                    inf_list = [inf if isinstance(inf, str) else inf.get("relationship", str(inf)) for inf in causal_inferences]
+                    research_context_parts.append(f"CAUSAL INFERENCES: {', '.join(inf_list)}")
+                
+                if research_context_parts:
+                    research_context = "\n".join(research_context_parts)
+                    logger.info(f"📋 Using research context from item metadata")
+                    logger.info(f"   Research questions: {len(questions)}")
+            
+            # Fallback: Get research context from Research Service if not in item metadata
+            if not research_context:
+                try:
+                    import sys
+                    import os
+                    transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'transparentcity-platform', 'src')
+                    if transparentcity_path not in sys.path:
+                        sys.path.insert(0, transparentcity_path)
+                    
+                    from transparentcity.services import get_research_service
+                    research_service = get_research_service()
+                    
+                    research_context = research_service.get_research_context(
+                        city_id=1,  # San Francisco
+                        district=district,
+                        max_agendas=3
+                    )
+                    
+                    if research_context:
+                        logger.info(f"📋 Using research context from Research Service")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to get research context: {e}")
+                    research_context = None
+            
+            # Build prompt with optional research question (from rationale) and research context
+            prompt_base = f"""Please explain why the metric '{metric_name}' (ID: {metric_id}){group_context} {direction} from {comparison_mean} to {recent_mean} ({percent_change_str}) between {previous_month} and {recent_month} for {district_display}."""
+            
+            # Prioritize research question from rationale field
+            if research_question:
+                prompt = f"""{prompt_base}
+
+RESEARCH QUESTION:
+{research_question}
+
+CRITICAL: The above research question is the primary focus for your investigation. Please conduct thorough research to answer this specific question. Use the available tools to explore correlations, geographic patterns, and causal relationships related to this question.
+"""
+                if research_context:
+                    prompt += f"""
+
+ADDITIONAL RESEARCH CONTEXT:
+{research_context}
+
+Use this additional context to inform your analysis, but prioritize answering the research question above.
+"""
+            elif research_context:
+                prompt = f"""{prompt_base}
+
+RESEARCH CONTEXT:
+{research_context}
+
+Use the research context above to guide your analysis. Focus on answering the research questions and exploring the suggested metrics and causal relationships.
+"""
+            else:
+                prompt = prompt_base
+            
+            prompt += """
 
 Use the available tools to research this change and provide a comprehensive explanation that can be included in a monthly newsletter for city residents.
 Please share anomalies (referenced by anomaly_ID, not metric_ID), groups or data-points that explain a large portion of the difference in the metric.  Your goal is a clear explanation of the change.  
@@ -2122,6 +3132,10 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
         
         cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
+        # Initialize district from outer scope to avoid UnboundLocalError
+        # This will be used if we can't resolve a report_id from filename
+        current_district = district
+        
         # Prefer selecting items by report_id if we can resolve it from the provided original filename
         selected_report_id = None
         if original_filename:
@@ -2141,7 +3155,7 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
                     selected_report_id = report_row["id"]
                     # If we resolved a report by filename, prefer the district from that report
                     try:
-                        district = report_row["district"]
+                        current_district = report_row["district"]
                     except Exception:
                         pass
             except Exception as e:
@@ -2149,6 +3163,7 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
         
         if selected_report_id is not None:
             # Pull items by report_id
+            logger.info(f"Querying monthly_reporting for report_id: {selected_report_id}")
             cursor.execute(
                 """
                 SELECT *,
@@ -2166,6 +3181,11 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
                 """,
                 (selected_report_id,),
             )
+            
+            # Log how many items we expect to find
+            cursor.execute("SELECT COUNT(*) FROM monthly_reporting WHERE report_id = %s", (selected_report_id,))
+            expected_count = cursor.fetchone()[0]
+            logger.info(f"Expected {expected_count} items for report_id {selected_report_id}")
         else:
             # Fallback to date + district for backward compatibility
             cursor.execute(
@@ -2183,7 +3203,7 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
                 WHERE report_date = %s AND district = %s
                 ORDER BY priority
                 """,
-                (report_date, district),
+                (report_date, current_district),
             )
         
         items = cursor.fetchall()
@@ -2193,7 +3213,7 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
             )
         else:
             logger.info(
-                f"Found {len(items)} report items for date {report_date} and district {district}"
+                f"Found {len(items)} report items for date {report_date} and district {current_district}"
             )
         if not items:
             if selected_report_id is not None:
@@ -2202,7 +3222,7 @@ def generate_monthly_report(report_date=None, district="0", original_filename=No
                 )
             else:
                 logger.warning(
-                    f"No report items found for date {report_date} and district {district}"
+                    f"No report items found for date {report_date} and district {current_district}"
                 )
             cursor.close()
             return None
@@ -3076,19 +4096,31 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
             if json_str:
                 logger.info(f"Strategy 1 (raw extraction) found JSON of length: {len(json_str)}")
                 try:
-                    proofread_data = json.loads(json_str)
-                    logger.info("✅ Successfully parsed JSON using raw extraction")
+                    parsed_data = json.loads(json_str)
+                    # Validate that it has the required "newsletter" field
+                    if isinstance(parsed_data, dict) and 'newsletter' in parsed_data:
+                        proofread_data = parsed_data
+                        logger.info("✅ Successfully parsed JSON using raw extraction with 'newsletter' field")
+                    else:
+                        logger.warning(f"JSON parsed but missing 'newsletter' field. Keys found: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'not a dict'}")
+                        # Store it anyway in case we can't find a better one
+                        proofread_data = parsed_data
                 except json.JSONDecodeError as e:
                     logger.warning(f"Raw extraction found JSON but parsing failed: {e}")
                     # Try with strict=False
                     try:
-                        proofread_data = json.loads(json_str, strict=False)
-                        logger.info("✅ Successfully parsed JSON using raw extraction with strict=False")
+                        parsed_data = json.loads(json_str, strict=False)
+                        if isinstance(parsed_data, dict) and 'newsletter' in parsed_data:
+                            proofread_data = parsed_data
+                            logger.info("✅ Successfully parsed JSON using raw extraction with strict=False and 'newsletter' field")
+                        else:
+                            logger.warning(f"JSON parsed with strict=False but missing 'newsletter' field. Keys found: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'not a dict'}")
+                            proofread_data = parsed_data
                     except json.JSONDecodeError:
                         json_str = None
             
-            # Strategy 2: If raw extraction failed, try cleaning first
-            if not proofread_data:
+            # Strategy 2: If raw extraction failed or didn't have newsletter field, try cleaning first
+            if not proofread_data or (proofread_data and 'newsletter' not in proofread_data):
                 cleaned_response = clean_html_response(response_content)
                 logger.info(f"Strategy 2 (cleaned extraction) - cleaned response length: {len(cleaned_response)}")
                 logger.info(f"Cleaned response preview: {repr(cleaned_response[:200])}")
@@ -3097,33 +4129,59 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
                 if json_str:
                     logger.info(f"Strategy 2 found JSON of length: {len(json_str)}")
                     try:
-                        proofread_data = json.loads(json_str)
-                        logger.info("✅ Successfully parsed JSON using cleaned extraction")
+                        parsed_data = json.loads(json_str)
+                        # Validate that it has the required "newsletter" field
+                        if isinstance(parsed_data, dict) and 'newsletter' in parsed_data:
+                            proofread_data = parsed_data
+                            logger.info("✅ Successfully parsed JSON using cleaned extraction with 'newsletter' field")
+                        else:
+                            logger.warning(f"JSON parsed but missing 'newsletter' field. Keys found: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'not a dict'}")
+                            # Only use this if we don't have any data yet
+                            if not proofread_data:
+                                proofread_data = parsed_data
                     except json.JSONDecodeError as e:
                         logger.warning(f"Cleaned extraction found JSON but parsing failed: {e}")
                         # Try with strict=False
                         try:
-                            proofread_data = json.loads(json_str, strict=False)
-                            logger.info("✅ Successfully parsed JSON using cleaned extraction with strict=False")
+                            parsed_data = json.loads(json_str, strict=False)
+                            if isinstance(parsed_data, dict) and 'newsletter' in parsed_data:
+                                proofread_data = parsed_data
+                                logger.info("✅ Successfully parsed JSON using cleaned extraction with strict=False and 'newsletter' field")
+                            else:
+                                logger.warning(f"JSON parsed with strict=False but missing 'newsletter' field. Keys found: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'not a dict'}")
+                                if not proofread_data:
+                                    proofread_data = parsed_data
                         except json.JSONDecodeError:
                             json_str = None
             
             # Strategy 3: Try direct parsing if response looks like pure JSON
-            if not proofread_data:
+            if not proofread_data or (proofread_data and 'newsletter' not in proofread_data):
                 cleaned_response = clean_html_response(response_content)
                 if cleaned_response.strip().startswith('{') and cleaned_response.strip().endswith('}'):
                     logger.info("Strategy 3 (direct parsing) - response appears to be pure JSON")
                     try:
-                        proofread_data = json.loads(cleaned_response)
-                        logger.info("✅ Successfully parsed JSON using direct parsing")
+                        parsed_data = json.loads(cleaned_response)
+                        if isinstance(parsed_data, dict) and 'newsletter' in parsed_data:
+                            proofread_data = parsed_data
+                            logger.info("✅ Successfully parsed JSON using direct parsing with 'newsletter' field")
+                        else:
+                            logger.warning(f"Direct parsing succeeded but missing 'newsletter' field. Keys found: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'not a dict'}")
+                            if not proofread_data:
+                                proofread_data = parsed_data
                     except json.JSONDecodeError as e:
                         logger.warning(f"Direct parsing failed: {e}")
                         
                         # Strategy 3b: Try with strict=False to allow control characters
                         try:
                             logger.info("Strategy 3b - trying json.loads with strict=False")
-                            proofread_data = json.loads(cleaned_response, strict=False)
-                            logger.info("✅ Successfully parsed JSON using strict=False")
+                            parsed_data = json.loads(cleaned_response, strict=False)
+                            if isinstance(parsed_data, dict) and 'newsletter' in parsed_data:
+                                proofread_data = parsed_data
+                                logger.info("✅ Successfully parsed JSON using strict=False with 'newsletter' field")
+                            else:
+                                logger.warning(f"Parsing with strict=False succeeded but missing 'newsletter' field. Keys found: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'not a dict'}")
+                                if not proofread_data:
+                                    proofread_data = parsed_data
                         except json.JSONDecodeError as e2:
                             logger.warning(f"Parsing with strict=False failed: {e2}")
                             
@@ -3154,37 +4212,76 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
                                     return ''.join(result)
                                 
                                 sanitized_response = escape_control_chars(cleaned_response)
-                                proofread_data = json.loads(sanitized_response)
-                                logger.info("✅ Successfully parsed JSON after sanitizing control characters")
+                                parsed_data = json.loads(sanitized_response)
+                                if isinstance(parsed_data, dict) and 'newsletter' in parsed_data:
+                                    proofread_data = parsed_data
+                                    logger.info("✅ Successfully parsed JSON after sanitizing control characters with 'newsletter' field")
+                                else:
+                                    logger.warning(f"Parsing after sanitization succeeded but missing 'newsletter' field. Keys found: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'not a dict'}")
+                                    if not proofread_data:
+                                        proofread_data = parsed_data
                             except json.JSONDecodeError as e3:
                                 logger.warning(f"Parsing after sanitization failed: {e3}")
             
-            # Strategy 4: Try to find and extract JSON from any text
-            if not proofread_data:
-                logger.info("Strategy 4 (comprehensive search) - searching for any JSON pattern")
+            # Strategy 4: Try to find and extract JSON from any text (prioritize ones with "newsletter" field)
+            if not proofread_data or (proofread_data and 'newsletter' not in proofread_data):
+                logger.info("Strategy 4 (comprehensive search) - searching for any JSON pattern with 'newsletter' field")
                 # Look for JSON objects that might be embedded in text
                 import re
                 # Find all potential JSON objects (more aggressive pattern)
+                # Prioritize patterns that look for "newsletter" field first
                 json_patterns = [
-                    r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Basic nested braces
-                    r'\{.*?"newsletter".*?\}',  # Look for newsletter field
+                    r'\{.*?"newsletter".*?\}',  # Look for newsletter field FIRST (highest priority)
                     r'\{.*?"proofread_feedback".*?\}',  # Look for feedback field
+                    r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Basic nested braces (lowest priority)
                 ]
                 
-                for pattern in json_patterns:
+                # First pass: only try patterns that explicitly look for "newsletter"
+                for pattern in json_patterns[:2]:  # Only first two patterns
                     matches = re.findall(pattern, response_content, re.DOTALL)
+                    # Sort matches by length (longest first) to get most complete JSON
+                    matches.sort(key=len, reverse=True)
                     for match in matches:
                         try:
                             # Try to parse this potential JSON
                             test_data = json.loads(match)
-                            if 'newsletter' in test_data:  # Validate it has expected structure
+                            if isinstance(test_data, dict) and 'newsletter' in test_data:
                                 proofread_data = test_data
-                                logger.info("✅ Successfully parsed JSON using comprehensive search")
+                                logger.info("✅ Successfully parsed JSON using comprehensive search with 'newsletter' field")
                                 break
                         except json.JSONDecodeError:
                             continue
-                    if proofread_data:
+                    if proofread_data and 'newsletter' in proofread_data:
                         break
+                
+                # Second pass: if we still don't have newsletter, try all patterns but prefer ones with newsletter
+                if not proofread_data or (proofread_data and 'newsletter' not in proofread_data):
+                    logger.info("Strategy 4b - trying all patterns, will validate for 'newsletter' field")
+                    all_matches = []
+                    for pattern in json_patterns:
+                        matches = re.findall(pattern, response_content, re.DOTALL)
+                        all_matches.extend(matches)
+                    
+                    # Remove duplicates and sort by length (longest first)
+                    unique_matches = list(set(all_matches))
+                    unique_matches.sort(key=len, reverse=True)
+                    
+                    for match in unique_matches:
+                        try:
+                            test_data = json.loads(match)
+                            if isinstance(test_data, dict):
+                                if 'newsletter' in test_data:
+                                    proofread_data = test_data
+                                    logger.info("✅ Successfully parsed JSON using comprehensive search with 'newsletter' field")
+                                    break
+                                elif not proofread_data:
+                                    # Store first valid JSON even without newsletter as fallback
+                                    proofread_data = test_data
+                                    logger.warning(f"Found JSON without 'newsletter' field. Keys: {list(test_data.keys())}")
+                        except json.JSONDecodeError:
+                            continue
+                        if proofread_data and 'newsletter' in proofread_data:
+                            break
             
             # If all strategies failed, raise an error
             if not proofread_data:
@@ -3207,8 +4304,29 @@ def proofread_and_revise_report(report_path, model_key=None, report_id=None):
             if not revised_newsletter_content:
                 logger.error("No 'newsletter' content found in proofread response.")
                 logger.error(f"Available keys in response: {list(proofread_data.keys()) if proofread_data else 'None'}")
-                logger.error(f"Raw response preview: {response_content[:500]}...")
-                return {"status": "error", "message": "Proofread response missing 'newsletter' content."}
+                logger.error(f"Full parsed JSON structure: {json.dumps(proofread_data, indent=2)[:1000] if proofread_data else 'None'}...")
+                logger.error(f"Raw response preview (first 1000 chars): {response_content[:1000]}...")
+                
+                # Try to find newsletter content in alternative fields or nested structures
+                alternative_fields = ['content', 'html', 'revised_content', 'newsletter_content', 'revised_newsletter']
+                for field in alternative_fields:
+                    if proofread_data and field in proofread_data:
+                        logger.warning(f"Found alternative field '{field}' with content. Attempting to use it.")
+                        alternative_content = proofread_data.get(field)
+                        if alternative_content and isinstance(alternative_content, str) and len(alternative_content) > 100:
+                            logger.info(f"Using alternative field '{field}' as newsletter content")
+                            revised_newsletter_content = alternative_content
+                            break
+                
+                # If still no content, return detailed error
+                if not revised_newsletter_content:
+                    error_msg = (
+                        f"Proofread response missing 'newsletter' content. "
+                        f"Available keys: {list(proofread_data.keys()) if proofread_data else 'None'}. "
+                        f"The AI model may not be following the prompt format correctly. "
+                        f"Please check the model response format and ensure it returns JSON with a 'newsletter' field."
+                    )
+                    return {"status": "error", "message": error_msg}
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse proofread response as JSON: {e}")
@@ -3509,10 +4627,15 @@ def run_monthly_report_process_with_filename(district="0", period_type="month", 
         deltas = select_deltas_to_discuss(period_type=period_type, district=district)
         if deltas.get("status") != "success":
             return deltas
+        
+        # Step 1.5: Select anomalies to discuss
+        logger.info("Step 1.5: Selecting anomalies to discuss")
+        anomalies = select_anomalies_to_discuss(period_type=period_type, district=district, limit=20)
+        logger.info(f"Found {len(anomalies)} anomalies to include")
             
         # Step 2: Prioritize deltas and get explanations
         logger.info("Step 2: Prioritizing deltas")
-        prioritized = prioritize_deltas(deltas, max_items=max_report_items, model_key=model_key)
+        prioritized = prioritize_deltas(deltas, anomalies=anomalies if anomalies else None, max_items=max_report_items, model_key=model_key, period_type=period_type)
         if prioritized.get("status") != "success":
             return prioritized
         
@@ -3594,19 +4717,41 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
         deltas = select_deltas_to_discuss(period_type=period_type, district=district)
         if deltas.get("status") != "success":
             return deltas
+        
+        # Step 1.5: Select anomalies to discuss
+        logger.info("Step 1.5: Selecting anomalies to discuss")
+        anomalies = select_anomalies_to_discuss(period_type=period_type, district=district, limit=20)
+        logger.info(f"Found {len(anomalies)} anomalies to include")
             
         # Step 2: Prioritize deltas and get explanations
         logger.info("Step 2: Prioritizing deltas")
-        prioritized = prioritize_deltas(deltas, max_items=max_report_items, model_key=model_key)
+        prioritized = prioritize_deltas(deltas, anomalies=anomalies if anomalies else None, max_items=max_report_items, model_key=model_key, period_type=period_type)
         if prioritized.get("status") != "success":
             return prioritized
         
         # Store prioritized items in the database
         logger.info("Step 2.5: Storing prioritized items")
+        
+        # DEBUG: Log what we're about to store
+        prioritized_items_to_store = prioritized.get("prioritized_items", [])
+        causal_analysis_to_store = prioritized.get("causal_graph_analysis")
+        research_agendas_to_store = prioritized.get("research_agendas")
+        
+        logger.info(f"🔍 DEBUG: About to store {len(prioritized_items_to_store)} prioritized items")
+        logger.info(f"🔍 DEBUG: causal_graph_analysis type: {type(causal_analysis_to_store)}, is None? {causal_analysis_to_store is None}")
+        logger.info(f"🔍 DEBUG: research_agendas type: {type(research_agendas_to_store)}, is None? {research_agendas_to_store is None}")
+        if research_agendas_to_store:
+            logger.info(f"🔍 DEBUG: research_agendas length: {len(research_agendas_to_store)}")
+            logger.info(f"🔍 DEBUG: research_agendas content: {json.dumps(research_agendas_to_store)[:200]}...")
+        else:
+            logger.warning("🔍 DEBUG: research_agendas is None or empty!")
+        
         store_result = store_prioritized_items(
-            prioritized.get("prioritized_items", []),
+            prioritized_items_to_store,
             period_type=period_type,
-            district=district
+            district=district,
+            causal_graph_analysis=causal_analysis_to_store,
+            research_agendas=research_agendas_to_store
         )
         if store_result.get("status") != "success":
             return store_result
@@ -3859,25 +5004,24 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
 
         # Step 7: Generate the monthly newsletter (with enriched context already in the database)
         logger.info("Step 7: Generating monthly newsletter")
+        logger.info(f"Using report_id {report_id} to get original filename")
         
-        # Get the original filename from the database for this district
+        # Get the original filename from the database using the report_id we already have
         def get_original_filename_operation(connection):
             cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
             
-            # Get the most recent report for this district
+            # Get the original filename for the specific report_id we created
             cursor.execute("""
                 SELECT original_filename 
                 FROM reports 
-                WHERE district = %s 
-                ORDER BY created_at DESC 
-                LIMIT 1
-            """, (district,))
+                WHERE id = %s
+            """, (report_id,))
             
             result = cursor.fetchone()
             cursor.close()
             return result['original_filename'] if result else None
         
-        # Get the original filename
+        # Get the original filename using the report_id
         filename_result = execute_with_connection(
             operation=get_original_filename_operation,
             db_host=DB_HOST,
@@ -3890,9 +5034,11 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
         original_filename = None
         if filename_result["status"] == "success" and filename_result["result"]:
             original_filename = filename_result["result"]
-            logger.info(f"Using original filename: {original_filename}")
+            logger.info(f"Using original filename: {original_filename} for report_id: {report_id}")
         else:
-            logger.info("No original filename found, will generate new filename")
+            logger.warning(f"No original filename found for report_id {report_id}, will generate new filename")
+            # Fallback: try to get it from the report_id directly
+            logger.info("Attempting to use report_id directly in generate_monthly_report")
         
         newsletter_result = generate_monthly_report(district=district, original_filename=original_filename, model_key=model_key)
         if newsletter_result.get("status") != "success":
@@ -4051,9 +5197,15 @@ def run_monthly_report_process(district="0", period_type="month", max_report_ite
         logger.error(error_msg, exc_info=True)
         return {"status": "error", "message": error_msg}
 
-def get_monthly_reports_list():
+def get_monthly_reports_list(limit: int = None):
     """
     Get a list of all monthly newsletters from the database.
+    
+    Optimized to use a single query with JOINs instead of N+1 queries.
+    This significantly improves performance when loading large lists.
+    
+    Args:
+        limit: Optional limit on number of reports to return (default: None = all reports)
     
     Returns:
         List of newsletter objects with id, report_date, district, filename, etc.
@@ -4063,13 +5215,49 @@ def get_monthly_reports_list():
     def get_reports_operation(connection):
         cursor = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
-        # Query the reports table
-        cursor.execute("""
-            SELECT id, district, period_type, max_items, original_filename, revised_filename, 
-                   created_at, updated_at, published_url, proofread_feedback, headlines
-            FROM reports
-            ORDER BY created_at DESC
-        """)
+        # Optimized single query using JOINs and window functions to avoid N+1 queries
+        # This fetches all report data, item counts, and rationale in one query
+        query = """
+            WITH report_counts AS (
+                SELECT 
+                    report_id,
+                    COUNT(*) as item_count
+                FROM monthly_reporting
+                GROUP BY report_id
+            ),
+            report_rationales AS (
+                SELECT DISTINCT ON (report_id)
+                    report_id,
+                    rationale
+                FROM monthly_reporting
+                WHERE rationale IS NOT NULL
+                ORDER BY report_id, priority ASC
+            )
+            SELECT 
+                r.id,
+                r.district,
+                r.period_type,
+                r.max_items,
+                r.original_filename,
+                r.revised_filename,
+                r.created_at,
+                r.updated_at,
+                r.published_url,
+                r.proofread_feedback,
+                r.headlines,
+                COALESCE(rc.item_count, 0) as item_count,
+                rr.rationale
+            FROM reports r
+            LEFT JOIN report_counts rc ON r.id = rc.report_id
+            LEFT JOIN report_rationales rr ON r.id = rr.report_id
+            ORDER BY r.created_at DESC
+        """
+        
+        if limit:
+            query += " LIMIT %s"
+            cursor.execute(query, (limit,))
+        else:
+            cursor.execute(query)
         
         reports = cursor.fetchall()
         
@@ -4110,20 +5298,6 @@ def get_monthly_reports_list():
             else:
                 # Fallback to created_at if filename doesn't match expected format
                 report_date = report['created_at'].isoformat()
-            
-            # Count the number of items for this report
-            cursor.execute("""
-                SELECT COUNT(*) FROM monthly_reporting WHERE report_id = %s
-            """, (report['id'],))
-            
-            item_count = cursor.fetchone()[0]
-            
-            # Fetch the rationale of the highest-priority item (lowest priority value)
-            cursor.execute("""
-                SELECT rationale FROM monthly_reporting WHERE report_id = %s ORDER BY priority ASC LIMIT 1
-            """, (report['id'],))
-            rationale_row = cursor.fetchone()
-            rationale = rationale_row[0] if rationale_row else None
 
             # Parse headlines if it's a JSON string
             headlines = report.get('headlines')
@@ -4142,8 +5316,8 @@ def get_monthly_reports_list():
                 "district_name": district_name,
                 "period_type": report['period_type'],
                 "max_items": report['max_items'],
-                "item_count": item_count,
-                "rationale": rationale,
+                "item_count": report['item_count'],
+                "rationale": report['rationale'],
                 "original_filename": report['original_filename'],
                 "revised_filename": report['revised_filename'],
                 "published_url": report['published_url'],
@@ -5967,11 +7141,73 @@ def reprioritize_deltas_for_report(filename, district="0", period_type="month", 
         if deltas.get("status") != "success":
             return {"status": "error", "message": f"Failed to select deltas: {deltas.get('message')}"}
             
+        # Step 1.5: Select anomalies to discuss
+        logger.info("Step 1.5: Selecting anomalies to discuss")
+        anomalies = select_anomalies_to_discuss(period_type=period_type, district=district, limit=20)
+        logger.info(f"Found {len(anomalies)} anomalies to include")
+        
         # Step 3: Prioritize deltas and get explanations
         logger.info("Step 3: Prioritizing deltas")
-        prioritized = prioritize_deltas(deltas, max_items=actual_max_items)
+        prioritized = prioritize_deltas(deltas, anomalies=anomalies if anomalies else None, max_items=actual_max_items, period_type=period_type)
         if prioritized.get("status") != "success":
             return {"status": "error", "message": f"Failed to prioritize deltas: {prioritized.get('message')}"}
+        
+        # DEBUG: Log what we got from prioritize_deltas
+        prioritized_items_to_store = prioritized.get("prioritized_items", [])
+        causal_analysis_to_store = prioritized.get("causal_graph_analysis")
+        research_agendas_to_store = prioritized.get("research_agendas")
+        
+        logger.info(f"🔍 DEBUG: prioritize_deltas returned {len(prioritized_items_to_store)} items")
+        logger.info(f"🔍 DEBUG: causal_graph_analysis: {bool(causal_analysis_to_store)}")
+        logger.info(f"🔍 DEBUG: research_agendas: {bool(research_agendas_to_store)}")
+        if research_agendas_to_store:
+            logger.info(f"🔍 DEBUG: research_agendas length: {len(research_agendas_to_store)}")
+        
+        # Step 3.5: Update report metadata with causal_graph_analysis and research_agendas
+        logger.info("Step 3.5: Updating report metadata with causal graph analysis and research agendas")
+        
+        def update_report_metadata_operation(connection):
+            cursor = connection.cursor()
+            
+            # Prepare report metadata
+            report_metadata = {}
+            if causal_analysis_to_store:
+                report_metadata["causal_graph_analysis"] = causal_analysis_to_store
+                logger.info(f"Adding causal_graph_analysis to report metadata")
+            if research_agendas_to_store:
+                report_metadata["research_agendas"] = research_agendas_to_store
+                logger.info(f"Adding {len(research_agendas_to_store)} research agendas to report metadata")
+            else:
+                logger.warning("⚠️ No research_agendas to store in report metadata")
+            
+            # Update the report's metadata
+            cursor.execute("""
+                UPDATE reports
+                SET metadata = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (
+                json.dumps(report_metadata) if report_metadata else '{}',
+                report_id
+            ))
+            
+            connection.commit()
+            cursor.close()
+            logger.info(f"Updated report metadata with keys: {list(report_metadata.keys())}")
+        
+        # Execute metadata update
+        metadata_result = execute_with_connection(
+            operation=update_report_metadata_operation,
+            db_host=DB_HOST,
+            db_port=DB_PORT,
+            db_name=DB_NAME,
+            db_user=DB_USER,
+            db_password=DB_PASSWORD
+        )
+        
+        if metadata_result["status"] != "success":
+            logger.warning(f"Failed to update report metadata: {metadata_result.get('message')}")
+            # Continue anyway - items can still be stored
         
         # Step 4: Store new prioritized items with the existing report_id
         logger.info("Step 4: Storing new prioritized items")

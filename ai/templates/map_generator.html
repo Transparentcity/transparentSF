@@ -1631,6 +1631,18 @@
                     { value: '24', text: 'Last 24 months' },
                     { value: 'since_2024', text: 'Since Jan 1 2024' }
                 ];
+            } else if (periodType === 'week') {
+                // For weeks, show week-specific options
+                options = [
+                    { value: '1', text: 'Last 1 week' },
+                    { value: '2', text: 'Last 2 weeks' },
+                    { value: '4', text: 'Last 4 weeks' },
+                    { value: '8', text: 'Last 8 weeks' },
+                    { value: '12', text: 'Last 12 weeks' },
+                    { value: '26', text: 'Last 26 weeks' },
+                    { value: '52', text: 'Last 52 weeks' },
+                    { value: 'since_2024', text: 'Since Jan 1 2024' }
+                ];
             } else if (periodType === 'quarter') {
                 // For quarters, keep reasonable range
                 options = [

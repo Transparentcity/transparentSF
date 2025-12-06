@@ -350,6 +350,19 @@
             overflow: visible;
         }
         
+        /* Sparkline specific styles */
+        .sparkline-mode .chart-container {
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 0;
+        }
+        
+        /* Hide braces in sparkline mode */
+        .sparkline-mode .chart-container::before,
+        .sparkline-mode .chart-container::after {
+            display: none !important;
+        }
+        
         /* Override framing size for very small containers */
         @media (max-width: 300px) {
             .chart-container::before,
@@ -538,6 +551,13 @@
         const urlParams = new URLSearchParams(window.location.search);
         const anomalyId = urlParams.get('id');
         const fullView = urlParams.get('full_view') === 'true';
+        const isIframeParam = urlParams.get('_iframe') === 'true';
+        const renderMode = urlParams.get('render');
+        const formatParam = urlParams.get('format');
+        const isSparkline = renderMode === 'sparkline';
+        const isImageFormat = formatParam === 'image';
+        // For sparkline+image format, we want axes visible
+        const showAxes = !isSparkline || isImageFormat;
         
         // Elements
         const loadingEl = document.getElementById('loading');
@@ -668,7 +688,17 @@
 
         // Function to handle chart section visibility
         function handleChartSection() {
-            const isEmbedded = window.location !== window.parent.location;
+            // First check URL parameter (most reliable for cross-origin iframes)
+            let isEmbedded = isIframeParam;
+            if (!isEmbedded) {
+                // Fallback to window comparison (may fail for cross-origin iframes)
+                try {
+                    isEmbedded = window.location !== window.parent.location;
+                } catch (e) {
+                    // Cross-origin iframe - assume embedded mode
+                    isEmbedded = true;
+                }
+            }
             
             // In embedded mode, always prevent hash-based scrolling
             if (isEmbedded && window.location.hash) {
@@ -689,6 +719,11 @@
             
             // Add or remove chart-section-mode class on body
             document.body.classList.toggle('chart-section-mode', isChartSection);
+            
+            // Add sparkline-mode class if applicable
+            if (isSparkline) {
+                document.body.classList.add('sparkline-mode');
+            }
             
             if (isChartSection) {
                 // Hide non-chart elements
@@ -711,69 +746,78 @@
                     chartContainer.style.justifyContent = 'center';
                     chartContainer.style.alignItems = 'center';
                     
-                    // Add permalink button to chart section
-                    let permalinkBtn = document.getElementById('chart-section-permalink');
-                    if (!permalinkBtn) {
-                        permalinkBtn = document.createElement('button');
-                        permalinkBtn.id = 'chart-section-permalink';
-                        permalinkBtn.className = 'btn btn-sm btn-link';
-                        permalinkBtn.style.position = 'absolute';
-                        permalinkBtn.style.bottom = '5px';
-                        permalinkBtn.style.right = '5px';
-                        permalinkBtn.style.zIndex = '1000';
-                        permalinkBtn.style.fontSize = '10px';
-                        permalinkBtn.style.color = '#888888';
-                        permalinkBtn.style.textDecoration = 'none';
-                        permalinkBtn.style.border = 'none';
-                        permalinkBtn.style.background = 'none';
-                        permalinkBtn.style.padding = '0';
-                        permalinkBtn.style.cursor = 'pointer';
-                        permalinkBtn.innerHTML = '<i class="fas fa-share-alt me-1"></i>Share';
-                        permalinkBtn.onclick = function() {
-                            const fullUrl = window.location.href.split('#')[0];
-                            if (navigator.share) {
-                                navigator.share({
-                                    title: 'TransparentSF Chart',
-                                    text: 'Check out this chart from TransparentSF',
-                                    url: fullUrl
-                                }).catch(err => {
-                                    console.error('Error sharing:', err);
+                    if (!isSparkline) {
+                        // Add permalink button to chart section
+                        let permalinkBtn = document.getElementById('chart-section-permalink');
+                        if (!permalinkBtn) {
+                            permalinkBtn = document.createElement('button');
+                            permalinkBtn.id = 'chart-section-permalink';
+                            permalinkBtn.className = 'btn btn-sm btn-link';
+                            permalinkBtn.style.position = 'absolute';
+                            permalinkBtn.style.bottom = '5px';
+                            permalinkBtn.style.right = '5px';
+                            permalinkBtn.style.zIndex = '1000';
+                            permalinkBtn.style.fontSize = '10px';
+                            permalinkBtn.style.color = '#888888';
+                            permalinkBtn.style.textDecoration = 'none';
+                            permalinkBtn.style.border = 'none';
+                            permalinkBtn.style.background = 'none';
+                            permalinkBtn.style.padding = '0';
+                            permalinkBtn.style.cursor = 'pointer';
+                            permalinkBtn.innerHTML = '<i class="fas fa-share-alt me-1"></i>Share';
+                            permalinkBtn.onclick = function() {
+                                const fullUrl = window.location.href.split('#')[0];
+                                if (navigator.share) {
+                                    navigator.share({
+                                        title: 'TransparentSF Chart',
+                                        text: 'Check out this chart from TransparentSF',
+                                        url: fullUrl
+                                    }).catch(err => {
+                                        console.error('Error sharing:', err);
+                                        // Fallback to copying to clipboard
+                                        copyToClipboard(fullUrl);
+                                    });
+                                } else {
                                     // Fallback to copying to clipboard
                                     copyToClipboard(fullUrl);
-                                });
-                            } else {
-                                // Fallback to copying to clipboard
-                                copyToClipboard(fullUrl);
-                            }
-                        };
-                        chartContainer.appendChild(permalinkBtn);
-                    }
-                    
-                    // Add full view button if it doesn't exist
-                    let fullViewBtn = document.getElementById('full-view-btn');
-                    if (!fullViewBtn) {
-                        fullViewBtn = document.createElement('button');
-                        fullViewBtn.id = 'full-view-btn';
-                        fullViewBtn.className = 'btn btn-sm btn-link';
-                        fullViewBtn.style.position = 'absolute';
-                        fullViewBtn.style.bottom = '5px';
-                        fullViewBtn.style.left = '5px';
-                        fullViewBtn.style.zIndex = '1000';
-                        fullViewBtn.style.fontSize = '10px';
-                        fullViewBtn.style.color = '#888888';
-                        fullViewBtn.style.textDecoration = 'none';
-                        fullViewBtn.style.border = 'none';
-                        fullViewBtn.style.background = 'none';
-                        fullViewBtn.style.padding = '0';
-                        fullViewBtn.style.cursor = 'pointer';
-                        fullViewBtn.innerHTML = '<i class="fas fa-expand me-1"></i>Full View';
-                        fullViewBtn.onclick = function() {
-                            const baseUrl = window.location.href.split('#')[0]; // Get URL without hash
-                            const currentUrl = new URL(baseUrl);
-                            currentUrl.searchParams.set('full_view', 'true');
-                            window.open(currentUrl.toString(), '_blank');
-                        };
-                        chartContainer.appendChild(fullViewBtn);
+                                }
+                            };
+                            chartContainer.appendChild(permalinkBtn);
+                        }
+                        
+                        // Add full view button if it doesn't exist
+                        let fullViewBtn = document.getElementById('full-view-btn');
+                        if (!fullViewBtn) {
+                            fullViewBtn = document.createElement('button');
+                            fullViewBtn.id = 'full-view-btn';
+                            fullViewBtn.className = 'btn btn-sm btn-link';
+                            fullViewBtn.style.position = 'absolute';
+                            fullViewBtn.style.bottom = '5px';
+                            fullViewBtn.style.left = '5px';
+                            fullViewBtn.style.zIndex = '1000';
+                            fullViewBtn.style.fontSize = '10px';
+                            fullViewBtn.style.color = '#888888';
+                            fullViewBtn.style.textDecoration = 'none';
+                            fullViewBtn.style.border = 'none';
+                            fullViewBtn.style.background = 'none';
+                            fullViewBtn.style.padding = '0';
+                            fullViewBtn.style.cursor = 'pointer';
+                            fullViewBtn.innerHTML = '<i class="fas fa-expand me-1"></i>Full View';
+                            fullViewBtn.onclick = function() {
+                                const baseUrl = window.location.href.split('#')[0]; // Get URL without hash
+                                const currentUrl = new URL(baseUrl);
+                                currentUrl.searchParams.set('full_view', 'true');
+                                window.open(currentUrl.toString(), '_blank');
+                            };
+                            chartContainer.appendChild(fullViewBtn);
+                        }
+                    } else {
+                        // If in sparkline mode, remove these buttons if they exist
+                        const permalinkBtn = document.getElementById('chart-section-permalink');
+                        if (permalinkBtn) permalinkBtn.remove();
+                        
+                        const fullViewBtn = document.getElementById('full-view-btn');
+                        if (fullViewBtn) fullViewBtn.remove();
                     }
                 }
                 
@@ -1172,6 +1216,78 @@
                     showlegend: false
                 });
             }
+
+            // Prepare annotations and average line for sparkline mode
+            const annotations = [];
+            
+            if (isSparkline) {
+                // Combine all data points to find first/last and calculate average
+                const pairs = [];
+                for (let i = 0; i < comparisonDates.length; i++) pairs.push({date: comparisonDates[i], value: comparisonValues[i]});
+                for (let i = 0; i < recentDates.length; i++) pairs.push({date: recentDates[i], value: recentValues[i]});
+                
+                // Sort by date
+                pairs.sort((a, b) => a.date - b.date);
+                
+                if (pairs.length > 0) {
+                    // Calculate average
+                    const sum = pairs.reduce((acc, item) => acc + item.value, 0);
+                    const average = sum / pairs.length;
+                    
+                    // Add average line
+                    traces.push({
+                        x: [pairs[0].date, pairs[pairs.length - 1].date],
+                        y: [average, average],
+                        type: 'scatter',
+                        mode: 'lines',
+                        line: { color: 'rgba(0,0,0,0.3)', width: 1, dash: 'dot' },
+                        name: 'Average',
+                        showlegend: false,
+                        hoverinfo: 'skip'
+                    });
+                    
+                    const firstPoint = pairs[0];
+                    const lastPoint = pairs[pairs.length - 1];
+                    
+                    // First point annotation
+                    annotations.push({
+                        x: firstPoint.date,
+                        y: firstPoint.value,
+                        xref: 'x',
+                        yref: 'y',
+                        text: formatValue(firstPoint.value),
+                        showarrow: false,
+                        xanchor: 'left', 
+                        yanchor: 'bottom',
+                        yshift: 5,
+                        font: {
+                            family: 'IBM Plex Sans, Arial, sans-serif',
+                            size: 10,
+                            color: '#666'
+                        }
+                    });
+                    
+                    // Last point annotation
+                    annotations.push({
+                        x: lastPoint.date,
+                        y: lastPoint.value,
+                        xref: 'x',
+                        yref: 'y',
+                        text: formatValue(lastPoint.value),
+                        showarrow: false,
+                        xanchor: 'right',
+                        yanchor: 'bottom',
+                        yshift: 5,
+                        font: {
+                            family: 'IBM Plex Sans, Arial, sans-serif',
+                            size: 10,
+                            color: '#ad35fa',
+                            weight: 'bold'
+                        }
+                    });
+                }
+            }
+
             
             // Get the metric name from metadata
             const objectName = metadata.object_name || anomaly.field_name || 'Value';
@@ -1196,7 +1312,7 @@
             // Configuration for the plot
             const layout = {
                 title: {
-                    text: combinedTitleText,
+                    text: isSparkline ? '' : combinedTitleText,
                     font: {
                         family: 'Inter, Arial, sans-serif',
                         size: 14,
@@ -1207,11 +1323,9 @@
                     xanchor: 'center',
                     pad: { t: 5, b: 5 } // Reduced padding
                 },
-                annotations: [
-                    // The original annotation for changeText (annotations[0]) is removed.
-                    // If other annotations existed, their indices would shift.
-                ],
+                annotations: annotations,
                 xaxis: {
+                    visible: showAxes,
                     title: {
                         text: '',
                         font: { 
@@ -1271,6 +1385,7 @@
                     tickpadding: 10
                 },
                 yaxis: {
+                    visible: showAxes,
                     title: {
                         text: metadata.y_axis_label || anomaly.field_name || "Value",
                         font: { 
@@ -1289,7 +1404,7 @@
                         color: '#222222'
                     }
                 },
-                showlegend: true,
+                showlegend: showAxes && !isSparkline, // Show legend only in full mode, not sparkline+image
                 legend: {
                     orientation: 'h',
                     x: 0.5,
@@ -1303,7 +1418,10 @@
                     },
                     bgcolor: 'var(--soft-sand, rgba(246, 241, 234, 0.7))'
                 },
-                margin: isEmbedded ? { t: 30, b: 20, l: 40, r: 25 } : { t: 40, b: 25, l: 50, r: 45 }, // Much smaller margins to fill container
+                // Margins: sparkline pure = no margins, sparkline+image = compact margins, embedded/full = normal margins
+                margin: (isSparkline && !isImageFormat) ? { t: 0, b: 0, l: 0, r: 0 } : 
+                        (isSparkline && isImageFormat) ? { t: 10, b: 25, l: 35, r: 15 } :
+                        (isEmbedded ? { t: 30, b: 20, l: 40, r: 25 } : { t: 40, b: 25, l: 50, r: 45 }),
                 height: null,
                 width: null,
                 autosize: true,
@@ -1443,10 +1561,24 @@
         }
         
         // Detect and apply embedded-mode class IMMEDIATELY for CSS optimizations
-        const isEmbeddedGlobal = window.location !== window.parent.location;
+        // First check URL parameter (most reliable for cross-origin iframes)
+        let isEmbeddedGlobal = isIframeParam;
+        if (!isEmbeddedGlobal) {
+            // Fallback to window comparison (may fail for cross-origin iframes)
+            try {
+                isEmbeddedGlobal = window.location !== window.parent.location;
+            } catch (e) {
+                // Cross-origin iframe - assume embedded mode
+                isEmbeddedGlobal = true;
+            }
+        }
         console.log('Anomaly chart: Checking embedded mode - isEmbedded:', isEmbeddedGlobal);
         console.log('Anomaly chart: window.location:', window.location.href);
-        console.log('Anomaly chart: window.parent.location:', window.parent.location.href);
+        try {
+            console.log('Anomaly chart: window.parent.location:', window.parent.location.href);
+        } catch (e) {
+            console.log('Anomaly chart: window.parent.location: [cross-origin, cannot access]');
+        }
         
         if (isEmbeddedGlobal) {
             document.body.classList.add('embedded-mode');

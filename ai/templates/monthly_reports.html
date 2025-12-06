@@ -48,6 +48,34 @@
             padding: 15px;
             box-shadow: var(--shadow-light);
             border: 1px solid var(--border-primary);
+            transition: all 0.3s ease;
+        }
+        
+        .section.collapsed {
+            max-height: 60px;
+            overflow: hidden;
+        }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .section-header:hover {
+            opacity: 0.8;
+        }
+        
+        .section-toggle {
+            font-size: 12px;
+            color: var(--text-secondary);
+            transition: transform 0.3s ease;
+        }
+        
+        .section.collapsed .section-toggle {
+            transform: rotate(-90deg);
         }
         
         .section h2 {
@@ -55,6 +83,16 @@
             color: var(--text-primary);
             font-size: 18px;
             margin-bottom: 10px;
+            flex: 1;
+        }
+        
+        .section-content {
+            transition: opacity 0.3s ease;
+        }
+        
+        .section.collapsed .section-content {
+            opacity: 0;
+            pointer-events: none;
         }
         
         .form-group {
@@ -320,13 +358,19 @@
             border-radius: 4px;
         }
         
-        .success {
+        .status-message.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .status-message.success {
             background-color: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
         }
         
-        .error {
+        .status-message.error {
             background-color: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
@@ -733,6 +777,29 @@
             padding: 30px;
             color: #666;
         }
+        
+        .loading-skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s ease-in-out infinite;
+            border-radius: 4px;
+            height: 20px;
+            margin-bottom: 10px;
+        }
+        
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
+        .skeleton-container {
+            padding: 20px;
+        }
+        
+        .skeleton-container .loading-skeleton:nth-child(1) { width: 60%; }
+        .skeleton-container .loading-skeleton:nth-child(2) { width: 80%; }
+        .skeleton-container .loading-skeleton:nth-child(3) { width: 70%; }
+        .skeleton-container .loading-skeleton:nth-child(4) { width: 90%; }
 
         .error-message {
             color: #dc3545;
@@ -901,16 +968,25 @@
     <div class="container">
         <h1>Monthly Newsletters</h1>
         
-        <div class="section">
-            <h2>Prompt Templates</h2>
-            <div class="prompt-templates">
-                <div class="loading-indicator" id="prompts-loading">Loading prompts...</div>
-                <div id="prompt-buttons" style="display: none; gap: 10px;"></div>
+        <div class="section" id="prompts-section">
+            <div class="section-header" onclick="toggleSection('prompts-section')">
+                <h2>Prompt Templates</h2>
+                <span class="section-toggle">▼</span>
+            </div>
+            <div class="section-content">
+                <div class="prompt-templates">
+                    <div class="loading-indicator" id="prompts-loading">Loading prompts...</div>
+                    <div id="prompt-buttons" style="display: none; gap: 10px;"></div>
+                </div>
             </div>
         </div>
         
-        <div class="section">
-            <h2>Generate New Newsletter</h2>
+        <div class="section" id="generate-section">
+            <div class="section-header" onclick="toggleSection('generate-section')">
+                <h2>Generate New Newsletter</h2>
+                <span class="section-toggle">▼</span>
+            </div>
+            <div class="section-content">
             <form id="generate-report-form">
                 <div style="display: flex; align-items: flex-end; gap: 15px; margin-bottom: 10px;">
                     <div style="width: 200px;">
@@ -947,10 +1023,15 @@
                 </div>
                 <div id="generate-status" class="status-message" style="display: none;"></div>
             </form>
+            </div>
         </div>
         
-        <div class="section">
-            <h2>View Newsletters</h2>
+        <div class="section" id="view-section">
+            <div class="section-header" onclick="toggleSection('view-section')">
+                <h2>View Newsletters</h2>
+                <span class="section-toggle">▼</span>
+            </div>
+            <div class="section-content">
             <div class="report-selector" style="display: flex; align-items: flex-end; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
                 <div style="width: 300px;">
                     <label for="report-select">Select a Newsletter</label>
@@ -986,8 +1067,19 @@
                 <h3>Newsletter Details</h3>
                 <div id="report-metrics"></div>
             </div>
+            </div>
         </div>
     </div>
+    
+    <script>
+        // Simple function to toggle section collapse/expand
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.classList.toggle('collapsed');
+            }
+        }
+    </script>
     
     <div id="reportDetailsModal" class="modal">
         <div class="modal-content">
@@ -1043,48 +1135,43 @@
             // Variable to store reports data 
             let reportsData = null;
             
-            // Load available models for newsletter generation
+            // Cache for API responses and file existence checks
+            const cache = {
+                models: null,
+                prompts: null,
+                reports: null,
+                fileChecks: new Map(),
+                reportDetails: new Map()
+            };
+            
+            // Debounce function for file existence checks
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+            
+            // Load available models for newsletter generation (with caching)
             async function loadAvailableModels() {
+                // Return cached data if available
+                if (cache.models) {
+                    populateModelSelect(cache.models);
+                    return;
+                }
+                
                 try {
                     const response = await fetch('/api/monthly-reports/available-models');
                     const data = await response.json();
                     
                     if (data.status === 'success') {
-                        // Clear existing options
-                        modelSelect.innerHTML = '';
-                        
-                        // Add default option
-                        const defaultOption = document.createElement('option');
-                        defaultOption.value = '';
-                        defaultOption.textContent = `Default (${data.default_model})`;
-                        modelSelect.appendChild(defaultOption);
-                        
-                        // Add available models grouped by provider
-                        const modelsByProvider = {};
-                        data.models.forEach(model => {
-                            if (!modelsByProvider[model.provider]) {
-                                modelsByProvider[model.provider] = [];
-                            }
-                            modelsByProvider[model.provider].push(model);
-                        });
-                        
-                        // Add models by provider
-                        Object.keys(modelsByProvider).forEach(provider => {
-                            // Add provider header
-                            const providerOption = document.createElement('option');
-                            providerOption.value = '';
-                            providerOption.textContent = `--- ${provider.toUpperCase()} ---`;
-                            providerOption.disabled = true;
-                            modelSelect.appendChild(providerOption);
-                            
-                            // Add models for this provider
-                            modelsByProvider[provider].forEach(model => {
-                                const option = document.createElement('option');
-                                option.value = model.key;
-                                option.textContent = model.name;
-                                modelSelect.appendChild(option);
-                            });
-                        });
+                        cache.models = data;
+                        populateModelSelect(data);
                     } else {
                         console.error('Failed to load models:', data.message);
                         modelSelect.innerHTML = '<option value="">Error loading models</option>';
@@ -1095,197 +1182,173 @@
                 }
             }
             
-            // Define updateReportLinks function globally
-            const updateReportLinks = () => {
+            // Helper function to populate model select
+            function populateModelSelect(data) {
+                modelSelect.innerHTML = '';
+                
+                // Add default option
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = `Default (${data.default_model})`;
+                modelSelect.appendChild(defaultOption);
+                
+                // Add available models grouped by provider
+                const modelsByProvider = {};
+                data.models.forEach(model => {
+                    if (!modelsByProvider[model.provider]) {
+                        modelsByProvider[model.provider] = [];
+                    }
+                    modelsByProvider[model.provider].push(model);
+                });
+                
+                // Add models by provider
+                Object.keys(modelsByProvider).forEach(provider => {
+                    // Add provider header
+                    const providerOption = document.createElement('option');
+                    providerOption.value = '';
+                    providerOption.textContent = `--- ${provider.toUpperCase()} ---`;
+                    providerOption.disabled = true;
+                    modelSelect.appendChild(providerOption);
+                    
+                    // Add models for this provider
+                    modelsByProvider[provider].forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.key;
+                        option.textContent = model.name;
+                        modelSelect.appendChild(option);
+                    });
+                });
+            }
+            
+            // Define updateReportLinks function globally (optimized with parallel file checks)
+            const updateReportLinks = async () => {
                 const selectedOption = reportSelect.options[reportSelect.selectedIndex];
                 if (!selectedOption || !selectedOption.value) return;
                 
                 const originalFilename = selectedOption.value;
                 const revisedFilename = selectedOption.dataset.revisedFilename;
-                // Email filename should be based on the revised filename (which is the input to the consolidated function)
                 const emailFilename = revisedFilename ? revisedFilename.replace('.html', '_email.html') : 
                                      (originalFilename ? originalFilename.replace('.html', '_email.html') : null);
                 
-                
-                // Original link
+                // Original link (no check needed, always available)
                 const originalLink = document.getElementById('view-original-report');
                 if (originalLink) {
                     originalLink.href = `/backend/monthly-report/file/${originalFilename}`;
                     originalLink.style.display = originalFilename ? 'inline-block' : 'none';
                 }
                 
-                // Revised link
+                // Revised link (no check needed, use data attribute)
                 const revisedLink = document.getElementById('view-revised-report');
                 if (revisedLink) {
                     revisedLink.href = revisedFilename ? `/backend/monthly-report/file/${revisedFilename}` : '#';
                     revisedLink.style.display = revisedFilename ? 'inline-block' : 'none';
                 }
                 
-                // Final link (with embedded charts) - only show if charts exist
+                // Published link (no check needed, use cached data)
+                const publishedLink = document.getElementById('view-published-report');
+                if (publishedLink) {
+                    const report = reportsData?.reports?.find(r => r.original_filename === originalFilename);
+                    if (report && report.published_url) {
+                        publishedLink.href = report.published_url;
+                        publishedLink.style.display = 'inline-block';
+                    } else {
+                        publishedLink.href = '#';
+                        publishedLink.style.display = 'none';
+                    }
+                }
+                
+                // Collect all files to check in parallel
+                const filesToCheck = [];
+                
+                // Final file patterns
                 const finalLink = document.getElementById('view-final-report');
                 if (finalLink) {
-                    // Try different possible final filename patterns
                     let possibleFinalFilenames = [];
-                    
                     if (revisedFilename) {
-                        // Pattern 1: _revised -> _final
-                        possibleFinalFilenames.push(revisedFilename.replace('_revised', '_final'));
-                        // Pattern 2: _for_proofreading_revised -> _final
-                        possibleFinalFilenames.push(revisedFilename.replace('_for_proofreading_revised', '_final'));
-                        // Pattern 3: _for_proofreading_revised -> _for_proofreading_revised_final
-                        possibleFinalFilenames.push(revisedFilename.replace('_for_proofreading_revised', '_for_proofreading_revised_final'));
+                        possibleFinalFilenames.push(
+                            revisedFilename.replace('_revised', '_final'),
+                            revisedFilename.replace('_for_proofreading_revised', '_final'),
+                            revisedFilename.replace('_for_proofreading_revised', '_for_proofreading_revised_final')
+                        );
                     }
-                    
                     if (originalFilename) {
-                        // Pattern 4: original -> _final
                         possibleFinalFilenames.push(originalFilename.replace('.html', '_final.html'));
-                    }
-                    
-                    // Pattern 5: Try to construct from the base filename (remove all suffixes)
-                    if (originalFilename) {
                         const baseName = originalFilename.replace(/_(revised|for_proofreading|email|with_placeholders)\.html$/, '');
                         possibleFinalFilenames.push(`${baseName}_final.html`);
                     }
-                    
-                    // Check each possible filename to see if it exists
-                    const checkFinalFile = async () => {
-                        for (const finalFilename of possibleFinalFilenames) {
-                            try {
-                                const response = await fetch(`/backend/monthly-report/file/${finalFilename}`, { method: 'HEAD' });
-                                if (response.ok) {
-                                    finalLink.href = `/backend/monthly-report/file/${finalFilename}`;
-                                    finalLink.style.display = 'inline-block';
-                                    return;
-                                }
-                            } catch (e) {
-                                // Continue to next filename
-                            }
-                        }
-                        // If no final file found, hide the link
-                        finalLink.style.display = 'none';
-                    };
-                    
-                    checkFinalFile();
+                    filesToCheck.push({ filenames: possibleFinalFilenames, link: finalLink, type: 'final' });
                 }
                 
-                // Email link - try multiple patterns
+                // Email file patterns
                 const emailLink = document.getElementById('view-email-report');
                 if (emailLink) {
-                    // Try different possible email filename patterns
                     let possibleEmailFilenames = [];
-                    
-                    if (revisedFilename) {
-                        // Pattern 1: _revised -> _email
-                        possibleEmailFilenames.push(revisedFilename.replace('_revised', '_email'));
-                        // Pattern 2: _for_proofreading_revised -> _email
-                        possibleEmailFilenames.push(revisedFilename.replace('_for_proofreading_revised', '_email'));
-                        // Pattern 3: _for_proofreading_revised -> _for_proofreading_revised_email
-                        possibleEmailFilenames.push(revisedFilename.replace('_for_proofreading_revised', '_for_proofreading_revised_email'));
-                    }
-                    
-                    if (originalFilename) {
-                        // Pattern 4: original -> _email
-                        possibleEmailFilenames.push(originalFilename.replace('.html', '_email.html'));
-                    }
-                    
-                    // Pattern 5: Try to construct from the base filename (remove all suffixes)
-                    if (originalFilename) {
-                        const baseName = originalFilename.replace(/_(revised|for_proofreading|email|with_placeholders)\.html$/, '');
-                        possibleEmailFilenames.push(`${baseName}_email.html`);
-                    }
-                    
-                    // Add the emailFilename we constructed in updateReportLinks (put it first so it's checked first)
                     if (emailFilename) {
                         possibleEmailFilenames.unshift(emailFilename);
                     }
-                    
-                    // Check each possible filename to see if it exists
-                    const checkEmailFile = async () => {
-                        for (const emailFilename of possibleEmailFilenames) {
-                            try {
-                                const response = await fetch(`/backend/monthly-report/file/${emailFilename}`, { method: 'HEAD' });
-                                if (response.ok) {
-                                    emailLink.href = `/backend/monthly-report/file/${emailFilename}`;
-                                    emailLink.style.display = 'inline-block';
-                                    return;
-                                }
-                            } catch (e) {
-                                // Continue to next filename
-                            }
-                        }
-                        // If no email file found, hide the link
-                        emailLink.style.display = 'none';
-                    };
-                    
-                    checkEmailFile();
+                    if (revisedFilename) {
+                        possibleEmailFilenames.push(
+                            revisedFilename.replace('_revised', '_email'),
+                            revisedFilename.replace('_for_proofreading_revised', '_email'),
+                            revisedFilename.replace('_for_proofreading_revised', '_for_proofreading_revised_email')
+                        );
+                    }
+                    if (originalFilename) {
+                        possibleEmailFilenames.push(originalFilename.replace('.html', '_email.html'));
+                        const baseName = originalFilename.replace(/_(revised|for_proofreading|email|with_placeholders)\.html$/, '');
+                        possibleEmailFilenames.push(`${baseName}_email.html`);
+                    }
+                    filesToCheck.push({ filenames: possibleEmailFilenames, link: emailLink, type: 'email' });
                 }
                 
                 // Audio script link
                 const audioScriptLink = document.getElementById('view-audio-script');
-                if (audioScriptLink) {
-                    // Construct the audio script filename from the email version
-                    const audioScriptFilename = emailFilename ? emailFilename.replace('.html', '_audio_script.html') : null;
-                    
-                    if (audioScriptFilename) {
-                        audioScriptLink.href = `/backend/monthly-report/file/${audioScriptFilename}`;
-                        audioScriptLink.style.display = 'inline-block';
-                    } else {
-                        audioScriptLink.style.display = 'none';
-                    }
-                }
-                
-                // Published link
-                const publishedLink = document.getElementById('view-published-report');
-                if (publishedLink) {
-                    // Find the report in the loaded data
-                    const report = reportsData?.reports?.find(r => r.original_filename === originalFilename);
-                    
-                    if (report && report.published_url) {
-                        publishedLink.href = report.published_url;
-                        publishedLink.style.display = 'inline-block';
-                        console.log("Found published URL:", report.published_url);
-                    } else {
-                        publishedLink.href = '#';
-                        publishedLink.style.display = 'none';
-                        console.log("No published URL found for report:", originalFilename);
-                    }
+                if (audioScriptLink && emailFilename) {
+                    const audioScriptFilename = emailFilename.replace('.html', '_audio_script.html');
+                    filesToCheck.push({ filenames: [audioScriptFilename], link: audioScriptLink, type: 'audio_script' });
+                } else if (audioScriptLink) {
+                    audioScriptLink.style.display = 'none';
                 }
                 
                 // Audio player
                 const audioPlayerContainer = document.getElementById('audio-player-container');
                 const audioPlayer = document.getElementById('audio-player');
-                if (audioPlayerContainer && audioPlayer) {
-                    // Construct the audio filename from the email version
-                    const audioFilename = emailFilename ? emailFilename.replace('.html', '.mp3') : null;
-                    
-                    if (audioFilename) {
-                        // Check if audio file exists by trying to load it
-                        const audioUrl = `/backend/narration/${audioFilename}`;
-                        
-                        // Test if the audio file exists
-                        fetch(audioUrl, { method: 'HEAD' })
-                            .then(response => {
-                                if (response.ok) {
-                                    // Audio file exists, show player
-                                    audioPlayer.src = audioUrl;
-                                    audioPlayerContainer.style.display = 'flex';
-                                    console.log("Audio file found:", audioUrl);
-                                } else {
-                                    // Audio file doesn't exist, hide player
-                                    audioPlayerContainer.style.display = 'none';
-                                    console.log("Audio file not found:", audioUrl);
-                                }
-                            })
-                            .catch(error => {
-                                // Error checking file, hide player
-                                audioPlayerContainer.style.display = 'none';
-                                console.log("Error checking audio file:", error);
-                            });
-                    } else {
-                        // No email filename, hide player
-                        audioPlayerContainer.style.display = 'none';
-                    }
+                if (audioPlayerContainer && audioPlayer && emailFilename) {
+                    const audioFilename = emailFilename.replace('.html', '.mp3');
+                    filesToCheck.push({ filenames: [`/backend/narration/${audioFilename}`], link: audioPlayerContainer, type: 'audio', player: audioPlayer });
+                } else if (audioPlayerContainer) {
+                    audioPlayerContainer.style.display = 'none';
                 }
+                
+                // Check all files in parallel
+                const checkPromises = filesToCheck.map(async ({ filenames, link, type, player }) => {
+                    // Check files in parallel
+                    const checks = await Promise.all(
+                        filenames.map(filename => {
+                            const url = filename.startsWith('/') ? filename : `/backend/monthly-report/file/${filename}`;
+                            return checkFileExists(filename.startsWith('/') ? filename.split('/').pop() : filename)
+                                .then(exists => ({ filename, url, exists }))
+                                .catch(() => ({ filename, url, exists: false }));
+                        })
+                    );
+                    
+                    // Find first existing file
+                    const existing = checks.find(check => check.exists);
+                    
+                    if (existing) {
+                        if (type === 'audio') {
+                            player.src = existing.url;
+                            link.style.display = 'flex';
+                        } else {
+                            link.href = existing.url;
+                            link.style.display = 'inline-block';
+                        }
+                    } else {
+                        link.style.display = 'none';
+                    }
+                });
+                
+                await Promise.all(checkPromises);
             };
             
             // Initialize the prompt editor components
@@ -1296,14 +1359,14 @@
                 reportActions.style.display = 'none';
             }
             
-            // Load prompts
-            loadPrompts();
-            
-            // Load available models for newsletter generation
-            loadAvailableModels();
-            
-            // Load reports into the selector
-            loadReports();
+            // Load all initial data in parallel for better performance
+            Promise.all([
+                loadPrompts(),
+                loadAvailableModels(),
+                loadReports()
+            ]).catch(error => {
+                console.error('Error loading initial data:', error);
+            });
             
             // Modal event handlers for report details
             closeBtn.onclick = function() {
@@ -1331,8 +1394,15 @@
                 savePromptChanges();
             }
             
-            // Function to load prompts from prompts.json
+            // Function to load prompts from prompts.json (with caching)
             async function loadPrompts() {
+                // Return cached data if available
+                if (cache.prompts) {
+                    promptsData = cache.prompts;
+                    displayPromptButtons();
+                    return;
+                }
+                
                 try {
                     promptsLoadingEl.style.display = 'block';
                     promptButtonsEl.style.display = 'none';
@@ -1342,6 +1412,7 @@
                     
                     if (data.status === 'success' && data.prompts) {
                         promptsData = data.prompts;
+                        cache.prompts = data.prompts;
                         displayPromptButtons();
                     } else {
                         throw new Error(data.message || 'Failed to load prompts');
@@ -1513,63 +1584,24 @@
                 }
             }
             
-            // Load reports into the selector
-            async function loadReports(preserveSelection = false) {
+            // Load reports into the selector (with caching and better UI)
+            async function loadReports(preserveSelection = false, forceRefresh = false) {
                 try {
+                    // Use cached data if available and not forcing refresh
+                    if (!forceRefresh && cache.reports) {
+                        reportsData = cache.reports;
+                        populateReportSelect(cache.reports, preserveSelection);
+                        return;
+                    }
+                    
                     const response = await fetch('/api/monthly-reports/list');
                     const data = await response.json();
                     
                     console.log("Newsletters data received:", data);
                     reportsData = data; // Store for later use
+                    cache.reports = data; // Cache the response
                     
-                    // Store current selection if we want to preserve it
-                    const currentSelection = preserveSelection ? reportSelect.value : null;
-                    
-                    if (data.status === 'success' && data.reports && data.reports.length > 0) {
-                        // Log each report's published_url for debugging
-                        data.reports.forEach(report => {
-                            console.log(`Report ${report.original_filename} published URL: ${report.published_url || 'none'}`);
-                        });
-                        
-                        // Clear existing options except the first one
-                        while (reportSelect.options.length > 1) {
-                            reportSelect.remove(1);
-                        }
-                        
-                        // Add new options
-                        data.reports.forEach(report => {
-                            const option = document.createElement('option');
-                            // Use the original_filename as the value
-                            option.value = report.original_filename;
-                            // Show the original filename as the display text
-                            option.textContent = report.original_filename;
-                            // Store revised filename as a data attribute
-                            option.dataset.revisedFilename = report.revised_filename || ''; 
-                            reportSelect.appendChild(option);
-                            console.log("Added option:", option.value, option.textContent);
-                        });
-                        
-                        // Restore selection if preserving, otherwise auto-select if only one report
-                        if (preserveSelection && currentSelection) {
-                            reportSelect.value = currentSelection;
-                            // Trigger the change event to load the report details
-                            const event = new Event('change');
-                            reportSelect.dispatchEvent(event);
-                        } else if (data.reports.length === 1) {
-                            reportSelect.value = data.reports[0].original_filename;
-                            // Trigger the change event to load the report details
-                            const event = new Event('change');
-                            reportSelect.dispatchEvent(event);
-                        }
-                    } else {
-                        console.log("No newsletters found or empty newsletters array");
-                        // Add a message if no reports are found
-                        const option = document.createElement('option');
-                        option.value = "";
-                        option.textContent = "No newsletters available";
-                        option.disabled = true;
-                        reportSelect.appendChild(option);
-                    }
+                    populateReportSelect(data, preserveSelection);
                 } catch (error) {
                     console.error('Error loading newsletters:', error);
                     // Add an error message to the dropdown
@@ -1581,35 +1613,103 @@
                 }
             }
             
-            // Function to check if a file exists
+            // Helper function to populate report select dropdown
+            function populateReportSelect(data, preserveSelection) {
+                const currentSelection = preserveSelection ? reportSelect.value : null;
+                
+                if (data.status === 'success' && data.reports && data.reports.length > 0) {
+                    // Clear existing options except the first one
+                    while (reportSelect.options.length > 1) {
+                        reportSelect.remove(1);
+                    }
+                    
+                    // Add new options with better formatting
+                    data.reports.forEach(report => {
+                        const option = document.createElement('option');
+                        option.value = report.original_filename;
+                        // Format display text: "District Name - Date (Item Count)"
+                        const dateStr = report.report_date ? new Date(report.report_date).toLocaleDateString() : '';
+                        const displayText = `${report.district_name || 'Unknown'} - ${dateStr} (${report.item_count || 0} items)`;
+                        option.textContent = displayText;
+                        option.dataset.revisedFilename = report.revised_filename || '';
+                        option.dataset.reportId = report.id;
+                        reportSelect.appendChild(option);
+                    });
+                    
+                    // Restore selection if preserving, otherwise auto-select if only one report
+                    if (preserveSelection && currentSelection) {
+                        reportSelect.value = currentSelection;
+                        const event = new Event('change');
+                        reportSelect.dispatchEvent(event);
+                    } else if (data.reports.length === 1) {
+                        reportSelect.value = data.reports[0].original_filename;
+                        const event = new Event('change');
+                        reportSelect.dispatchEvent(event);
+                    }
+                } else {
+                    console.log("No newsletters found or empty newsletters array");
+                    // Add a message if no reports are found
+                    const option = document.createElement('option');
+                    option.value = "";
+                    option.textContent = "No newsletters available";
+                    option.disabled = true;
+                    reportSelect.appendChild(option);
+                }
+            }
+            
+            // Function to check if a file exists (with caching)
             async function checkFileExists(filename) {
+                // Check cache first
+                if (cache.fileChecks.has(filename)) {
+                    return cache.fileChecks.get(filename);
+                }
+                
                 try {
                     const response = await fetch(`/backend/monthly-report/file/${filename}`, { method: 'HEAD' });
-                    return response.ok;
+                    const exists = response.ok;
+                    cache.fileChecks.set(filename, exists);
+                    return exists;
                 } catch (error) {
                     console.error(`Error checking file ${filename}:`, error);
+                    cache.fileChecks.set(filename, false);
                     return false;
                 }
             }
             
-            // Function to update button states based on file existence
+            // Debounced version for batch file checks
+            const debouncedFileCheck = debounce(async (filenames, callback) => {
+                const results = await Promise.all(
+                    filenames.map(filename => checkFileExists(filename))
+                );
+                callback(results);
+            }, 300);
+            
+            // Function to update button states based on file existence (optimized with parallel checks)
             async function updateButtonStates(originalFilename) {
                 if (!originalFilename) return;
                 
                 const baseName = originalFilename.replace(/\.html$/, '');
                 
-                // Check which files exist
+                // Check which files exist (in parallel for better performance)
                 const filesToCheck = [
                     { suffix: '_revised.html', buttonId: 'rerun-proofreading', buttonText: 'Re-run Proofreading' },
                     { suffix: '_email.html', buttonId: 'convert-charts-finalize', buttonText: 'Convert Charts and Finalize', checkBoth: true },
                     { suffix: '_final.html', buttonId: 'convert-charts-finalize', buttonText: 'Convert Charts and Finalize', checkBoth: true }
                 ];
                 
+                // Check all files in parallel
+                const fileChecks = await Promise.all(
+                    filesToCheck.map(async (fileInfo) => {
+                        const filename = baseName + fileInfo.suffix;
+                        const exists = await checkFileExists(filename);
+                        return { ...fileInfo, filename, exists };
+                    })
+                );
+                
                 // Check each file and update button state
                 const buttonStates = {};
-                for (const fileInfo of filesToCheck) {
-                    const filename = baseName + fileInfo.suffix;
-                    const exists = await checkFileExists(filename);
+                for (const fileInfo of fileChecks) {
+                    const exists = fileInfo.exists;
                     
                     if (fileInfo.checkBoth) {
                         // For the consolidated button, track both email and final file states
@@ -1659,12 +1759,13 @@
                     }
                 }
                 
-                // Special handling for re-prioritize deltas button
-                // This should only be available if the original file exists but no revised version
+                // Special handling for re-prioritize deltas button (parallel checks)
                 const reprioritizeBtn = document.getElementById('reprioritize-deltas-btn');
                 if (reprioritizeBtn) {
-                    const originalExists = await checkFileExists(originalFilename);
-                    const revisedExists = await checkFileExists(baseName + '_revised.html');
+                    const [originalExists, revisedExists] = await Promise.all([
+                        checkFileExists(originalFilename),
+                        checkFileExists(baseName + '_revised.html')
+                    ]);
                     
                     if (originalExists && !revisedExists) {
                         reprioritizeBtn.classList.remove('completed');
@@ -1673,12 +1774,11 @@
                     } else {
                         reprioritizeBtn.classList.remove('available');
                         reprioritizeBtn.classList.add('completed');
-                        reprioritizeBtn.disabled = false; // Keep clickable even when completed
+                        reprioritizeBtn.disabled = false;
                     }
                 }
                 
                 // Special handling for re-explain deltas button
-                // This should be available if revised file doesn't exist
                 const reexplainBtn = document.getElementById('reexplain-deltas-btn');
                 if (reexplainBtn) {
                     const revisedExists = await checkFileExists(baseName + '_revised.html');
@@ -1690,7 +1790,7 @@
                     } else {
                         reexplainBtn.classList.remove('available');
                         reexplainBtn.classList.add('completed');
-                        reexplainBtn.disabled = false; // Keep clickable even when completed
+                        reexplainBtn.disabled = false;
                     }
                 }
                 
@@ -1733,11 +1833,13 @@
                         };
                     }
                     
-                    // Update report links for the selected report
-                    setTimeout(updateReportLinks, 500);
+                    // Update report links for the selected report (debounced)
+                    const debouncedUpdateLinks = debounce(updateReportLinks, 300);
+                    debouncedUpdateLinks();
                     
-                    // Update button states based on file existence
-                    updateButtonStates(selectedReport);
+                    // Update button states based on file existence (debounced)
+                    const debouncedUpdateButtons = debounce(() => updateButtonStates(selectedReport), 300);
+                    debouncedUpdateButtons();
                     
                     // Set up the re-run generation button
                     const rerunReportBtn = document.getElementById('rerunReportBtn');
@@ -1820,8 +1922,35 @@
                 
                 // Disable button and show loading state
                 generateBtn.disabled = true;
-                generateBtn.innerHTML = '<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> Generating...</div>';
-                generateStatus.style.display = 'none';
+                let stepCounter = 0;
+                const steps = [
+                    'Selecting metric changes...',
+                    'Selecting anomalies...',
+                    'Analyzing causal relationships...',
+                    'Prioritizing items with AI...',
+                    'Generating research agendas...',
+                    'Storing results...',
+                    'Generating explanations...',
+                    'Creating report...'
+                ];
+                
+                const updateProgress = () => {
+                    if (stepCounter < steps.length) {
+                        generateBtn.innerHTML = `<div style="display: flex; align-items: center; justify-content: center;"><span class="loading"></span> ${steps[stepCounter]}</div>`;
+                        generateStatus.textContent = `Step ${stepCounter + 1}/${steps.length}: ${steps[stepCounter]}`;
+                        generateStatus.className = 'status-message info';
+                        generateStatus.style.display = 'block';
+                    }
+                };
+                
+                // Start progress updates
+                updateProgress();
+                const progressInterval = setInterval(() => {
+                    stepCounter++;
+                    if (stepCounter < steps.length) {
+                        updateProgress();
+                    }
+                }, 10000); // Update every 10 seconds
                 
                 try {
                     // Call the API to generate the report
@@ -1837,19 +1966,39 @@
                         })
                     });
                     
+                    clearInterval(progressInterval);
                     const data = await response.json();
                     
                     if (data.status === 'success') {
-                        generateStatus.className = 'status-message success';
-                        generateStatus.textContent = 'Newsletter generated successfully!';
-                        generateStatus.style.display = 'block';
-                        
-                        // Reload the reports list while preserving selection
-                        loadReports(true);
+                        // Check if this is a job-based response
+                        if (data.job_id) {
+                            // Job-based response - show running message with link
+                            generateStatus.className = 'status-message info';
+                            const jobLink = `/backend/jobs/${data.job_id}`;
+                            generateStatus.innerHTML = `Monthly Newsletter is running. <a href="${jobLink}" target="_blank" style="color: #007bff; text-decoration: underline;">View job status (${data.job_id.substring(0, 8)}...)</a>`;
+                            generateStatus.style.display = 'block';
+                            
+                            // Trigger immediate job badge update
+                            if (typeof checkActiveJobs === 'function') {
+                                checkActiveJobs();
+                            }
+                            
+                            // Poll for job completion
+                            pollJobStatus(data.job_id);
+                        } else {
+                            // Legacy response - newsletter already completed
+                            generateStatus.className = 'status-message success';
+                            generateStatus.textContent = 'Newsletter generated successfully!';
+                            generateStatus.style.display = 'block';
+                            
+                            // Reload the reports list while preserving selection
+                            loadReports(true);
+                        }
                     } else {
                         throw new Error(data.message || 'Failed to generate newsletter');
                     }
                 } catch (error) {
+                    clearInterval(progressInterval);
                     generateStatus.className = 'status-message error';
                     generateStatus.textContent = `Error: ${error.message}`;
                     generateStatus.style.display = 'block';
@@ -1860,25 +2009,114 @@
                 }
             });
             
-            // Function to load report details
+            // Function to poll job status and reload when complete
+            async function pollJobStatus(jobId) {
+                const maxAttempts = 300; // 5 minutes max (1 second intervals)
+                let attempts = 0;
+                
+                const pollInterval = setInterval(async () => {
+                    attempts++;
+                    
+                    try {
+                        const response = await fetch(`/backend/jobs/${jobId}`);
+                        const data = await response.json();
+                        
+                        if (data.status === 'success' && data.job) {
+                            const job = data.job;
+                            
+                            // Update status message with progress
+                            if (job.status === 'running' && job.progress !== undefined) {
+                                const generateStatus = document.getElementById('generate-status');
+                                if (generateStatus) {
+                                    const jobLink = `/backend/jobs/${jobId}`;
+                                    generateStatus.innerHTML = `Monthly Newsletter is running (${job.progress}%). <a href="${jobLink}" target="_blank" style="color: #007bff; text-decoration: underline;">View job status</a>`;
+                                }
+                            }
+                            
+                            // Check if job is complete
+                            if (job.status === 'completed') {
+                                clearInterval(pollInterval);
+                                const generateStatus = document.getElementById('generate-status');
+                                if (generateStatus) {
+                                    generateStatus.className = 'status-message success';
+                                    generateStatus.textContent = 'Newsletter generated successfully!';
+                                }
+                                
+                                // Reload the reports list
+                                loadReports(true);
+                                
+                                // Trigger job badge update
+                                if (typeof checkActiveJobs === 'function') {
+                                    checkActiveJobs();
+                                }
+                            } else if (job.status === 'failed') {
+                                clearInterval(pollInterval);
+                                const generateStatus = document.getElementById('generate-status');
+                                if (generateStatus) {
+                                    generateStatus.className = 'status-message error';
+                                    generateStatus.textContent = `Newsletter generation failed: ${job.error || 'Unknown error'}`;
+                                }
+                                
+                                // Trigger job badge update
+                                if (typeof checkActiveJobs === 'function') {
+                                    checkActiveJobs();
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error polling job status:', error);
+                    }
+                    
+                    // Stop polling after max attempts
+                    if (attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        const generateStatus = document.getElementById('generate-status');
+                        if (generateStatus) {
+                            generateStatus.className = 'status-message warning';
+                            generateStatus.textContent = 'Job is taking longer than expected. Check the jobs page for status.';
+                        }
+                    }
+                }, 1000); // Poll every second
+            }
+            
+            // Function to load report details (with caching and optimized loading)
             async function loadReportDetails(filename) {
                 try {
                     console.log("Loading newsletter details for:", filename);
                     
-                    // Show loading state
-                    reportMetrics.innerHTML = '<p>Loading newsletter details...</p>';
+                    // Check cache first
+                    if (cache.reportDetails.has(filename)) {
+                        const cachedData = cache.reportDetails.get(filename);
+                        displayReportDetails(cachedData);
+                        reportDetails.style.display = 'block';
+                        return;
+                    }
+                    
+                    // Show loading state with skeleton
+                    reportMetrics.innerHTML = `
+                        <div class="skeleton-container">
+                            <div class="loading-skeleton"></div>
+                            <div class="loading-skeleton"></div>
+                            <div class="loading-skeleton"></div>
+                            <div class="loading-skeleton"></div>
+                        </div>
+                    `;
                     reportDetails.style.display = 'block';
                     
-                    // Find the report ID from the reports list
-                    const reportsResponse = await fetch('/api/monthly-reports/list');
-                    const reportsData = await reportsResponse.json();
+                    // Use cached reports data if available, otherwise fetch
+                    let reportsDataToUse = reportsData;
+                    if (!reportsDataToUse || !reportsDataToUse.reports) {
+                        const reportsResponse = await fetch('/api/monthly-reports/list');
+                        reportsDataToUse = await reportsResponse.json();
+                        reportsData = reportsDataToUse; // Update global cache
+                    }
                     
-                    if (reportsData.status !== 'success' || !reportsData.reports) {
+                    if (reportsDataToUse.status !== 'success' || !reportsDataToUse.reports) {
                         throw new Error("Failed to get reports list");
                     }
                     
                     // Find the report with matching filename
-                    const report = reportsData.reports.find(r => r.original_filename === filename);
+                    const report = reportsDataToUse.reports.find(r => r.original_filename === filename);
                     if (!report) {
                         throw new Error("Report not found");
                     }
@@ -1901,6 +2139,8 @@
                             console.log("Report data received:", reportData);
                             
                             if (reportData.status === 'success' && reportData.report) {
+                                // Cache the report data
+                                cache.reportDetails.set(filename, reportData.report);
                                 // Display the report data
                                 displayReportDetails(reportData.report);
                                 reportDetails.style.display = 'block';
@@ -2023,9 +2263,24 @@
                     const data = await response.json();
                     
                     if (data.status === 'success') {
-                        alert('Newsletter has been re-written successfully!');
-                        // Reload reports while preserving the current selection
-                        await loadReports(true);
+                        if (data.job_id) {
+                            // Job-based response - show message with link
+                            const jobLink = `/backend/jobs/${data.job_id}`;
+                            alert(`Newsletter regeneration started! View job status: ${jobLink}`);
+                            
+                            // Trigger immediate job badge update
+                            if (typeof checkActiveJobs === 'function') {
+                                checkActiveJobs();
+                            }
+                            
+                            // Poll for completion
+                            pollJobStatusForReload(data.job_id, filename);
+                        } else {
+                            // Legacy response - already completed
+                            alert('Newsletter has been re-written successfully!');
+                            // Reload reports while preserving the current selection
+                            await loadReports(true);
+                        }
                     } else {
                         alert('Error re-writing newsletter: ' + data.message);
                     }
@@ -2035,6 +2290,53 @@
                     button.textContent = originalText;
                     button.disabled = false;
                 }
+            }
+            
+            // Function to poll job status and reload when complete (for rerun operations)
+            async function pollJobStatusForReload(jobId, filename) {
+                const maxAttempts = 300; // 5 minutes max
+                let attempts = 0;
+                
+                const pollInterval = setInterval(async () => {
+                    attempts++;
+                    
+                    try {
+                        const response = await fetch(`/backend/jobs/${jobId}`);
+                        const data = await response.json();
+                        
+                        if (data.status === 'success' && data.job) {
+                            const job = data.job;
+                            
+                            if (job.status === 'completed') {
+                                clearInterval(pollInterval);
+                                alert('Newsletter has been re-written successfully!');
+                                // Reload reports while preserving the current selection
+                                await loadReports(true);
+                                
+                                // Trigger job badge update
+                                if (typeof checkActiveJobs === 'function') {
+                                    checkActiveJobs();
+                                }
+                            } else if (job.status === 'failed') {
+                                clearInterval(pollInterval);
+                                alert(`Newsletter regeneration failed: ${job.error || 'Unknown error'}`);
+                                
+                                // Trigger job badge update
+                                if (typeof checkActiveJobs === 'function') {
+                                    checkActiveJobs();
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error polling job status:', error);
+                    }
+                    
+                    // Stop polling after max attempts
+                    if (attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        alert('Job is taking longer than expected. Check the jobs page for status.');
+                    }
+                }, 1000); // Poll every second
             }
             
             // Function to re-run proofreading
@@ -2068,11 +2370,26 @@
                     const data = await response.json();
                     
                     if (data.status === 'success') {
-                        alert('Proofreading re-run successfully!');
-                        // Reload the reports list while preserving selection
-                        loadReports(true);
-                        // Update button states after completion
-                        setTimeout(() => updateButtonStates(filename), 1000);
+                        if (data.job_id) {
+                            // Job-based response - show message with link
+                            const jobLink = `/backend/jobs/${data.job_id}`;
+                            alert(`Proofreading started! View job status: ${jobLink}`);
+                            
+                            // Trigger immediate job badge update
+                            if (typeof checkActiveJobs === 'function') {
+                                checkActiveJobs();
+                            }
+                            
+                            // Poll for completion
+                            pollJobStatusForProofreading(data.job_id, filename);
+                        } else {
+                            // Legacy response - already completed
+                            alert('Proofreading re-run successfully!');
+                            // Reload the reports list while preserving selection
+                            loadReports(true);
+                            // Update button states after completion
+                            setTimeout(() => updateButtonStates(filename), 1000);
+                        }
                     } else {
                         throw new Error(data.message || 'Failed to re-run proofreading');
                     }
@@ -2084,6 +2401,55 @@
                     rerunProofreadingBtn.disabled = false;
                     rerunProofreadingBtn.textContent = 'Re-run Proofreading';
                 }
+            }
+            
+            // Function to poll job status and reload when complete (for proofreading)
+            async function pollJobStatusForProofreading(jobId, filename) {
+                const maxAttempts = 300; // 5 minutes max
+                let attempts = 0;
+                
+                const pollInterval = setInterval(async () => {
+                    attempts++;
+                    
+                    try {
+                        const response = await fetch(`/backend/jobs/${jobId}`);
+                        const data = await response.json();
+                        
+                        if (data.status === 'success' && data.job) {
+                            const job = data.job;
+                            
+                            if (job.status === 'completed') {
+                                clearInterval(pollInterval);
+                                alert('Proofreading re-run successfully!');
+                                // Reload the reports list while preserving selection
+                                loadReports(true);
+                                // Update button states after completion
+                                setTimeout(() => updateButtonStates(filename), 1000);
+                                
+                                // Trigger job badge update
+                                if (typeof checkActiveJobs === 'function') {
+                                    checkActiveJobs();
+                                }
+                            } else if (job.status === 'failed') {
+                                clearInterval(pollInterval);
+                                alert(`Proofreading failed: ${job.error || 'Unknown error'}`);
+                                
+                                // Trigger job badge update
+                                if (typeof checkActiveJobs === 'function') {
+                                    checkActiveJobs();
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error polling job status:', error);
+                    }
+                    
+                    // Stop polling after max attempts
+                    if (attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        alert('Job is taking longer than expected. Check the jobs page for status.');
+                    }
+                }, 1000); // Poll every second
             }
             
             // Function to delete a report
@@ -2281,6 +2647,146 @@
                             </div>
                         </div>
                     `;
+                }
+                
+                // Display causal graph analysis if available
+                console.log("Report metadata:", report.metadata);
+                if (report.metadata) {
+                    try {
+                        const metadata = typeof report.metadata === 'string' 
+                            ? JSON.parse(report.metadata) 
+                            : report.metadata;
+                        
+                        console.log("Parsed metadata:", metadata);
+                        const causalAnalysis = metadata.causal_graph_analysis;
+                        console.log("Causal analysis:", causalAnalysis);
+                        if (causalAnalysis) {
+                            metricsHtml += `
+                                <div class="causal-graph-container" style="margin-top: 20px; margin-bottom: 20px; padding: 15px; background-color: #f0f8ff; border-radius: 8px; border-left: 4px solid #4a90e2;">
+                                    <h2 style="margin: 0 0 15px 0; color: #4a90e2;">🔗 Causal Graph Analysis</h2>
+                            `;
+                            
+                            // Display detected chains
+                            if (causalAnalysis.detected_chains && causalAnalysis.detected_chains.length > 0) {
+                                metricsHtml += `
+                                    <div style="margin-bottom: 15px;">
+                                        <h3 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">Detected Causal Chains</h3>
+                                        ${causalAnalysis.detected_chains.map(chain => `
+                                            <div style="margin-bottom: 10px; padding: 10px; background-color: #fff; border-radius: 4px; border: 1px solid #ddd;">
+                                                <strong>${chain.chain_name || chain.chain_id || 'Unknown Chain'}</strong>
+                                                ${chain.description ? `<p style="margin: 5px 0; color: #666; font-size: 13px;">${chain.description}</p>` : ''}
+                                                <div style="margin-top: 8px;">
+                                                    <span style="font-size: 12px; color: ${chain.matches_expectation ? '#28a745' : '#dc3545'};">
+                                                        ${chain.matches_expectation ? '✓ Matches expectation' : '✗ Does not match expectation'}
+                                                    </span>
+                                                </div>
+                                                ${chain.metrics && chain.metrics.length > 0 ? `
+                                                    <div style="margin-top: 8px; font-size: 12px;">
+                                                        <strong>Metrics:</strong>
+                                                        <ul style="margin: 5px 0; padding-left: 20px;">
+                                                            ${chain.metrics.map(m => `<li>${m.metric_name}: ${m.change_direction} (${m.percent_change ? m.percent_change.toFixed(1) : '0'}%)</li>`).join('')}
+                                                        </ul>
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                `;
+                            }
+                            
+                            // Display unexpected relationships
+                            if (causalAnalysis.unexpected_relationships && causalAnalysis.unexpected_relationships.length > 0) {
+                                metricsHtml += `
+                                    <div style="margin-bottom: 15px;">
+                                        <h3 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">⚠️ Unexpected Relationships</h3>
+                                        ${causalAnalysis.unexpected_relationships.map(rel => `
+                                            <div style="margin-bottom: 10px; padding: 10px; background-color: #fff3cd; border-radius: 4px; border: 1px solid #ffc107;">
+                                                <strong>${rel.metric1_name}</strong> (${rel.expected}) vs <strong>${rel.metric2_name}</strong> (${rel.observed})
+                                                ${rel.reasoning ? `<p style="margin: 5px 0; color: #666; font-size: 12px;">${rel.reasoning}</p>` : ''}
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                `;
+                            }
+                            
+                            metricsHtml += `</div>`;
+                        }
+                        
+                        // Display research agendas
+                        const researchAgendas = metadata.research_agendas;
+                        console.log("Research agendas:", researchAgendas);
+                        console.log("Research agendas type:", typeof researchAgendas);
+                        console.log("Research agendas is array?", Array.isArray(researchAgendas));
+                        console.log("Research agendas length:", researchAgendas ? (Array.isArray(researchAgendas) ? researchAgendas.length : 'not an array') : 'null/undefined');
+                        
+                        // Handle both array and object formats
+                        let agendasToDisplay = [];
+                        if (Array.isArray(researchAgendas)) {
+                            agendasToDisplay = researchAgendas;
+                        } else if (researchAgendas && typeof researchAgendas === 'object') {
+                            // If it's an object, try to extract agendas from it
+                            agendasToDisplay = Object.values(researchAgendas).filter(item => 
+                                item && (item.narrative_thread || item.research_questions || item.suggested_metrics)
+                            );
+                        }
+                        
+                        console.log("Agendas to display:", agendasToDisplay);
+                        console.log("Agendas to display length:", agendasToDisplay.length);
+                        
+                        if (agendasToDisplay && agendasToDisplay.length > 0) {
+                            metricsHtml += `
+                                <div class="research-agendas-container" style="margin-top: 20px; margin-bottom: 20px; padding: 15px; background-color: #f5f0ff; border-radius: 8px; border-left: 4px solid #ad35fa;">
+                                    <h2 style="margin: 0 0 15px 0; color: #ad35fa;">📋 Research Agendas</h2>
+                                    ${agendasToDisplay.map((agenda, idx) => {
+                                        console.log(`Processing agenda ${idx}:`, agenda);
+                                        return `
+                                        <div style="margin-bottom: 20px; padding: 15px; background-color: #fff; border-radius: 4px; border: 1px solid #ddd;">
+                                            <h3 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">Agenda ${idx + 1}</h3>
+                                            ${agenda.narrative_thread ? `
+                                                <div style="margin-bottom: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 4px;">
+                                                    <strong>Narrative Thread:</strong>
+                                                    <p style="margin: 5px 0 0 0; color: #666;">${agenda.narrative_thread}</p>
+                                                </div>
+                                            ` : ''}
+                                            ${agenda.research_questions && agenda.research_questions.length > 0 ? `
+                                                <div style="margin-bottom: 10px;">
+                                                    <strong>Research Questions:</strong>
+                                                    <ol style="margin: 5px 0; padding-left: 20px;">
+                                                        ${agenda.research_questions.map(q => `<li style="margin-bottom: 5px;">${q}</li>`).join('')}
+                                                    </ol>
+                                                </div>
+                                            ` : ''}
+                                            ${agenda.suggested_metrics && agenda.suggested_metrics.length > 0 ? `
+                                                <div style="margin-bottom: 10px;">
+                                                    <strong>Suggested Metrics to Investigate:</strong>
+                                                    <ul style="margin: 5px 0; padding-left: 20px;">
+                                                        ${agenda.suggested_metrics.map(m => {
+                                                            const metricName = m.metric_name || m.metric_id || 'Unknown Metric';
+                                                            const reason = m.reason ? ` - ${m.reason}` : '';
+                                                            return `<li style="margin-bottom: 5px;">${metricName}${reason}</li>`;
+                                                        }).join('')}
+                                                    </ul>
+                                                </div>
+                                            ` : ''}
+                                            ${agenda.causal_inferences && agenda.causal_inferences.length > 0 ? `
+                                                <div style="margin-top: 10px; padding: 10px; background-color: #e7f3ff; border-radius: 4px;">
+                                                    <strong>Causal Inferences:</strong>
+                                                    <ul style="margin: 5px 0; padding-left: 20px;">
+                                                        ${agenda.causal_inferences.map(inf => `<li style="margin-bottom: 5px;">${inf}</li>`).join('')}
+                                                    </ul>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    `;
+                                    }).join('')}
+                                </div>
+                            `;
+                        } else {
+                            console.log("No research agendas to display - agendasToDisplay is empty or invalid");
+                        }
+                    } catch (error) {
+                        console.error('Error parsing report metadata:', error);
+                    }
                 }
                 
                 // Check if metrics exist in the report

@@ -1,0 +1,271 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-01-15",
+  "relationships": [
+    {
+      "id": "total_to_violent",
+      "source_metric_id": 1,
+      "source_metric_key": "total_police_incidents",
+      "source_metric_name": "Total Police Incidents",
+      "target_metric_id": 2,
+      "target_metric_key": "violent_crime_incidents",
+      "target_metric_name": "Violent Crime Incidents",
+      "relationship_type": "contains",
+      "direction": "compositional",
+      "change_direction": "same",
+      "confidence": "high",
+      "description": "Total police incidents contains violent crime incidents. If total incidents decrease, violent crime should also decrease proportionally.",
+      "category": "crime",
+      "lag_days": 0,
+      "strength": 0.95,
+      "expected_ratio": 0.13
+    },
+    {
+      "id": "total_to_property",
+      "source_metric_id": 1,
+      "source_metric_key": "total_police_incidents",
+      "source_metric_name": "Total Police Incidents",
+      "target_metric_id": 3,
+      "target_metric_key": "property_crime_incidents",
+      "target_metric_name": "Property Crime Incidents",
+      "relationship_type": "contains",
+      "direction": "compositional",
+      "change_direction": "same",
+      "confidence": "high",
+      "description": "Total police incidents contains property crime incidents. If total incidents decrease, property crime should also decrease proportionally.",
+      "category": "crime",
+      "lag_days": 0,
+      "strength": 0.95,
+      "expected_ratio": 0.39
+    },
+    {
+      "id": "total_to_drug",
+      "source_metric_id": 1,
+      "source_metric_key": "total_police_incidents",
+      "source_metric_name": "Total Police Incidents",
+      "target_metric_id": 4,
+      "target_metric_key": "drug_crime_incidents",
+      "target_metric_name": "Drug Crime Incidents",
+      "relationship_type": "contains",
+      "direction": "compositional",
+      "change_direction": "same",
+      "confidence": "medium",
+      "description": "Total police incidents contains drug crime incidents. However, drug crime may increase independently due to enforcement priorities or real increases in drug activity.",
+      "category": "crime",
+      "lag_days": 0,
+      "strength": 0.70,
+      "expected_ratio": 0.07
+    },
+    {
+      "id": "violent_to_homicides",
+      "source_metric_id": 2,
+      "source_metric_key": "violent_crime_incidents",
+      "source_metric_name": "Violent Crime Incidents",
+      "target_metric_id": 29,
+      "target_metric_key": "homicides",
+      "target_metric_name": "Homicides",
+      "relationship_type": "contains",
+      "direction": "compositional",
+      "change_direction": "same",
+      "confidence": "medium",
+      "description": "Violent crime incidents contains homicides. If violent crime decreases, homicides should also decrease, though homicides are rare events with high variance.",
+      "category": "crime",
+      "lag_days": 0,
+      "strength": 0.85,
+      "expected_ratio": 0.004
+    },
+    {
+      "id": "incidents_to_arrests",
+      "source_metric_id": 1,
+      "source_metric_key": "total_police_incidents",
+      "source_metric_name": "Total Police Incidents",
+      "target_metric_id": 6,
+      "target_metric_key": "arrests_presented_to_da",
+      "target_metric_name": "Arrests Presented to DA",
+      "relationship_type": "causes",
+      "direction": "downstream",
+      "change_direction": "same",
+      "confidence": "high",
+      "description": "If total police incidents decrease, arrests presented to DA should decrease proportionally after processing lag. However, arrest rates may vary by crime type and enforcement priorities.",
+      "category": "criminal_justice",
+      "lag_days": 7,
+      "strength": 0.80
+    },
+    {
+      "id": "arrests_to_jail_bookings",
+      "source_metric_id": 6,
+      "source_metric_key": "arrests_presented_to_da",
+      "source_metric_name": "Arrests Presented to DA",
+      "target_metric_id": 5,
+      "target_metric_key": "jail_bookings",
+      "target_metric_name": "Jail Bookings",
+      "relationship_type": "correlates",
+      "direction": "bidirectional",
+      "change_direction": "same",
+      "confidence": "medium",
+      "description": "Arrests presented to DA correlate with jail bookings, though not all arrests result in bookings (some are cited and released).",
+      "category": "criminal_justice",
+      "lag_days": 0,
+      "strength": 0.75
+    },
+    {
+      "id": "arrests_to_charges",
+      "source_metric_id": 6,
+      "source_metric_key": "arrests_presented_to_da",
+      "source_metric_name": "Arrests Presented to DA",
+      "target_metric_id": 32,
+      "target_metric_key": "da_charges_filed",
+      "target_metric_name": "DA Charges Filed",
+      "relationship_type": "causes",
+      "direction": "downstream",
+      "change_direction": "same",
+      "confidence": "high",
+      "description": "If arrests presented to DA increase, DA charges filed should increase proportionally. However, DA filing rates may vary based on case strength and policies.",
+      "category": "criminal_justice",
+      "lag_days": 14,
+      "strength": 0.85
+    },
+    {
+      "id": "charges_to_convictions",
+      "source_metric_id": 32,
+      "source_metric_key": "da_charges_filed",
+      "source_metric_name": "DA Charges Filed",
+      "target_metric_id": 7,
+      "target_metric_key": "da_convictions",
+      "target_metric_name": "DA Convictions",
+      "relationship_type": "causes",
+      "direction": "downstream",
+      "change_direction": "same",
+      "confidence": "high",
+      "description": "If DA charges filed increase, DA convictions should increase proportionally after court processing time. Conviction rates may vary by case type.",
+      "category": "criminal_justice",
+      "lag_days": 90,
+      "strength": 0.80
+    },
+    {
+      "id": "pipeline_to_processing_time",
+      "source_metric_id": 6,
+      "source_metric_key": "arrests_presented_to_da",
+      "source_metric_name": "Arrests Presented to DA",
+      "target_metric_id": 33,
+      "target_metric_key": "arrest_to_conviction_days",
+      "target_metric_name": "Arrest to Conviction (days)",
+      "relationship_type": "affects",
+      "direction": "inverse",
+      "change_direction": "inverse",
+      "confidence": "medium",
+      "description": "If arrests presented to DA increase, processing time (arrest to conviction days) may increase due to court backlog. If arrests decrease, processing time may decrease.",
+      "category": "criminal_justice",
+      "lag_days": 0,
+      "strength": 0.65
+    },
+    {
+      "id": "charges_to_processing_time",
+      "source_metric_id": 32,
+      "source_metric_key": "da_charges_filed",
+      "source_metric_name": "DA Charges Filed",
+      "target_metric_id": 33,
+      "target_metric_key": "arrest_to_conviction_days",
+      "target_metric_name": "Arrest to Conviction (days)",
+      "relationship_type": "affects",
+      "direction": "inverse",
+      "change_direction": "inverse",
+      "confidence": "medium",
+      "description": "If DA charges filed increase, processing time may increase due to court caseload. If charges decrease, processing time may decrease.",
+      "category": "criminal_justice",
+      "lag_days": 0,
+      "strength": 0.70
+    }
+  ],
+  "chains": [
+    {
+      "chain_id": "criminal_justice_pipeline",
+      "name": "Criminal Justice Processing Pipeline",
+      "description": "Flow from police incidents through arrests, charges, to convictions",
+      "metric_ids": [1, 6, 32, 7],
+      "expected_lag_days": 120,
+      "expected_ratios": {
+        "1_to_6": 0.11,
+        "6_to_32": 0.58,
+        "32_to_7": 0.35
+      }
+    },
+    {
+      "chain_id": "crime_composition",
+      "name": "Crime Type Composition",
+      "description": "Total incidents broken down by crime type",
+      "metric_ids": [1, 2, 3, 4, 29],
+      "expected_ratios": {
+        "1_to_2": 0.13,
+        "1_to_3": 0.39,
+        "1_to_4": 0.07,
+        "2_to_29": 0.004
+      }
+    },
+    {
+      "chain_id": "arrest_to_conviction_flow",
+      "name": "Arrest to Conviction Flow",
+      "description": "Flow from arrests through charges to convictions, with processing time",
+      "metric_ids": [6, 32, 7, 33],
+      "expected_lag_days": 120
+    }
+  ],
+  "categories": {
+    "crime": {
+      "name": "Crime",
+      "description": "Metrics related to crime incidents and reporting"
+    },
+    "criminal_justice": {
+      "name": "Criminal Justice",
+      "description": "Metrics related to criminal justice processing pipeline"
+    }
+  },
+  "validation_rules": {
+    "compositional_relationships": {
+      "description": "For contains relationships, sum of parts should approximately equal total",
+      "examples": [
+        {
+          "total_metric_id": 1,
+          "component_metric_ids": [2, 3, 4],
+          "tolerance": 0.10,
+          "note": "Total should approximately equal sum of violent + property + drug (plus other categories)"
+        },
+        {
+          "total_metric_id": 2,
+          "component_metric_ids": [29],
+          "tolerance": 0.05,
+          "note": "Violent crime should contain homicides (plus other violent crimes)"
+        }
+      ]
+    },
+    "downstream_lags": {
+      "description": "Downstream metrics should show changes after specified lag days",
+      "examples": [
+        {
+          "source_metric_id": 1,
+          "target_metric_id": 6,
+          "expected_lag_days": 7,
+          "tolerance_days": 3,
+          "note": "Incidents to arrests: 7 day processing lag"
+        },
+        {
+          "source_metric_id": 6,
+          "target_metric_id": 32,
+          "expected_lag_days": 14,
+          "tolerance_days": 7,
+          "note": "Arrests to charges: 14 day DA review lag"
+        },
+        {
+          "source_metric_id": 32,
+          "target_metric_id": 7,
+          "expected_lag_days": 90,
+          "tolerance_days": 30,
+          "note": "Charges to convictions: 90 day court processing lag"
+        }
+      ]
+    }
+  }
+}
+
+
+

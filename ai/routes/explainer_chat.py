@@ -264,7 +264,7 @@ async def explain_change_streaming_api(request: Request):
         
         return StreamingResponse(
             generate_stream(),
-            media_type="text/plain",
+            media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
@@ -378,11 +378,37 @@ async def langchain_explainer_streaming_api(request: Request):
                 # Prepare metric details for the agent
                 metric_details = {}
                 if session_data and 'metric_id' in session_data:
+                    district_id = session_data.get('district_id', 0)
                     metric_details = {
                         "metric_id": session_data.get('metric_id'),
-                        "district_id": session_data.get('district_id', 0),
-                        "period_type": session_data.get('period_type', 'month')
+                        "district_id": district_id,
+                        "district": str(district_id),  # Add district for research context lookup
+                        "period_type": session_data.get('period_type', 'month'),
+                        "city_id": 1  # San Francisco
                     }
+                    
+                    # NEW: Get research context for this district
+                    try:
+                        import sys
+                        import os
+                        transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'transparentcity-platform', 'src')
+                        if transparentcity_path not in sys.path:
+                            sys.path.insert(0, transparentcity_path)
+                        
+                        from transparentcity.services import get_research_service
+                        research_service = get_research_service()
+                        
+                        research_context = research_service.get_research_context(
+                            city_id=1,  # San Francisco
+                            district=str(district_id),
+                            max_agendas=3
+                        )
+                        
+                        if research_context:
+                            metric_details["research_context"] = research_context
+                            logger.info(f"📋 Including research context in agent prompt")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to get research context: {e}")
                 
                 # Use the agent's explain_change_streaming method which includes real-time tool call logging
                 async for chunk in agent.explain_change_streaming(prompt, metric_details, session_id=session_id):
@@ -398,7 +424,7 @@ async def langchain_explainer_streaming_api(request: Request):
         
         return StreamingResponse(
             generate_stream(),
-            media_type="text/plain",
+            media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
@@ -942,7 +968,7 @@ async def langchain_explainer_continue_api(request: Request):
         
         return StreamingResponse(
             generate_continue_stream(),
-            media_type="text/plain",
+            media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",

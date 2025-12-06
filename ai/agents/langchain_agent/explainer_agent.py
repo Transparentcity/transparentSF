@@ -822,10 +822,42 @@ class LangChainExplainerAgent:
             required_sections = tool_factory.get_required_prompt_sections(self.tool_groups)
             self.logger.info(f"Required sections: {required_sections}")
             
+            # NEW: Get research context if available in metric_details
+            research_context = metric_details.get("research_context") if metric_details else None
+            city_id = metric_details.get("city_id", 1) if metric_details else 1  # Default to San Francisco
+            district = metric_details.get("district") or metric_details.get("district_id") if metric_details else None
+            
+            # If research_context not provided but we have district, try to get it
+            if not research_context and district is not None:
+                try:
+                    import sys
+                    import os
+                    transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), '..', 'transparentcity-platform', 'src')
+                    if transparentcity_path not in sys.path:
+                        sys.path.insert(0, transparentcity_path)
+                    
+                    from transparentcity.services import get_research_service
+                    research_service = get_research_service()
+                    
+                    research_context = research_service.get_research_context(
+                        city_id=city_id,
+                        district=str(district),
+                        max_agendas=3
+                    )
+                    
+                    if research_context:
+                        self.logger.info(f"📋 Retrieved research context for district {district}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Failed to get research context: {e}")
+                    research_context = None
+            
             # Build the system prompt
             system_prompt = prompt_builder.build_system_prompt(
                 required_sections=required_sections,
                 metric_details=metric_details,
+                research_context=research_context,
+                city_id=city_id,
+                district=str(district) if district is not None else None,
                 include_all_sections=self.include_all_sections
             )
             self.logger.info(f"Built system prompt, length: {len(system_prompt)}")

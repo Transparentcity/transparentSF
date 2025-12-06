@@ -1,0 +1,90 @@
+{
+  "items": [
+    {
+      "index": 1,
+      "metric": "Drug Crime Incidents",
+      "metric_id": "4",
+      "group": "All",
+      "priority": 1,
+      "explanation": "Drug crime incidents increased 58.6% year-over-year, which is a significant counter-trend while total police incidents decreased by 12.8%. This suggests either increased enforcement focus on drug crimes or a real increase in drug-related activity. This is particularly interesting given the broader crime reduction trend."
+    },
+    {
+      "index": 2,
+      "metric": "Total Police Incidents",
+      "metric_id": "1",
+      "group": "All",
+      "priority": 2,
+      "explanation": "Total police incidents decreased by 12.8% year-over-year, continuing a positive trend. However, this decrease is not uniform across all crime types, with drug crimes showing a sharp increase."
+    },
+    {
+      "index": 3,
+      "metric": "Property Crime Incidents",
+      "metric_id": "3",
+      "group": "All",
+      "priority": 3,
+      "explanation": "Property crime incidents decreased by 24.7% year-over-year, which is a larger decrease than the overall 12.8% decrease in total incidents. This indicates property crime is declining faster than other crime types."
+    }
+  ],
+  "causal_graph_analysis": {
+    "detected_chains": [
+      {
+        "chain_name": "Crime Type Composition",
+        "description": "Total incidents broken down by crime type",
+        "metrics_involved": ["Total Police Incidents", "Drug Crime Incidents", "Property Crime Incidents"],
+        "matches_expectation": false,
+        "anomaly_reason": "Drug crime up 58.6% while total down 12.8% - unexpected inverse relationship"
+      }
+    ],
+    "unexpected_relationships": [
+      {
+        "metric1": "Drug Crime Incidents",
+        "metric2": "Total Police Incidents",
+        "relationship": "Drug crime increased 58.6% while total incidents decreased 12.8%",
+        "reasoning": "This unexpected relationship suggests either increased enforcement focus on drug crimes or a real increase in drug-related activity that is not reflected in overall incident counts"
+      }
+    ]
+  },
+  "research_agendas": [
+    {
+      "narrative_thread": "Investigating the correlation between increased drug crime incidents and overdose-related metrics to understand whether the increase represents enforcement activity, actual drug activity, or both",
+      "research_questions": [
+        "Are drug crime incidents correlated with overdose deaths?",
+        "What is the relationship between drug arrests and narcan deployments?",
+        "Are there geographic patterns in drug crime increases that correlate with overdose hotspots?"
+      ],
+      "suggested_metrics": [
+        {
+          "metric_name": "Drug Crime Incidents",
+          "metric_id": "4",
+          "reason": "Primary metric showing 58.6% increase",
+          "research_question": "What geographic areas and neighborhoods are driving the 58.6% increase in drug crime incidents, and are there specific patterns in the types of drug-related incidents?"
+        },
+        {
+          "metric_name": "Unintentional Drug Overdose Deaths",
+          "metric_id": "93",
+          "reason": "Correlation analysis with drug crime incidents",
+          "research_question": "Are the increased drug crime incidents correlated with overdose deaths? What is the temporal and geographic relationship between drug arrests and overdose deaths?"
+        },
+        {
+          "metric_name": "SFPD Narcan/Naloxone Deployment",
+          "metric_id": "92",
+          "reason": "Emergency response correlation",
+          "research_question": "What is the relationship between drug crime incidents and narcan deployments? Are narcan deployments increasing in the same areas where drug crimes are rising?"
+        },
+        {
+          "metric_name": "Violent Crime Incidents",
+          "metric_id": "2",
+          "reason": "Potential correlation with drug-related violence",
+          "research_question": "Are there correlations between drug crime incidents and violent crime incidents? Do areas with high drug crime also show increases in violent crime?"
+        }
+      ],
+      "causal_inferences": [
+        "drug_crime_up ↔ overdose_deaths_up",
+        "drug_crime_up ↔ narcan_deployments_up"
+      ]
+    }
+  ]
+}
+
+
+

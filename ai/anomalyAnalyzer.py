@@ -1008,7 +1008,12 @@ async def anomaly_chat(request: Request):
         # Create StreamingResponse
         response = StreamingResponse(
             generate_response(user_input, session_data),
-            media_type="text/plain"
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
         )
         
         return response
@@ -1849,8 +1854,81 @@ This requirement is non-negotiable and is essential for providing accurate infor
         
         direction = "increased" if float(data.get("delta", 0)) > 0 else "decreased"
         
+        # NEW: Create or get research agenda for this metric analysis
+        research_context = None
+        try:
+            import sys
+            import os
+            transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'transparentcity-platform', 'src')
+            if transparentcity_path not in sys.path:
+                sys.path.insert(0, transparentcity_path)
+            
+            from transparentcity.services import get_research_service, ResearchType
+            
+            research_service = get_research_service()
+            
+            # Create a focused research agenda for this specific metric analysis
+            agenda = research_service.create_agenda(
+                narrative_thread=f"Investigating {direction} in {metric_name} ({percent_change_str}) for {district}",
+                research_questions=[
+                    f"Why did {metric_name} {direction} by {percent_change_str} in {district}?",
+                    f"What factors contributed to this change between {previous_period} and {recent_period}?",
+                    f"Is this change part of a broader trend or an isolated event?",
+                    f"Are there related metrics or anomalies that explain this change?"
+                ],
+                suggested_metrics=[
+                    {
+                        "metric_name": metric_name,
+                        "reason": f"Primary metric showing {percent_change_str} change",
+                        "priority": 1
+                    }
+                ],
+                causal_inferences=[
+                    {
+                        "relationship": f"{metric_name}_change ↔ external_factors",
+                        "direction": "unknown",
+                        "confidence": 0.5,
+                        "evidence": f"{percent_change_str} change detected"
+                    }
+                ],
+                research_type=ResearchType.EXPLANATORY,
+                city_id=1,  # San Francisco
+                district=str(district_number) if district_number is not None else "0",
+                period_type=period_type,
+                priority=1
+            )
+            
+            logger.info(f"✅ Created research agenda for metric analysis: {agenda.id}")
+            
+            # Get research context (includes this new agenda plus any existing ones)
+            research_context = research_service.get_research_context(
+                city_id=1,
+                district=str(district_number) if district_number is not None else "0",
+                max_agendas=3
+            )
+            
+            if research_context:
+                logger.info(f"📋 Including research context in analysis prompt")
+                logger.info(f"   Research context length: {len(research_context)} chars")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to create/get research agenda: {e}")
+            research_context = None
+        
         # Create a more structured prompt that explicitly lists the tools to use
-        prompt = f"""I need you to explain a significant change in the metric '{metric_name}' (ID: {metric_id}) for {district}.
+        prompt_base = f"""I need you to explain a significant change in the metric '{metric_name}' (ID: {metric_id}) for {district}."""
+        
+        if research_context:
+            prompt = f"""{prompt_base}
+
+RESEARCH CONTEXT:
+{research_context}
+
+Use the research context above to guide your analysis. Focus on answering the research questions and exploring the suggested metrics and causal relationships.
+"""
+        else:
+            prompt = prompt_base
+        
+        prompt += f"""
 
 METRIC DETAILS:
 - Name: {metric_name}
@@ -1939,7 +2017,8 @@ async def query_anomalies_endpoint(
     district: str = None,
     only_active: bool = True,
     recent_month: str = None,     # Add recent_month parameter (format: YYYY-MM)
-    comparison_month: str = None  # Add comparison_month parameter (format: YYYY-MM)
+    comparison_month: str = None,  # Add comparison_month parameter (format: YYYY-MM)
+    show_on_dash: bool = False  # Filter for metrics with show_on_dash=True
 ):
     """
     API endpoint to query anomalies for a specific metric.
@@ -1956,16 +2035,17 @@ async def query_anomalies_endpoint(
         only_anomalies: If True, only return records where out_of_bounds=True
         metric_name: Filter by metric name in metadata
         object_id: Filter by object_id
-        period_type: Filter by period type (month, quarter, year)
+        period_type: Filter by period type (month, quarter, year). When provided, automatically filters for current period.
         district: Filter by district
         only_active: If True, only return active anomalies (is_active=True)
+        show_on_dash: If True, only return anomalies for metrics where show_on_dash=True
     """
     try:
         # Create context_variables dict
         context_variables = {}
         
         # Log the request parameters
-        logging.info(f"Query anomalies request: metric_name={metric_name}, object_id={object_id}, district={district}, period_type={period_type}, only_active={only_active}, recent_month={recent_month}, comparison_month={comparison_month}")
+        logging.info(f"Query anomalies request: metric_name={metric_name}, object_id={object_id}, district={district}, period_type={period_type}, only_active={only_active}, recent_month={recent_month}, comparison_month={comparison_month}, show_on_dash={show_on_dash}")
         
         # Import the function here to make sure it's available
         try:
@@ -2019,11 +2099,13 @@ async def query_anomalies_endpoint(
             from psycopg2.extras import RealDictCursor
             
             # Build query with standard filters and join with metrics table to get greendirection
-            query = """
+            # Use INNER JOIN when filtering by show_on_dash to ensure we only get anomalies with matching metrics
+            join_type = "INNER JOIN" if show_on_dash else "LEFT JOIN"
+            query = f"""
                 SELECT a.*, m.greendirection, 
                        a.analysis_session_id, a.analysis_date, a.analysis_status, a.metadata
                 FROM anomalies a
-                LEFT JOIN metrics m ON a.object_id = m.id::text
+                {join_type} metrics m ON a.object_id::text = m.id::text
                 WHERE 1=1 
             """
             params = []
@@ -2061,13 +2143,24 @@ async def query_anomalies_endpoint(
                 
             # Add object_id filter - this is our key addition
             if object_id:
-                query += "AND a.object_id = %s "
-                params.append(str(object_id))
+                if ',' in str(object_id):
+                    object_ids = [oid.strip() for oid in str(object_id).split(',')]
+                    placeholders = ','.join(['%s'] * len(object_ids))
+                    query += f"AND a.object_id IN ({placeholders}) "
+                    params.extend(object_ids)
+                else:
+                    query += "AND a.object_id = %s "
+                    params.append(str(object_id))
                 
             # Add period_type filter if provided
             if period_type:
                 query += "AND a.period_type = %s "
                 params.append(period_type)
+            
+            # Filter for show_on_dash metrics if requested
+            # Since we use INNER JOIN when show_on_dash is true, we can safely filter
+            if show_on_dash:
+                query += "AND m.show_on_dash = true "
             
             # Calculate the correct recent period based on current date and period_type
             # This ensures we show anomalies for the most recent complete period
@@ -2293,13 +2386,18 @@ async def query_anomalies_endpoint(
                     logging.error(f"Error processing anomaly item: {item_error}")
                     logging.error(f"Problem item: {item}")
             
-            # Sort by absolute percent change (highest impact first)
+            # Determine sort key based on query_type
+            sort_key = 'percent_change'
+            if query_type == 'by_anomaly_severity':
+                sort_key = 'difference'
+            
+            # Sort by absolute value of the key (highest impact first)
             positive_anomalies = sorted(positive_anomalies, 
-                                      key=lambda x: abs(float(x['percent_change'])), 
+                                      key=lambda x: abs(float(x.get(sort_key, 0) or 0)), 
                                       reverse=True)[:limit]
             
             negative_anomalies = sorted(negative_anomalies, 
-                                      key=lambda x: abs(float(x['percent_change'])), 
+                                      key=lambda x: abs(float(x.get(sort_key, 0) or 0)), 
                                       reverse=True)[:limit]
             
             logging.info(f"Categorized anomalies: {len(positive_anomalies)} positive, {len(negative_anomalies)} negative")
@@ -2371,9 +2469,11 @@ async def anomaly_chart_page(request: Request):
     """
     # Check if format=image is in the query parameters
     format_param = request.query_params.get('format')
+    render_mode = request.query_params.get('render')
     
     if format_param == 'image':
         try:
+            logger.info(f"Generating anomaly chart image: format={format_param}, render={render_mode}")
             # Extract parameters for the chart
             anomaly_id = request.query_params.get('id')
             
@@ -2455,6 +2555,9 @@ async def anomaly_chart_page(request: Request):
             comparison_mean = anomaly.get('comparison_mean', 0)
             std_dev = anomaly.get('std_dev', 0)
             
+            # Determine if we're in sparkline mode
+            is_sparkline = render_mode == 'sparkline'
+            
             # Add normal range area
             if comparison_mean is not None and std_dev is not None:
                 all_dates = sorted(comparison_dates + recent_dates)
@@ -2479,7 +2582,7 @@ async def anomaly_chart_page(request: Request):
                         fill='tonexty',
                         fillcolor='rgba(74, 116, 99, 0.15)',  # Spruce Green with transparency
                         name='Normal Range',
-                        showlegend=True
+                        showlegend=not is_sparkline
                     ))
             
             # Add comparison period trace
@@ -2487,10 +2590,10 @@ async def anomaly_chart_page(request: Request):
                 fig.add_trace(go.Scatter(
                     x=comparison_dates,
                     y=comparison_values,
-                    mode='lines+markers',
+                    mode='lines+markers' if not is_sparkline else 'lines',
                     name='Time Series',
-                    line=dict(color='#ad35fa', width=2),  # Bright Blue
-                    marker=dict(color='#ad35fa', size=6)
+                    line=dict(color='#ad35fa', width=is_sparkline and 8 or 2),  # Thicker line for sparkline
+                    marker=dict(color='#ad35fa', size=is_sparkline and 10 or 6)
                 ))
             
             # Add recent period trace
@@ -2498,10 +2601,10 @@ async def anomaly_chart_page(request: Request):
                 fig.add_trace(go.Scatter(
                     x=recent_dates,
                     y=recent_values,
-                    mode='lines+markers',
+                    mode='lines+markers' if not is_sparkline else 'lines',
                     name='Time Series',
-                    line=dict(color='#ad35fa', width=2),  # Bright Blue
-                    marker=dict(color='#ad35fa', size=6),
+                    line=dict(color='#ad35fa', width=is_sparkline and 8 or 2),  # Thicker line for sparkline
+                    marker=dict(color='#ad35fa', size=is_sparkline and 10 or 6),
                     showlegend=False  # Hide duplicate legend entry
                 ))
             
@@ -2511,7 +2614,7 @@ async def anomaly_chart_page(request: Request):
                     x=[comparison_dates[-1], recent_dates[0]],
                     y=[comparison_values[-1], recent_values[0]],
                     mode='lines',
-                    line=dict(color='#ad35fa', width=2),  # Bright Blue
+                    line=dict(color='#ad35fa', width=is_sparkline and 8 or 2),  # Thicker line for sparkline
                     showlegend=False
                 ))
             
@@ -2523,71 +2626,167 @@ async def anomaly_chart_page(request: Request):
             group_value = anomaly.get('group_value', 'Value')
             subtitle = f"{group_field_name}: {group_value}"
             
-            # Update layout
-            fig.update_layout(
-                title={
-                    'text': object_name,
-                    'y': 0.95,
-                    'font': {'size': 16, 'color': '#222222'}
-                },
-                annotations=[
-                    dict(
-                        text=f"{'Spike' if anomaly.get('percent_change', 0) > 0 else 'Drop'} in {subtitle}",
-                        showarrow=False,
-                        xref="paper", 
-                        yref="paper",
-                        x=0.5, 
-                        y=0.9,
-                        font={'size': 14, 'color': '#222222'}
-                    )
-                ],
-                xaxis={
-                    'title': '',
-                    'showgrid': False,
-                    'showline': True,
-                    'linecolor': '#e5e7eb',
-                    'linewidth': 1,
-                    'tickmode': 'auto',
-                    'tickformat': '%b %Y',
-                    'tickangle': 0
-                },
-                yaxis={
-                    'title': metadata.get('y_axis_label', object_name),
-                    'showgrid': True,
-                    'gridcolor': 'rgba(232, 233, 235, 0.5)',
-                    'zeroline': False,
-                    'rangemode': 'tozero'
-                },
-                legend={
-                    'orientation': 'h',
-                    'x': 0.5,
-                    'y': -0.12,
-                    'xanchor': 'center',
-                    'yanchor': 'top',
-                    'bgcolor': 'rgba(246, 241, 234, 0.7)'
-                },
-                autosize=False,
-                width=1000,
-                height=600,
-                margin=dict(l=80, r=80, t=120, b=100),
-                plot_bgcolor='rgba(255,255,255,0.9)',
-                paper_bgcolor='rgba(255,255,255,0.9)'
-            )
-            
-            # Add annotation for most recent value if available
-            if recent_dates and recent_values:
-                fig.add_annotation(
-                    x=recent_dates[-1],
-                    y=recent_values[-1],
-                    text=f"{recent_dates[-1].strftime('%b %Y')}: {recent_values[-1]:.2f}",
-                    showarrow=True,
-                    arrowhead=2,
-                    ax=-50,
-                    ay=30,
-                    bgcolor='rgba(0, 123, 255, 0.7)',
-                    bordercolor='#ad35fa',
-                    borderwidth=1
+            # Configure layout based on mode
+            logger.info(f"Anomaly chart image - is_sparkline: {is_sparkline}, render_mode: {render_mode}")
+            if is_sparkline:
+                # Get all values and dates for calculations
+                all_values = comparison_values + recent_values
+                all_dates = sorted(comparison_dates + recent_dates)
+                max_val = max(all_values) if all_values else 0
+                min_val = min(all_values) if all_values else 0
+                
+                # Calculate padding for Y-axis to show dramatic changes clearly
+                # Add 30% padding above and 35% below the data range to prevent clipping
+                value_range = max_val - min_val if max_val != min_val else max_val * 0.2
+                y_padding_top = value_range * 0.30
+                y_padding_bottom = value_range * 0.35  # More padding at bottom
+                y_min = max(0, min_val - y_padding_bottom)  # Don't go below 0
+                y_max = max_val + y_padding_top
+                
+                # Get first and last data points
+                all_data_sorted = sorted(
+                    [(d, v) for d, v in zip(comparison_dates, comparison_values)] + 
+                    [(d, v) for d, v in zip(recent_dates, recent_values)],
+                    key=lambda x: x[0]
                 )
+                first_date, first_value = all_data_sorted[0] if all_data_sorted else (None, None)
+                last_date, last_value = all_data_sorted[-1] if all_data_sorted else (None, None)
+                
+                # Format values for display
+                def format_value(val):
+                    if val is None:
+                        return '-'
+                    if val >= 1000000:
+                        return f"{val/1000000:.1f}M"
+                    elif val >= 1000:
+                        return f"{val/1000:.1f}K"
+                    elif val >= 100:
+                        return f"{val:.0f}"
+                    elif val >= 10:
+                        return f"{val:.1f}"
+                    else:
+                        return f"{val:.2f}"
+                
+                # Create annotations for first and last data points - positioned OUTSIDE chart
+                sparkline_annotations = []
+                if first_date and first_value is not None:
+                    sparkline_annotations.append({
+                        'x': -0.02,  # Left of chart (paper coordinates)
+                        'y': first_value,
+                        'xref': 'paper',  # Use paper coords for x (0=left edge, 1=right edge)
+                        'yref': 'y',  # Use data coords for y to align with line
+                        'text': f"<b>{format_value(first_value)}</b>",
+                        'showarrow': False,
+                        'xanchor': 'right',  # Anchor to right so text is to the left
+                        'yanchor': 'middle',
+                        'font': {'size': 28, 'color': '#666666', 'family': 'Arial, sans-serif'}
+                    })
+                if last_date and last_value is not None:
+                    sparkline_annotations.append({
+                        'x': 1.02,  # Right of chart (paper coordinates)
+                        'y': last_value,
+                        'xref': 'paper',  # Use paper coords for x
+                        'yref': 'y',  # Use data coords for y to align with line
+                        'text': f"<b>{format_value(last_value)}</b>",
+                        'showarrow': False,
+                        'xanchor': 'left',  # Anchor to left so text is to the right
+                        'yanchor': 'middle',
+                        'font': {'size': 28, 'color': '#ad35fa', 'family': 'Arial, sans-serif'}
+                    })
+                
+                layout = {
+                    'title': {'text': '', 'font': {'size': 1}},
+                    'xaxis': {
+                        'visible': False,
+                        'showticklabels': False,
+                        'showgrid': False,
+                        'zeroline': False,
+                        'range': [min(all_dates) if all_dates else None, 
+                                  max(all_dates) if all_dates else None]
+                    },
+                    'yaxis': {
+                        'visible': False,
+                        'showgrid': False,
+                        'showline': False,
+                        'zeroline': False,
+                        'range': [y_min, y_max]  # Padded range to show dramatic changes
+                    },
+                    'showlegend': False,
+                    'margin': dict(l=80, r=80, t=30, b=30),  # Wide margins for labels on sides
+                    'autosize': False,
+                    'width': 480,  # Wider to accommodate side labels
+                    'height': 300,
+                    'plot_bgcolor': 'rgba(0,0,0,0)',
+                    'paper_bgcolor': 'rgba(0,0,0,0)',
+                    'annotations': sparkline_annotations
+                }
+            else:
+                layout = {
+                    'title': {
+                        'text': object_name,
+                        'y': 0.95,
+                        'font': {'size': 16, 'color': '#222222'}
+                    },
+                    'annotations': [
+                        dict(
+                            text=f"{'Spike' if anomaly.get('percent_change', 0) > 0 else 'Drop'} in {subtitle}",
+                            showarrow=False,
+                            xref="paper", 
+                            yref="paper",
+                            x=0.5, 
+                            y=0.9,
+                            font={'size': 14, 'color': '#222222'}
+                        )
+                    ],
+                    'xaxis': {
+                        'title': '',
+                        'showgrid': False,
+                        'showline': True,
+                        'linecolor': '#e5e7eb',
+                        'linewidth': 1,
+                        'tickmode': 'auto',
+                        'tickformat': '%b %Y',
+                        'tickangle': 0
+                    },
+                    'yaxis': {
+                        'title': metadata.get('y_axis_label', object_name),
+                        'showgrid': True,
+                        'gridcolor': 'rgba(232, 233, 235, 0.5)',
+                        'zeroline': False,
+                        'rangemode': 'tozero'
+                    },
+                    'legend': {
+                        'orientation': 'h',
+                        'x': 0.5,
+                        'y': -0.12,
+                        'xanchor': 'center',
+                        'yanchor': 'top',
+                        'bgcolor': 'rgba(246, 241, 234, 0.7)'
+                    },
+                    'autosize': False,
+                    'width': 1000,
+                    'height': 600,
+                    'margin': dict(l=80, r=80, t=120, b=100),
+                    'plot_bgcolor': 'rgba(255,255,255,0.9)',
+                    'paper_bgcolor': 'rgba(255,255,255,0.9)'
+                }
+                
+                # Add annotation for most recent value if available
+                if recent_dates and recent_values:
+                    fig.add_annotation(
+                        x=recent_dates[-1],
+                        y=recent_values[-1],
+                        text=f"{recent_dates[-1].strftime('%b %Y')}: {recent_values[-1]:.2f}",
+                        showarrow=True,
+                        arrowhead=2,
+                        ax=-50,
+                        ay=30,
+                        bgcolor='rgba(0, 123, 255, 0.7)',
+                        bordercolor='#ad35fa',
+                        borderwidth=1
+                    )
+            
+            fig.update_layout(**layout)
             
             # Convert to PNG image
             img_bytes = BytesIO()

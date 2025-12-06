@@ -144,6 +144,144 @@
             border-radius: 4px;
         }
         
+        /* Multi-series chart layout in full view */
+        .chart-container.multi-series-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-width: 100%; /* Allow chart to use full width */
+            width: 100%;
+            margin: 0; /* Remove auto centering for multi-series */
+        }
+        
+        .chart-container.multi-series-layout .chart-wrapper {
+            flex: 1 1 auto;
+            min-width: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chart-container.multi-series-layout #time-series-chart {
+            width: 100%;
+            height: 100%;
+            min-height: 500px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+        }
+        
+        .chart-container.multi-series-layout #time-series-plot {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        
+        .chart-legend-container {
+            width: 100%;
+            padding: 16px;
+            background-color: rgba(246, 241, 234, 0.5);
+            border-radius: 4px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            margin-top: 8px;
+        }
+        
+        .chart-container.multi-series-layout .chart-legend-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        [data-theme="dark"] .chart-legend-container {
+            background-color: rgba(196, 77, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .chart-legend-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--ink-black);
+            font-family: 'IBM Plex Sans', Arial, sans-serif;
+        }
+        
+        [data-theme="dark"] .chart-legend-title {
+            color: #ffffff;
+        }
+        
+        .chart-legend-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+        }
+        
+        .chart-legend-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+        
+        .chart-legend-item:hover {
+            background-color: rgba(173, 53, 250, 0.1);
+        }
+        
+        [data-theme="dark"] .chart-legend-item:hover {
+            background-color: rgba(196, 77, 255, 0.15);
+        }
+        
+        .chart-legend-item input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent-color);
+            flex-shrink: 0;
+        }
+        
+        .chart-legend-item label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+            color: var(--ink-black);
+            font-family: 'IBM Plex Sans', Arial, sans-serif;
+            user-select: none;
+            line-height: 1.2;
+        }
+        
+        [data-theme="dark"] .chart-legend-item label {
+            color: #ffffff;
+        }
+        
+        .chart-legend-color {
+            width: 20px;
+            height: 3px;
+            margin-right: 8px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        
+        .chart-legend-item.disabled {
+            opacity: 0.4;
+        }
+        
+        @media (max-width: 992px) {
+            .chart-legend-items {
+                gap: 12px;
+            }
+            
+            .chart-legend-item {
+                padding: 4px 8px;
+                font-size: 0.8rem;
+            }
+        }
+        
         #time-series-chart {
             width: 100%;
             height: 0;
@@ -162,9 +300,14 @@
             left: 0;
             width: 100% !important;
             height: 100% !important;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            display: block;
+        }
+        
+        /* In embedded mode, ensure plot is properly positioned */
+        body.chart-section-mode #time-series-plot {
+            position: relative;
+            width: 100% !important;
+            height: 100% !important;
         }
         
         /* Ensure Plotly elements are responsive */
@@ -612,7 +755,10 @@
                         </div>
                     </div>
                     <div id="error-message" class="error-message" style="display: none;"></div>
-                    <div id="time-series-chart"></div>
+                    <div class="chart-wrapper">
+                        <div id="time-series-chart"></div>
+                    </div>
+                    <div id="chart-legend-container" class="chart-legend-container" style="display: none;"></div>
                     <div id="datasf-link" class="mt-3" style="text-align: center;"></div>
                 </div>
                 
@@ -814,13 +960,35 @@
             chartElement.style.justifyContent = 'center';
             chartElement.style.alignItems = 'center';
             chartElement.style.width = '100%';
-            chartElement.style.height = '100%';
+            
+            // For embedded mode, set explicit dimensions BEFORE creating plot
+            if (!fullView) {
+                // Calculate dimensions for embedded mode
+                const availableWidth = Math.min(window.innerWidth || 600, 600);
+                const chartHeight = Math.max(400, availableWidth * 0.75); // 4:3 aspect ratio, min 400px
+                
+                chartElement.style.height = chartHeight + 'px';
+                chartElement.style.minHeight = chartHeight + 'px';
+                chartElement.style.paddingBottom = '0'; // Remove CSS padding-bottom trick
+                chartElement.style.position = 'relative';
+            }
             
             // Create a new div for the actual chart
             const plotDiv = document.createElement('div');
             plotDiv.id = 'time-series-plot';
-            plotDiv.style.width = '100%';
-            plotDiv.style.height = '100%';
+            
+            if (!fullView) {
+                // In embedded mode, set explicit pixel dimensions
+                const availableWidth = Math.min(window.innerWidth || 600, 600);
+                const plotHeight = Math.max(400, availableWidth * 0.75);
+                plotDiv.style.width = availableWidth + 'px';
+                plotDiv.style.height = plotHeight + 'px';
+            } else {
+                // In full view, use percentages
+                plotDiv.style.width = '100%';
+                plotDiv.style.height = '100%';
+            }
+            
             plotDiv.style.maxWidth = '100%';
             plotDiv.style.maxHeight = '100%';
             chartElement.appendChild(plotDiv);
@@ -1403,6 +1571,18 @@
             // Get the metric name from metadata
             const objectName = metadata.object_name || metadata.field_name || 'Time Series';
             
+            // Detect if this is a multi-series chart (before layout configuration)
+            // Multi-series charts have group_field set (and it's not 'year' for YTD charts)
+            // or have multiple traces with distinct names (excluding average lines)
+            const hasGroupField = metadata.group_field && metadata.group_field !== 'year';
+            const hasMultipleSeries = traces.filter(t => 
+                t.name && 
+                !t.name.includes('Average') && 
+                !t.name.includes('7-Day Avg')
+            ).length > 1;
+            
+            const isMultiSeries = fullView && (hasGroupField || hasMultipleSeries);
+            
             // Check if this is a YTD trend chart
             const isYtdTrendChart = metadata.group_field === 'year' && 
                                    timeSeriesData.some(item => item.group_value && 
@@ -1536,7 +1716,7 @@
                             color: '#222222' 
                         }
                     },
-                    showlegend: true,
+                    showlegend: !isMultiSeries,  // Hide legend for multi-series charts in full view
                     legend: {
                         orientation: 'h',
                         x: 0.5,
@@ -1555,7 +1735,12 @@
                         itemsizing: 'constant',
                         itemwidth: 20
                     },
-                    margin: { t: 55, b: isEmbedded ? 50 : 80, l: 50, r: 45 }, // Reduced bottom margin for embedded mode
+                    margin: { 
+                        t: 55, 
+                        b: isEmbedded ? 50 : 80, 
+                        l: 50, 
+                        r: 45  // Maximize chart space - legend is now outside the chart
+                    },
                     height: null,
                     width: null,
                     autosize: true,
@@ -1694,7 +1879,7 @@
                             color: '#222222' // Ink Black
                         }
                     },
-                    showlegend: true,
+                    showlegend: !isMultiSeries,  // Hide legend for multi-series charts in full view
                     legend: {
                         orientation: 'h',
                         x: 0.5,
@@ -1708,7 +1893,12 @@
                         },
                         bgcolor: 'rgba(246, 241, 234, 0.7)' // Soft Sand with transparency
                     },
-                    margin: { t: 55, b: isEmbedded ? 60 : 100, l: 50, r: 45 }, // Reduced bottom margin for embedded mode
+                    margin: { 
+                        t: 55, 
+                        b: isEmbedded ? 60 : 100, 
+                        l: 50, 
+                        r: 45  // Maximize chart space - legend is now outside the chart
+                    },
                     height: null, // Remove fixed height
                     width: null, // Remove fixed width
                     autosize: true, // Enable autosize
@@ -2211,6 +2401,30 @@
                     const containerHeight = Math.min(window.innerHeight, availableWidth * aspectRatio);
                     
                     chartContainer.style.height = containerHeight + 'px';
+                    
+                    // Ensure the time-series-chart element has proper height
+                    // Override the CSS padding-bottom trick with explicit height
+                    if (timeSeriesChart) {
+                        // Calculate height: container height minus chart container padding (16px top + 16px bottom = 32px)
+                        const chartHeight = Math.max(400, containerHeight - 32); // Subtract padding, min 400px
+                        timeSeriesChart.style.position = 'relative'; // Ensure positioning context
+                        timeSeriesChart.style.height = chartHeight + 'px';
+                        timeSeriesChart.style.paddingBottom = '0'; // Override CSS padding-bottom
+                        timeSeriesChart.style.minHeight = '400px';
+                        timeSeriesChart.style.display = 'flex'; // Ensure it's displayed
+                        timeSeriesChart.style.visibility = 'visible'; // Ensure it's visible
+                    }
+                    
+                    // Ensure plot element fills the chart container
+                    if (plotElement) {
+                        plotElement.style.position = 'absolute'; // Ensure absolute positioning
+                        plotElement.style.top = '0';
+                        plotElement.style.left = '0';
+                        plotElement.style.height = '100%';
+                        plotElement.style.width = '100%';
+                        plotElement.style.display = 'block'; // Ensure it's displayed
+                        plotElement.style.visibility = 'visible'; // Ensure it's visible
+                    }
 
                     // Adjust the parent Bootstrap container
                     const bootstrapContainer = chartContainer.closest('.container');
@@ -2220,14 +2434,38 @@
                         bootstrapContainer.style.padding = '0'; // Remove Bootstrap container padding
                     }
                 } else {
-                    // For full view mode - cap width at 600px
-                    const availableWidth = Math.min(chartContainer.parentElement.clientWidth, 600); // Cap at 600px
-                    const availableHeight = availableWidth * 0.75; // 4:3 aspect ratio
+                    // For full view mode
+                    const isMultiSeriesLayout = chartContainer.classList.contains('multi-series-layout');
                     
-                    chartContainer.style.width = availableWidth + 'px'; // Use calculated width
-                    chartContainer.style.height = availableHeight + 'px';
-                    chartContainer.style.maxWidth = '600px'; // Cap at 600px
-                    chartContainer.style.maxHeight = 'none'; // Remove height constraint
+                    if (isMultiSeriesLayout) {
+                        // For multi-series charts, let them fill available space
+                        chartContainer.style.width = '100%';
+                        chartContainer.style.maxWidth = '100%';
+                        chartContainer.style.height = 'auto';
+                        chartContainer.style.minHeight = '500px';
+                        
+                        // Make sure chart wrapper and plot fill the space
+                        const chartWrapper = chartContainer.querySelector('.chart-wrapper');
+                        if (chartWrapper) {
+                            chartWrapper.style.flex = '1 1 auto';
+                            chartWrapper.style.minHeight = '500px';
+                        }
+                        
+                        const timeSeriesChart = document.getElementById('time-series-chart');
+                        if (timeSeriesChart) {
+                            timeSeriesChart.style.height = '100%';
+                            timeSeriesChart.style.minHeight = '500px';
+                        }
+                    } else {
+                        // For single-series charts, cap width at 600px
+                        const availableWidth = Math.min(chartContainer.parentElement.clientWidth, 600); // Cap at 600px
+                        const availableHeight = availableWidth * 0.75; // 4:3 aspect ratio
+                        
+                        chartContainer.style.width = availableWidth + 'px'; // Use calculated width
+                        chartContainer.style.height = availableHeight + 'px';
+                        chartContainer.style.maxWidth = '600px'; // Cap at 600px
+                        chartContainer.style.maxHeight = 'none'; // Remove height constraint
+                    }
                 }
                 
                 // Make sure the plot fills its container
@@ -2257,13 +2495,229 @@
                 resizeObserver.observe(chartContainer);
             }
             
-            // Initial call to set aspect ratio
-            updateChartAspectRatio();
+            // For multi-series charts in full view, hide on-chart legend and apply layout
+            // (isMultiSeries is already defined above)
+            if (isMultiSeries) {
+                layout.showlegend = false;
+                
+                const chartContainer = document.getElementById('chart-section');
+                if (chartContainer) {
+                    chartContainer.classList.add('multi-series-layout');
+                }
+                
+                // Create checkbox legend BEFORE setting showlegend to false
+                const legendContainer = document.getElementById('chart-legend-container');
+                if (legendContainer) {
+                    legendContainer.innerHTML = '<div class="chart-legend-title">Series</div>';
+                    
+                    // Create container for legend items
+                    const legendItemsContainer = document.createElement('div');
+                    legendItemsContainer.className = 'chart-legend-items';
+                    
+                    // Filter out average lines and create legend items for each trace
+                    // Keep track of actual trace indices since we're filtering
+                    let legendTraceIndex = 0;
+                    let hasLegendItems = false;
+                    traces.forEach((trace, index) => {
+                        // Skip average lines and other non-series traces
+                        if (trace.name && (trace.name.includes('Average') || trace.name.includes('7-Day Avg'))) {
+                            return;
+                        }
+                        
+                        // Skip traces that are hidden by default (like raw daily data in YTD charts)
+                        // Check hoverinfo instead of showlegend since we'll set showlegend to false later
+                        if (trace.hoverinfo === 'skip') {
+                            return;
+                        }
+                        
+                        // Skip traces without names (they're not real series)
+                        if (!trace.name) {
+                            return;
+                        }
+                        
+                        const legendItem = document.createElement('div');
+                        legendItem.className = 'chart-legend-item';
+                        legendItem.dataset.traceIndex = index;
+                        
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = true;
+                        checkbox.id = `legend-checkbox-${index}`;
+                        
+                        const colorBox = document.createElement('div');
+                        colorBox.className = 'chart-legend-color';
+                        const traceColor = trace.line?.color || trace.marker?.color || '#ad35fa';
+                        colorBox.style.backgroundColor = traceColor;
+                        
+                        const label = document.createElement('label');
+                        label.htmlFor = `legend-checkbox-${index}`;
+                        label.textContent = trace.name || `Series ${legendTraceIndex + 1}`;
+                        
+                        legendItem.appendChild(checkbox);
+                        legendItem.appendChild(colorBox);
+                        legendItem.appendChild(label);
+                        
+                        // Add toggle functionality
+                        checkbox.addEventListener('change', function() {
+                            const plotElement = document.getElementById('time-series-plot');
+                            if (!plotElement) return;
+                            
+                            const isVisible = checkbox.checked;
+                            legendItem.classList.toggle('disabled', !isVisible);
+                            
+                            // Update trace visibility using the actual trace index
+                            Plotly.restyle(plotElement, {
+                                visible: isVisible ? true : 'legendonly'
+                            }, index);
+                        });
+                        
+                        legendItemsContainer.appendChild(legendItem);
+                        legendTraceIndex++;
+                        hasLegendItems = true;
+                    });
+                    
+                    // Only show legend container if there are actual items
+                    if (hasLegendItems) {
+                        legendContainer.appendChild(legendItemsContainer);
+                        legendContainer.style.display = 'block';
+                    } else {
+                        legendContainer.style.display = 'none';
+                        // Remove multi-series-layout class if no legend items
+                        const chartContainer = document.getElementById('chart-section');
+                        if (chartContainer) {
+                            chartContainer.classList.remove('multi-series-layout');
+                        }
+                    }
+                }
+                
+                // Now set showlegend to false for all traces to hide on-chart legend
+                traces.forEach(trace => {
+                    trace.showlegend = false;
+                });
+            } else {
+                // Ensure legend container is hidden for non-multi-series charts
+                const legendContainer = document.getElementById('chart-legend-container');
+                if (legendContainer) {
+                    legendContainer.style.display = 'none';
+                }
+                const chartContainer = document.getElementById('chart-section');
+                if (chartContainer) {
+                    chartContainer.classList.remove('multi-series-layout');
+                }
+            }
             
-            // Create the plot and maintain responsive sizing
-            Plotly.newPlot('time-series-plot', traces, layout, config).then(() => {
+            // Ensure plot element has dimensions before creating plot (critical for embedded mode)
+            const plotElementForCheck = document.getElementById('time-series-plot');
+            if (plotElementForCheck && !fullView) {
+                // Force a layout recalculation to ensure dimensions are set
+                const rect = plotElementForCheck.getBoundingClientRect();
+                const computedStyle = window.getComputedStyle(plotElementForCheck);
+                
+                // Get parent dimensions if plot element doesn't have them
+                const parentRect = plotElementForCheck.parentElement?.getBoundingClientRect();
+                const availableWidth = parentRect?.width || Math.min(window.innerWidth || 600, 600);
+                const availableHeight = parentRect?.height || Math.max(400, availableWidth * 0.75);
+                
+                // Set explicit dimensions if needed
+                if (rect.width === 0 || rect.height === 0 || parseFloat(computedStyle.width) === 0 || parseFloat(computedStyle.height) === 0) {
+                    const plotWidth = availableWidth;
+                    const plotHeight = Math.max(400, availableWidth * 0.75);
+                    
+                    plotElementForCheck.style.width = plotWidth + 'px';
+                    plotElementForCheck.style.height = plotHeight + 'px';
+                    plotElementForCheck.style.minWidth = plotWidth + 'px';
+                    plotElementForCheck.style.minHeight = plotHeight + 'px';
+                    
+                    // Also ensure parent has dimensions
+                    if (plotElementForCheck.parentElement) {
+                        plotElementForCheck.parentElement.style.width = plotWidth + 'px';
+                        plotElementForCheck.parentElement.style.height = plotHeight + 'px';
+                    }
+                    
+                    // Force a reflow
+                    plotElementForCheck.offsetHeight;
+                }
+            }
+            
+            // Create the plot - Plotly needs the element to exist and have dimensions
+            const plotElementId = 'time-series-plot';
+            const finalPlotElement = document.getElementById(plotElementId);
+            
+            if (!finalPlotElement) {
+                console.error('Plot element not found before Plotly.newPlot');
+                return;
+            }
+            
+            // Verify element is visible and has dimensions
+            const finalRect = finalPlotElement.getBoundingClientRect();
+            if (finalRect.width === 0 || finalRect.height === 0) {
+                console.warn('Plot element has zero dimensions, setting fallback:', {
+                    width: finalRect.width,
+                    height: finalRect.height,
+                    computedWidth: window.getComputedStyle(finalPlotElement).width,
+                    computedHeight: window.getComputedStyle(finalPlotElement).height
+                });
+                
+                const fallbackWidth = Math.min(window.innerWidth || 600, 600);
+                const fallbackHeight = Math.max(400, fallbackWidth * 0.75);
+                finalPlotElement.style.width = fallbackWidth + 'px';
+                finalPlotElement.style.height = fallbackHeight + 'px';
+                
+                // Wait a frame for layout to update
+                requestAnimationFrame(() => {
+                    Plotly.newPlot(plotElementId, traces, layout, config).then(() => {
+                        // Continue with the rest of the code...
+                        handlePlotCreated();
+                    }).catch(err => {
+                        console.error('Plotly.newPlot error:', err);
+                    });
+                });
+                return;
+            }
+            
+            // Element has dimensions, proceed normally
+            Plotly.newPlot(plotElementId, traces, layout, config).then(() => {
+                handlePlotCreated();
+            }).catch(err => {
+                console.error('Plotly.newPlot error:', err);
+            });
+            
+            function handlePlotCreated() {
+                // For multi-series charts, explicitly hide the legend after plot creation
+                const plotElement = document.getElementById('time-series-plot');
+                if (isMultiSeries && plotElement) {
+                    Plotly.relayout(plotElement, { showlegend: false });
+                }
+                
                 // Set initial dimensions and maintain responsive aspect ratio
-                updateChartAspectRatio();
+                // Use setTimeout to ensure DOM is ready and Plotly has rendered
+                setTimeout(() => {
+                    updateChartAspectRatio();
+                    // Force Plotly to resize after dimensions are set
+                    const plotEl = document.getElementById('time-series-plot');
+                    const chartEl = document.getElementById('time-series-chart');
+                    
+                    // Fallback: Ensure chart has a visible height
+                    if (chartEl) {
+                        const computedHeight = window.getComputedStyle(chartEl).height;
+                        const computedWidth = window.getComputedStyle(chartEl).width;
+                        
+                        // If height is 0, auto, or missing, set explicit height
+                        if (computedHeight === '0px' || !computedHeight || computedHeight === 'auto' || parseFloat(computedHeight) < 100) {
+                            // Use width to calculate height if available, otherwise use 400px
+                            const width = parseFloat(computedWidth) || 600;
+                            const height = Math.max(400, width * 0.75); // 4:3 aspect ratio, min 400px
+                            chartEl.style.height = height + 'px';
+                            chartEl.style.paddingBottom = '0';
+                            chartEl.style.minHeight = '400px';
+                        }
+                    }
+                    
+                    // Force Plotly resize after ensuring dimensions
+                    if (plotEl) {
+                        Plotly.Plots.resize(plotEl);
+                    }
+                }, 150);
                 
                 // Apply initial font sizing
                 setTimeout(resizePlot, 100);
@@ -2276,11 +2730,11 @@
                 // Apply initial theme colors
                 applyThemeToPlot(document.documentElement.getAttribute('data-theme') || 'light');
                 
-                // Add group filter to chart if needed
-                if (window.hasGroups && fullView) {
+                // Add group filter to chart if needed (only if function exists)
+                if (window.hasGroups && fullView && typeof addGroupFilterToChart === 'function') {
                     addGroupFilterToChart();
                 }
-            });
+            }
             
             // Create and display caption if available
             createCaption(metadata);
@@ -3090,18 +3544,21 @@
             const paperBg = isDark ? '#1a1a1a' : '#ffffff';
             const plotBg = isDark ? '#1a1a1a' : '#ffffff';
 
-            Plotly.relayout('time-series-plot', {
-                'font.color': textColor,
-                'xaxis.tickfont.color': textColor,
-                'xaxis.linecolor': borderColor,
-                'yaxis.title.font.color': textColor,
-                'yaxis.tickfont.color': textColor,
-                'yaxis.gridcolor': gridColor,
-                'legend.font.color': textColor,
-                'title.font.color': textColor,
-                'paper_bgcolor': paperBg,
-                'plot_bgcolor': plotBg
-            });
+            const plotElement = document.getElementById('time-series-plot');
+            if (plotElement) {
+                Plotly.relayout(plotElement, {
+                    'font.color': textColor,
+                    'xaxis.tickfont.color': textColor,
+                    'xaxis.linecolor': borderColor,
+                    'yaxis.title.font.color': textColor,
+                    'yaxis.tickfont.color': textColor,
+                    'yaxis.gridcolor': gridColor,
+                    'legend.font.color': textColor,
+                    'title.font.color': textColor,
+                    'paper_bgcolor': paperBg,
+                    'plot_bgcolor': plotBg
+                });
+            }
         }
 
         // Listen for dark-mode changes dispatched by DarkModeManager

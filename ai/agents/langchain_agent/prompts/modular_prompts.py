@@ -20,7 +20,10 @@ class ModularPromptBuilder:
         self, 
         required_sections: List[str],
         metric_details: Optional[Dict[str, Any]] = None,
-        include_all_sections: bool = False
+        include_all_sections: bool = False,
+        research_context: Optional[str] = None,  # NEW: Research context parameter
+        city_id: Optional[int] = None,  # NEW: City ID for research context
+        district: Optional[str] = None  # NEW: District for research context
     ) -> str:
         """
         Build a system prompt with only the required sections.
@@ -29,6 +32,9 @@ class ModularPromptBuilder:
             required_sections: List of section keys to include
             metric_details: Optional metric details to include in context
             include_all_sections: If True, include all sections regardless of requirements
+            research_context: Optional research context string to inject
+            city_id: Optional city ID for research context filtering
+            district: Optional district for research context filtering
             
         Returns:
             Complete system prompt string
@@ -52,6 +58,41 @@ class ModularPromptBuilder:
             metric_context = self._build_metric_context(metric_details)
             if metric_context:  # Only add if we got a valid context
                 prompt_parts.append(metric_context)
+        
+        # NEW: Add research context if provided
+        research_context_str = research_context
+        if not research_context_str and (city_id is not None or district is not None):
+            # Try to fetch research context from service
+            try:
+                import sys
+                import os
+                transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), 'transparentcity-platform', 'src')
+                if transparentcity_path not in sys.path:
+                    sys.path.insert(0, transparentcity_path)
+                
+                from transparentcity.services import get_research_service
+                research_service = get_research_service()
+                research_context_str = research_service.get_research_context(
+                    city_id=city_id or 1,  # Default to San Francisco
+                    district=district or "0",
+                    max_agendas=3
+                )
+            except Exception as e:
+                self.logger.warning(f"Failed to fetch research context: {e}")
+        
+        # Add research context section if we have research context
+        if research_context_str:
+            research_context_section = f"""RESEARCH CONTEXT - Active Research Agendas:
+
+{research_context_str}
+
+When conducting analysis, ensure your work aligns with the active research agendas above.
+Prioritize investigations that address the research questions and explore the suggested metrics.
+Consider causal relationships identified in the research context when interpreting results.
+
+If no research context is provided above, proceed with standard analysis practices."""
+            prompt_parts.append(research_context_section)
+            self.logger.info(f"Included research context ({len(research_context_str)} chars)")
         
         # Add each required section
         for section_key in sections_to_include:

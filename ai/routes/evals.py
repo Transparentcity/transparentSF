@@ -239,7 +239,7 @@ async def run_eval_streaming_endpoint(request: Request):
         
         return StreamingResponse(
             generate_eval_stream(),
-            media_type="text/plain",
+            media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",

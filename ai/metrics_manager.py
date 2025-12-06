@@ -18,14 +18,18 @@ router = APIRouter()
 
 @router.get("/api/enhanced-queries")
 async def get_enhanced_queries_db():
-    """Serve enhanced dashboard queries built entirely from database."""
+    """Serve enhanced dashboard queries built entirely from database.
+    Returns metrics grouped by category, ordered by display_order within each category.
+    Categories are ordered by the minimum display_order of metrics within each category.
+    """
     try:
         from tools.db_utils import get_pooled_connection
+        from collections import OrderedDict
         
         with get_pooled_connection() as connection:
             cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             
-            # Query all active metrics from the database
+            # Query all active metrics from the database, ordered by category and display_order
             cursor.execute("""
                 SELECT 
                     m.id,
@@ -56,18 +60,26 @@ async def get_enhanced_queries_db():
                 FROM metrics m
                 LEFT JOIN datasets d ON m.endpoint = d.endpoint AND d.is_active = true
                 WHERE m.is_active = true
-                ORDER BY m.display_order NULLS LAST, m.id
+                ORDER BY m.category, COALESCE(m.display_order, 999), m.id
             """)
             
             metrics_rows = cursor.fetchall()
         
-        # Build the enhanced queries structure
+        # First pass: Build the enhanced queries structure and track category order
         enhanced_queries = {}
+        category_min_order = {}  # Track minimum display_order per category
         
         for row in metrics_rows:
             category = row['category']
             subcategory = row['subcategory'] or category
             metric_name = row['metric_name']
+            display_order = row['display_order'] if row['display_order'] is not None else 999
+            
+            # Track minimum display_order for each category
+            if category not in category_min_order:
+                category_min_order[category] = display_order
+            else:
+                category_min_order[category] = min(category_min_order[category], display_order)
             
             # Initialize category if not exists
             if category not in enhanced_queries:
@@ -108,8 +120,57 @@ async def get_enhanced_queries_db():
             # Add the metric to the enhanced queries
             enhanced_queries[category][subcategory]["queries"][metric_name] = metric_data
         
-        logger.info(f"Built enhanced queries from database with {len(metrics_rows)} metrics")
-        return JSONResponse(content=enhanced_queries)
+        # Second pass: Sort categories by their minimum display_order, then alphabetically
+        # Sort subcategories within each category by their minimum display_order
+        sorted_categories = sorted(
+            category_min_order.items(),
+            key=lambda x: (x[1], x[0])  # Sort by display_order, then category name
+        )
+        
+        # Build ordered result with category breaks
+        ordered_queries = OrderedDict()
+        
+        for category, _ in sorted_categories:
+            if category in enhanced_queries:
+                # Sort subcategories within this category
+                subcategories = enhanced_queries[category]
+                
+                # Get minimum display_order for each subcategory
+                subcategory_orders = {}
+                for subcat_name, subcat_data in subcategories.items():
+                    min_order = 999
+                    for metric_name, metric_data in subcat_data.get("queries", {}).items():
+                        metric_order = metric_data.get("display_order")
+                        if metric_order is not None:
+                            min_order = min(min_order, metric_order)
+                    subcategory_orders[subcat_name] = min_order
+                
+                # Sort subcategories by their minimum display_order
+                sorted_subcategories = sorted(
+                    subcategories.items(),
+                    key=lambda x: (subcategory_orders.get(x[0], 999), x[0])
+                )
+                
+                # Add category with sorted subcategories
+                ordered_queries[category] = OrderedDict(sorted_subcategories)
+                
+                # Sort metrics within each subcategory by display_order
+                for subcat_name, subcat_data in ordered_queries[category].items():
+                    queries = subcat_data.get("queries", {})
+                    # Sort metrics by display_order, then by metric name
+                    sorted_queries = OrderedDict(
+                        sorted(
+                            queries.items(),
+                            key=lambda x: (
+                                x[1].get("display_order") if x[1].get("display_order") is not None else 999,
+                                x[0]  # metric name as tiebreaker
+                            )
+                        )
+                    )
+                    ordered_queries[category][subcat_name]["queries"] = sorted_queries
+        
+        logger.info(f"Built enhanced queries from database with {len(metrics_rows)} metrics in {len(ordered_queries)} categories")
+        return JSONResponse(content=ordered_queries)
         
     except Exception as e:
         logger.error(f"Error building enhanced queries from database: {str(e)}")

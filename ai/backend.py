@@ -3243,7 +3243,7 @@ async def get_monthly_report_by_id(report_id: int):
         # Get the report details
         cur.execute("""
             SELECT id, district, period_type, max_items, created_at, updated_at, 
-                   original_filename, revised_filename, published_url, audio_file, headlines
+                   original_filename, revised_filename, published_url, audio_file, headlines, metadata
             FROM reports
             WHERE id = %s
         """, (report_id,))
@@ -3267,6 +3267,17 @@ async def get_monthly_report_by_id(report_id: int):
         
         metrics = cur.fetchall()
         
+        # Parse metadata if it's a JSON string
+        metadata = report.get("metadata")
+        if metadata and isinstance(metadata, str):
+            try:
+                import json
+                metadata = json.loads(metadata)
+            except (json.JSONDecodeError, TypeError):
+                metadata = None
+        elif metadata is None:
+            metadata = {}
+        
         # Format the report data
         report_data = {
             "id": report["id"],
@@ -3281,6 +3292,7 @@ async def get_monthly_report_by_id(report_id: int):
             "published_url": report["published_url"],
             "audio_file": report["audio_file"],
             "headlines": report["headlines"],
+            "metadata": metadata,
             "metrics": []
         }
         
@@ -3657,68 +3669,151 @@ async def rerun_monthly_report_generation(request: Request):
         
         logger.info(f"Re-running monthly report generation for district {district}, period_type {period_type}, only_generate={only_generate}, filename={filename}, model_key={model_key}")
         
-        # Run the monthly report process in a separate thread to prevent blocking
-        loop = asyncio.get_event_loop()
-        
+        # Create a background job for newsletter regeneration
         if only_generate:
-            # Only run the generate_monthly_report function with original filename if provided
-            result = await loop.run_in_executor(
-                None,
-                lambda: generate_monthly_report(district=district, original_filename=filename, model_key=model_key)
-            )
+            job_description = f"Regenerate newsletter only (district={district}, filename={filename})"
         else:
-            # Run the full monthly report process - but use the existing filename if provided
-            # This ensures we don't create duplicate files with different timestamps
-            if filename:
-                # If we have an existing filename, use it to maintain consistency
-                result = await loop.run_in_executor(
-                    None,
-                    lambda: run_monthly_report_process_with_filename(
-                        district=district,
-                        period_type=period_type,
-                        max_report_items=max_report_items,
-                        model_key=model_key,
-                        original_filename=filename
-                    )
-                )
-            else:
-                # Run the full monthly report process with new filename generation
-                result = await loop.run_in_executor(
-                    None,
-                    lambda: run_monthly_report_process(
-                        district=district,
-                        period_type=period_type,
-                        max_report_items=max_report_items,
-                        model_key=model_key
-                    )
-                )
+            job_description = f"Re-run full newsletter process (district={district}, period={period_type}, items={max_report_items})"
         
-        if result.get("status") == "success":
-            return JSONResponse(
-                content={
-                    "status": "success",
-                    "message": "Monthly report generation completed successfully",
-                    "report_path": result.get("revised_report_path") or result.get("newsletter_path")
-                }
+        job_id = job_manager.create_job("newsletter_regeneration", job_description)
+        logger.info(f"Created newsletter regeneration job {job_id}")
+        
+        # Mark job as running immediately so badge updates faster
+        job = job_manager.get_job(job_id)
+        if job:
+            job.start()
+            job.update_progress(1)
+        
+        # Start the newsletter generation in the background
+        asyncio.create_task(
+            _run_newsletter_regeneration_job(
+                job_id=job_id,
+                district=district,
+                period_type=period_type,
+                max_report_items=max_report_items,
+                only_generate=only_generate,
+                filename=filename,
+                model_key=model_key
             )
-        else:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "status": "error",
-                    "message": result.get("message", "Unknown error occurred during monthly report generation")
-                }
-            )
+        )
+        
+        # Return immediately with job_id
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Newsletter regeneration is running",
+                "job_id": job_id
+            }
+        )
             
     except Exception as e:
-        logger.error(f"Error re-running monthly report generation: {str(e)}", exc_info=True)
+        logger.error(f"Error starting newsletter regeneration job: {str(e)}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={
                 "status": "error",
-                "message": f"Error re-running monthly report generation: {str(e)}"
+                "message": f"Error starting newsletter regeneration job: {str(e)}"
             }
         )
+
+
+async def _run_newsletter_regeneration_job(
+    job_id: str,
+    district: str = "0",
+    period_type: str = "month",
+    max_report_items: int = 10,
+    only_generate: bool = False,
+    filename: str = None,
+    model_key: str = None
+):
+    """Run the newsletter regeneration as a background job with progress updates."""
+    try:
+        from monthly_report import run_monthly_report_process, generate_monthly_report, run_monthly_report_process_with_filename
+        import asyncio
+        
+        logger.info(f"Starting newsletter regeneration job {job_id}")
+        
+        # Get the job (should already be started, but verify)
+        job = job_manager.get_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found in job manager")
+            return
+        
+        # Job should already be started, but ensure it's running
+        if job.status != "running":
+            job.start()
+        job.update_progress(5)
+        logger.info(f"Job {job_id} running, progress: 5%")
+        
+        # Run the newsletter process in a thread pool
+        def run_newsletter_process():
+            try:
+                # Get job to update progress
+                job = job_manager.get_job(job_id)
+                if job:
+                    job.update_progress(10)
+                logger.info(f"Job {job_id} progress: 10% - Starting newsletter process")
+                
+                if only_generate:
+                    # Only run the generate_monthly_report function with original filename if provided
+                    result = generate_monthly_report(district=district, original_filename=filename, model_key=model_key)
+                else:
+                    # Run the full monthly report process - but use the existing filename if provided
+                    if filename:
+                        result = run_monthly_report_process_with_filename(
+                            district=district,
+                            period_type=period_type,
+                            max_report_items=max_report_items,
+                            model_key=model_key,
+                            original_filename=filename
+                        )
+                    else:
+                        result = run_monthly_report_process(
+                            district=district,
+                            period_type=period_type,
+                            max_report_items=max_report_items,
+                            model_key=model_key
+                        )
+                
+                return result
+            except Exception as e:
+                logger.error(f"Error in newsletter process for job {job_id}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
+        
+        # Execute in thread pool to prevent blocking
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, run_newsletter_process)
+        
+        # Check result and complete job
+        job = job_manager.get_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found when trying to complete")
+            return
+        
+        if result.get("status") == "success":
+            report_path = result.get("revised_report_path") or result.get("newsletter_path")
+            
+            job.update_progress(100)
+            job.complete({
+                "report_path": report_path,
+                "district": district,
+                "period_type": period_type,
+                "max_report_items": max_report_items,
+                "only_generate": only_generate
+            })
+            logger.info(f"✅ Newsletter regeneration job {job_id} completed successfully")
+        else:
+            error_message = result.get("message", "Newsletter regeneration failed")
+            job.fail(error_message)
+            logger.error(f"❌ Newsletter regeneration job {job_id} failed: {error_message}")
+            
+    except Exception as e:
+        logger.error(f"Error in newsletter regeneration job {job_id}: {e}", exc_info=True)
+        job = job_manager.get_job(job_id)
+        if job:
+            job.fail(str(e))
 
 @router.post("/rerun_monthly_report_proofreading")
 async def rerun_monthly_report_proofreading(request: Request):
@@ -3746,6 +3841,17 @@ async def rerun_monthly_report_proofreading(request: Request):
             )
         
         logger.info(f"Re-running proofreading for report at {report_path} with model_key={model_key}")
+        
+        # Create a background job for proofreading
+        job_description = f"Proofread newsletter (report_path={report_path})"
+        job_id = job_manager.create_job("newsletter_proofreading", job_description)
+        logger.info(f"Created newsletter proofreading job {job_id}")
+        
+        # Mark job as running immediately so badge updates faster
+        job = job_manager.get_job(job_id)
+        if job:
+            job.start()
+            job.update_progress(1)
         
         # Get the report_id from the filename for more reliable database updates
         report_id = None
@@ -3803,39 +3909,110 @@ async def rerun_monthly_report_proofreading(request: Request):
         except Exception as e:
             logger.warning(f"Error looking up report_id: {e}. Will use filename-based lookup as fallback.")
         
-        # Run the proofreading process in a separate thread to prevent blocking
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: proofread_and_revise_report(report_path, model_key=model_key, report_id=report_id)
+        # Start the proofreading in the background
+        asyncio.create_task(
+            _run_newsletter_proofreading_job(
+                job_id=job_id,
+                report_path=report_path,
+                model_key=model_key,
+                report_id=report_id
+            )
         )
         
-        if result.get("status") == "success":
-            return JSONResponse(
-                content={
-                    "status": "success",
-                    "message": "Proofreading completed successfully",
-                    "revised_report_path": result.get("revised_report_path")
-                }
-            )
-        else:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "status": "error",
-                    "message": result.get("message", "Unknown error occurred during proofreading")
-                }
-            )
+        # Return immediately with job_id
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Newsletter proofreading is running",
+                "job_id": job_id
+            }
+        )
             
     except Exception as e:
-        logger.error(f"Error re-running proofreading: {str(e)}", exc_info=True)
+        logger.error(f"Error starting newsletter proofreading job: {str(e)}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={
                 "status": "error",
-                "message": f"Error re-running proofreading: {str(e)}"
+                "message": f"Error starting newsletter proofreading job: {str(e)}"
             }
         )
+
+
+async def _run_newsletter_proofreading_job(
+    job_id: str,
+    report_path: str,
+    model_key: str = None,
+    report_id: int = None
+):
+    """Run the newsletter proofreading as a background job with progress updates."""
+    try:
+        from monthly_report import proofread_and_revise_report
+        import asyncio
+        
+        logger.info(f"Starting newsletter proofreading job {job_id}")
+        
+        # Get the job (should already be started, but verify)
+        job = job_manager.get_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found in job manager")
+            return
+        
+        # Job should already be started, but ensure it's running
+        if job.status != "running":
+            job.start()
+        job.update_progress(5)
+        logger.info(f"Job {job_id} running, progress: 5%")
+        
+        # Run the proofreading process in a thread pool
+        def run_proofreading_process():
+            try:
+                # Get job to update progress
+                job = job_manager.get_job(job_id)
+                if job:
+                    job.update_progress(20)
+                logger.info(f"Job {job_id} progress: 20% - Starting proofreading process")
+                
+                result = proofread_and_revise_report(report_path, model_key=model_key, report_id=report_id)
+                
+                if job:
+                    job.update_progress(90)
+                logger.info(f"Job {job_id} progress: 90% - Proofreading complete")
+                
+                return result
+            except Exception as e:
+                logger.error(f"Error in proofreading process for job {job_id}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
+        
+        # Execute in thread pool to prevent blocking
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, run_proofreading_process)
+        
+        # Check result and complete job
+        job = job_manager.get_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found when trying to complete")
+            return
+        
+        if result.get("status") == "success":
+            job.update_progress(100)
+            job.complete({
+                "revised_report_path": result.get("revised_report_path"),
+                "report_path": report_path
+            })
+            logger.info(f"✅ Newsletter proofreading job {job_id} completed successfully")
+        else:
+            error_message = result.get("message", "Newsletter proofreading failed")
+            job.fail(error_message)
+            logger.error(f"❌ Newsletter proofreading job {job_id} failed: {error_message}")
+            
+    except Exception as e:
+        logger.error(f"Error in newsletter proofreading job {job_id}: {e}", exc_info=True)
+        job = job_manager.get_job(job_id)
+        if job:
+            job.fail(str(e))
 
 @router.post("/reprioritize_deltas")
 async def reprioritize_deltas_endpoint(request: Request):

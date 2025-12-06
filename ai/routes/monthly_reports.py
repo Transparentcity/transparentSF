@@ -4,6 +4,7 @@ import logging
 import os
 import asyncio
 from pathlib import Path
+from background_jobs import job_manager
 
 # Create router
 router = APIRouter(prefix="/api/monthly-reports", tags=["monthly-reports"])
@@ -45,14 +46,21 @@ async def generate_monthly_report_post(request: Request):
         
         logger.info(f"Generating monthly report with district={district}, period_type={period_type}, max_items={max_report_items}, model={model_key}")
         
-        # Import the necessary function
-        from monthly_report import run_monthly_report_process
+        # Create a background job for newsletter generation
+        job_description = f"Generate monthly newsletter (district={district}, period={period_type}, items={max_report_items})"
+        job_id = job_manager.create_job("newsletter_generation", job_description)
+        logger.info(f"Created newsletter generation job {job_id}")
         
-        # Run the monthly report process in a separate thread to prevent blocking
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: run_monthly_report_process(
+        # Mark job as running immediately so badge updates faster
+        job = job_manager.get_job(job_id)
+        if job:
+            job.start()
+            job.update_progress(1)
+        
+        # Start the newsletter generation in the background
+        asyncio.create_task(
+            _run_newsletter_generation_job(
+                job_id=job_id,
                 district=district,
                 period_type=period_type,
                 max_report_items=max_report_items,
@@ -60,40 +68,104 @@ async def generate_monthly_report_post(request: Request):
             )
         )
         
-        if result.get("status") == "success":
-            # Return the report path
-            report_path = result.get("revised_report_path") or result.get("newsletter_path")
-            
-            if report_path:
-                # Extract the filename from the path
-                filename = os.path.basename(report_path)
-                logger.info(f"Monthly report generated successfully: {filename}")
-                
-                return JSONResponse({
-                    "status": "success",
-                    "message": "Monthly report generated successfully",
-                    "filename": filename
-                })
-            else:
-                logger.info("Monthly report generated but no file path returned")
-                return JSONResponse({
-                    "status": "success",
-                    "message": "Monthly report generated successfully"
-                })
-        else:
-            error_message = result.get("message", "Monthly report generation failed. Check logs for details.")
-            logger.error(error_message)
-            return JSONResponse({
-                "status": "error",
-                "message": error_message
-            }, status_code=500)
+        # Return immediately with job_id
+        return JSONResponse({
+            "status": "success",
+            "message": "Monthly Newsletter is running",
+            "job_id": job_id
+        })
+        
     except Exception as e:
-        error_message = f"Error generating monthly report: {str(e)}"
+        error_message = f"Error starting newsletter generation job: {str(e)}"
         logger.error(error_message)
         return JSONResponse({
             "status": "error",
             "message": error_message
         }, status_code=500)
+
+
+async def _run_newsletter_generation_job(
+    job_id: str,
+    district: str = "0",
+    period_type: str = "month",
+    max_report_items: int = 10,
+    model_key: str = None
+):
+    """Run the newsletter generation as a background job with progress updates."""
+    try:
+        from monthly_report import run_monthly_report_process
+        
+        logger.info(f"Starting newsletter generation job {job_id}")
+        
+        # Get the job (should already be started, but verify)
+        job = job_manager.get_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found in job manager")
+            return
+        
+        # Job should already be started, but ensure it's running
+        if job.status != "running":
+            job.start()
+        job.update_progress(5)
+        logger.info(f"Job {job_id} running, progress: 5%")
+        
+        # Run the monthly report process in a thread pool
+        def run_newsletter_process():
+            try:
+                # Get job to update progress
+                job = job_manager.get_job(job_id)
+                if job:
+                    job.update_progress(10)
+                logger.info(f"Job {job_id} progress: 10% - Starting newsletter process")
+                
+                result = run_monthly_report_process(
+                    district=district,
+                    period_type=period_type,
+                    max_report_items=max_report_items,
+                    model_key=model_key
+                )
+                
+                return result
+            except Exception as e:
+                logger.error(f"Error in newsletter process for job {job_id}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
+        
+        # Execute in thread pool to prevent blocking
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, run_newsletter_process)
+        
+        # Check result and complete job
+        job = job_manager.get_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found when trying to complete")
+            return
+        
+        if result.get("status") == "success":
+            # Extract filename from result
+            report_path = result.get("revised_report_path") or result.get("newsletter_path")
+            filename = os.path.basename(report_path) if report_path else None
+            
+            job.update_progress(100)
+            job.complete({
+                "filename": filename,
+                "report_path": report_path,
+                "district": district,
+                "period_type": period_type,
+                "max_report_items": max_report_items
+            })
+            logger.info(f"✅ Newsletter generation job {job_id} completed successfully: {filename}")
+        else:
+            error_message = result.get("message", "Newsletter generation failed")
+            job.fail(error_message)
+            logger.error(f"❌ Newsletter generation job {job_id} failed: {error_message}")
+            
+    except Exception as e:
+        logger.error(f"Error in newsletter generation job {job_id}: {e}", exc_info=True)
+        job = job_manager.get_job(job_id)
+        if job:
+            job.fail(str(e))
 
 @router.get("/list")
 async def get_monthly_reports():
