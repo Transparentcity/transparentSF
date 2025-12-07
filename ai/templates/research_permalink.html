@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.title }} - Transparent SF Research</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+    
+    <!-- Meta tags for social sharing -->
+    <meta name="description" content="{{ report.original_prompt[:160] }}...">
+    <meta property="og:title" content="{{ report.title }}">
+    <meta property="og:description" content="{{ report.original_prompt[:160] }}...">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ report.title }}">
+    <meta name="twitter:description" content="{{ report.original_prompt[:160] }}...">
+    
+    <!-- Markdown processing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- Dark Mode CSS -->
+    <link rel="stylesheet" href="/static/darkmode.css">
+    
+    <style>
+        /* Import brand fonts */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        
+        /* Brand Colors */
+        :root {
+            --ink-black: #222222;
+            --cloud-gray: #E8E9EB;
+            --warm-coral: #FF6B5A;
+            --bright-purple: #ad35fa;
+            --soft-sand: #F6F1EA;
+            --sky-tint: #B8D8E3;
+            --spruce-green: #4A7463;
+        }
+        
+        body { 
+            font-family: 'IBM Plex Sans', Arial, Helvetica, sans-serif; 
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+            color: var(--text-primary);
+            background-color: var(--bg-primary);
+            line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 8px;
+            }
+            
+            .container {
+                padding: 8px;
+                max-width: none;
+            }
+        }
+        
+        .header {
+            margin-bottom: 30px;
+        }
+        
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .brand-logo {
+            height: 40px;
+            width: auto;
+        }
+        
+        .header-content {
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--cloud-gray);
+        }
+        
+        .title {
+            font-family: 'Inter', sans-serif;
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0 0 15px 0;
+            line-height: 1.2;
+        }
+        
+        .title::before {
+            content: "🔬 ";
+        }
+        
+        .meta {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 15px;
+        }
+        
+        .meta-item {
+            display: inline-block;
+            margin-right: 20px;
+            margin-bottom: 5px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .status.completed {
+            background-color: rgba(74, 116, 99, 0.2);
+            color: var(--spruce-green);
+        }
+        
+        .status.running {
+            background-color: rgba(255, 193, 7, 0.2);
+            color: #d9a300;
+        }
+        
+        .status.failed {
+            background-color: rgba(255, 107, 90, 0.15);
+            color: var(--warm-coral);
+        }
+        
+        .share-section {
+            background-color: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 12px;
+            min-width: 280px;
+        }
+        
+        .share-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0 0 8px 0;
+        }
+        
+        .share-url {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .share-input {
+            flex: 1;
+            padding: 6px 10px;
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            font-size: 12px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: monospace;
+        }
+        
+        .copy-button {
+            background-color: var(--bright-purple);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        
+        .copy-button:hover {
+            opacity: 0.9;
+        }
+        
+        .copy-button.copied {
+            background-color: #28a745;
+        }
+        
+        .content {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 30px;
+        }
+        
+        /* Chart container styling */
+        .chart-container {
+            margin: 15px 0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .chart-container iframe {
+            display: block;
+            width: 100%;
+            border: none;
+        }
+        
+        /* Research agenda display */
+        .agenda-section {
+            margin-bottom: 24px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border-left: 3px solid var(--bright-purple);
+        }
+        
+        .agenda-section h3 {
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0 0 12px 0;
+            color: var(--text-primary);
+        }
+        
+        .agenda-narrative {
+            font-style: italic;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        
+        .agenda-questions {
+            list-style: decimal;
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .agenda-questions li {
+            margin-bottom: 6px;
+        }
+        
+        /* Content styling */
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 {
+            color: var(--text-primary);
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .content h1 { font-size: 24px; }
+        .content h2 { font-size: 20px; }
+        .content h3 { font-size: 18px; }
+        .content h4 { font-size: 16px; }
+        
+        .content p {
+            margin-bottom: 15px;
+        }
+        
+        .content ul, .content ol {
+            margin-bottom: 15px;
+            padding-left: 30px;
+        }
+        
+        .content li {
+            margin-bottom: 5px;
+        }
+        
+        .content blockquote {
+            border-left: 4px solid var(--bright-purple);
+            padding: 15px 20px;
+            margin: 20px 0;
+            font-style: italic;
+            color: var(--text-secondary);
+            background-color: var(--soft-sand);
+            border-radius: 4px;
+        }
+        
+        [data-theme="dark"] .content blockquote {
+            background-color: var(--bg-secondary) !important;
+        }
+        
+        .content pre {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        
+        .content code {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+        
+        .content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .content th, .content td {
+            padding: 12px;
+            text-align: left;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-primary);
+        }
+        
+        .content th {
+            background-color: var(--bg-secondary);
+            font-weight: 600;
+        }
+        
+        @media (max-width: 768px) {
+            .header-top {
+                flex-direction: column;
+                gap: 15px;
+                align-items: stretch;
+            }
+            
+            .brand-logo {
+                height: 32px;
+                align-self: flex-start;
+            }
+            
+            .share-section {
+                min-width: auto;
+                width: 100%;
+            }
+            
+            .share-url {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            
+            .title {
+                font-size: 24px;
+            }
+            
+            .content {
+                padding: 15px;
+                margin: 0 -8px;
+            }
+        }
+        
+        /* Dark mode overrides */
+        [data-theme="dark"] .content {
+            background-color: var(--bg-primary) !important;
+            color: var(--text-primary) !important;
+        }
+        
+        [data-theme="dark"] .content h1,
+        [data-theme="dark"] .content h2,
+        [data-theme="dark"] .content h3,
+        [data-theme="dark"] .content h4,
+        [data-theme="dark"] .content h5,
+        [data-theme="dark"] .content h6,
+        [data-theme="dark"] .content p,
+        [data-theme="dark"] .content div,
+        [data-theme="dark"] .content span,
+        [data-theme="dark"] .content li {
+            color: var(--text-primary) !important;
+        }
+        
+        [data-theme="dark"] .content pre,
+        [data-theme="dark"] .content code {
+            background-color: var(--bg-secondary) !important;
+            color: var(--text-primary) !important;
+        }
+        
+        [data-theme="dark"] .content blockquote {
+            background-color: var(--bg-secondary) !important;
+            color: var(--text-secondary) !important;
+            border-left-color: var(--bright-purple) !important;
+        }
+        
+        [data-theme="dark"] .agenda-section {
+            background-color: var(--bg-secondary) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-top">
+                <img src="/static/wordmark.png" alt="TransparentSF" class="brand-logo" id="wordmark-logo">
+                <div class="share-section">
+                    <div class="share-title">📤 Share this research</div>
+                    <div class="share-url">
+                        <input type="text" class="share-input" id="shareUrl" value="{{ request.url }}" readonly>
+                        <button class="copy-button" onclick="copyToClipboard()">Copy Link</button>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 5px;">
+                        Share this permanent link to give others access to this research report
+                    </div>
+                </div>
+            </div>
+            <div class="header-content">
+                <h1 class="title">{{ report.title }}</h1>
+                <div class="meta">
+                    <span class="meta-item">
+                        <strong>Created:</strong> 
+                        {% if report.created_at %}
+                            <span id="created-date">{{ report.created_at }}</span>
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </span>
+                    <span class="meta-item">
+                        <strong>District:</strong> {{ "Citywide" if report.district == "0" else "District " + report.district }}
+                    </span>
+                    <span class="meta-item">
+                        <span class="status {{ report.status }}">{{ report.status.replace('_', ' ').title() }}</span>
+                    </span>
+                </div>
+                {% if report.original_prompt %}
+                <div class="meta">
+                    <strong>Research Question:</strong> <em>{{ report.original_prompt }}</em>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        {% if agenda %}
+        <div class="agenda-section">
+            <h3>📋 Research Agenda</h3>
+            {% if agenda.narrative_thread %}
+            <div class="agenda-narrative">{{ agenda.narrative_thread }}</div>
+            {% endif %}
+            {% if agenda.research_questions %}
+            <ol class="agenda-questions">
+                {% for question in agenda.research_questions %}
+                <li>{{ question }}</li>
+                {% endfor %}
+            </ol>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <div class="content" id="reportContent">
+            <!-- Content will be processed and inserted here -->
+        </div>
+    </div>
+    
+    <style>
+        /* Lazy loading chart containers */
+        .lazy-chart-container {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .lazy-chart-container.loaded .chart-loading-placeholder {
+            display: none !important;
+        }
+        
+        .lazy-chart-container.loaded iframe {
+            display: block !important;
+        }
+        
+        .spinner-small {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--bg-tertiary, #e8e9eb);
+            border-top-color: var(--bright-purple, #ad35fa);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    
+    <script>
+        // Lazy loading queue for charts/maps
+        const chartLoadQueue = [];
+        let isLoadingChart = false;
+        let chartIdCounter = 0;
+        
+        // Process next chart in queue
+        function processChartQueue() {
+            if (isLoadingChart || chartLoadQueue.length === 0) return;
+            
+            isLoadingChart = true;
+            const { chartId, src } = chartLoadQueue.shift();
+            
+            const container = document.getElementById(chartId);
+            if (!container) {
+                isLoadingChart = false;
+                processChartQueue();
+                return;
+            }
+            
+            const iframe = container.querySelector('iframe');
+            if (iframe && !iframe.src) {
+                iframe.src = src;
+                iframe.onload = () => {
+                    container.classList.add('loaded');
+                    isLoadingChart = false;
+                    setTimeout(processChartQueue, 300);
+                };
+                iframe.onerror = () => {
+                    isLoadingChart = false;
+                    setTimeout(processChartQueue, 300);
+                };
+            } else {
+                isLoadingChart = false;
+                processChartQueue();
+            }
+        }
+        
+        // Intersection Observer for lazy loading
+        let chartObserver = null;
+        
+        function setupChartObserver() {
+            if (chartObserver) return;
+            
+            chartObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const container = entry.target;
+                        const src = container.dataset.src;
+                        const chartId = container.id;
+                        
+                        if (src && !container.classList.contains('queued')) {
+                            container.classList.add('queued');
+                            chartLoadQueue.push({ chartId, src });
+                            processChartQueue();
+                        }
+                        
+                        chartObserver.unobserve(container);
+                    }
+                });
+            }, {
+                root: null,
+                rootMargin: '100px',
+                threshold: 0.1
+            });
+        }
+        
+        function observeCharts() {
+            setupChartObserver();
+            document.querySelectorAll('.lazy-chart-container').forEach(container => {
+                if (!container.classList.contains('queued') && !container.classList.contains('loaded')) {
+                    chartObserver.observe(container);
+                }
+            });
+        }
+        
+        // Process chart placeholders with lazy loading
+        function processChartPlaceholders(content) {
+            if (!content) return content;
+            
+            const chartRegex = /\[CHART:([^:]+):([^\]]+)\]/g;
+            
+            return content.replace(chartRegex, (match, chartType, params) => {
+                const paramParts = params.split(':');
+                const uniqueId = 'chart-' + (++chartIdCounter);
+                let src = '';
+                let height = '500px';
+                
+                if (chartType === 'anomaly' || chartType === 'anomaly_id' || chartType === 'anomalyid') {
+                    const anomalyId = paramParts[0];
+                    src = `/anomaly-analyzer/anomaly-chart?id=${anomalyId}`;
+                } else if (chartType === 'time_series' || chartType === 'time_series_id' || chartType === 'timeseries' || chartType === 'timeseriesid') {
+                    if (paramParts.length === 1) {
+                        const chartId = paramParts[0];
+                        src = `/backend/time-series-chart?chart_id=${chartId}&embedded=true`;
+                    } else {
+                        const metricId = paramParts[0];
+                        const district = paramParts[1] || '0';
+                        const period = paramParts[2] || 'month';
+                        src = `/backend/time-series-chart?metric_id=${metricId}&district=${district}&period_type=${period}&embedded=true`;
+                    }
+                } else if (chartType === 'map') {
+                    const mapId = paramParts[0];
+                    src = `/backend/map-chart?id=${mapId}&embedded=true`;
+                } else if (chartType === 'dualmap') {
+                    const map1Id = paramParts[0];
+                    const map2Id = paramParts[1];
+                    src = `/dual-map?map1_id=${map1Id}&map2_id=${map2Id}`;
+                }
+                
+                // Max height of 500px for all charts
+                height = '500px';
+                
+                if (!src) return match;
+                
+                return `<div class="lazy-chart-container chart-container" id="${uniqueId}" data-src="${src}" style="min-height: ${height};">
+                    <div class="chart-loading-placeholder" style="
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        height: ${height};
+                        background: var(--bg-secondary);
+                        border-radius: 8px;
+                        color: var(--text-secondary);
+                    ">
+                        <div class="spinner-small" style="margin-bottom: 12px;"></div>
+                        <span style="font-size: 13px;">Loading ${chartType === 'map' || chartType === 'dualmap' ? 'map' : 'chart'}...</span>
+                    </div>
+                    <iframe style="width: 100%; height: ${height}; border: none; display: none;" 
+                            frameborder="0" scrolling="${chartType === 'map' || chartType === 'dualmap' ? 'yes' : 'no'}"
+                            onload="this.style.display='block'; this.previousElementSibling.style.display='none';">
+                    </iframe>
+                </div>`;
+            });
+        }
+        
+        // Copy to clipboard
+        function copyToClipboard() {
+            const shareInput = document.getElementById('shareUrl');
+            const copyButton = document.querySelector('.copy-button');
+            
+            navigator.clipboard.writeText(shareInput.value).then(() => {
+                copyButton.textContent = 'Copied!';
+                copyButton.classList.add('copied');
+                
+                setTimeout(() => {
+                    copyButton.textContent = 'Copy Link';
+                    copyButton.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+        
+        // Format date nicely
+        document.addEventListener('DOMContentLoaded', function() {
+            const createdDateElement = document.getElementById('created-date');
+            if (createdDateElement) {
+                const dateStr = createdDateElement.textContent;
+                try {
+                    const date = new Date(dateStr);
+                    if (!isNaN(date.getTime())) {
+                        createdDateElement.textContent = date.toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Could not parse date:', dateStr);
+                }
+            }
+            
+            // Process and display content
+            const contentElement = document.getElementById('reportContent');
+            const rawContent = {{ content|tojson }};
+            
+            let processedContent = processChartPlaceholders(rawContent);
+            
+            // Render markdown
+            if (typeof marked !== 'undefined') {
+                contentElement.innerHTML = marked.parse(processedContent);
+            } else {
+                processedContent = processedContent.replace(/\n/g, '<br>');
+                contentElement.innerHTML = processedContent;
+            }
+            
+            // Set up lazy loading for charts
+            setTimeout(observeCharts, 100);
+        });
+    </script>
+    
+    <!-- Dark Mode -->
+    <script>
+        (function() {
+            'use strict';
+            
+            let currentTheme = null;
+            
+            function applyTheme(theme) {
+                if (currentTheme === theme) return;
+                currentTheme = theme;
+                document.documentElement.setAttribute('data-theme', theme);
+            }
+            
+            function getCurrentTheme() {
+                const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                let stored = null;
+                try {
+                    stored = localStorage.getItem('theme');
+                } catch (e) {}
+                return stored || (systemPrefersDark ? 'dark' : 'light');
+            }
+            
+            function addSystemListener() {
+                const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                const systemListener = function(e) {
+                    const newTheme = e.matches ? 'dark' : 'light';
+                    try {
+                        const stored = localStorage.getItem('theme');
+                        if (!stored) {
+                            applyTheme(newTheme);
+                        }
+                    } catch (e) {
+                        applyTheme(newTheme);
+                    }
+                };
+                
+                if (mediaQuery.addEventListener) {
+                    mediaQuery.addEventListener('change', systemListener);
+                } else {
+                    mediaQuery.addListener(systemListener);
+                }
+            }
+            
+            function addStorageListener() {
+                window.addEventListener('storage', function(e) {
+                    if (e.key === 'theme' && e.newValue) {
+                        applyTheme(e.newValue);
+                    }
+                });
+            }
+            
+            function initDarkMode() {
+                const theme = getCurrentTheme();
+                applyTheme(theme);
+                addSystemListener();
+                addStorageListener();
+            }
+            
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initDarkMode);
+            } else {
+                initDarkMode();
+            }
+        })();
+    </script>
+</body>
+</html>
+

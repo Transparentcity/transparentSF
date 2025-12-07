@@ -3,6 +3,8 @@ Explainer Chat Routes
 
 This module contains all the explainer agent and chat-related endpoints,
 moved from backend.py for better organization.
+
+Uses Redis-backed session storage for persistence across server restarts.
 """
 
 from fastapi import APIRouter, Request
@@ -22,6 +24,13 @@ from agents.config.models import get_available_models, get_default_model, get_de
 # Import tiktoken for token counting
 import tiktoken
 
+# Import Redis-backed session store
+from core.session_store import (
+    get_session_store,
+    SessionData,
+    generate_session_id as gen_session_id,
+)
+
 # Initialize router and logger
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,7 +46,13 @@ def set_templates(t):
 
 # Session store for explainer agents
 # This stores ExplainerAgent instances by session_id to maintain conversation history
+# Note: The agent instances are still stored in memory, but session data is persisted to Redis
 explainer_sessions: Dict[str, Any] = {}
+
+# Get the session store (Redis with fallback to in-memory)
+def get_store():
+    """Get the session store instance."""
+    return get_session_store()
 
 # Track session creation and destruction for debugging
 def log_session_event(event: str, session_id: str, details: str = ""):
@@ -45,6 +60,51 @@ def log_session_event(event: str, session_id: str, details: str = ""):
     session_count = len(explainer_sessions)
     active_sessions = list(explainer_sessions.keys())[:3]  # First 3 session IDs
     logger.info(f"SESSION {event}: {session_id} | Total sessions: {session_count} | Active: {active_sessions} | {details}")
+
+
+async def save_agent_session_data(session_id: str, agent, model_key: str, tool_groups: list):
+    """Save agent session data to the persistent store."""
+    try:
+        store = get_store()
+        
+        # Get conversation history from agent
+        conversation_history = []
+        if hasattr(agent, 'get_conversation_history'):
+            conversation_history = agent.get_conversation_history()
+        
+        session_data = SessionData(
+            session_id=session_id,
+            agent_type="langchain_explainer",
+            model_key=model_key,
+            tool_groups=[g.value if hasattr(g, 'value') else str(g) for g in tool_groups],
+            conversation_history=conversation_history,
+        )
+        
+        # Save with 1 hour TTL (can be configured via env var)
+        import os
+        ttl = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
+        await store.save_session(session_data, ttl_seconds=ttl)
+        logger.debug(f"Saved session data for {session_id}")
+    except Exception as e:
+        logger.warning(f"Failed to save session data for {session_id}: {e}")
+
+
+async def load_agent_session_data(session_id: str) -> tuple:
+    """Load agent session data from the persistent store.
+    
+    Returns:
+        Tuple of (session_data, conversation_history) or (None, []) if not found
+    """
+    try:
+        store = get_store()
+        session_data = await store.get_session(session_id)
+        if session_data:
+            logger.debug(f"Loaded session data for {session_id}")
+            return session_data, session_data.conversation_history or []
+        return None, []
+    except Exception as e:
+        logger.warning(f"Failed to load session data for {session_id}: {e}")
+        return None, []
 
 @router.get("/available-models")
 async def get_available_models_endpoint():
@@ -363,10 +423,29 @@ async def langchain_explainer_streaming_api(request: Request):
             logger.info(f"Using existing LangChain explainer agent for session: {session_key}")
         else:
             logger.info(f"SESSION LOOKUP: No existing agent found, creating new one for: {session_key}")
+            
+            # Try to restore session from persistent store (Redis)
+            persisted_session, conversation_history = await load_agent_session_data(session_id)
+            
             # Create new LangChain agent and session with session logging enabled
             agent = create_explainer_agent(model_key=model_key, tool_groups=tool_group_enums, enable_session_logging=True)
+            
+            # Restore conversation history if we have persisted data
+            if persisted_session and conversation_history:
+                logger.info(f"SESSION RESTORE: Restoring {len(conversation_history)} messages from Redis for {session_key}")
+                if hasattr(agent, 'restore_conversation_history'):
+                    agent.restore_conversation_history(conversation_history)
+                elif hasattr(agent, 'messages'):
+                    # Fallback: manually restore messages if method doesn't exist
+                    from langchain_core.messages import HumanMessage, AIMessage
+                    for msg in conversation_history:
+                        if msg.get('role') == 'user':
+                            agent.messages.append(HumanMessage(content=msg.get('content', '')))
+                        elif msg.get('role') == 'assistant':
+                            agent.messages.append(AIMessage(content=msg.get('content', '')))
+            
             explainer_sessions[session_key] = agent
-            log_session_event("CREATED", session_key, f"model={model_key}, tools={tool_groups}")
+            log_session_event("CREATED", session_key, f"model={model_key}, tools={tool_groups}, restored={persisted_session is not None}")
             logger.info(f"Created new LangChain explainer agent for session: {session_key}")
         
         async def generate_stream():
@@ -387,15 +466,9 @@ async def langchain_explainer_streaming_api(request: Request):
                         "city_id": 1  # San Francisco
                     }
                     
-                    # NEW: Get research context for this district
+                    # Get research context for this district
                     try:
-                        import sys
-                        import os
-                        transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'transparentcity-platform', 'src')
-                        if transparentcity_path not in sys.path:
-                            sys.path.insert(0, transparentcity_path)
-                        
-                        from transparentcity.services import get_research_service
+                        from services.research_service import get_research_service
                         research_service = get_research_service()
                         
                         research_context = research_service.get_research_context(
@@ -415,6 +488,13 @@ async def langchain_explainer_streaming_api(request: Request):
                     if chunk:
                         # The agent already yields properly formatted SSE data, so pass it through directly
                         yield chunk
+                
+                # Save session data to Redis after streaming completes
+                try:
+                    await save_agent_session_data(session_id, agent, model_key, tool_group_enums)
+                    logger.debug(f"Session data saved to Redis for {session_id}")
+                except Exception as save_err:
+                    logger.warning(f"Failed to save session data after streaming: {save_err}")
                 
                 # Don't send manual completion signal - the agent handles this with session_id
                 
@@ -513,6 +593,15 @@ async def cancel_explainer_session(request: Request):
                 # Remove the session to cancel any ongoing operations
                 log_session_event("DELETED", session_key, "via cancel endpoint")
                 del explainer_sessions[session_key]
+                
+                # Also delete from Redis
+                try:
+                    store = get_store()
+                    await store.delete_session(session_id)
+                    logger.info(f"Deleted session from Redis: {session_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete session from Redis: {e}")
+                
                 logger.info(f"Cancelled explainer session: {session_key}")
                 return JSONResponse(
                     status_code=200,
@@ -591,6 +680,16 @@ async def clear_explainer_session(request: Request):
                 logger.info(f"Cleared explainer session: {session_key}")
                 session_cleared = True
         
+        # Also delete from Redis (use the original session_id without prefix)
+        try:
+            store = get_store()
+            await store.delete_session(session_id)
+            logger.info(f"Deleted session from Redis: {session_id}")
+            # Consider session cleared even if only Redis had it
+            session_cleared = True
+        except Exception as e:
+            logger.warning(f"Failed to delete session from Redis: {e}")
+        
         if session_cleared:
             return JSONResponse(content={"status": "success", "message": f"Session {session_id} cleared"})
         else:
@@ -623,12 +722,31 @@ async def clear_all_explainer_sessions():
     """Clear all explainer sessions."""
     try:
         session_count = len(explainer_sessions)
+        
+        # Clear all agent sessions from memory
+        for session_key, agent in list(explainer_sessions.items()):
+            if hasattr(agent, 'clear_session'):
+                agent.clear_session()
+        
         log_session_event("ALL_CLEARED", "all", f"cleared {session_count} sessions")
         explainer_sessions.clear()
-        logger.info(f"Cleared all {session_count} explainer sessions")
+        
+        # Also clear all sessions from Redis
+        redis_cleared = 0
+        try:
+            store = get_store()
+            session_ids = await store.list_sessions()
+            for session_id in session_ids:
+                await store.delete_session(session_id)
+                redis_cleared += 1
+            logger.info(f"Cleared {redis_cleared} sessions from Redis")
+        except Exception as e:
+            logger.warning(f"Failed to clear sessions from Redis: {e}")
+        
+        logger.info(f"Cleared all {session_count} memory sessions and {redis_cleared} Redis sessions")
         return JSONResponse(content={
             "status": "success", 
-            "message": f"Cleared {session_count} sessions"
+            "message": f"Cleared {session_count} memory sessions and {redis_cleared} Redis sessions"
         })
         
     except Exception as e:
@@ -666,6 +784,55 @@ async def get_explainer_sessions():
             content={
                 "status": "error",
                 "message": f"Error getting sessions: {str(e)}"
+            }
+        )
+
+
+@router.get("/api/session-store-status")
+async def get_session_store_status():
+    """Get information about the session store (Redis or in-memory)."""
+    try:
+        store = get_store()
+        store_type = type(store).__name__
+        
+        # Get list of persisted sessions
+        try:
+            persisted_sessions = await store.list_sessions()
+        except Exception as e:
+            persisted_sessions = []
+            logger.warning(f"Failed to list persisted sessions: {e}")
+        
+        # Get Redis-specific info if applicable
+        redis_info = None
+        if store_type == "RedisSessionStore":
+            try:
+                if hasattr(store, '_redis_client') and store._redis_client:
+                    info = store._redis_client.info("clients")
+                    redis_info = {
+                        "connected_clients": info.get("connected_clients"),
+                        "redis_version": store._redis_client.info("server").get("redis_version"),
+                    }
+            except Exception as e:
+                logger.warning(f"Failed to get Redis info: {e}")
+        
+        return JSONResponse(content={
+            "status": "success",
+            "store_type": store_type,
+            "is_redis": store_type == "RedisSessionStore",
+            "is_fallback": store_type == "InMemorySessionStore",
+            "memory_sessions": len(explainer_sessions),
+            "persisted_sessions": len(persisted_sessions),
+            "persisted_session_ids": persisted_sessions[:10],  # First 10
+            "redis_info": redis_info
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting session store status: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Error getting session store status: {str(e)}"
             }
         )
 

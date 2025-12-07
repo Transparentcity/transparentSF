@@ -2193,17 +2193,9 @@ def store_prioritized_items(prioritized_items, period_type='month', district=Non
         if research_agendas:
             logger.info(f"Stored {len(research_agendas)} research agendas")
             
-            # NEW: Store research agendas in Research Service
+            # Store research agendas in Research Service
             try:
-                # Try to import research service from transparentcity-platform
-                import sys
-                import os
-                # Add transparentcity-platform to path if not already there
-                transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'transparentcity-platform', 'src')
-                if transparentcity_path not in sys.path:
-                    sys.path.insert(0, transparentcity_path)
-                
-                from transparentcity.services import get_research_service
+                from services.research_service import get_research_service
                 research_service = get_research_service()
                 
                 # Convert research agendas to ResearchAgenda objects
@@ -2661,13 +2653,7 @@ def generate_explanations(report_ids, model_key=None):
             # Fallback: Get research context from Research Service if not in item metadata
             if not research_context:
                 try:
-                    import sys
-                    import os
-                    transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'transparentcity-platform', 'src')
-                    if transparentcity_path not in sys.path:
-                        sys.path.insert(0, transparentcity_path)
-                    
-                    from transparentcity.services import get_research_service
+                    from services.research_service import get_research_service
                     research_service = get_research_service()
                     
                     research_context = research_service.get_research_context(

@@ -913,6 +913,11 @@ async def get_sessions_summary_endpoint():
                     agent_type = session_data.get('agent_type', 'unknown')
                     model = session_data.get('model', 'unknown')
                     user_input = session_data.get('user_input', '')
+                    # Handle case where user_input might be a dict instead of string
+                    if isinstance(user_input, dict):
+                        user_input = user_input.get('content', user_input.get('text', str(user_input)))
+                    elif not isinstance(user_input, str):
+                        user_input = str(user_input) if user_input else ''
                     tool_calls = session_data.get('tool_calls', [])
                     success = session_data.get('success', False)
                     total_execution_time_ms = session_data.get('total_execution_time_ms', 0)

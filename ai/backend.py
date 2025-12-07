@@ -1641,88 +1641,10 @@ async def enhance_queries():
             "message": f"Error enhancing dashboard queries: {str(e)}"
         }, status_code=500)
 
-@router.post("/execute-postgres-query")
-async def execute_postgres_query(request: Request):
-    """Execute a PostgreSQL query and return results."""
-    try:
-        data = await request.json()
-        query = data.get('query', '').strip()
-        parameters = data.get('parameters', {})
-
-        if not query:
-            return JSONResponse({
-                'status': 'error',
-                'message': 'Query is required'
-            })
-
-        # Determine database connection source
-        database_url = os.getenv("DATABASE_URL")
-        if database_url:
-            db_source = database_url  # Show the actual DATABASE_URL
-        else:
-            # Build connection string from individual parameters for display
-            host = os.getenv("POSTGRES_HOST", "localhost")
-            port = os.getenv("POSTGRES_PORT", "5432")
-            dbname = os.getenv("POSTGRES_DB", "transparentsf")
-            user = os.getenv("POSTGRES_USER", "postgres")
-            db_source = f"from params to {host}:{port}/{dbname}"
-
-        # Connect to PostgreSQL
-        conn = get_db_connection()
-        if not conn:
-            return JSONResponse(
-                status_code=500,
-                content={"detail": "Failed to connect to database"}
-            )
-        
-        try:
-            # Create a cursor with dictionary-like results
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            
-            # Execute the query with parameters
-            cursor.execute(query, parameters)
-            
-            # For non-SELECT queries, commit the transaction
-            if not query.strip().upper().startswith('SELECT'):
-                conn.commit()
-                return JSONResponse({
-                    'status': 'success',
-                    'message': 'Query executed successfully',
-                    'rowCount': cursor.rowcount,
-                    'db_source': db_source
-                })
-            
-            # For SELECT queries, fetch and return results
-            results = cursor.fetchall()
-            
-            # Convert results to list of dictionaries and handle datetime serialization
-            results_list = []
-            for row in results:
-                row_dict = dict(row)
-                # Convert datetime objects to ISO format strings
-                for key, value in row_dict.items():
-                    if isinstance(value, (datetime, date)):
-                        row_dict[key] = value.isoformat()
-                results_list.append(row_dict)
-            
-            return JSONResponse({
-                'status': 'success',
-                'rowCount': len(results_list),
-                'query': query,
-                'results': results_list,
-                'db_source': db_source
-            })
-            
-        finally:
-            cursor.close()
-            conn.close()
-            
-    except Exception as e:
-        logger.exception(f"Error executing PostgreSQL query: {str(e)}")
-        return JSONResponse({
-            'status': 'error',
-            'message': str(e)
-        }, status_code=500)
+# REMOVED: execute-postgres-query endpoint
+# This endpoint was removed for security reasons - it allowed arbitrary SQL execution.
+# If you need to query the database, use the specific API endpoints that have proper
+# validation and parameterized queries, or use a database admin tool like pgAdmin.
 
 @router.post("/get-biggest-deltas")
 async def get_biggest_deltas_api(request: Request):

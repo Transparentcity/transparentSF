@@ -1,0 +1,1089 @@
+# Transparent SF — Visual Design System & Style Guide
+**Version 2.0 | December 2024**
+
+---
+
+## 1. Brand Foundation
+
+### Brand Essence
+Transparent SF uses AI and public data to make San Francisco's civic landscape legible, understandable, and actionable for everyday residents. We cut through headlines, spin, and political narratives by delivering clear, consistent insights grounded in real data.
+
+### Only-ness Statement
+The only project that uses AI to transform San Francisco's public data into simple, citizen-focused insights that expose what's really happening in the city and how to improve it.
+
+### Core Belief
+**Legibility precedes progress.** Public data is powerful, but only if people can understand and use it.
+
+### Mission
+Transform raw public data into actionable insights that reveal how San Francisco is really working — helping citizens cut through stakeholder spin, advocate for effective solutions, and hold leaders accountable to measurable outcomes.
+
+### Voice & Personality
+- **Intelligent but accessible** — Complex data made understandable
+- **Civic-minded, not partisan** — Facts over ideology
+- **Transparent and self-aware** — Open-source, humble about limitations
+- **Clean and clear** — Design and tone prioritize signal over noise
+- **Calm, credible, sometimes wry** — Authoritative without being preachy
+
+### Tagline
+> **See your city clearly.**
+
+---
+
+## 2. Color System
+
+### Primary Palette
+
+#### Brand Purple (Primary Accent)
+The signature color representing transparency, clarity, and civic intelligence.
+
+| Token | Light Mode | Dark Mode | Usage |
+|-------|------------|-----------|-------|
+| `--bright-purple` | `#ad35fa` | `#c44dff` | Primary buttons, active states, links, focus rings |
+| `--accent-hover` | `#9625e0` | `#ad35fa` | Hover states on purple elements |
+| `--secondary-purple` | `#8B5CF6` | `#a78bfa` | Secondary accents, subtle highlights |
+
+```css
+/* CSS Implementation */
+:root {
+    --bright-purple: #ad35fa;
+    --accent-hover: #9625e0;
+    --secondary-purple: #8B5CF6;
+}
+
+[data-theme="dark"] {
+    --bright-purple: #c44dff;
+    --accent-hover: #ad35fa;
+    --secondary-purple: #a78bfa;
+}
+```
+
+#### Semantic Colors
+
+| Token | Light Mode | Dark Mode | Usage |
+|-------|------------|-----------|-------|
+| `--ink-black` | `#222222` | `#ffffff` | Primary text, logos |
+| `--warm-coral` | `#FF6B5A` | `#FF6B5A` | Errors, alerts, danger, negative change |
+| `--cloud-gray` | `#E8E9EB` | `#2a2a2a` | Borders, dividers, inactive states |
+| `--soft-sand` | `#F6F1EA` | `#1a1a1a` | Secondary backgrounds, cards |
+| `--sky-blue` | `#71B2CA` | `#71B2CA` | Informational, chart accents |
+| `--sky-tint` | `#B8D8E3` | `#1e3a47` | Light blue backgrounds |
+| `--spruce-green` | `#4A7463` | `#4A7463` | Success, positive change, chart accents |
+
+### Background Hierarchy
+
+| Token | Light Mode | Dark Mode | Usage |
+|-------|------------|-----------|-------|
+| `--bg-primary` | `#ffffff` | `#0f0a1f` | Main body background |
+| `--bg-secondary` | `#f8f9fa` | `#15102b` | Cards, panels, sidebar |
+| `--bg-tertiary` | `#ffffff` | `#1f1740` | Nested elements, accordions |
+
+### Text Hierarchy
+
+| Token | Light Mode | Dark Mode | Usage |
+|-------|------------|-----------|-------|
+| `--text-primary` | `#222222` | `#ffffff` | Headings, body text |
+| `--text-secondary` | `#666666` | `#cccccc` | Labels, captions, metadata |
+| `--text-muted` | `#999999` | `#888888` | Placeholders, disabled text |
+
+### Border & Shadow
+
+| Token | Light Mode | Dark Mode | Usage |
+|-------|------------|-----------|-------|
+| `--border-primary` | `#E8E9EB` | `#2a2a2a` | Card borders, dividers |
+| `--border-secondary` | `#f0f0f0` | `#404040` | Subtle dividers |
+| `--shadow-light` | `rgba(0,0,0,0.1)` | `rgba(0,0,0,0.3)` | Subtle elevation |
+| `--shadow-medium` | `rgba(0,0,0,0.15)` | `rgba(0,0,0,0.5)` | Modal, dropdown shadows |
+
+---
+
+## 3. Typography
+
+### Font Stack
+
+#### Display & Headings
+**Inter** — Modern, clean geometric sans-serif optimized for screen readability.
+
+```css
+font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+```
+
+#### Body Text
+**IBM Plex Sans** — Humanist sans-serif designed for clarity in dense information layouts.
+
+```css
+font-family: 'IBM Plex Sans', Arial, Helvetica, sans-serif;
+```
+
+### Type Scale
+
+| Level | Font | Weight | Size | Line Height | Usage |
+|-------|------|--------|------|-------------|-------|
+| H1 | Inter | 700 (Bold) | 36px | 42px | Page titles |
+| H2 | Inter | 600 (Semi) | 24px | 32px | Section headers |
+| H3 | Inter | 500 (Medium) | 18px | 28px | Card titles, panel headers |
+| H4 | Inter | 500 (Medium) | 14px | 22px | Subsection headers |
+| Body | IBM Plex Sans | 400 | 14px | 22px | Primary content |
+| Body Small | IBM Plex Sans | 400 | 13px | 20px | Sidebar, compact layouts |
+| Caption | IBM Plex Sans | 400 | 12px | 18px | Metadata, chart labels |
+| Micro | IBM Plex Sans | 400 | 11px | 16px | Chart annotations, badges |
+| Label | Inter | 600 | 12px | 16px | Form labels, section tags |
+
+### Typography CSS
+
+```css
+/* Import fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+/* Type scale */
+h1 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: 36px;
+    line-height: 42px;
+    color: var(--text-primary);
+}
+
+h2 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 24px;
+    line-height: 32px;
+    color: var(--text-primary);
+}
+
+h3 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 18px;
+    line-height: 28px;
+    color: var(--text-primary);
+}
+
+body {
+    font-family: 'IBM Plex Sans', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--text-primary);
+}
+
+/* Navigation section headers */
+.nav-section h3 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+```
+
+---
+
+## 4. Spacing System
+
+Base unit: **4px**
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--space-1` | 4px | Micro gaps |
+| `--space-2` | 8px | Related elements |
+| `--space-3` | 12px | Component internal |
+| `--space-4` | 16px | Section padding |
+| `--space-5` | 20px | Card padding |
+| `--space-6` | 24px | Section gaps |
+| `--space-8` | 32px | Major sections |
+| `--space-10` | 40px | Page margins |
+
+### Component Spacing Guidelines
+
+- **Cards/Panels**: 16px–20px internal padding
+- **Button padding**: 10px vertical, 15px horizontal
+- **Form inputs**: 12px padding
+- **Sidebar items**: 4px vertical margin, 10px–15px horizontal padding
+- **Section gaps**: 24px–32px
+
+---
+
+## 5. Component Library
+
+### Buttons
+
+#### Primary Button (Purple)
+```css
+.btn-primary {
+    background: var(--bright-purple);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+    background: var(--accent-hover);
+    transform: scale(1.02);
+}
+
+.btn-primary:active {
+    transform: scale(0.98);
+}
+
+.btn-primary:focus {
+    outline: 2px solid var(--bright-purple);
+    outline-offset: 2px;
+}
+```
+
+#### Secondary Button (Outline)
+```css
+.btn-secondary {
+    background: transparent;
+    color: var(--bright-purple);
+    border: 1px solid var(--bright-purple);
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+    background: rgba(173, 53, 250, 0.1);
+}
+```
+
+#### Danger Button
+```css
+.btn-danger {
+    background: transparent;
+    color: var(--warm-coral);
+    border: 1px solid var(--warm-coral);
+    border-left: 3px solid var(--warm-coral);
+}
+
+.btn-danger:hover {
+    background: rgba(255, 107, 90, 0.1);
+}
+```
+
+#### Icon Button (Circular)
+```css
+.btn-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+    background: var(--bg-tertiary);
+    transform: scale(1.05);
+}
+```
+
+### Sidebar Navigation
+
+#### Navigation Item
+```css
+.sidebar button {
+    display: block;
+    width: 90%;
+    margin: 4px auto;
+    padding: 10px 15px;
+    background: var(--cloud-gray);
+    border: none;
+    border-left: 3px solid var(--ink-black);
+    border-radius: 4px;
+    color: var(--text-primary);
+    text-align: left;
+    font-size: 13px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sidebar button:hover {
+    background: var(--bg-secondary);
+}
+
+/* Active/Selected State - Purple accent */
+.sidebar button.active,
+.sidebar button.selected {
+    background: var(--bg-secondary);
+    border-left: 3px solid var(--bright-purple);
+}
+```
+
+### Cards & Panels
+
+#### Standard Card
+```css
+.card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+/* Dark mode */
+[data-theme="dark"] .card {
+    background: var(--bg-secondary);
+    border-color: var(--border-secondary);
+}
+```
+
+#### Chart Container
+```css
+.chart-container {
+    background-color: var(--bg-primary);
+    border-radius: 4px;
+    padding: 16px;
+    max-width: 600px; /* For embedded charts */
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .chart-container {
+    background-color: #1a1a1a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+```
+
+#### Metadata Panel
+```css
+.metadata {
+    background-color: rgba(173, 53, 250, 0.05);
+    border: 1px solid rgba(173, 53, 250, 0.1);
+    border-radius: 4px;
+    padding: 16px;
+    font-size: 0.9rem;
+}
+
+[data-theme="dark"] .metadata {
+    background-color: rgba(196, 77, 255, 0.08);
+    border-color: rgba(196, 77, 255, 0.15);
+}
+```
+
+### Badges
+
+```css
+.badge {
+    background-color: var(--bright-purple);
+    color: white;
+    font-weight: 500;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+}
+
+/* Notification badge (pulsing) */
+.badge-notification {
+    background: var(--bright-purple);
+    color: white;
+    padding: 3px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(173, 53, 250, 0.3);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+```
+
+### Form Elements
+
+```css
+input, textarea, select {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-primary);
+    border-radius: 4px;
+    padding: 12px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+input:focus, textarea:focus, select:focus {
+    border-color: var(--bright-purple);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(173, 53, 250, 0.1);
+}
+
+input::placeholder {
+    color: var(--text-muted);
+}
+```
+
+---
+
+## 6. State Patterns
+
+### Loading State
+```css
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 250px;
+    color: var(--spruce-green);
+}
+
+/* Use Bootstrap spinner with brand color */
+.spinner-border.text-primary {
+    color: var(--bright-purple) !important;
+}
+```
+
+### Error State
+```css
+.error-message {
+    color: var(--warm-coral);
+    padding: 12px;
+    background-color: rgba(255, 107, 90, 0.1);
+    border-radius: 5px;
+    border-left: 3px solid var(--warm-coral);
+    font-size: 0.9rem;
+}
+```
+
+### Success State
+```css
+.success-message {
+    color: var(--spruce-green);
+    padding: 12px;
+    background-color: rgba(74, 116, 99, 0.1);
+    border-radius: 5px;
+    border-left: 3px solid var(--spruce-green);
+    font-size: 0.9rem;
+}
+```
+
+### Empty State
+```css
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+.empty-state-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.empty-state-description {
+    font-size: 14px;
+    max-width: 400px;
+    margin: 0 auto;
+}
+```
+
+### Data Change Indicators
+```css
+/* Positive change (increase) */
+.positive-change {
+    color: var(--spruce-green);
+}
+
+/* Negative change (decrease) */
+.negative-change {
+    color: var(--warm-coral);
+}
+
+/* Neutral/no change */
+.neutral-change {
+    color: var(--text-secondary);
+}
+```
+
+---
+
+## 7. Chart & Visualization Standards
+
+### Chart Color Palette
+
+Use these colors in order for multi-series charts:
+
+1. `#ad35fa` — Bright Purple (primary series)
+2. `#FF6B5A` — Warm Coral
+3. `#71B2CA` — Sky Blue
+4. `#4A7463` — Spruce Green
+5. `#8B5CF6` — Secondary Purple
+6. `#F6F1EA` — Soft Sand (backgrounds only)
+
+### Chart Typography
+
+```javascript
+// Plotly.js configuration
+const chartLayout = {
+    font: {
+        family: 'IBM Plex Sans, Arial, sans-serif',
+        color: '#222222'
+    },
+    title: {
+        font: {
+            family: 'Inter, Arial, sans-serif',
+            size: 14,
+            weight: 600
+        }
+    },
+    xaxis: {
+        tickfont: {
+            family: 'IBM Plex Sans, Arial, sans-serif',
+            size: 9
+        }
+    },
+    yaxis: {
+        tickfont: {
+            family: 'IBM Plex Sans, Arial, sans-serif',
+            size: 9
+        },
+        title: {
+            font: {
+                family: 'IBM Plex Sans, Arial, sans-serif',
+                size: 10
+            }
+        }
+    },
+    legend: {
+        font: {
+            family: 'IBM Plex Sans, Arial, sans-serif',
+            size: 9
+        }
+    }
+};
+```
+
+### Chart Container Constraints
+
+- **Embedded/iframe mode**: Max width 600px
+- **Full view**: Responsive, use available width
+- **Aspect ratio**: 4:3 (75% padding-bottom) for time series charts
+- **Margins**: Minimal in embedded mode (t:30, b:20, l:40, r:25)
+
+### Chart Grid & Axes
+
+```javascript
+// Grid styling
+gridcolor: 'rgba(232, 233, 235, 0.5)', // Light mode
+// Dark mode: 'rgba(60, 60, 60, 0.5)'
+
+showgrid: true, // Y-axis only
+zeroline: false,
+
+// Axis line
+showline: true,
+linecolor: '#e5e7eb',
+linewidth: 1
+```
+
+### Anomaly Visualization
+
+- **Normal range**: Fill with `rgba(74, 116, 99, 0.15)` (Spruce Green)
+- **Historical data**: Line with `#ad35fa` (Bright Purple)
+- **Recent data**: Same as historical for continuity
+- **Connecting line**: Dotted style between periods
+
+### Hover Labels
+
+```javascript
+hoverlabel: {
+    bgcolor: 'var(--soft-sand, #F6F1EA)',
+    bordercolor: 'var(--spruce-green, #4A7463)',
+    font: {
+        family: 'IBM Plex Sans, Arial, sans-serif',
+        size: 9,
+        color: '#222222'
+    }
+}
+```
+
+---
+
+## 8. Map Standards
+
+### Map Color Scale
+
+For choropleth/district maps, use a purple gradient:
+
+- Lowest: `#f3e8ff` (Light lavender)
+- Low-mid: `#d8b4fe`
+- Mid: `#a855f7`
+- High-mid: `#8B5CF6`
+- Highest: `#6d28d9` (Deep purple)
+
+### Map Legend Styling
+
+```css
+.map-legend {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    padding: 12px;
+    max-width: 250px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.legend-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9em;
+    margin-bottom: 8px;
+}
+```
+
+### Map Tooltips
+
+```css
+.tsf-tooltip {
+    max-width: 300px;
+    font-family: 'IBM Plex Sans', Arial, sans-serif;
+}
+
+.tsf-tooltip-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.tsf-tooltip-key {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+.tsf-tooltip-val {
+    color: var(--text-primary);
+    word-wrap: break-word;
+}
+```
+
+---
+
+## 9. Dark Mode Implementation
+
+### Activation
+
+Apply dark mode via `data-theme="dark"` on the `<html>` or root element.
+
+```javascript
+// Toggle dark mode
+document.documentElement.setAttribute('data-theme', 'dark');
+```
+
+### Key Overrides
+
+```css
+[data-theme="dark"] {
+    /* Backgrounds shift to deep purple tones */
+    --bg-primary: #0f0a1f;
+    --bg-secondary: #15102b;
+    --bg-tertiary: #1f1740;
+    
+    /* Bright purple gets lighter for visibility */
+    --bright-purple: #c44dff;
+    
+    /* Text inverts to white */
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    
+    /* Borders darken */
+    --border-primary: #2a2a2a;
+    --border-secondary: #404040;
+}
+```
+
+### Chart Dark Mode
+
+```javascript
+// Update Plotly charts for dark mode
+function applyDarkModeToChart(plotId) {
+    Plotly.relayout(plotId, {
+        'font.color': '#ffffff',
+        'xaxis.tickfont.color': '#ffffff',
+        'xaxis.linecolor': '#404040',
+        'yaxis.tickfont.color': '#ffffff',
+        'yaxis.gridcolor': 'rgba(60, 60, 60, 0.5)',
+        'paper_bgcolor': 'transparent',
+        'plot_bgcolor': 'transparent'
+    });
+}
+```
+
+### Logo Switching
+
+```css
+[data-theme="dark"] #wordmark-logo,
+[data-theme="dark"] img[src*="wordmark.png"] {
+    content: url('/static/darkwordmark.png');
+}
+```
+
+---
+
+## 10. Responsive Design
+
+### Breakpoints
+
+| Name | Width | Usage |
+|------|-------|-------|
+| Mobile | < 576px | Single column, stacked elements |
+| Tablet | 576px – 768px | Compact layouts |
+| Desktop | 768px – 1200px | Standard three-column layout |
+| Large | > 1200px | Expanded content areas |
+
+### Chart Responsiveness
+
+```css
+@media (max-width: 576px) {
+    body {
+        padding: 10px;
+    }
+    
+    .chart-container {
+        padding: 8px;
+    }
+    
+    #chart {
+        padding-bottom: 70%; /* Taller aspect ratio for mobile */
+    }
+}
+
+@media (max-height: 500px) {
+    #chart {
+        padding-bottom: 60%; /* Compact for small windows */
+    }
+}
+```
+
+### Embedded Mode
+
+```css
+body.embedded-mode {
+    margin: 0;
+    padding: 2px;
+    overflow: hidden;
+}
+
+body.embedded-mode .chart-container {
+    margin: 0;
+    padding: 2px;
+    max-width: 600px;
+}
+```
+
+---
+
+## 11. Accessibility
+
+### Focus States
+
+All interactive elements must have visible focus indicators:
+
+```css
+:focus {
+    outline: 2px solid var(--bright-purple);
+    outline-offset: 2px;
+}
+
+/* For buttons with custom focus */
+button:focus-visible {
+    outline: 2px solid var(--bright-purple);
+    outline-offset: 2px;
+}
+```
+
+### Color Contrast
+
+- Body text on light background: #222222 on #ffffff (15.9:1) ✓
+- Body text on dark background: #ffffff on #0f0a1f (15.2:1) ✓
+- Purple accent on white: #ad35fa on #ffffff (4.6:1) — Use for large text/icons only
+- Error coral on white: #FF6B5A on #ffffff (4.0:1) — Pair with icon or bold text
+
+### Screen Reader Considerations
+
+- Always include descriptive `alt` text for data visualizations
+- Use `aria-label` for icon-only buttons
+- Provide text alternatives for color-coded information
+- Use semantic HTML elements (`<main>`, `<nav>`, `<article>`)
+
+---
+
+## 12. Animation & Transitions
+
+### Standard Transitions
+
+```css
+/* Default transition for interactive elements */
+transition: all 0.2s ease;
+
+/* Slower transitions for panels/modals */
+transition: all 0.3s ease;
+```
+
+### Common Animations
+
+#### Hover Scale
+```css
+button:hover {
+    transform: scale(1.02);
+}
+
+button:active {
+    transform: scale(0.98);
+}
+```
+
+#### Pulse (for notifications)
+```css
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.notification-badge {
+    animation: pulse 2s infinite;
+}
+```
+
+#### Gear Rotation
+```css
+.settings-gear-btn:hover svg {
+    transform: rotate(15deg);
+}
+```
+
+### Theme Transitions
+
+```css
+body {
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+```
+
+---
+
+## 13. Iconography
+
+### Icon Library
+Use **Font Awesome 6** for consistent iconography.
+
+```html
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+```
+
+### Common Icons
+
+| Purpose | Icon | Class |
+|---------|------|-------|
+| Share | ↗ | `fa-share-alt` |
+| Embed | </> | `fa-code` |
+| Expand | ⤢ | `fa-expand` |
+| Settings | ⚙ | `fa-cog` |
+| Close | × | `fa-times` |
+| Info | ⓘ | `fa-info-circle` |
+| Warning | ⚠ | `fa-exclamation-triangle` |
+| Success | ✓ | `fa-check` |
+| Error | ⊗ | `fa-times-circle` |
+| External link | ↗ | `fa-external-link-alt` |
+| Copy | ⎘ | `fa-copy` |
+| Download | ↓ | `fa-download` |
+| Refresh | ↻ | `fa-sync-alt` |
+| Chart | 📊 | `fa-chart-bar` |
+| Map | 🗺 | `fa-map` |
+
+### Icon Sizing
+
+- Standard: 16px (1rem)
+- Large: 20px (1.25rem) 
+- Header: 24px (1.5rem)
+- Hero: 48px (3rem)
+
+---
+
+## 14. Writing Style
+
+### Tone Guidelines
+
+- **Be direct**: "12% increase in theft reports" not "There appears to be a notable uptick"
+- **Be neutral**: Present data, not opinions
+- **Be precise**: Use exact numbers when available
+- **Be accessible**: Avoid jargon; explain technical terms when necessary
+- **Be humble**: Acknowledge data limitations and uncertainty
+
+### Formatting Conventions
+
+- **Numbers**: Use commas for thousands (1,234,567)
+- **Percentages**: One decimal place for precision (12.3%)
+- **Dates**: "January 2024" or "Jan 2024" (month-year format)
+- **Times**: 12-hour format with am/pm
+- **Currency**: $1,234,567 (with commas)
+
+### Microcopy Examples
+
+| State | Message |
+|-------|---------|
+| Loading | "Loading chart data..." |
+| Error | "Unable to load data. Please try again." |
+| No data | "No data available for this period." |
+| Success | "Data updated successfully." |
+| Confirmation | "Are you sure you want to delete this?" |
+
+---
+
+## 15. File Naming & Asset Organization
+
+### File Naming Convention
+- Use lowercase with hyphens: `time-series-chart.html`
+- Be descriptive: `anomaly-detection-results.json`
+- Include version for assets: `logo-v2.svg`
+
+### Static Asset Structure
+```
+/static/
+├── css/
+│   ├── darkmode.css
+│   ├── chart-tabs.css
+│   └── conversation-renderer.css
+├── js/
+│   ├── darkmode.js
+│   └── iframe-darkmode.js
+├── data/
+│   └── Style Guide
+├── images/
+│   ├── wordmark.png
+│   ├── darkwordmark.png
+│   ├── favicon.ico
+│   └── favicon.png
+└── fonts/ (if self-hosted)
+```
+
+---
+
+## 16. Implementation Checklist
+
+When building new components or templates, verify:
+
+- [ ] Uses CSS custom properties for colors (not hardcoded values)
+- [ ] Includes dark mode support via `[data-theme="dark"]` overrides
+- [ ] Uses correct font stack (Inter for headings, IBM Plex Sans for body)
+- [ ] Follows spacing system (multiples of 4px)
+- [ ] Has visible focus states for accessibility
+- [ ] Includes loading, error, and empty states
+- [ ] Uses semantic HTML elements
+- [ ] Is responsive across breakpoints
+- [ ] Charts follow Plotly styling conventions
+- [ ] Links/accents use brand purple (`#ad35fa`)
+- [ ] Errors/warnings use warm coral (`#FF6B5A`)
+- [ ] Success/positive indicators use spruce green (`#4A7463`)
+
+---
+
+## Appendix A: Complete CSS Variables Reference
+
+```css
+:root {
+    /* Brand Colors */
+    --bright-purple: #ad35fa;
+    --secondary-purple: #8B5CF6;
+    --accent-hover: #9625e0;
+    
+    /* Semantic Colors */
+    --ink-black: #222222;
+    --warm-coral: #FF6B5A;
+    --cloud-gray: #E8E9EB;
+    --soft-sand: #F6F1EA;
+    --sky-blue: #71B2CA;
+    --sky-tint: #B8D8E3;
+    --spruce-green: #4A7463;
+    
+    /* Backgrounds */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #ffffff;
+    
+    /* Text */
+    --text-primary: #222222;
+    --text-secondary: #666666;
+    --text-muted: #999999;
+    
+    /* Borders */
+    --border-primary: #E8E9EB;
+    --border-secondary: #f0f0f0;
+    
+    /* Shadows */
+    --shadow-light: rgba(0, 0, 0, 0.1);
+    --shadow-medium: rgba(0, 0, 0, 0.15);
+    
+    /* Layout */
+    --explainer-width: 460px;
+    
+    /* Spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+}
+
+[data-theme="dark"] {
+    --bright-purple: #c44dff;
+    --secondary-purple: #a78bfa;
+    --accent-hover: #ad35fa;
+    
+    --ink-black: #ffffff;
+    --cloud-gray: #2a2a2a;
+    --soft-sand: #1a1a1a;
+    --sky-tint: #1e3a47;
+    
+    --bg-primary: #0f0a1f;
+    --bg-secondary: #15102b;
+    --bg-tertiary: #1f1740;
+    
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --text-muted: #888888;
+    
+    --border-primary: #2a2a2a;
+    --border-secondary: #404040;
+    
+    --shadow-light: rgba(0, 0, 0, 0.3);
+    --shadow-medium: rgba(0, 0, 0, 0.5);
+}
+```
+
+---
+
+*This style guide is a living document. Update it as the design system evolves.*
+
+**Prepared for Transparent SF | December 2024**
+

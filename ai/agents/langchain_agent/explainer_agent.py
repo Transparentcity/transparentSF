@@ -830,13 +830,7 @@ class LangChainExplainerAgent:
             # If research_context not provided but we have district, try to get it
             if not research_context and district is not None:
                 try:
-                    import sys
-                    import os
-                    transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), '..', 'transparentcity-platform', 'src')
-                    if transparentcity_path not in sys.path:
-                        sys.path.insert(0, transparentcity_path)
-                    
-                    from transparentcity.services import get_research_service
+                    from services.research_service import get_research_service
                     research_service = get_research_service()
                     
                     research_context = research_service.get_research_context(
@@ -1107,6 +1101,44 @@ class LangChainExplainerAgent:
                     "timestamp": getattr(message, 'timestamp', None)
                 })
         return history
+
+    def restore_conversation_history(self, history: List[Dict[str, Any]]):
+        """
+        Restore conversation history from a list of message dictionaries.
+        
+        This method is used to restore session state from Redis storage.
+        
+        Args:
+            history: List of message dictionaries with 'role' and 'content' keys
+        """
+        if not history:
+            self.logger.debug("No conversation history to restore")
+            return
+        
+        self.logger.info(f"Restoring {len(history)} messages to conversation history")
+        
+        # Clear existing messages
+        self.messages.clear()
+        
+        # Also clear memory if it exists
+        if hasattr(self, 'memory') and hasattr(self.memory, 'chat_memory'):
+            self.memory.chat_memory.clear()
+        
+        # Restore messages
+        for msg in history:
+            role = msg.get('role', '')
+            content = msg.get('content', '')
+            
+            if role == 'user':
+                self.messages.append(HumanMessage(content=content))
+                if hasattr(self, 'memory') and hasattr(self.memory, 'chat_memory'):
+                    self.memory.chat_memory.add_user_message(content)
+            elif role == 'assistant':
+                self.messages.append(AIMessage(content=content))
+                if hasattr(self, 'memory') and hasattr(self.memory, 'chat_memory'):
+                    self.memory.chat_memory.add_ai_message(content)
+        
+        self.logger.info(f"Restored {len(self.messages)} messages to conversation history")
 
     def explain_change_sync(self, prompt: str, metric_details: Dict[str, Any], session_id: Optional[str] = None) -> Dict[str, Any]:
         """Synchronously explain a change using the LangChain agent."""
@@ -2048,7 +2080,6 @@ class LangChainExplainerAgent:
                 # Convert Unix timestamp to ISO format for proper sorting
                 if isinstance(tool_call.start_time, (int, float)):
                     # Convert Unix timestamp to ISO format
-                    from datetime import datetime
                     tool_timestamp = datetime.fromtimestamp(tool_call.start_time).isoformat()
                 elif hasattr(tool_call.start_time, 'isoformat'):
                     tool_timestamp = tool_call.start_time.isoformat()

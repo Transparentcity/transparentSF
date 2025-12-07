@@ -1854,16 +1854,10 @@ This requirement is non-negotiable and is essential for providing accurate infor
         
         direction = "increased" if float(data.get("delta", 0)) > 0 else "decreased"
         
-        # NEW: Create or get research agenda for this metric analysis
+        # Create or get research agenda for this metric analysis
         research_context = None
         try:
-            import sys
-            import os
-            transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'transparentcity-platform', 'src')
-            if transparentcity_path not in sys.path:
-                sys.path.insert(0, transparentcity_path)
-            
-            from transparentcity.services import get_research_service, ResearchType
+            from services.research_service import get_research_service, ResearchType
             
             research_service = get_research_service()
             

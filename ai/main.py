@@ -215,6 +215,7 @@ from routes.explainer_chat import router as explainer_chat_router, set_templates
 from routes.monthly_reports import router as monthly_reports_router
 from routes.charts import router as charts_router, set_templates as set_charts_templates
 from routes.writeups import router as writeups_router, set_templates as set_writeups_templates
+from routes.research import router as research_router, set_templates as set_research_templates
 from routes.legal_code import router as legal_code_router, set_templates as set_legal_code_templates
 from routes.settings import router as settings_router, set_templates as set_settings_templates
 from routes.vacancy_analysis import router as vacancy_analysis_router, set_templates as set_vacancy_analysis_templates
@@ -955,6 +956,11 @@ logger.debug("Included charts router")
 set_writeups_templates(templates)
 app.include_router(writeups_router, tags=["writeups"])
 logger.debug("Included write-ups router")
+
+# Mount research router
+set_research_templates(templates)
+app.include_router(research_router, tags=["research"])
+logger.debug("Included research router")
 
 # Mount legal code router
 set_legal_code_templates(templates)

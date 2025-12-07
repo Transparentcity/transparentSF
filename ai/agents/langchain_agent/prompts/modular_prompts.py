@@ -59,18 +59,12 @@ class ModularPromptBuilder:
             if metric_context:  # Only add if we got a valid context
                 prompt_parts.append(metric_context)
         
-        # NEW: Add research context if provided
+        # Add research context if provided
         research_context_str = research_context
         if not research_context_str and (city_id is not None or district is not None):
             # Try to fetch research context from service
             try:
-                import sys
-                import os
-                transparentcity_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), 'transparentcity-platform', 'src')
-                if transparentcity_path not in sys.path:
-                    sys.path.insert(0, transparentcity_path)
-                
-                from transparentcity.services import get_research_service
+                from services.research_service import get_research_service
                 research_service = get_research_service()
                 research_context_str = research_service.get_research_context(
                     city_id=city_id or 1,  # Default to San Francisco
@@ -78,7 +72,7 @@ class ModularPromptBuilder:
                     max_agendas=3
                 )
             except Exception as e:
-                self.logger.warning(f"Failed to fetch research context: {e}")
+                self.logger.debug(f"Research context not available: {e}")
         
         # Add research context section if we have research context
         if research_context_str:

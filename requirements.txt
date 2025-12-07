@@ -39,6 +39,9 @@ langchain-xai>=0.1.0
 # Data serialization
 dataclasses-json>=0.6.0
 
+# Redis session management
+redis>=4.5.4
+
 # Google AI packages (handled by langchain-google-genai)
 
 # Google Cloud Storage

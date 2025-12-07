@@ -2465,7 +2465,7 @@
             return content.replace(chartRegex, (match, chartType, params) => {
                 const paramParts = params.split(':');
                 
-                if (chartType === 'anomaly') {
+                if (chartType === 'anomaly' || chartType === 'anomaly_id' || chartType === 'anomalyid') {
                     const anomalyId = paramParts[0];
                     return `<div class="chart-container" style="margin: 4px 0;">
                         <iframe src="/anomaly-analyzer/anomaly-chart?id=${anomalyId}" 
@@ -2473,7 +2473,7 @@
                                 frameborder="0" scrolling="no">
                         </iframe>
                     </div>`;
-                } else if (chartType === 'time_series' || chartType === 'time_series_id') {
+                } else if (chartType === 'time_series' || chartType === 'time_series_id' || chartType === 'timeseries' || chartType === 'timeseriesid') {
                     if (paramParts.length === 1) {
                         const chartId = paramParts[0];
                         return `<div class="chart-container" style="margin: 4px 0;">

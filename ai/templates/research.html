@@ -1,0 +1,2290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Research - Transparent SF</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="manifest" href="/static/site.webmanifest">
+    
+    <!-- Google Analytics Tracking -->
+    {% include 'ga_tracking.html' %}
+    
+    <!-- Markdown processing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Dark Mode CSS -->
+    <link rel="stylesheet" href="/static/darkmode.css">
+    <!-- Conversation Renderer -->
+    <link rel="stylesheet" href="/static/conversation-renderer.css">
+    <script src="/static/js/conversation-renderer.js"></script>
+    <!-- Inter and IBM Plex Sans fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 400px;
+            --bright-purple: #ad35fa;
+            --accent-hover: #9625e0;
+            --secondary-purple: #8B5CF6;
+            --warm-coral: #FF6B5A;
+            --spruce-green: #4A7463;
+            --cloud-gray: #E8E9EB;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-tertiary: #ffffff;
+            --text-primary: #222222;
+            --text-secondary: #666666;
+            --text-muted: #999999;
+            --border-primary: #E8E9EB;
+        }
+
+        [data-theme="dark"] {
+            --bright-purple: #c44dff;
+            --accent-hover: #ad35fa;
+            --secondary-purple: #a78bfa;
+            --bg-primary: #0f0a1f;
+            --bg-secondary: #15102b;
+            --bg-tertiary: #1f1740;
+            --text-primary: #ffffff;
+            --text-secondary: #cccccc;
+            --text-muted: #888888;
+            --border-primary: #2a2a2a;
+            --cloud-gray: #2a2a2a;
+        }
+
+        body { 
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            margin: 0;
+            padding: 0;
+            font-size: 14px;
+            color: var(--text-primary);
+            background-color: var(--bg-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        .main-container {
+            display: flex;
+            height: 100vh;
+            flex-direction: column;
+        }
+        
+        /* Content Area */
+        .content-area {
+            display: flex;
+            height: 100vh;
+        }
+        
+        /* Left Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-primary);
+            border-right: 1px solid var(--border-primary);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+        
+        .sidebar-header h2 {
+            margin: 0 0 12px 0;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 18px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .sidebar-header h2::before {
+            content: "🔬";
+        }
+        
+        button.secondary {
+            background-color: var(--bg-secondary);
+            color: var(--bright-purple);
+            border: 1px solid var(--bright-purple);
+        }
+        
+        button.secondary:hover {
+            background-color: var(--bg-tertiary);
+        }
+        
+        .new-research-btn {
+            width: 100%;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .sessions-list {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 10px;
+            min-height: 0;
+            position: relative;
+        }
+        
+        .sessions-list-loading {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+        }
+        
+        .sessions-list-loading.active {
+            display: block;
+        }
+        
+        .sessions-list-loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--bg-tertiary);
+            border-top: 4px solid var(--bright-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+        
+        .session-section {
+            margin-bottom: 20px;
+        }
+        
+        .session-section-header {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin: 0 0 8px 12px;
+        }
+        
+        /* Dropdown menu styles */
+        .session-menu {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .session-menu-btn {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .session-menu-btn:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--bright-purple);
+        }
+        
+        .session-menu-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-width: 160px;
+            z-index: 1000;
+            display: none;
+            overflow: hidden;
+        }
+        
+        .session-menu-dropdown.show {
+            display: block;
+        }
+        
+        .session-menu-item {
+            display: block;
+            width: 100%;
+            padding: 8px 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            text-align: left;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s ease;
+            text-decoration: none;
+        }
+        
+        .session-menu-item:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .session-menu-item.danger {
+            color: var(--warm-coral);
+        }
+        
+        .session-menu-item.danger:hover {
+            background: rgba(255, 107, 90, 0.1);
+        }
+        
+        .session-actions {
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .session-item:hover .session-actions {
+            opacity: 1;
+        }
+        
+        .session-item {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            margin-bottom: 10px;
+            background: var(--bg-secondary);
+            border: none;
+            border-radius: 8px;
+            color: var(--text-primary);
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 13px;
+            font-family: 'IBM Plex Sans', sans-serif;
+            border-left: 3px solid transparent;
+            box-sizing: border-box;
+        }
+        
+        .session-item:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .session-item.active {
+            background: var(--bg-tertiary);
+            border-left-color: var(--bright-purple);
+        }
+        
+        .session-item.running {
+            border-left-color: #ffc107;
+        }
+        
+        .session-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            line-height: 1.3;
+        }
+        
+        .session-title-text {
+            flex: 1;
+        }
+        
+        .session-prompt-preview {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            line-height: 1.4;
+            opacity: 0.8;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 100%;
+        }
+        
+        .session-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+        
+        .session-status {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .session-status.draft {
+            background: rgba(150, 150, 150, 0.2);
+            color: var(--text-secondary);
+        }
+        
+        .session-status.agenda_ready {
+            background: rgba(173, 53, 250, 0.15);
+            color: var(--bright-purple);
+        }
+        
+        .session-status.running {
+            background: rgba(255, 193, 7, 0.2);
+            color: #d9a300;
+        }
+        
+        .session-status.synthesizing {
+            background: rgba(113, 178, 202, 0.2);
+            color: #4A90A4;
+        }
+        
+        .session-status.completed {
+            background: rgba(74, 116, 99, 0.2);
+            color: var(--spruce-green);
+        }
+        
+        .session-status.failed {
+            background: rgba(255, 107, 90, 0.15);
+            color: var(--warm-coral);
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 400px;
+        }
+        
+        /* Prompt Interface */
+        .prompt-interface {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            justify-content: flex-start;
+            padding-top: 15vh;
+        }
+        
+        .welcome-message {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+        }
+        
+        .welcome-message h3 {
+            margin: 0 0 10px 0;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+        }
+        
+        .welcome-message p {
+            max-width: 500px;
+            margin: 0 auto 20px;
+            line-height: 1.5;
+        }
+        
+        /* Content Display */
+        .content-display {
+            height: 100%;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        /* Tab System */
+        .tab-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .tab-header {
+            display: flex;
+            border-bottom: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+        }
+        
+        .tab-button {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .tab-button:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+        
+        .tab-button.active {
+            color: var(--bright-purple);
+            border-bottom-color: var(--bright-purple);
+            background: var(--bg-primary);
+        }
+        
+        .tab-content {
+            flex: 1;
+            display: none;
+            overflow: hidden;
+        }
+        
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Report Content */
+        .report-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        
+        .report-header {
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+        
+        .report-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+            color: var(--text-primary);
+        }
+        
+        .report-meta {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        
+        /* Agenda Editor */
+        .agenda-section {
+            margin-bottom: 24px;
+        }
+        
+        .agenda-section h4 {
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 0 0 12px 0;
+            color: var(--text-primary);
+        }
+        
+        .agenda-json-input {
+            width: 100%;
+            min-height: 200px;
+            padding: 12px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            resize: vertical;
+        }
+        
+        .agenda-json-input:focus {
+            outline: none;
+            border-color: var(--bright-purple);
+            box-shadow: 0 0 0 3px rgba(173, 53, 250, 0.1);
+        }
+        
+        .agenda-preview {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        
+        .agenda-item {
+            padding: 12px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 3px solid var(--bright-purple);
+        }
+        
+        .agenda-item-question {
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        
+        .agenda-item-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        /* Button Actions */
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-primary {
+            background: var(--bright-purple);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary:disabled {
+            background: var(--cloud-gray);
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: var(--bright-purple);
+            border: 1px solid var(--bright-purple);
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(173, 53, 250, 0.1);
+        }
+        
+        /* Input Area */
+        .input-area {
+            padding: 20px;
+            background: var(--bg-primary);
+        }
+        
+        .input-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-primary);
+            overflow: hidden;
+        }
+        
+        .model-selector {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-primary);
+            background: var(--bg-tertiary);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .model-selector label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        .model-selector select {
+            padding: 6px 10px;
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+        
+        .prompt-input {
+            display: flex;
+            align-items: flex-end;
+            gap: 12px;
+            padding: 16px;
+        }
+        
+        .prompt-textarea {
+            flex: 1;
+            min-height: 60px;
+            max-height: 200px;
+            padding: 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-primary);
+            font-family: 'IBM Plex Sans', sans-serif;
+            font-size: 14px;
+            resize: none;
+            outline: none;
+        }
+        
+        .prompt-textarea::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .send-button {
+            background: var(--bright-purple);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .send-button:hover {
+            background: var(--accent-hover);
+        }
+        
+        .send-button:disabled {
+            background: var(--cloud-gray);
+            cursor: not-allowed;
+        }
+        
+        /* Progress Display */
+        .progress-container {
+            margin: 16px 0;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: var(--cloud-gray);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--bright-purple);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        /* Research Items List */
+        .research-items-list {
+            margin-top: 16px;
+        }
+        
+        .research-item-card {
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 3px solid var(--border-primary);
+        }
+        
+        .research-item-card.pending {
+            border-left-color: var(--cloud-gray);
+        }
+        
+        .research-item-card.in_progress {
+            border-left-color: #ffc107;
+            animation: pulse-border 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-border {
+            0%, 100% { border-left-color: #ffc107; }
+            50% { border-left-color: #ffdb4d; }
+        }
+        
+        .research-item-loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #ffc107;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        
+        .research-item-loading .spinner-small {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 193, 7, 0.3);
+            border-top-color: #ffc107;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .research-item-card.completed {
+            border-left-color: var(--spruce-green);
+        }
+        
+        .research-item-card.failed {
+            border-left-color: var(--warm-coral);
+        }
+        
+        .research-item-question {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .research-item-result {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-primary);
+        }
+        
+        .research-item-summary {
+            font-size: 14px;
+            color: var(--text-primary);
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            border-left: 3px solid var(--spruce-green);
+        }
+        
+        .research-item-summary strong {
+            color: var(--spruce-green);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: block;
+            margin-bottom: 6px;
+        }
+        
+        .research-item-details {
+            margin-top: 8px;
+        }
+        
+        .research-item-toggle {
+            font-size: 12px;
+            color: var(--brand-blue);
+            cursor: pointer;
+            margin-top: 8px;
+            display: inline-block;
+        }
+        
+        .research-item-toggle:hover {
+            text-decoration: underline;
+        }
+        
+        .research-item-full {
+            display: none;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-primary);
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        .research-item-full.expanded {
+            display: block;
+        }
+        
+        /* Iteration history display */
+        .iteration-history {
+            margin-top: 12px;
+            border-top: 1px solid var(--border-primary);
+            padding-top: 12px;
+        }
+        
+        .iteration-history-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .iteration-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            background: var(--bright-purple);
+            color: white;
+        }
+        
+        .iteration-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            border-left: 3px solid var(--border-primary);
+        }
+        
+        .iteration-item.initial {
+            border-left-color: var(--brand-blue);
+        }
+        
+        .iteration-item.follow_up {
+            border-left-color: var(--bright-purple);
+        }
+        
+        .iteration-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .iteration-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .iteration-label.initial {
+            color: var(--brand-blue);
+        }
+        
+        .iteration-label.follow_up {
+            color: var(--bright-purple);
+        }
+        
+        .iteration-status {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        
+        .iteration-status.complete {
+            background: rgba(74, 116, 99, 0.2);
+            color: var(--spruce-green);
+        }
+        
+        .iteration-status.needs_followup {
+            background: rgba(173, 53, 250, 0.15);
+            color: var(--bright-purple);
+        }
+        
+        .iteration-question {
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        
+        .iteration-reason {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+        
+        .follow-up-question {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: rgba(173, 53, 250, 0.1);
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        
+        .follow-up-question strong {
+            color: var(--bright-purple);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Lazy loading chart containers */
+        .lazy-chart-container {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .lazy-chart-container.loaded .chart-loading-placeholder {
+            display: none !important;
+        }
+        
+        .lazy-chart-container.loaded iframe {
+            display: block !important;
+        }
+        
+        .lazy-chart-container.error .chart-loading-placeholder {
+            background: rgba(255, 107, 90, 0.1);
+        }
+        
+        .lazy-chart-container.error .chart-loading-placeholder span {
+            color: var(--warm-coral);
+        }
+        
+        .lazy-chart-container.queued .chart-loading-placeholder span::after {
+            content: ' (queued)';
+            font-size: 11px;
+            opacity: 0.7;
+        }
+        
+        /* Final Report Display */
+        .final-report {
+            line-height: 1.6;
+        }
+        
+        .final-report h1, .final-report h2, .final-report h3 {
+            font-family: 'Inter', sans-serif;
+            color: var(--text-primary);
+        }
+        
+        .final-report p {
+            margin-bottom: 12px;
+        }
+        
+        .final-report ul, .final-report ol {
+            margin-bottom: 12px;
+            padding-left: 24px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            :root {
+                --sidebar-width: 100%;
+            }
+            
+            .content-area {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 50vh;
+                border-right: none;
+                border-bottom: 1px solid var(--border-primary);
+            }
+            
+            .main-content {
+                min-width: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="content-area">
+            <!-- Left Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Research</h2>
+                    <button id="newResearchBtn" class="new-research-btn secondary">+ New Research</button>
+                </div>
+                <div class="sessions-list" id="sessionsList">
+                    <div class="sessions-list-loading active" id="sessionsLoading">
+                        <div class="spinner"></div>
+                        <div style="color: var(--text-secondary); font-size: 13px;">Loading research reports...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Prompt Interface (shown when creating new research) -->
+                <div class="prompt-interface" id="promptInterface">
+                    <div class="welcome-message">
+                        <h3>Start New Research</h3>
+                        <p>Ask a question about San Francisco and let the AI research it for you. Examples:</p>
+                        <ul style="text-align: left; max-width: 500px; margin: 0 auto 20px; line-height: 1.8;">
+                            <li>"Is the Mission district safe?"</li>
+                            <li>"Explain the recent increase in scooters blocking sidewalks in District 5"</li>
+                            <li>"What should we write about in our November newsletter?"</li>
+                            <li>"Are building permits taking longer to approve?"</li>
+                        </ul>
+                    </div>
+                    <div class="input-area">
+                        <div class="input-container">
+                            <div class="model-selector">
+                                <label>Model:</label>
+                                <select id="modelSelect">
+                                    <option value="">Loading models...</option>
+                                </select>
+                                <label>District:</label>
+                                <select id="districtSelect">
+                                    <option value="0">Citywide</option>
+                                    <option value="1">District 1</option>
+                                    <option value="2">District 2</option>
+                                    <option value="3">District 3</option>
+                                    <option value="4">District 4</option>
+                                    <option value="5">District 5</option>
+                                    <option value="6">District 6</option>
+                                    <option value="7">District 7</option>
+                                    <option value="8">District 8</option>
+                                    <option value="9">District 9</option>
+                                    <option value="10">District 10</option>
+                                    <option value="11">District 11</option>
+                                </select>
+                            </div>
+                            <div class="prompt-input">
+                                <textarea id="promptTextarea" class="prompt-textarea" placeholder="What would you like to research about San Francisco?"></textarea>
+                                <button id="sendButton" class="send-button">Research</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Content Display (shown when viewing research) -->
+                <div class="content-display" id="contentDisplay" style="display: none;">
+                    <div class="tab-container">
+                        <div class="tab-header">
+                            <button class="tab-button active" data-tab="report">Report</button>
+                            <button class="tab-button" data-tab="agenda">Agenda</button>
+                            <button class="tab-button" data-tab="items">Research Items</button>
+                        </div>
+                        
+                        <!-- Report Tab -->
+                        <div class="tab-content active" id="reportTab">
+                            <div class="report-content">
+                                <div class="report-header">
+                                    <h1 class="report-title" id="reportTitle">Research Report</h1>
+                                    <div class="report-meta" id="reportMeta">
+                                        <span id="reportStatus" class="session-status draft">Draft</span>
+                                        <span id="reportDate"></span>
+                                    </div>
+                                </div>
+                                <div id="reportBody" class="final-report">
+                                    <p style="color: var(--text-secondary);">Generate the research agenda and run the research to see results here.</p>
+                                </div>
+                                
+                                <div class="action-buttons" id="reportActions">
+                                    <button class="btn-primary" id="generateAgendaBtn">Generate Agenda</button>
+                                    <button class="btn-primary" id="runResearchBtn" style="display: none;">Run Research</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Agenda Tab -->
+                        <div class="tab-content" id="agendaTab">
+                            <div class="report-content">
+                                <div class="agenda-section">
+                                    <h4>Research Agenda (JSON)</h4>
+                                    <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 12px;">
+                                        The AI will generate an agenda automatically, or you can paste your own JSON here.
+                                    </p>
+                                    <textarea id="agendaJsonInput" class="agenda-json-input" placeholder='{
+    "narrative_thread": "Investigating safety in the Mission District",
+    "research_questions": [
+        "What are the crime trends in the Mission?",
+        "How does this compare to other districts?"
+    ],
+    "items": [
+        {
+            "metric_id": "1",
+            "metric_name": "Violent Crime Incidents",
+            "research_question": "What is driving the crime rate?",
+            "priority": 1
+        }
+    ]
+}'></textarea>
+                                    <div class="action-buttons">
+                                        <button class="btn-secondary" id="setAgendaBtn">Set Agenda Manually</button>
+                                        <button class="btn-primary" id="generateAgendaBtn2">Generate with AI</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="agenda-section" id="agendaPreview" style="display: none;">
+                                    <h4>Agenda Preview</h4>
+                                    <div id="agendaPreviewContent" class="agenda-preview">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Research Items Tab -->
+                        <div class="tab-content" id="itemsTab">
+                            <div class="report-content">
+                                <h4>Research Items</h4>
+                                <div id="progressContainer" class="progress-container" style="display: none;">
+                                    <div class="progress-bar">
+                                        <div class="progress-bar-fill" id="progressFill" style="width: 0%;"></div>
+                                    </div>
+                                    <div class="progress-text" id="progressText">0% complete</div>
+                                </div>
+                                <div id="researchItemsList" class="research-items-list">
+                                    <p style="color: var(--text-secondary);">No research items yet. Generate or set an agenda first.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dark mode script -->
+    <script src="/static/darkmode.js"></script>
+    
+    <script>
+        // State
+        let currentReportId = null;
+        let currentReport = null;
+        let reports = new Map();
+        let isGenerating = false;
+        let pollingIntervals = {};
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAvailableModels();
+            loadReports();
+            
+            // Event listeners
+            document.getElementById('newResearchBtn').addEventListener('click', showNewResearch);
+            document.getElementById('sendButton').addEventListener('click', handleCreateResearch);
+            document.getElementById('promptTextarea').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleCreateResearch();
+                }
+            });
+            
+            document.getElementById('generateAgendaBtn').addEventListener('click', generateAgenda);
+            document.getElementById('generateAgendaBtn2').addEventListener('click', generateAgenda);
+            document.getElementById('setAgendaBtn').addEventListener('click', setAgendaManually);
+            document.getElementById('runResearchBtn').addEventListener('click', runResearch);
+            
+            // Tab switching
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const tabId = this.dataset.tab;
+                    switchTab(tabId);
+                });
+            });
+            
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.session-menu')) {
+                    document.querySelectorAll('.session-menu-dropdown').forEach(d => d.classList.remove('show'));
+                }
+            });
+        });
+        
+        // Load available models
+        async function loadAvailableModels() {
+            try {
+                const response = await fetch('/backend/available-models');
+                const data = await response.json();
+                
+                const modelSelect = document.getElementById('modelSelect');
+                if (!modelSelect) {
+                    console.warn('Model select element not found');
+                    return;
+                }
+                modelSelect.innerHTML = '';
+                
+                if (data.status === 'success' && data.models && data.models.length > 0) {
+                    // Add default option
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = `Default (${data.default_model || 'gpt-4o'})`;
+                    modelSelect.appendChild(defaultOption);
+                    
+                    // Group models by provider
+                    const modelsByProvider = {};
+                    data.models.forEach(model => {
+                        if (!modelsByProvider[model.provider]) {
+                            modelsByProvider[model.provider] = [];
+                        }
+                        modelsByProvider[model.provider].push(model);
+                    });
+                    
+                    // Add models by provider
+                    Object.keys(modelsByProvider).forEach(provider => {
+                        const optgroup = document.createElement('optgroup');
+                        optgroup.label = provider;
+                        
+                        modelsByProvider[provider].forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.key || model.name;
+                            option.textContent = model.display_name || model.name;
+                            optgroup.appendChild(option);
+                        });
+                        
+                        modelSelect.appendChild(optgroup);
+                    });
+                } else {
+                    // Fallback if no models returned
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = 'Default Model';
+                    modelSelect.appendChild(defaultOption);
+                }
+            } catch (error) {
+                console.error('Error loading models:', error);
+                // Fallback on error
+                const modelSelect = document.getElementById('modelSelect');
+                if (modelSelect) {
+                    modelSelect.innerHTML = '<option value="">Default Model</option>';
+                }
+            }
+        }
+        
+        // Load research reports
+        async function loadReports() {
+            try {
+                const response = await fetch('/api/research/list');
+                const data = await response.json();
+                
+                const loadingEl = document.getElementById('sessionsLoading');
+                if (loadingEl) loadingEl.classList.remove('active');
+                
+                if (data.status === 'success') {
+                    reports.clear();
+                    data.reports.forEach(report => {
+                        reports.set(report.id, report);
+                    });
+                    renderReportsList();
+                }
+            } catch (error) {
+                console.error('Error loading reports:', error);
+                const loadingEl = document.getElementById('sessionsLoading');
+                if (loadingEl) {
+                    loadingEl.innerHTML = '<div style="color: var(--warm-coral);">Error loading reports</div>';
+                }
+            }
+        }
+        
+        // Render reports list
+        function renderReportsList() {
+            const container = document.getElementById('sessionsList');
+            const loading = document.getElementById('sessionsLoading');
+            
+            if (!container) {
+                console.warn('Sessions list container not found');
+                return;
+            }
+            
+            if (reports.size === 0) {
+                container.innerHTML = `
+                    <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+                        No research reports yet.<br>Start your first research!
+                    </div>
+                `;
+                return;
+            }
+            
+            // Group by date
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            const groups = {
+                today: [],
+                yesterday: [],
+                thisWeek: [],
+                older: []
+            };
+            
+            reports.forEach((report, id) => {
+                const date = new Date(report.created_at);
+                if (date.toDateString() === today.toDateString()) {
+                    groups.today.push(report);
+                } else if (date.toDateString() === yesterday.toDateString()) {
+                    groups.yesterday.push(report);
+                } else if ((today - date) / (1000 * 60 * 60 * 24) < 7) {
+                    groups.thisWeek.push(report);
+                } else {
+                    groups.older.push(report);
+                }
+            });
+            
+            let html = '';
+            
+            const renderGroup = (title, items) => {
+                if (items.length === 0) return '';
+                return `
+                    <div class="session-section">
+                        <div class="session-section-header">${title}</div>
+                        ${items.map(report => renderReportItem(report)).join('')}
+                    </div>
+                `;
+            };
+            
+            html += renderGroup('Today', groups.today);
+            html += renderGroup('Yesterday', groups.yesterday);
+            html += renderGroup('This Week', groups.thisWeek);
+            html += renderGroup('Older', groups.older);
+            
+            container.innerHTML = html;
+        }
+        
+        // Render single report item
+        function renderReportItem(report) {
+            const isActive = currentReportId === report.id;
+            const statusClass = report.status.replace('_', '-');
+            const promptPreview = report.original_prompt ? 
+                (report.original_prompt.length > 60 ? report.original_prompt.substring(0, 57) + '...' : report.original_prompt) : '';
+            
+            return `
+                <div class="session-item ${isActive ? 'active' : ''} ${report.status === 'running' ? 'running' : ''}" 
+                     onclick="selectReport(${report.id})">
+                    <div class="session-title">
+                        <span class="session-title-text">${escapeHtml(report.title)}</span>
+                        <div class="session-actions">
+                            <div class="session-menu">
+                                <button class="session-menu-btn" onclick="event.stopPropagation(); toggleMenu(this)">⋮</button>
+                                <div class="session-menu-dropdown">
+                                    <button class="session-menu-item" onclick="copyResearchUrl(${report.id}, this)">📋 Copy Link</button>
+                                    ${report.status === 'completed' ? `
+                                        <button class="session-menu-item" onclick="viewResearchDetails(${report.id})">👁 View Details</button>
+                                    ` : ''}
+                                    <button class="session-menu-item danger" onclick="deleteResearch(${report.id})">🗑 Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    ${promptPreview ? `<div class="session-prompt-preview">${escapeHtml(promptPreview)}</div>` : ''}
+                    <div class="session-meta">
+                        <span class="session-status ${statusClass}">${formatStatus(report.status)}</span>
+                        <span>${formatDate(report.created_at)}</span>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Toggle dropdown menu
+        function toggleMenu(btn) {
+            const dropdown = btn.nextElementSibling;
+            document.querySelectorAll('.session-menu-dropdown').forEach(d => {
+                if (d !== dropdown) d.classList.remove('show');
+            });
+            dropdown.classList.toggle('show');
+        }
+        
+        // Select a report
+        async function selectReport(reportId) {
+            currentReportId = reportId;
+            renderReportsList();
+            
+            try {
+                const response = await fetch(`/api/research/${reportId}`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    currentReport = data.report;
+                    displayReport(currentReport);
+                }
+            } catch (error) {
+                console.error('Error loading report:', error);
+            }
+        }
+        
+        // Display report
+        function displayReport(report) {
+            const promptInterface = document.getElementById('promptInterface');
+            const contentDisplay = document.getElementById('contentDisplay');
+            const reportTitle = document.getElementById('reportTitle');
+            const reportStatus = document.getElementById('reportStatus');
+            const reportDate = document.getElementById('reportDate');
+            const generateBtn = document.getElementById('generateAgendaBtn');
+            const runBtn = document.getElementById('runResearchBtn');
+            const agendaJsonInput = document.getElementById('agendaJsonInput');
+            const reportBody = document.getElementById('reportBody');
+            
+            // Show content display, hide prompt interface
+            if (promptInterface) promptInterface.style.display = 'none';
+            if (contentDisplay) contentDisplay.style.display = 'flex';
+            
+            // Set report header info
+            if (reportTitle) reportTitle.textContent = report.title;
+            if (reportStatus) {
+                reportStatus.textContent = formatStatus(report.status);
+                reportStatus.className = `session-status ${report.status.replace('_', '-')}`;
+            }
+            if (reportDate) reportDate.textContent = formatDate(report.created_at);
+            
+            // Show appropriate action buttons
+            if (generateBtn && runBtn) {
+                if (report.status === 'draft') {
+                    generateBtn.style.display = 'inline-block';
+                    runBtn.style.display = 'none';
+                } else if (report.status === 'agenda_ready' || report.status === 'failed') {
+                    generateBtn.style.display = 'none';
+                    runBtn.style.display = 'inline-block';
+                } else {
+                    generateBtn.style.display = 'none';
+                    runBtn.style.display = 'none';
+                }
+            }
+            
+            // Display agenda
+            if (report.agenda_json) {
+                if (agendaJsonInput) agendaJsonInput.value = report.agenda_json;
+                try {
+                    displayAgendaPreview(JSON.parse(report.agenda_json));
+                } catch (e) {
+                    console.warn('Failed to parse agenda_json:', e);
+                }
+            } else if (report.agenda) {
+                const agendaJson = typeof report.agenda === 'string' ? report.agenda : JSON.stringify(report.agenda, null, 2);
+                if (agendaJsonInput) agendaJsonInput.value = agendaJson;
+                try {
+                    displayAgendaPreview(typeof report.agenda === 'string' ? JSON.parse(report.agenda) : report.agenda);
+                } catch (e) {
+                    console.warn('Failed to parse agenda:', e);
+                }
+            }
+            
+            // Display research items
+            if (report.items && report.items.length > 0) {
+                displayResearchItems(report.items);
+            }
+            
+            // Display final report with chart/map placeholder processing
+            if (reportBody) {
+                if (report.final_report_html) {
+                    reportBody.innerHTML = processChartPlaceholders(report.final_report_html);
+                } else if (report.final_report) {
+                    const parsedContent = marked.parse(report.final_report);
+                    reportBody.innerHTML = processChartPlaceholders(parsedContent);
+                } else {
+                    reportBody.innerHTML = '<p style="color: var(--text-secondary);">Generate the research agenda and run the research to see results here.</p>';
+                }
+                // Set up lazy loading for charts
+                refreshChartObservers();
+            }
+            
+            // Start polling if running
+            if (report.status === 'running' || report.status === 'synthesizing') {
+                startPolling(report.id);
+                updateProgress(report.progress_percent || 0);
+            }
+        }
+        
+        // Display agenda preview
+        function displayAgendaPreview(agenda) {
+            const container = document.getElementById('agendaPreviewContent');
+            const section = document.getElementById('agendaPreview');
+            
+            // Handle null elements gracefully
+            if (!container || !section) {
+                console.warn('Agenda preview elements not found');
+                return;
+            }
+            
+            if (!agenda) {
+                section.style.display = 'none';
+                return;
+            }
+            
+            section.style.display = 'block';
+            
+            let html = '';
+            
+            // Show refined question if available
+            if (agenda.refined_question) {
+                html += `<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-primary); border-radius: 6px; border-left: 3px solid var(--brand-blue);">
+                    <strong style="color: var(--brand-blue); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Refined Question</strong><br>
+                    <span style="font-size: 15px;">${escapeHtml(agenda.refined_question)}</span>
+                </div>`;
+            }
+            
+            // Show success criteria
+            if (agenda.success_criteria) {
+                html += `<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-primary); border-radius: 6px; border-left: 3px solid var(--spruce-green);">
+                    <strong style="color: var(--spruce-green); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Success Criteria</strong><br>
+                    <span style="font-size: 13px; color: var(--text-secondary);">${escapeHtml(agenda.success_criteria)}</span>
+                </div>`;
+            }
+            
+            // Show example good answer
+            if (agenda.example_good_answer) {
+                html += `<div style="margin-bottom: 16px; padding: 12px; background: rgba(173, 53, 250, 0.08); border-radius: 6px; border-left: 3px solid var(--bright-purple);">
+                    <strong style="color: var(--bright-purple); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Example of a Good Answer</strong><br>
+                    <span style="font-size: 13px; font-style: italic;">${escapeHtml(agenda.example_good_answer)}</span>
+                </div>`;
+            }
+            
+            // Show narrative thread (fallback for old format)
+            if (agenda.narrative_thread && !agenda.refined_question) {
+                html += `<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-primary); border-radius: 6px;">
+                    <strong>Narrative:</strong> ${escapeHtml(agenda.narrative_thread)}
+                </div>`;
+            }
+            
+            // Show research items
+            if (agenda.items && agenda.items.length > 0) {
+                html += `<div style="margin-top: 16px;"><strong>Research Items (${agenda.items.length}):</strong></div>`;
+                agenda.items.forEach((item, idx) => {
+                    html += `
+                        <div class="agenda-item" style="margin-top: 8px;">
+                            <div style="display: flex; align-items: flex-start; gap: 8px;">
+                                <span style="background: var(--bg-tertiary); color: var(--text-secondary); padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">${idx + 1}</span>
+                                <div style="flex: 1;">
+                                    <div class="agenda-item-question">${escapeHtml(item.research_question || 'No question')}</div>
+                                    ${item.success_criteria ? `<div style="font-size: 12px; color: var(--spruce-green); margin-top: 4px;">✓ ${escapeHtml(item.success_criteria)}</div>` : ''}
+                                    ${item.builds_toward ? `<div style="font-size: 12px; color: var(--text-tertiary); margin-top: 2px;">↳ ${escapeHtml(item.builds_toward)}</div>` : ''}
+                                    <div class="agenda-item-meta" style="margin-top: 4px;">
+                                        ${item.metric_name ? `📊 ${escapeHtml(item.metric_name)}` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        // Extract summary from research result
+        function extractSummary(result) {
+            if (!result) return null;
+            
+            // Try to find ## Summary section
+            const summaryMatch = result.match(/##\s*Summary\s*\n+([\s\S]*?)(?=\n##|$)/i);
+            if (summaryMatch && summaryMatch[1]) {
+                return summaryMatch[1].trim();
+            }
+            
+            // Fallback: try to find first paragraph that looks like a summary
+            const lines = result.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+            if (lines.length > 0) {
+                // Get first meaningful paragraph (up to 300 chars)
+                const firstPara = lines[0].trim();
+                if (firstPara.length > 300) {
+                    return firstPara.substring(0, 297) + '...';
+                }
+                return firstPara;
+            }
+            
+            return null;
+        }
+        
+        // Display research items
+        function displayResearchItems(items) {
+            const container = document.getElementById('researchItemsList');
+            
+            if (!container) {
+                console.warn('Research items container not found');
+                return;
+            }
+            
+            if (!items || items.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">No research items yet.</p>';
+                return;
+            }
+            
+            container.innerHTML = items.map((item, index) => {
+                const summary = extractSummary(item.result);
+                const isRunning = item.status === 'in_progress';
+                const isPending = item.status === 'pending';
+                const isCompleted = item.status === 'completed';
+                
+                let resultHtml = '';
+                
+                if (isRunning) {
+                    const iterations = item.metadata?.iterations || [];
+                    const currentIteration = item.metadata?.total_iterations || iterations.length || 1;
+                    const lastIteration = iterations[iterations.length - 1];
+                    const iterationInfo = currentIteration > 1 
+                        ? `Iteration ${currentIteration}: Following up...` 
+                        : 'Researching...';
+                    
+                    resultHtml = `
+                        <div class="research-item-loading">
+                            <div class="spinner-small"></div>
+                            <span>${iterationInfo}</span>
+                        </div>
+                        ${iterations.length > 0 ? `
+                            <div style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
+                                ${iterations.map((iter, idx) => `
+                                    <div style="margin-bottom: 4px;">
+                                        ${iter.type === 'initial' ? '✓' : '🔍'} 
+                                        ${iter.type === 'initial' ? 'Initial research' : 'Follow-up'}: 
+                                        ${iter.is_complete ? 'Complete' : (iter.follow_up_question ? 'Generated follow-up' : 'Evaluating...')}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    `;
+                } else if (isPending) {
+                    resultHtml = `
+                        <div style="font-size: 12px; color: var(--text-tertiary); margin-top: 8px;">
+                            Waiting to start...
+                        </div>
+                    `;
+                } else if (item.error_message) {
+                    resultHtml = `
+                        <div class="research-item-result" style="color: var(--warm-coral);">
+                            <strong>Error:</strong> ${escapeHtml(item.error_message)}
+                        </div>
+                    `;
+                } else if (item.result) {
+                    // Process chart placeholders in the full analysis
+                    const processedResult = processChartPlaceholders(marked.parse(item.result));
+                    
+                    // Build iteration history display
+                    let iterationHtml = '';
+                    const iterations = item.metadata?.iterations || [];
+                    const totalIterations = item.metadata?.total_iterations || iterations.length;
+                    
+                    if (iterations.length > 0) {
+                        iterationHtml = '<div class="iteration-history">' +
+                            '<div class="iteration-history-header">' +
+                                '<span>🔄 Research Iterations</span>' +
+                                '<span class="iteration-badge">' + totalIterations + ' ' + (totalIterations === 1 ? 'pass' : 'passes') + '</span>' +
+                            '</div>' +
+                            iterations.map((iter, iterIdx) => {
+                                const iterType = iter.type || 'initial';
+                                const isComplete = iter.is_complete;
+                                const followUp = iter.follow_up_question;
+                                
+                                // Parse reason from evaluation if available
+                                let reason = '';
+                                if (iter.evaluation) {
+                                    const reasonMatch = iter.evaluation.split('REASON:');
+                                    if (reasonMatch.length > 1) {
+                                        reason = reasonMatch[1].trim();
+                                    }
+                                }
+                                
+                                let iterHtml = '<div class="iteration-item ' + iterType + '">' +
+                                    '<div class="iteration-header">' +
+                                        '<span class="iteration-label ' + iterType + '">' +
+                                            (iterType === 'initial' ? '📋 Initial Research' : '🔍 Follow-up #' + iterIdx) +
+                                        '</span>' +
+                                        '<span class="iteration-status ' + (isComplete ? 'complete' : 'needs_followup') + '">' +
+                                            (isComplete ? '✓ Complete' : '→ Needs more') +
+                                        '</span>' +
+                                    '</div>' +
+                                    '<div class="iteration-question">' + escapeHtml(iter.question || item.research_question) + '</div>';
+                                
+                                if (reason) {
+                                    iterHtml += '<div class="iteration-reason">' + escapeHtml(reason) + '</div>';
+                                }
+                                
+                                if (followUp && !isComplete) {
+                                    iterHtml += '<div class="follow-up-question">' +
+                                        '<strong>Generated Follow-up:</strong><br>' +
+                                        escapeHtml(followUp) +
+                                    '</div>';
+                                }
+                                
+                                iterHtml += '</div>';
+                                return iterHtml;
+                            }).join('') +
+                        '</div>';
+                    }
+                    
+                    resultHtml = `
+                        <div class="research-item-summary">
+                            <strong>Summary</strong>
+                            ${summary ? escapeHtml(summary) : 'Analysis complete - see details below'}
+                        </div>
+                        ${iterations.length > 1 ? `<div style="font-size: 12px; color: var(--bright-purple); margin-top: 8px;">🔄 ${totalIterations} research iterations performed</div>` : ''}
+                        <span class="research-item-toggle" onclick="toggleItemDetails(${index})">
+                            Show full analysis ▼
+                        </span>
+                        <div class="research-item-full" id="item-details-${index}">
+                            ${iterationHtml}
+                            <h4 style="margin-top: 16px;">Complete Research Findings</h4>
+                            ${processedResult}
+                        </div>
+                    `;
+                }
+                
+                return `
+                    <div class="research-item-card ${item.status}">
+                        <div class="research-item-question">${escapeHtml(item.research_question)}</div>
+                        <div class="agenda-item-meta">
+                            ${item.metric_name ? `Metric: ${escapeHtml(item.metric_name)}` : ''}
+                            <span class="session-status ${item.status}" style="margin-left: 8px;">${formatStatus(item.status)}</span>
+                        </div>
+                        ${resultHtml}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Toggle item details visibility
+        function toggleItemDetails(index) {
+            const details = document.getElementById(`item-details-${index}`);
+            const toggle = details.previousElementSibling;
+            
+            if (details.classList.contains('expanded')) {
+                details.classList.remove('expanded');
+                toggle.textContent = 'Show full analysis ▼';
+            } else {
+                details.classList.add('expanded');
+                toggle.textContent = 'Hide full analysis ▲';
+                // Set up lazy loading for any charts in the expanded section
+                refreshChartObservers();
+            }
+        }
+        
+        // Show new research interface
+        function showNewResearch() {
+            currentReportId = null;
+            currentReport = null;
+            
+            const promptInterface = document.getElementById('promptInterface');
+            const contentDisplay = document.getElementById('contentDisplay');
+            const promptTextarea = document.getElementById('promptTextarea');
+            
+            if (promptInterface) promptInterface.style.display = 'flex';
+            if (contentDisplay) contentDisplay.style.display = 'none';
+            if (promptTextarea) {
+                promptTextarea.value = '';
+                promptTextarea.focus();
+            }
+            renderReportsList();
+        }
+        
+        // Create new research
+        async function handleCreateResearch() {
+            if (isGenerating) return;
+            
+            const prompt = document.getElementById('promptTextarea').value.trim();
+            const modelKey = document.getElementById('modelSelect').value;
+            const district = document.getElementById('districtSelect').value;
+            
+            if (!prompt) return;
+            
+            isGenerating = true;
+            const btn = document.getElementById('sendButton');
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+            
+            try {
+                const response = await fetch('/api/research/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: '',
+                        prompt: prompt,
+                        district: district,
+                        model_key: modelKey,
+                        generate_title: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    await loadReports();
+                    selectReport(data.report_id);
+                    
+                    // Auto-generate agenda
+                    setTimeout(() => generateAgenda(), 500);
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to create research'));
+                }
+            } catch (error) {
+                console.error('Error creating research:', error);
+                alert('Error creating research: ' + error.message);
+            } finally {
+                isGenerating = false;
+                btn.disabled = false;
+                btn.textContent = 'Research';
+            }
+        }
+        
+        // Generate research agenda
+        async function generateAgenda() {
+            if (!currentReportId) return;
+            
+            const btn = document.getElementById('generateAgendaBtn');
+            const btn2 = document.getElementById('generateAgendaBtn2');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Generating...';
+            }
+            if (btn2) {
+                btn2.disabled = true;
+                btn2.textContent = 'Generating...';
+            }
+            
+            try {
+                const modelKey = document.getElementById('modelSelect').value;
+                
+                const response = await fetch(`/api/research/${currentReportId}/generate-agenda`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_key: modelKey })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Poll for completion
+                    pollAgendaGeneration(data.job_id);
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to start agenda generation'));
+                    resetAgendaButtons();
+                }
+            } catch (error) {
+                console.error('Error generating agenda:', error);
+                alert('Error: ' + error.message);
+                resetAgendaButtons();
+            }
+        }
+        
+        // Poll agenda generation
+        async function pollAgendaGeneration(jobId) {
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/research/job/${jobId}`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        const job = data.job;
+                        
+                        if (job.status === 'completed') {
+                            clearInterval(interval);
+                            await loadReports();
+                            selectReport(currentReportId);
+                        } else if (job.status === 'failed') {
+                            clearInterval(interval);
+                            alert('Agenda generation failed: ' + (job.error || 'Unknown error'));
+                            resetAgendaButtons();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error polling job:', error);
+                }
+            }, 2000);
+        }
+        
+        // Reset agenda buttons
+        function resetAgendaButtons() {
+            const btn = document.getElementById('generateAgendaBtn');
+            const btn2 = document.getElementById('generateAgendaBtn2');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Generate Agenda';
+            }
+            if (btn2) {
+                btn2.disabled = false;
+                btn2.textContent = 'Generate with AI';
+            }
+        }
+        
+        // Set agenda manually
+        async function setAgendaManually() {
+            if (!currentReportId) {
+                alert('No report selected');
+                return;
+            }
+            
+            const agendaInput = document.getElementById('agendaJsonInput');
+            if (!agendaInput) {
+                console.error('Agenda input element not found');
+                return;
+            }
+            
+            const agendaJson = agendaInput.value.trim();
+            
+            if (!agendaJson) {
+                alert('Please enter agenda JSON');
+                return;
+            }
+            
+            let parsedAgenda;
+            try {
+                parsedAgenda = JSON.parse(agendaJson); // Validate JSON
+            } catch (e) {
+                alert('Invalid JSON: ' + e.message);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/research/${currentReportId}/set-agenda`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agenda_json: agendaJson })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Show agenda preview immediately
+                    displayAgendaPreview(parsedAgenda);
+                    
+                    // Reload reports and select current
+                    await loadReports();
+                    await selectReport(currentReportId);
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to set agenda'));
+                }
+            } catch (error) {
+                console.error('Error setting agenda:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        // Run research
+        async function runResearch() {
+            if (!currentReportId) return;
+            
+            const btn = document.getElementById('runResearchBtn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Starting...';
+            }
+            
+            try {
+                const modelSelect = document.getElementById('modelSelect');
+                const modelKey = modelSelect ? modelSelect.value : '';
+                
+                const response = await fetch(`/api/research/${currentReportId}/run`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_key: modelKey })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    startPolling(currentReportId);
+                    if (btn) btn.textContent = 'Running...';
+                    const progressContainer = document.getElementById('progressContainer');
+                    if (progressContainer) progressContainer.style.display = 'block';
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to start research'));
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'Run Research';
+                    }
+                }
+            } catch (error) {
+                console.error('Error running research:', error);
+                alert('Error: ' + error.message);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Run Research';
+                }
+            }
+        }
+        
+        // Start polling for updates
+        function startPolling(reportId) {
+            if (pollingIntervals[reportId]) {
+                clearInterval(pollingIntervals[reportId]);
+            }
+            
+            pollingIntervals[reportId] = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/research/${reportId}`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        const report = data.report;
+                        reports.set(reportId, report);
+                        
+                        if (currentReportId === reportId) {
+                            currentReport = report;
+                            updateProgress(report.progress_percent || 0);
+                            
+                            if (report.items) {
+                                displayResearchItems(report.items);
+                            }
+                            
+                            if (report.status === 'completed' || report.status === 'failed') {
+                                clearInterval(pollingIntervals[reportId]);
+                                delete pollingIntervals[reportId];
+                                displayReport(report);
+                            }
+                        }
+                        
+                        renderReportsList();
+                    }
+                } catch (error) {
+                    console.error('Error polling:', error);
+                }
+            }, 3000);
+        }
+        
+        // Update progress bar
+        function updateProgress(percent) {
+            const container = document.getElementById('progressContainer');
+            const fill = document.getElementById('progressFill');
+            const text = document.getElementById('progressText');
+            
+            if (container) container.style.display = 'block';
+            if (fill) fill.style.width = percent + '%';
+            if (text) text.textContent = percent + '% complete';
+        }
+        
+        // Switch tabs
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tabId);
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.toggle('active', content.id === tabId + 'Tab');
+            });
+        }
+        
+        // Copy research URL
+        function copyResearchUrl(reportId, btn) {
+            const report = reports.get(reportId);
+            // Use permalink URL for completed reports, regular URL otherwise
+            const url = report && report.status === 'completed' 
+                ? `${window.location.origin}/api/research/permalink/${reportId}`
+                : `${window.location.origin}/api/research/${reportId}`;
+            navigator.clipboard.writeText(url).then(() => {
+                const original = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => btn.textContent = original, 2000);
+            });
+        }
+        
+        // View research details
+        function viewResearchDetails(reportId) {
+            selectReport(reportId);
+        }
+        
+        // Delete research
+        async function deleteResearch(reportId) {
+            if (!confirm('Are you sure you want to delete this research report?')) return;
+            
+            try {
+                const response = await fetch(`/api/research/${reportId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    if (currentReportId === reportId) {
+                        showNewResearch();
+                    }
+                    reports.delete(reportId);
+                    renderReportsList();
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to delete'));
+                }
+            } catch (error) {
+                console.error('Error deleting:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        // Utility functions
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Lazy loading queue for charts/maps
+        const chartLoadQueue = [];
+        let isLoadingChart = false;
+        let chartIdCounter = 0;
+        
+        // Process next chart in queue
+        function processChartQueue() {
+            if (isLoadingChart || chartLoadQueue.length === 0) return;
+            
+            isLoadingChart = true;
+            const { chartId, src } = chartLoadQueue.shift();
+            
+            const container = document.getElementById(chartId);
+            if (!container) {
+                isLoadingChart = false;
+                processChartQueue();
+                return;
+            }
+            
+            const iframe = container.querySelector('iframe');
+            if (iframe && !iframe.src) {
+                iframe.src = src;
+                iframe.onload = () => {
+                    container.classList.add('loaded');
+                    isLoadingChart = false;
+                    // Small delay before loading next to be gentle on backend
+                    setTimeout(processChartQueue, 300);
+                };
+                iframe.onerror = () => {
+                    container.classList.add('error');
+                    isLoadingChart = false;
+                    setTimeout(processChartQueue, 300);
+                };
+            } else {
+                isLoadingChart = false;
+                processChartQueue();
+            }
+        }
+        
+        // Intersection Observer for lazy loading
+        let chartObserver = null;
+        
+        function setupChartObserver() {
+            if (chartObserver) return;
+            
+            chartObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const container = entry.target;
+                        const src = container.dataset.src;
+                        const chartId = container.id;
+                        
+                        if (src && !container.classList.contains('queued')) {
+                            container.classList.add('queued');
+                            chartLoadQueue.push({ chartId, src });
+                            processChartQueue();
+                        }
+                        
+                        chartObserver.unobserve(container);
+                    }
+                });
+            }, {
+                root: null,
+                rootMargin: '100px', // Start loading slightly before visible
+                threshold: 0.1
+            });
+        }
+        
+        // Observe all lazy chart containers
+        function observeCharts() {
+            setupChartObserver();
+            document.querySelectorAll('.lazy-chart-container').forEach(container => {
+                if (!container.classList.contains('queued') && !container.classList.contains('loaded')) {
+                    chartObserver.observe(container);
+                }
+            });
+        }
+        
+        // Process chart and map placeholders in content (lazy loading version)
+        function processChartPlaceholders(content) {
+            if (!content) return content;
+            
+            // Regular expression to match chart placeholders: [CHART:type:param1:param2:param3]
+            const chartRegex = /\[CHART:([^:]+):([^\]]+)\]/g;
+            
+            return content.replace(chartRegex, (match, chartType, params) => {
+                const paramParts = params.split(':');
+                const uniqueId = 'chart-' + (++chartIdCounter);
+                let src = '';
+                let height = '500px';
+                
+                if (chartType === 'anomaly' || chartType === 'anomaly_id' || chartType === 'anomalyid') {
+                    const anomalyId = paramParts[0];
+                    src = `/anomaly-analyzer/anomaly-chart?id=${anomalyId}`;
+                } else if (chartType === 'time_series' || chartType === 'time_series_id' || chartType === 'timeseries' || chartType === 'timeseriesid') {
+                    if (paramParts.length === 1) {
+                        const chartId = paramParts[0];
+                        src = `/backend/time-series-chart?chart_id=${chartId}&embedded=true`;
+                    } else {
+                        const metricId = paramParts[0];
+                        const district = paramParts[1] || '0';
+                        const period = paramParts[2] || 'month';
+                        src = `/backend/time-series-chart?metric_id=${metricId}&district=${district}&period_type=${period}&embedded=true`;
+                    }
+                } else if (chartType === 'map') {
+                    const mapId = paramParts[0];
+                    src = `/backend/map-chart?id=${mapId}&embedded=true`;
+                } else if (chartType === 'dualmap') {
+                    const map1Id = paramParts[0];
+                    const map2Id = paramParts[1];
+                    src = `/dual-map?map1_id=${map1Id}&map2_id=${map2Id}`;
+                }
+                
+                // Max height of 500px for all charts
+                height = '500px';
+                
+                if (!src) return match;
+                
+                // Return a lazy-loading container
+                return `<div class="lazy-chart-container" id="${uniqueId}" data-src="${src}" style="margin: 16px 0; min-height: ${height};">
+                    <div class="chart-loading-placeholder" style="
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        height: ${height};
+                        background: var(--bg-secondary);
+                        border-radius: 8px;
+                        color: var(--text-secondary);
+                    ">
+                        <div class="spinner-small" style="margin-bottom: 12px;"></div>
+                        <span style="font-size: 13px;">Loading ${chartType === 'map' || chartType === 'dualmap' ? 'map' : 'chart'}...</span>
+                    </div>
+                    <iframe style="width: 100%; height: ${height}; border: none; border-radius: 8px; display: none;" 
+                            frameborder="0" scrolling="${chartType === 'map' || chartType === 'dualmap' ? 'yes' : 'no'}"
+                            onload="this.style.display='block'; this.previousElementSibling.style.display='none';">
+                    </iframe>
+                </div>`;
+            });
+        }
+        
+        // Re-observe charts after content changes
+        function refreshChartObservers() {
+            setTimeout(observeCharts, 100);
+        }
+        
+        function formatStatus(status) {
+            const statusMap = {
+                'draft': 'Draft',
+                'agenda_ready': 'Ready',
+                'running': 'Running',
+                'synthesizing': 'Synthesizing',
+                'completed': 'Completed',
+                'failed': 'Failed',
+                'cancelled': 'Cancelled',
+                'pending': 'Pending',
+                'in_progress': 'In Progress'
+            };
+            return statusMap[status] || status;
+        }
+        
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+            if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+            
+            return date.toLocaleDateString();
+        }
+    </script>
+</body>
+</html>
+
