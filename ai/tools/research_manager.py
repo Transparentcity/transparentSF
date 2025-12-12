@@ -205,6 +205,12 @@ class ResearchManager:
                     )
                 """)
                 
+                # Create unique index on item_id to prevent duplicates
+                cursor.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS research_items_item_id_unique 
+                    ON research_items(report_id, item_id)
+                """)
+                
                 # Create indexes for research_items
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS research_items_report_id_idx 
@@ -236,7 +242,8 @@ class ResearchManager:
         district: str = "0",
         model_key: str = None,
         agenda: Optional[Dict[str, Any]] = None,
-        agenda_json: Optional[str] = None
+        agenda_json: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Create a new research report.
@@ -248,6 +255,7 @@ class ResearchManager:
             model_key: Model to use for AI operations
             agenda: Parsed agenda dict (optional)
             agenda_json: Raw agenda JSON string (optional, for manual paste)
+            metadata: Additional metadata to store (optional)
             
         Returns:
             Dict with status and report_id
@@ -262,13 +270,16 @@ class ResearchManager:
                 else:
                     status = ResearchStatus.DRAFT.value
                 
+                # Prepare metadata
+                metadata_json = json.dumps(metadata) if metadata else '{}'
+                
                 cursor.execute("""
                     INSERT INTO research_reports (
                         title, original_prompt, district, status, 
-                        agenda, agenda_json, model_key, 
+                        agenda, agenda_json, model_key, metadata,
                         created_at, updated_at
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s,
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     ) RETURNING id
                 """, (
@@ -278,7 +289,8 @@ class ResearchManager:
                     status,
                     json.dumps(agenda) if agenda else None,
                     agenda_json,
-                    model_key
+                    model_key,
+                    metadata_json
                 ))
                 
                 report_id = cursor.fetchone()[0]
@@ -475,7 +487,8 @@ class ResearchManager:
         reason: Optional[str] = None,
         priority: int = 1,
         success_criteria: Optional[str] = None,
-        builds_toward: Optional[str] = None
+        builds_toward: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Add a research item to a report."""
         try:
@@ -485,11 +498,11 @@ class ResearchManager:
                 item_id = str(uuid.uuid4())
                 
                 # Store extra fields in metadata
-                metadata = {}
+                item_metadata = metadata.copy() if metadata else {}
                 if success_criteria:
-                    metadata["success_criteria"] = success_criteria
+                    item_metadata["success_criteria"] = success_criteria
                 if builds_toward:
-                    metadata["builds_toward"] = builds_toward
+                    item_metadata["builds_toward"] = builds_toward
                 
                 cursor.execute("""
                     INSERT INTO research_items (
@@ -502,7 +515,7 @@ class ResearchManager:
                 """, (
                     report_id, item_id, metric_id, metric_name,
                     anomaly_id, research_question, reason, priority,
-                    json.dumps(metadata) if metadata else '{}'
+                    json.dumps(item_metadata) if item_metadata else '{}'
                 ))
                 
                 db_id = cursor.fetchone()[0]
@@ -659,6 +672,77 @@ class ResearchManager:
             
         except Exception as e:
             logger.error(f"Error deleting research items: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def delete_non_agenda_items(self, report_id: int) -> Dict[str, Any]:
+        """
+        Delete non-agenda research items (exploration + evaluation-generated).
+
+        This is used to "start clean" on regenerate so the report begins with only
+        the original agenda items, and any evaluation follow-ons are re-created
+        later during the run.
+        """
+        try:
+            def delete_operation(conn):
+                cursor = conn.cursor()
+
+                # Delete exploration + evaluation items by multiple signals:
+                # - explicit metadata phase/added_by
+                # - priority >= 100 (legacy exploration)
+                # - reason string patterns (legacy)
+                cursor.execute(
+                    """
+                    DELETE FROM research_items
+                    WHERE report_id = %s
+                      AND (
+                        COALESCE(metadata->>'phase', '') IN ('exploration', 'evaluation')
+                        OR COALESCE(metadata->>'added_by', '') IN ('exploration', 'evaluation')
+                        OR priority >= 100
+                        OR COALESCE(reason, '') ILIKE '%%breadth-first exploration%%'
+                        OR COALESCE(reason, '') ILIKE '%%research question evaluation%%'
+                      )
+                    """,
+                    (report_id,),
+                )
+                deleted_count = cursor.rowcount
+
+                # Recompute progress stats since we removed items
+                cursor.execute(
+                    """
+                    UPDATE research_reports
+                    SET total_items = (
+                            SELECT COUNT(*) FROM research_items WHERE report_id = %s
+                        ),
+                        completed_items = (
+                            SELECT COUNT(*) FROM research_items
+                            WHERE report_id = %s AND status = 'completed'
+                        ),
+                        progress_percent = (
+                            SELECT CASE
+                                WHEN COUNT(*) > 0
+                                THEN (COUNT(*) FILTER (WHERE status = 'completed') * 100 / COUNT(*))
+                                ELSE 0
+                            END
+                            FROM research_items
+                            WHERE report_id = %s
+                        ),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    """,
+                    (report_id, report_id, report_id, report_id),
+                )
+
+                conn.commit()
+                cursor.close()
+                return {"status": "success", "deleted_count": deleted_count}
+
+            result = execute_with_connection(delete_operation)
+            if result.get("status") == "success":
+                return result.get("result", {"status": "success", "deleted_count": 0})
+            return {"status": "error", "message": result.get("message")}
+
+        except Exception as e:
+            logger.error(f"Error deleting non-agenda items: {e}")
             return {"status": "error", "message": str(e)}
 
 

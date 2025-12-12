@@ -215,37 +215,117 @@
             border: none;
         }
         
+        /* Secondary section - collapsible research agenda */
+        .secondary-section {
+            margin-top: 40px;
+            padding-top: 30px;
+            border-top: 1px solid var(--border-primary, #ddd);
+        }
+        
+        .collapsible-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 14px 18px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary, #ddd);
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
+            text-align: left;
+            transition: all 0.2s ease;
+        }
+        
+        .collapsible-toggle:hover {
+            background: var(--bg-tertiary, #f0f0f0);
+        }
+        
+        .toggle-icon {
+            font-size: 12px;
+            transition: transform 0.2s ease;
+        }
+        
+        .collapsible-toggle.expanded .toggle-icon {
+            transform: rotate(90deg);
+        }
+        
         /* Research agenda display */
         .agenda-section {
-            margin-bottom: 24px;
-            padding: 16px;
+            margin-top: 12px;
+            padding: 20px;
             background: var(--bg-secondary);
             border-radius: 8px;
             border-left: 3px solid var(--bright-purple);
         }
         
-        .agenda-section h3 {
-            font-family: 'Inter', sans-serif;
-            font-size: 16px;
-            font-weight: 600;
-            margin: 0 0 12px 0;
-            color: var(--text-primary);
+        .agenda-item {
+            margin-bottom: 16px;
+        }
+        
+        .agenda-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .agenda-item strong {
+            display: block;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .agenda-item p {
+            margin: 0;
+            line-height: 1.5;
         }
         
         .agenda-narrative {
             font-style: italic;
             color: var(--text-secondary);
-            margin-bottom: 12px;
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            background: var(--bg-tertiary, rgba(0,0,0,0.03));
+            border-radius: 6px;
         }
         
         .agenda-questions {
             list-style: decimal;
-            margin: 0;
-            padding-left: 20px;
+            margin: 8px 0 0 0;
+            padding-left: 24px;
         }
         
         .agenda-questions li {
-            margin-bottom: 6px;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .builds-toward {
+            display: block;
+            font-size: 12px;
+            color: var(--text-tertiary, #888);
+            margin-top: 3px;
+            padding-left: 8px;
+            border-left: 2px solid var(--bright-purple);
+        }
+        
+        /* Report section */
+        .report-section {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0 0 20px 0;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--bright-purple);
         }
         
         /* Content styling */
@@ -390,6 +470,23 @@
         [data-theme="dark"] .agenda-section {
             background-color: var(--bg-secondary) !important;
         }
+        
+        [data-theme="dark"] .collapsible-toggle {
+            background-color: var(--bg-secondary) !important;
+            border-color: var(--border-primary) !important;
+        }
+        
+        [data-theme="dark"] .collapsible-toggle:hover {
+            background-color: var(--bg-tertiary) !important;
+        }
+        
+        [data-theme="dark"] .agenda-narrative {
+            background-color: rgba(255,255,255,0.05) !important;
+        }
+        
+        [data-theme="dark"] .secondary-section {
+            border-top-color: var(--border-primary) !important;
+        }
     </style>
 </head>
 <body>
@@ -434,25 +531,59 @@
             </div>
         </div>
         
+        <div class="report-section">
+            <h2 class="section-title">📊 Research Findings</h2>
+            <div class="content" id="reportContent">
+                <!-- Final report content - displayed first and prominently -->
+            </div>
+        </div>
+        
         {% if agenda %}
-        <div class="agenda-section">
-            <h3>📋 Research Agenda</h3>
-            {% if agenda.narrative_thread %}
-            <div class="agenda-narrative">{{ agenda.narrative_thread }}</div>
-            {% endif %}
-            {% if agenda.research_questions %}
-            <ol class="agenda-questions">
-                {% for question in agenda.research_questions %}
-                <li>{{ question }}</li>
-                {% endfor %}
-            </ol>
-            {% endif %}
+        <div class="secondary-section">
+            <button class="collapsible-toggle" onclick="toggleAgenda()" id="agendaToggle">
+                <span class="toggle-icon">▶</span>
+                <span>📋 Research Agenda & Methodology</span>
+            </button>
+            <div class="agenda-section" id="agendaContent" style="display: none;">
+                {% if agenda.refined_question %}
+                <div class="agenda-item">
+                    <strong>Refined Question:</strong>
+                    <p>{{ agenda.refined_question }}</p>
+                </div>
+                {% endif %}
+                {% if agenda.narrative_thread %}
+                <div class="agenda-narrative">{{ agenda.narrative_thread }}</div>
+                {% endif %}
+                {% if agenda.success_criteria %}
+                <div class="agenda-item">
+                    <strong>Success Criteria:</strong>
+                    <p>{{ agenda.success_criteria }}</p>
+                </div>
+                {% endif %}
+                {% if agenda['items'] %}
+                <div class="agenda-item">
+                    <strong>Research Steps:</strong>
+                    <ol class="agenda-questions">
+                        {% for item in agenda['items'] %}
+                        <li>
+                            {{ item.research_question }}
+                            {% if item.builds_toward %}
+                            <span class="builds-toward">→ {{ item.builds_toward }}</span>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ol>
+                </div>
+                {% elif agenda.research_questions %}
+                <ol class="agenda-questions">
+                    {% for question in agenda.research_questions %}
+                    <li>{{ question }}</li>
+                    {% endfor %}
+                </ol>
+                {% endif %}
+            </div>
         </div>
         {% endif %}
-        
-        <div class="content" id="reportContent">
-            <!-- Content will be processed and inserted here -->
-        </div>
     </div>
     
     <style>
@@ -621,6 +752,20 @@
             });
         }
         
+        // Toggle research agenda
+        function toggleAgenda() {
+            const toggle = document.getElementById('agendaToggle');
+            const content = document.getElementById('agendaContent');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                toggle.classList.add('expanded');
+            } else {
+                content.style.display = 'none';
+                toggle.classList.remove('expanded');
+            }
+        }
+        
         // Copy to clipboard
         function copyToClipboard() {
             const shareInput = document.getElementById('shareUrl');
@@ -665,14 +810,21 @@
             const contentElement = document.getElementById('reportContent');
             const rawContent = {{ content|tojson }};
             
-            let processedContent = processChartPlaceholders(rawContent);
+            console.log('Raw content length:', rawContent ? rawContent.length : 0);
+            console.log('Raw content preview:', rawContent ? rawContent.substring(0, 500) : 'null');
             
-            // Render markdown
-            if (typeof marked !== 'undefined') {
-                contentElement.innerHTML = marked.parse(processedContent);
+            if (!rawContent || rawContent.trim() === '') {
+                contentElement.innerHTML = '<p style="color: var(--text-secondary); font-style: italic;">No report content available.</p>';
             } else {
-                processedContent = processedContent.replace(/\n/g, '<br>');
-                contentElement.innerHTML = processedContent;
+                let processedContent = processChartPlaceholders(rawContent);
+                
+                // Render markdown
+                if (typeof marked !== 'undefined') {
+                    contentElement.innerHTML = marked.parse(processedContent);
+                } else {
+                    processedContent = processedContent.replace(/\n/g, '<br>');
+                    contentElement.innerHTML = processedContent;
+                }
             }
             
             // Set up lazy loading for charts

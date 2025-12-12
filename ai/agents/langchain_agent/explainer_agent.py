@@ -907,7 +907,10 @@ class LangChainExplainerAgent:
                 memory=self.memory,  # Add memory to the executor
                 verbose=True,
                 handle_parsing_errors=True,
-                max_iterations=50
+                max_iterations=50,
+                # If we hit iteration limits, have the model generate a final answer
+                # instead of raising and leaving a truncated partial response.
+                early_stopping_method="generate",
             )
             self.logger.info(f"Created AgentExecutor: {executor}")
             
@@ -1242,6 +1245,7 @@ class LangChainExplainerAgent:
     async def explain_change_streaming(self, prompt: str, metric_details: Dict[str, Any] = None, session_id: Optional[str] = None):
         """Stream explanations using direct LLM streaming for real token-by-token output."""
         session = None
+        stop_condition_detected = False
         try:
             self.logger.info(f"=== Starting explain_change_streaming ===")
             self.logger.info(f"Prompt: {prompt}")
@@ -1992,6 +1996,7 @@ class LangChainExplainerAgent:
             
             if any(indicator in error_str.lower() for indicator in stop_indicators):
                 self.logger.warning(f"Detected agent stop condition in main exception: {error_str}")
+                stop_condition_detected = True
                 # Send special signal to frontend to show continue button
                 stop_message = {'agent_stopped': True, 'reason': 'stop_condition'}
                 self.logger.info(f"Sending stop condition message to frontend from main exception: {stop_message}")
@@ -2019,21 +2024,28 @@ class LangChainExplainerAgent:
             # Build conversation from intermediate responses and tool calls
             self._build_conversation_from_streaming(session, execution_callback)
             
-            # Mark session as successful
-            session.success = True
+            # Mark session as successful (unless we hit a stop condition)
+            session.success = not stop_condition_detected
             session.end_time = datetime.now().isoformat()
             
             # Update the existing session file with completion data (no new summary)
             self._update_session_file(session)
             self.logger.info(f"Updated existing session file for {session.session_id}")
             
-            # Send session_id in completion signal
-            completion_data = {'completed': True, 'session_id': session.session_id}
+            # Send session_id in completion signal (+ stop metadata if applicable)
+            completion_data = {
+                'completed': True,
+                'session_id': session.session_id,
+                **({'agent_stopped': True, 'reason': 'stop_condition'} if stop_condition_detected else {}),
+            }
         else:
-            completion_data = {'completed': True}
+            completion_data = {
+                'completed': True,
+                **({'agent_stopped': True, 'reason': 'stop_condition'} if stop_condition_detected else {}),
+            }
         
         # Save the conversation to memory
-        if response_content:
+        if response_content and not stop_condition_detected:
             # Add user message to memory
             self.memory.chat_memory.add_user_message(prompt)
             # Add assistant response to memory

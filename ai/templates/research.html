@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Research - Transparent SF</title>
+    <title>Deep Analysis - Transparent SF</title>
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -329,6 +329,10 @@
             font-size: 9px;
             font-weight: 600;
             text-transform: uppercase;
+            white-space: nowrap;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .session-status.draft {
@@ -350,6 +354,27 @@
             background: rgba(113, 178, 202, 0.2);
             color: #4A90A4;
         }
+
+        /* Active job indicator (sidebar list) */
+        .session-running-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 8px;
+            color: var(--text-secondary);
+            font-size: 10px;
+            white-space: nowrap;
+        }
+
+        .session-running-spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(173, 53, 250, 0.2);
+            border-top: 2px solid var(--bright-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            flex: 0 0 auto;
+        }
         
         .session-status.completed {
             background: rgba(74, 116, 99, 0.2);
@@ -359,6 +384,60 @@
         .session-status.failed {
             background: rgba(255, 107, 90, 0.15);
             color: var(--warm-coral);
+        }
+        
+        /* Regenerate Controls */
+        .regenerate-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-primary);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .regenerate-model-select {
+            flex: 1;
+            min-width: 120px;
+            padding: 6px 10px;
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 12px;
+        }
+        
+        .regenerate-btn {
+            padding: 6px 12px;
+            background: var(--bright-purple);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        
+        .regenerate-btn:hover {
+            background: var(--accent-hover);
+        }
+        
+        .regenerate-cancel-btn {
+            padding: 6px 12px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .regenerate-cancel-btn:hover {
+            background: var(--bg-secondary);
+            border-color: var(--text-secondary);
         }
         
         @keyframes spin {
@@ -1009,7 +1088,7 @@
             <!-- Left Sidebar -->
             <div class="sidebar">
                 <div class="sidebar-header">
-                    <h2>Research</h2>
+                    <h2>Deep Analysis</h2>
                     <button id="newResearchBtn" class="new-research-btn secondary">+ New Research</button>
                 </div>
                 <div class="sessions-list" id="sessionsList">
@@ -1056,6 +1135,10 @@
                                     <option value="10">District 10</option>
                                     <option value="11">District 11</option>
                                 </select>
+                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                    <input type="checkbox" id="enableWebSearch" style="cursor: pointer;">
+                                    <span>Enable Web Search</span>
+                                </label>
                             </div>
                             <div class="prompt-input">
                                 <textarea id="promptTextarea" class="prompt-textarea" placeholder="What would you like to research about San Francisco?"></textarea>
@@ -1091,6 +1174,7 @@
                                 <div class="action-buttons" id="reportActions">
                                     <button class="btn-primary" id="generateAgendaBtn">Generate Agenda</button>
                                     <button class="btn-primary" id="runResearchBtn" style="display: none;">Run Research</button>
+                                    <button class="btn-secondary" id="stopResearchBtn" style="display: none; background: var(--warm-coral); border-color: var(--warm-coral); color: white;">Stop</button>
                                 </div>
                             </div>
                         </div>
@@ -1136,6 +1220,12 @@
                         <div class="tab-content" id="itemsTab">
                             <div class="report-content">
                                 <h4>Research Items</h4>
+                                <div style="display:flex; align-items:center; gap:12px; margin: -6px 0 10px 0; flex-wrap: wrap;">
+                                    <label style="display:flex; align-items:center; gap:8px; font-size:12px; color: var(--text-secondary); cursor:pointer;">
+                                        <input type="checkbox" id="toggleExplorationItems" />
+                                        Show exploration items
+                                    </label>
+                                </div>
                                 <div id="progressContainer" class="progress-container" style="display: none;">
                                     <div class="progress-bar">
                                         <div class="progress-bar-fill" id="progressFill" style="width: 0%;"></div>
@@ -1163,11 +1253,39 @@
         let reports = new Map();
         let isGenerating = false;
         let pollingIntervals = {};
+        let regeneratingReportIds = new Set();
+        let showExplorationItems = false;
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             loadAvailableModels();
             loadReports();
+
+            // Preferences: whether to show exploration (breadth-first scouting) items
+            try {
+                showExplorationItems =
+                    localStorage.getItem('research_show_exploration_items') === 'true';
+            } catch (e) {
+                showExplorationItems = false;
+            }
+            const toggleExploration = document.getElementById('toggleExplorationItems');
+            if (toggleExploration) {
+                toggleExploration.checked = !!showExplorationItems;
+                toggleExploration.addEventListener('change', () => {
+                    showExplorationItems = !!toggleExploration.checked;
+                    try {
+                        localStorage.setItem(
+                            'research_show_exploration_items',
+                            showExplorationItems ? 'true' : 'false'
+                        );
+                    } catch (e) {
+                        // ignore
+                    }
+                    if (currentReport && Array.isArray(currentReport.items)) {
+                        displayResearchItems(currentReport.items);
+                    }
+                });
+            }
             
             // Event listeners
             document.getElementById('newResearchBtn').addEventListener('click', showNewResearch);
@@ -1183,6 +1301,8 @@
             document.getElementById('generateAgendaBtn2').addEventListener('click', generateAgenda);
             document.getElementById('setAgendaBtn').addEventListener('click', setAgendaManually);
             document.getElementById('runResearchBtn').addEventListener('click', runResearch);
+            const stopBtn = document.getElementById('stopResearchBtn');
+            if (stopBtn) stopBtn.addEventListener('click', stopResearch);
             
             // Tab switching
             document.querySelectorAll('.tab-button').forEach(btn => {
@@ -1355,6 +1475,26 @@
             const statusClass = report.status.replace('_', '-');
             const promptPreview = report.original_prompt ? 
                 (report.original_prompt.length > 60 ? report.original_prompt.substring(0, 57) + '...' : report.original_prompt) : '';
+            const isRegenerating = regeneratingReportIds.has(report.id);
+            const canRegenerate = report.status === 'completed' || report.status === 'failed';
+            
+            // Extract status detail from metadata
+            let statusDetail = null;
+            if (report.metadata) {
+                try {
+                    const metadata = typeof report.metadata === 'string' ? JSON.parse(report.metadata) : report.metadata;
+                    statusDetail = metadata?.status_detail || null;
+                } catch (e) {
+                    console.warn('Error parsing metadata:', e);
+                    statusDetail = null;
+                }
+            }
+
+            // Active-job indicator (agenda generation, research run, synthesis, re-synthesis)
+            const isActiveJob =
+                report.status === 'running' ||
+                report.status === 'synthesizing' ||
+                (report.status === 'draft' && !!statusDetail);
             
             return `
                 <div class="session-item ${isActive ? 'active' : ''} ${report.status === 'running' ? 'running' : ''}" 
@@ -1366,8 +1506,9 @@
                                 <button class="session-menu-btn" onclick="event.stopPropagation(); toggleMenu(this)">⋮</button>
                                 <div class="session-menu-dropdown">
                                     <button class="session-menu-item" onclick="copyResearchUrl(${report.id}, this)">📋 Copy Link</button>
-                                    ${report.status === 'completed' ? `
-                                        <button class="session-menu-item" onclick="viewResearchDetails(${report.id})">👁 View Details</button>
+                                    ${canRegenerate ? `
+                                        <button class="session-menu-item" onclick="event.stopPropagation(); showRegenerateUI(${report.id})">🔄 Regenerate</button>
+                                        <button class="session-menu-item" onclick="event.stopPropagation(); showResynthesizeUI(${report.id})">🧾 Re-synthesize</button>
                                     ` : ''}
                                     <button class="session-menu-item danger" onclick="deleteResearch(${report.id})">🗑 Delete</button>
                                 </div>
@@ -1376,9 +1517,25 @@
                     </div>
                     ${promptPreview ? `<div class="session-prompt-preview">${escapeHtml(promptPreview)}</div>` : ''}
                     <div class="session-meta">
-                        <span class="session-status ${statusClass}">${formatStatus(report.status)}</span>
+                        <span class="session-status ${statusClass}">${formatStatus(report.status, statusDetail)}</span>
+                        ${isActiveJob ? `
+                            <span class="session-running-indicator" title="Background job running">
+                                <span class="session-running-spinner"></span>
+                                <span>Working…</span>
+                            </span>
+                        ` : ''}
                         <span>${formatDate(report.created_at)}</span>
                     </div>
+                    ${isRegenerating ? `
+                        <div class="regenerate-controls" onclick="event.stopPropagation()">
+                            <select id="regenerateModel_${report.id}" class="regenerate-model-select">
+                                <option value="">Default Model</option>
+                            </select>
+                            <button class="regenerate-btn" onclick="executeRegenerate(${report.id})">Regenerate</button>
+                            <button class="regenerate-btn" onclick="executeResynthesize(${report.id})">Re-synthesize</button>
+                            <button class="regenerate-cancel-btn" onclick="cancelRegenerate(${report.id})">Cancel</button>
+                        </div>
+                    ` : ''}
                 </div>
             `;
         }
@@ -1398,8 +1555,7 @@
             renderReportsList();
             
             try {
-                const response = await fetch(`/api/research/${reportId}`);
-                const data = await response.json();
+                const data = await fetchReportWithItems(reportId);
                 
                 if (data.status === 'success') {
                     currentReport = data.report;
@@ -1408,6 +1564,33 @@
             } catch (error) {
                 console.error('Error loading report:', error);
             }
+        }
+
+        // Fetch report + items with aggressive cache-busting.
+        // Without this, some browsers/proxies can serve cached GET responses during polling,
+        // making the UI look "stuck" (e.g. everything stays "Waiting to start...").
+        async function fetchJsonNoCache(url) {
+            const response = await fetch(url, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache' }
+            });
+            return await response.json();
+        }
+
+        async function fetchReportWithItems(reportId) {
+            const ts = Date.now();
+            const [reportResp, itemsResp] = await Promise.all([
+                fetchJsonNoCache(`/api/research/${reportId}?_ts=${ts}`),
+                fetchJsonNoCache(`/api/research/${reportId}/items?_ts=${ts}`)
+            ]);
+
+            if (reportResp && reportResp.status === 'success' && reportResp.report) {
+                if (itemsResp && itemsResp.status === 'success' && Array.isArray(itemsResp.items)) {
+                    reportResp.report.items = itemsResp.items;
+                }
+            }
+
+            return reportResp;
         }
         
         // Display report
@@ -1419,6 +1602,7 @@
             const reportDate = document.getElementById('reportDate');
             const generateBtn = document.getElementById('generateAgendaBtn');
             const runBtn = document.getElementById('runResearchBtn');
+            const stopBtn = document.getElementById('stopResearchBtn');
             const agendaJsonInput = document.getElementById('agendaJsonInput');
             const reportBody = document.getElementById('reportBody');
             
@@ -1429,7 +1613,18 @@
             // Set report header info
             if (reportTitle) reportTitle.textContent = report.title;
             if (reportStatus) {
-                reportStatus.textContent = formatStatus(report.status);
+                // Extract status detail from metadata
+                let statusDetail = null;
+                if (report.metadata) {
+                    try {
+                        const metadata = typeof report.metadata === 'string' ? JSON.parse(report.metadata) : report.metadata;
+                        statusDetail = metadata?.status_detail || null;
+                    } catch (e) {
+                        console.warn('Error parsing metadata in displayReport:', e);
+                        statusDetail = null;
+                    }
+                }
+                reportStatus.textContent = formatStatus(report.status, statusDetail);
                 reportStatus.className = `session-status ${report.status.replace('_', '-')}`;
             }
             if (reportDate) reportDate.textContent = formatDate(report.created_at);
@@ -1439,12 +1634,15 @@
                 if (report.status === 'draft') {
                     generateBtn.style.display = 'inline-block';
                     runBtn.style.display = 'none';
+                    if (stopBtn) stopBtn.style.display = 'none';
                 } else if (report.status === 'agenda_ready' || report.status === 'failed') {
                     generateBtn.style.display = 'none';
                     runBtn.style.display = 'inline-block';
+                    if (stopBtn) stopBtn.style.display = 'none';
                 } else {
                     generateBtn.style.display = 'none';
                     runBtn.style.display = 'none';
+                    if (stopBtn) stopBtn.style.display = (report.status === 'running' || report.status === 'synthesizing') ? 'inline-block' : 'none';
                 }
             }
             
@@ -1473,8 +1671,20 @@
             
             // Display final report with chart/map placeholder processing
             if (reportBody) {
+                const looksLikeHtml = (text) => {
+                    if (!text || typeof text !== 'string') return false;
+                    // Basic heuristic: if it contains any HTML tag, treat as HTML
+                    return /<\/?[a-z][\s\S]*>/i.test(text);
+                };
+
                 if (report.final_report_html) {
-                    reportBody.innerHTML = processChartPlaceholders(report.final_report_html);
+                    // Sometimes backend fields can accidentally contain markdown; render robustly.
+                    if (looksLikeHtml(report.final_report_html)) {
+                        reportBody.innerHTML = processChartPlaceholders(report.final_report_html);
+                    } else {
+                        const parsedContent = marked.parse(report.final_report_html);
+                        reportBody.innerHTML = processChartPlaceholders(parsedContent);
+                    }
                 } else if (report.final_report) {
                     const parsedContent = marked.parse(report.final_report);
                     reportBody.innerHTML = processChartPlaceholders(parsedContent);
@@ -1485,10 +1695,37 @@
                 refreshChartObservers();
             }
             
-            // Start polling if running
-            if (report.status === 'running' || report.status === 'synthesizing') {
+            // Start polling if running, synthesizing, or draft (agenda generation)
+            if (report.status === 'running' || report.status === 'synthesizing' || report.status === 'draft') {
                 startPolling(report.id);
                 updateProgress(report.progress_percent || 0);
+            }
+        }
+
+        async function stopResearch() {
+            if (!currentReportId) return;
+            if (!confirm('Stop this run? In-progress items will be marked cancelled.')) return;
+            try {
+                const btn = document.getElementById('stopResearchBtn');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Stopping...';
+                }
+                const response = await fetch(`/api/research/${currentReportId}/cancel`, { method: 'POST' });
+                const data = await response.json();
+                if (data.status !== 'success') {
+                    alert('Error: ' + (data.message || 'Failed to stop'));
+                }
+            } catch (e) {
+                console.error('Error stopping research:', e);
+                alert('Error: ' + e.message);
+            } finally {
+                // Let polling refresh state; re-enable button just in case
+                const btn = document.getElementById('stopResearchBtn');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Stop';
+                }
             }
         }
         
@@ -1606,9 +1843,197 @@
                 return;
             }
             
-            container.innerHTML = items.map((item, index) => {
+            // Helpers: normalize metadata + infer phase/iteration for older items
+            function normalizeMetadata(item) {
+                const raw = item?.metadata;
+                if (!raw) return {};
+                if (typeof raw === 'object') return raw;
+                if (typeof raw === 'string') {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        return (parsed && typeof parsed === 'object') ? parsed : {};
+                    } catch (e) {
+                        return {};
+                    }
+                }
+                return {};
+            }
+
+            function inferEvaluationIteration(item, md) {
+                if (md && md.evaluation_iteration !== undefined && md.evaluation_iteration !== null) {
+                    return md.evaluation_iteration;
+                }
+                const reason = (item?.reason || '').toString();
+                const m = reason.match(/evaluation\s*\(iteration\s*(\d+)\)/i) || reason.match(/iteration\s*(\d+)/i);
+                if (m && m[1]) {
+                    const n = parseInt(m[1], 10);
+                    return Number.isFinite(n) ? n : 0;
+                }
+                return 0;
+            }
+
+            function buildConversationViewerLink(sessionId, label = "View session log") {
+                if (!sessionId) return "";
+                return `
+                    <a href="/backend/conversation?session=${encodeURIComponent(sessionId)}"
+                       target="_blank"
+                       style="color: var(--bright-purple); text-decoration: none; font-weight: 600; padding: 4px 10px; border: 1px solid var(--bright-purple); border-radius: 6px; display: inline-block; font-size: 12px; margin-top: 8px;"
+                       title="Open full agent trace (tools, intermediate responses, final answer)">
+                        📋 ${label}
+                    </a>
+                `;
+            }
+
+            function isExplorationItem(item, md) {
+                // New format
+                const phase = (md?.phase || '').toString();
+                const isExploration = md?.is_exploration === true || phase === 'exploration';
+                if (isExploration) return true;
+
+                // Back-compat: older exploration items had high priority and/or a reason string
+                if ((item?.priority ?? 0) >= 100) return true;
+                const reason = (item?.reason || '').toString();
+                if (/breadth[-\s]*first exploration/i.test(reason)) return true;
+
+                return false;
+            }
+
+            // Deduplicate items by item_id - keep the most recent/complete version of each item
+            const itemMap = new Map();
+            items.forEach(item => {
+                const itemId = item.item_id;
+                if (!itemId) {
+                    console.warn('Item without item_id found:', item);
+                    return; // Skip items without ID
+                }
+                
+                // If we've seen this item_id before, keep the one with the most recent update
+                // Priority: completed > in_progress > pending > failed
+                // If same status, prefer the one with more data (result, error_message, or later timestamp)
+                if (itemMap.has(itemId)) {
+                    const existing = itemMap.get(itemId);
+                    const statusPriority = {
+                        'completed': 4,
+                        'in_progress': 3,
+                        // Back-compat / defensive: some older runs used "running"
+                        'running': 3,
+                        'pending': 2,
+                        'failed': 1
+                    };
+                    const existingPriority = statusPriority[existing.status] ?? 0;
+                    const newPriority = statusPriority[item.status] ?? 0;
+                    
+                    // Keep the one with higher status priority
+                    if (newPriority > existingPriority) {
+                        itemMap.set(itemId, item);
+                    } else if (newPriority === existingPriority) {
+                        // Same status - prefer the one with more data or later timestamp
+                        const existingHasData = !!(existing.result || existing.error_message || existing.started_at);
+                        const newHasData = !!(item.result || item.error_message || item.started_at);
+                        
+                        if (newHasData && !existingHasData) {
+                            itemMap.set(itemId, item);
+                        } else if (existingHasData && newHasData) {
+                            // Both have data - keep the one with later timestamp or more complete result
+                            if (item.result && (!existing.result || item.result.length > existing.result.length)) {
+                                itemMap.set(itemId, item);
+                            } else if (item.completed_at && existing.completed_at && 
+                                      item.completed_at > existing.completed_at) {
+                                itemMap.set(itemId, item);
+                            }
+                        }
+                    }
+                } else {
+                    itemMap.set(itemId, item);
+                }
+            });
+            
+            // Convert map back to array
+            const uniqueItems = Array.from(itemMap.values());
+            
+            // Log if we found duplicates
+            if (uniqueItems.length < items.length) {
+                console.log(`Deduplicated ${items.length} items to ${uniqueItems.length} unique items`);
+            }
+            
+            // Hide exploration items by default (they're internal breadth-first scouting).
+            // This makes the Research Items tab reflect the agenda (and eval-added items) only.
+            const visibleItems = showExplorationItems
+                ? uniqueItems
+                : uniqueItems.filter(item => {
+                    const md = normalizeMetadata(item);
+                    return !isExplorationItem(item, md);
+                });
+            
+            // Sort items in a STABLE agenda order so items update inline:
+            // 1) evaluation iteration (Original/0, then Iteration 1, 2, ...)
+            // 2) priority (lower = higher priority)
+            // 3) created_at (tie-breaker)
+            //
+            // IMPORTANT: We intentionally do NOT sort by status, because that makes items
+            // "jump" around (e.g., completed items dropping below pending) and feels like
+            // they disappear mid-run.
+            const sortedItems = [...visibleItems].sort((a, b) => {
+                const aMd = normalizeMetadata(a);
+                const bMd = normalizeMetadata(b);
+
+                // Stable order: eval-iteration (0=original), then priority, then created_at
+                const aIteration = inferEvaluationIteration(a, aMd);
+                const bIteration = inferEvaluationIteration(b, bMd);
+                
+                if (aIteration !== bIteration) {
+                    return aIteration - bIteration;
+                }
+                
+                // Within same iteration, sort by priority (lower priority number = higher priority)
+                const aPriority = a.priority ?? 999;
+                const bPriority = b.priority ?? 999;
+                if (aPriority !== bPriority) {
+                    return aPriority - bPriority;
+                }
+
+                // Tie-breaker: created_at (older first)
+                const aCreated = a.created_at || "";
+                const bCreated = b.created_at || "";
+                if (aCreated < bCreated) return -1;
+                if (aCreated > bCreated) return 1;
+                return 0;
+            });
+            
+            // For display numbering like 1.1, 1.2, 2.1 ... (iteration.item)
+            // We treat "Original" (evalIteration=0) as Iteration 1.
+            const iterationCounters = new Map();
+
+            // Determine current phase from the report metadata, so the UI doesn't look "stuck"
+            // when the backend is doing exploration/evaluation work before starting agenda items.
+            let reportStatusDetail = null;
+            try {
+                if (typeof currentReport !== 'undefined' && currentReport && currentReport.metadata) {
+                    const md = typeof currentReport.metadata === 'string'
+                        ? JSON.parse(currentReport.metadata)
+                        : currentReport.metadata;
+                    reportStatusDetail = md?.status_detail || null;
+                }
+            } catch (e) {
+                reportStatusDetail = null;
+            }
+
+            const reportIsRunning = (typeof currentReport !== 'undefined')
+                && currentReport
+                && (currentReport.status === 'running' || currentReport.status === 'synthesizing');
+
+            const allPending = Array.isArray(items) && items.length > 0
+                && items.every((it) => (it && it.status) ? it.status === 'pending' : true);
+
+            const isExploringPhase = !!(reportIsRunning && reportStatusDetail && /explor/i.test(reportStatusDetail));
+            const isEvaluatingPhase = !!(reportIsRunning && reportStatusDetail && /evaluat/i.test(reportStatusDetail));
+            const isSynthesizingPhase = !!(reportIsRunning && reportStatusDetail && /synthesiz/i.test(reportStatusDetail));
+
+            container.innerHTML = sortedItems.map((item, index) => {
+                // Normalize metadata for consistent access
+                item.metadata = normalizeMetadata(item);
                 const summary = extractSummary(item.result);
-                const isRunning = item.status === 'in_progress';
+                const isRunning = item.status === 'in_progress' || item.status === 'running';
                 const isPending = item.status === 'pending';
                 const isCompleted = item.status === 'completed';
                 
@@ -1640,9 +2065,23 @@
                         ` : ''}
                     `;
                 } else if (isPending) {
+                    let pendingText = 'Waiting to start...';
+                    if (reportIsRunning && allPending) {
+                        if (isExploringPhase) {
+                            pendingText = 'Queued — exploration phase running...';
+                        } else if (isEvaluatingPhase) {
+                            pendingText = 'Queued — evaluation phase running...';
+                        } else if (isSynthesizingPhase) {
+                            pendingText = 'Queued — synthesizing report...';
+                        } else if (reportStatusDetail) {
+                            pendingText = `Queued — ${escapeHtml(reportStatusDetail)}`;
+                        } else {
+                            pendingText = 'Queued...';
+                        }
+                    }
                     resultHtml = `
                         <div style="font-size: 12px; color: var(--text-tertiary); margin-top: 8px;">
-                            Waiting to start...
+                            ${pendingText}
                         </div>
                     `;
                 } else if (item.error_message) {
@@ -1652,82 +2091,37 @@
                         </div>
                     `;
                 } else if (item.result) {
-                    // Process chart placeholders in the full analysis
-                    const processedResult = processChartPlaceholders(marked.parse(item.result));
-                    
-                    // Build iteration history display
-                    let iterationHtml = '';
                     const iterations = item.metadata?.iterations || [];
-                    const totalIterations = item.metadata?.total_iterations || iterations.length;
-                    
-                    if (iterations.length > 0) {
-                        iterationHtml = '<div class="iteration-history">' +
-                            '<div class="iteration-history-header">' +
-                                '<span>🔄 Research Iterations</span>' +
-                                '<span class="iteration-badge">' + totalIterations + ' ' + (totalIterations === 1 ? 'pass' : 'passes') + '</span>' +
-                            '</div>' +
-                            iterations.map((iter, iterIdx) => {
-                                const iterType = iter.type || 'initial';
-                                const isComplete = iter.is_complete;
-                                const followUp = iter.follow_up_question;
-                                
-                                // Parse reason from evaluation if available
-                                let reason = '';
-                                if (iter.evaluation) {
-                                    const reasonMatch = iter.evaluation.split('REASON:');
-                                    if (reasonMatch.length > 1) {
-                                        reason = reasonMatch[1].trim();
-                                    }
-                                }
-                                
-                                let iterHtml = '<div class="iteration-item ' + iterType + '">' +
-                                    '<div class="iteration-header">' +
-                                        '<span class="iteration-label ' + iterType + '">' +
-                                            (iterType === 'initial' ? '📋 Initial Research' : '🔍 Follow-up #' + iterIdx) +
-                                        '</span>' +
-                                        '<span class="iteration-status ' + (isComplete ? 'complete' : 'needs_followup') + '">' +
-                                            (isComplete ? '✓ Complete' : '→ Needs more') +
-                                        '</span>' +
-                                    '</div>' +
-                                    '<div class="iteration-question">' + escapeHtml(iter.question || item.research_question) + '</div>';
-                                
-                                if (reason) {
-                                    iterHtml += '<div class="iteration-reason">' + escapeHtml(reason) + '</div>';
-                                }
-                                
-                                if (followUp && !isComplete) {
-                                    iterHtml += '<div class="follow-up-question">' +
-                                        '<strong>Generated Follow-up:</strong><br>' +
-                                        escapeHtml(followUp) +
-                                    '</div>';
-                                }
-                                
-                                iterHtml += '</div>';
-                                return iterHtml;
-                            }).join('') +
-                        '</div>';
-                    }
+                    const totalIterations = item.metadata?.total_iterations || iterations.length || 1;
+                    const sessionId = item.session_id || item.metadata?.session_id;
+                    const sessionLink = buildConversationViewerLink(sessionId, "View session log");
                     
                     resultHtml = `
                         <div class="research-item-summary">
                             <strong>Summary</strong>
-                            ${summary ? escapeHtml(summary) : 'Analysis complete - see details below'}
+                            ${summary ? escapeHtml(summary) : 'Analysis complete - open session log for details'}
                         </div>
-                        ${iterations.length > 1 ? `<div style="font-size: 12px; color: var(--bright-purple); margin-top: 8px;">🔄 ${totalIterations} research iterations performed</div>` : ''}
-                        <span class="research-item-toggle" onclick="toggleItemDetails(${index})">
-                            Show full analysis ▼
-                        </span>
-                        <div class="research-item-full" id="item-details-${index}">
-                            ${iterationHtml}
-                            <h4 style="margin-top: 16px;">Complete Research Findings</h4>
-                            ${processedResult}
-                        </div>
+                        ${totalIterations > 1 ? `<div style="font-size: 12px; color: var(--bright-purple); margin-top: 8px;">🔄 ${totalIterations} research iterations</div>` : ''}
+                        ${sessionLink || `<div style="font-size: 12px; color: var(--text-tertiary); margin-top: 8px;">No session log available for this item.</div>`}
                     `;
                 }
                 
+                // Number each research set as iteration.item (e.g. 1.1, 1.2, 2.1)
+                // evalIteration=0 => Iteration 1; evalIteration=1 => Iteration 2; etc.
+                const evalIteration = inferEvaluationIteration(item, item.metadata);
+                const displayIteration = (evalIteration && evalIteration > 0) ? (evalIteration + 1) : 1;
+                const nextItemNumber = (iterationCounters.get(displayIteration) || 0) + 1;
+                iterationCounters.set(displayIteration, nextItemNumber);
+                const iterationItemLabel = `${displayIteration}.${nextItemNumber}`;
+                const badgeBg = displayIteration === 1 ? 'var(--spruce-green)' : 'var(--bright-purple)';
+                const iterationLabel = `<span style="display: inline-block; background: ${badgeBg}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; margin-right: 8px;">${iterationItemLabel}</span>`;
+                
                 return `
                     <div class="research-item-card ${item.status}">
-                        <div class="research-item-question">${escapeHtml(item.research_question)}</div>
+                        <div class="research-item-question">
+                            ${iterationLabel}
+                            ${escapeHtml(item.research_question)}
+                        </div>
                         <div class="agenda-item-meta">
                             ${item.metric_name ? `Metric: ${escapeHtml(item.metric_name)}` : ''}
                             <span class="session-status ${item.status}" style="margin-left: 8px;">${formatStatus(item.status)}</span>
@@ -1736,6 +2130,21 @@
                     </div>
                 `;
             }).join('');
+
+            // If we're running but all items are still pending, show a banner so it doesn't feel broken.
+            if (reportIsRunning && allPending) {
+                const bannerText = isExploringPhase
+                    ? `Exploration in progress. Agenda items will start after exploration completes.`
+                    : isEvaluatingPhase
+                        ? `Evaluation in progress. Agenda items will start after evaluation completes.`
+                        : (reportStatusDetail ? `${reportStatusDetail}` : `Research in progress...`);
+
+                container.innerHTML = `
+                    <div style="margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: rgba(0, 91, 248, 0.08); border: 1px solid rgba(0, 91, 248, 0.25); color: var(--text-secondary); font-size: 13px;">
+                        <strong style="color: var(--brand-blue);">Status:</strong> ${escapeHtml(bannerText)}
+                    </div>
+                ` + container.innerHTML;
+            }
         }
         
         // Toggle item details visibility
@@ -1779,6 +2188,7 @@
             const prompt = document.getElementById('promptTextarea').value.trim();
             const modelKey = document.getElementById('modelSelect').value;
             const district = document.getElementById('districtSelect').value;
+            const enableWebSearch = document.getElementById('enableWebSearch').checked;
             
             if (!prompt) return;
             
@@ -1796,7 +2206,8 @@
                         prompt: prompt,
                         district: district,
                         model_key: modelKey,
-                        generate_title: true
+                        generate_title: true,
+                        enable_web_search: enableWebSearch
                     })
                 });
                 
@@ -1865,20 +2276,55 @@
         async function pollAgendaGeneration(jobId) {
             const interval = setInterval(async () => {
                 try {
-                    const response = await fetch(`/api/research/job/${jobId}`);
-                    const data = await response.json();
+                    // Poll both job status and report status for real-time updates
+                    const [jobResponse, reportResponse] = await Promise.all([
+                        fetchJsonNoCache(`/api/research/job/${jobId}?_ts=${Date.now()}`),
+                        currentReportId ? fetchReportWithItems(currentReportId) : Promise.resolve(null)
+                    ]);
                     
-                    if (data.status === 'success') {
-                        const job = data.job;
-                        
-                        if (job.status === 'completed') {
-                            clearInterval(interval);
-                            await loadReports();
-                            selectReport(currentReportId);
-                        } else if (job.status === 'failed') {
-                            clearInterval(interval);
-                            alert('Agenda generation failed: ' + (job.error || 'Unknown error'));
-                            resetAgendaButtons();
+                    // Update report status if available
+                    if (reportResponse) {
+                        const reportData = reportResponse;
+                        if (reportData.status === 'success' && reportData.report) {
+                            const report = reportData.report;
+                            reports.set(currentReportId, report);
+                            
+                            // Update status display in real-time
+                            const reportStatus = document.getElementById('reportStatus');
+                            if (reportStatus) {
+                                let statusDetail = null;
+                                if (report.metadata) {
+                                    try {
+                                        const metadata = typeof report.metadata === 'string' ? JSON.parse(report.metadata) : report.metadata;
+                                        statusDetail = metadata?.status_detail || null;
+                                    } catch (e) {
+                                        console.warn('Error parsing metadata in agenda polling:', e);
+                                        statusDetail = null;
+                                    }
+                                }
+                                reportStatus.textContent = formatStatus(report.status, statusDetail);
+                                reportStatus.className = `session-status ${report.status.replace('_', '-')}`;
+                            }
+                            
+                            renderReportsList();
+                        }
+                    }
+                    
+                    // Check job status
+                    if (jobResponse) {
+                        const data = jobResponse;
+                        if (data.status === 'success') {
+                            const job = data.job;
+                            
+                            if (job.status === 'completed') {
+                                clearInterval(interval);
+                                await loadReports();
+                                selectReport(currentReportId);
+                            } else if (job.status === 'failed') {
+                                clearInterval(interval);
+                                alert('Agenda generation failed: ' + (job.error || 'Unknown error'));
+                                resetAgendaButtons();
+                            }
                         }
                     }
                 } catch (error) {
@@ -2006,8 +2452,7 @@
             
             pollingIntervals[reportId] = setInterval(async () => {
                 try {
-                    const response = await fetch(`/api/research/${reportId}`);
-                    const data = await response.json();
+                    const data = await fetchReportWithItems(reportId);
                     
                     if (data.status === 'success') {
                         const report = data.report;
@@ -2016,6 +2461,44 @@
                         if (currentReportId === reportId) {
                             currentReport = report;
                             updateProgress(report.progress_percent || 0);
+                            
+                            // Update status display in real-time
+                            const reportStatus = document.getElementById('reportStatus');
+                            if (reportStatus) {
+                                // Extract status detail from metadata
+                                let statusDetail = null;
+                                if (report.metadata) {
+                                    try {
+                                        const metadata = typeof report.metadata === 'string' ? JSON.parse(report.metadata) : report.metadata;
+                                        statusDetail = metadata?.status_detail || null;
+                                    } catch (e) {
+                                        console.warn('Error parsing metadata in polling:', e);
+                                        statusDetail = null;
+                                    }
+                                }
+                                reportStatus.textContent = formatStatus(report.status, statusDetail);
+                                reportStatus.className = `session-status ${report.status.replace('_', '-')}`;
+                            }
+                            
+                            // Update action buttons based on status
+                            const generateBtn = document.getElementById('generateAgendaBtn');
+                            const runBtn = document.getElementById('runResearchBtn');
+                            const stopBtn = document.getElementById('stopResearchBtn');
+                            if (generateBtn && runBtn) {
+                                if (report.status === 'draft') {
+                                    generateBtn.style.display = 'inline-block';
+                                    runBtn.style.display = 'none';
+                                    if (stopBtn) stopBtn.style.display = 'none';
+                                } else if (report.status === 'agenda_ready' || report.status === 'failed') {
+                                    generateBtn.style.display = 'none';
+                                    runBtn.style.display = 'inline-block';
+                                    if (stopBtn) stopBtn.style.display = 'none';
+                                } else {
+                                    generateBtn.style.display = 'none';
+                                    runBtn.style.display = 'none';
+                                    if (stopBtn) stopBtn.style.display = (report.status === 'running' || report.status === 'synthesizing') ? 'inline-block' : 'none';
+                                }
+                            }
                             
                             if (report.items) {
                                 displayResearchItems(report.items);
@@ -2071,11 +2554,6 @@
             });
         }
         
-        // View research details
-        function viewResearchDetails(reportId) {
-            selectReport(reportId);
-        }
-        
         // Delete research
         async function deleteResearch(reportId) {
             if (!confirm('Are you sure you want to delete this research report?')) return;
@@ -2099,6 +2577,140 @@
             } catch (error) {
                 console.error('Error deleting:', error);
                 alert('Error: ' + error.message);
+            }
+        }
+        
+        // Show regenerate UI with model dropdown
+        function showRegenerateUI(reportId) {
+            // Close any open dropdown menus
+            document.querySelectorAll('.session-menu-dropdown').forEach(d => d.classList.remove('show'));
+            
+            // Add to regenerating set
+            regeneratingReportIds.add(reportId);
+            renderReportsList();
+            
+            // Populate model dropdown after render
+            setTimeout(() => populateRegenerateModelDropdowns(), 50);
+        }
+
+        // Show re-synthesize UI (uses the same controls block)
+        function showResynthesizeUI(reportId) {
+            // Close any open dropdown menus
+            document.querySelectorAll('.session-menu-dropdown').forEach(d => d.classList.remove('show'));
+            
+            regeneratingReportIds.add(reportId);
+            renderReportsList();
+            setTimeout(() => populateRegenerateModelDropdowns(), 50);
+        }
+        
+        // Cancel regenerate UI
+        function cancelRegenerate(reportId) {
+            regeneratingReportIds.delete(reportId);
+            renderReportsList();
+        }
+        
+        // Populate model dropdowns for regenerate
+        function populateRegenerateModelDropdowns() {
+            const modelSelects = document.querySelectorAll('[id^="regenerateModel_"]');
+            const mainModelSelect = document.getElementById('modelSelect');
+            
+            modelSelects.forEach(select => {
+                if (mainModelSelect && mainModelSelect.innerHTML) {
+                    select.innerHTML = mainModelSelect.innerHTML;
+                }
+            });
+        }
+        
+        // Execute regeneration
+        async function executeRegenerate(reportId) {
+            const modelSelect = document.getElementById(`regenerateModel_${reportId}`);
+            const modelKey = modelSelect ? modelSelect.value : '';
+            
+            if (!confirm('Are you sure you want to regenerate this research? This will re-run the research with the selected model.')) {
+                return;
+            }
+            
+            // Remove from regenerating set
+            regeneratingReportIds.delete(reportId);
+            
+            // Show running status
+            const report = reports.get(reportId);
+            if (report) {
+                report.status = 'running';
+                reports.set(reportId, report);
+            }
+            renderReportsList();
+            
+            // Select the report to show progress
+            selectReport(reportId);
+            
+            try {
+                const response = await fetch(`/api/research/${reportId}/regenerate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_key: modelKey })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Start polling for updates
+                    startPolling(reportId);
+                    
+                    // Update progress display
+                    const progressContainer = document.getElementById('progressContainer');
+                    if (progressContainer) progressContainer.style.display = 'block';
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to regenerate research'));
+                    await loadReports();
+                    selectReport(reportId);
+                }
+            } catch (error) {
+                console.error('Error regenerating research:', error);
+                alert('Error: ' + error.message);
+                await loadReports();
+                selectReport(reportId);
+            }
+        }
+
+        // Re-synthesize final report only (no re-research of items)
+        async function executeResynthesize(reportId) {
+            const modelSelect = document.getElementById(`regenerateModel_${reportId}`);
+            const modelKey = modelSelect ? modelSelect.value : '';
+            
+            if (!confirm('Re-synthesize the final report from existing item results? This will NOT re-run research; it only rebuilds the final report.')) {
+                return;
+            }
+            
+            // Remove from regenerating set
+            regeneratingReportIds.delete(reportId);
+            renderReportsList();
+            
+            // Select the report to show progress
+            selectReport(reportId);
+            
+            try {
+                const response = await fetch(`/api/research/${reportId}/resynthesize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_key: modelKey })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Start polling for updates
+                    startPolling(reportId);
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to re-synthesize report'));
+                    await loadReports();
+                    selectReport(reportId);
+                }
+            } catch (error) {
+                console.error('Error re-synthesizing report:', error);
+                alert('Error: ' + error.message);
+                await loadReports();
+                selectReport(reportId);
             }
         }
         
@@ -2256,7 +2868,7 @@
             setTimeout(observeCharts, 100);
         }
         
-        function formatStatus(status) {
+        function formatStatus(status, statusDetail = null) {
             const statusMap = {
                 'draft': 'Draft',
                 'agenda_ready': 'Ready',
@@ -2268,7 +2880,15 @@
                 'pending': 'Pending',
                 'in_progress': 'In Progress'
             };
-            return statusMap[status] || status;
+            
+            let statusText = statusMap[status] || status;
+            
+            // Add status detail if available for more context
+            if (statusDetail && (status === 'draft' || status === 'running' || status === 'synthesizing')) {
+                statusText += `: ${statusDetail}`;
+            }
+            
+            return statusText;
         }
         
         function formatDate(dateStr) {

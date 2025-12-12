@@ -1,21 +1,21 @@
-# Transparent SF — Visual Design System & Style Guide
-**Version 2.0 | December 2024**
+# TransparentCity — Visual Design System & Style Guide
+**Version 2.0 | December 2024 (TransparentCity / transparent.city)**
 
 ---
 
 ## 1. Brand Foundation
 
 ### Brand Essence
-Transparent SF uses AI and public data to make San Francisco's civic landscape legible, understandable, and actionable for everyday residents. We cut through headlines, spin, and political narratives by delivering clear, consistent insights grounded in real data.
+TransparentCity uses AI and public data to make cities' civic landscapes legible, understandable, and actionable for everyday residents. We cut through headlines, spin, and political narratives by delivering clear, consistent insights grounded in real data.
 
 ### Only-ness Statement
-The only project that uses AI to transform San Francisco's public data into simple, citizen-focused insights that expose what's really happening in the city and how to improve it.
+The only project that uses AI to transform public data into simple, citizen-focused insights that expose what's really happening in a city and how to improve it.
 
 ### Core Belief
 **Legibility precedes progress.** Public data is powerful, but only if people can understand and use it.
 
 ### Mission
-Transform raw public data into actionable insights that reveal how San Francisco is really working — helping citizens cut through stakeholder spin, advocate for effective solutions, and hold leaders accountable to measurable outcomes.
+Transform raw public data into actionable insights that reveal how cities are really working — helping residents cut through stakeholder spin, advocate for effective solutions, and hold leaders accountable to measurable outcomes.
 
 ### Voice & Personality
 - **Intelligent but accessible** — Complex data made understandable
@@ -1083,7 +1083,8 @@ When building new components or templates, verify:
 
 ---
 
-*This style guide is a living document. Update it as the design system evolves.*
+*This style guide is a living document for the TransparentCity platform and TransparentSF. Update it as the design system evolves.*
 
-**Prepared for Transparent SF | December 2024**
+**Prepared for TransparentCity / transparent.city | December 2024**
+
 

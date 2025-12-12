@@ -805,6 +805,54 @@ When anomalies are found, include them in your explanation using chart placehold
 This systematic approach ensures thorough investigation of metric changes through anomaly analysis.
 """
 
+# Web search tools
+WEB_SEARCH_INSTRUCTIONS = """WEB SEARCH TOOL:
+
+Use the search_web tool to find real-time information, current events, recent news, and additional context that can help explain data trends, anomalies, or provide background information.
+
+- search_web: Search the web for real-time information and context using Perplexity AI
+  USAGE: search_web(query="your search query", system_message=None)
+  
+  This tool uses Perplexity AI to search the web and provide up-to-date information with citations.
+  
+  Parameters:
+  - query: The search query describing what information you're looking for (required)
+  - system_message: Optional custom system message to guide the search (defaults to general research prompt)
+  
+  Returns:
+  - content: The search results and context information
+  - citations: List of source citations for the information
+  - metadata: Additional metadata from the search (links, search_queries, etc.)
+  
+  When to use:
+  - When you need current events or recent news related to a metric change
+  - When you need background information or explanations for trends
+  - When you need to understand external factors that might explain data patterns
+  - When you need real-time context that isn't available in the documentation
+  
+  Example:
+  ```
+  search_web(query="What are the recent trends in crime rates in San Francisco?")
+  ```
+  
+  ```
+  search_web(query="Why might police incident reports have increased in District 2?")
+  ```
+  
+  Best practices:
+  - Use specific, focused queries rather than very broad ones
+  - Include relevant context (location, time period, metric type) in your query
+  - Review citations to verify information quality
+  - Use web search to supplement, not replace, data analysis from the dataset
+  - Combine web search results with data from set_dataset and query_docs for comprehensive analysis
+  
+  Integration with workflow:
+  - Use web search after you've analyzed the data but need additional context
+  - Use web search to find explanations for unexpected patterns or anomalies
+  - Use web search to provide real-world context for data trends
+  - Cite sources when using information from web search in your explanations
+"""
+
 # Metrics management tools
 METRICS_TOOLS_INSTRUCTIONS = """METRICS MANAGEMENT TOOLS:
 Metrics Workflow:
@@ -1009,6 +1057,11 @@ PROMPT_SECTIONS = {
         'name': 'Metrics Management',
         'description': 'Tools for managing and querying metrics database',
         'content': METRICS_TOOLS_INSTRUCTIONS
+    },
+    'web_search': {
+        'name': 'Web Search',
+        'description': 'Instructions for using web search to find real-time context and information',
+        'content': WEB_SEARCH_INSTRUCTIONS
     }
 }
 

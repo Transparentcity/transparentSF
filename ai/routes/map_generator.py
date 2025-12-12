@@ -114,6 +114,130 @@ async def get_metrics():
             content={"status": "error", "message": f"Error getting metrics: {str(e)}"}
         )
 
+@router.post("/api/map-generator/repair-map/{map_id}")
+async def repair_map_location_data(map_id: int) -> JSONResponse:
+    """
+    Repair a stored map's location_data for known schema mismatches.
+
+    Why this exists:
+    - Some older analysis-neighborhood delta maps were saved with a `district` key
+      instead of `neighborhood`, causing the viewer to treat all regions as missing.
+
+    This endpoint is safe/idempotent: it only rewrites items when it detects a
+    missing expected key and a present alternate key.
+    """
+    try:
+        def _repair_operation(conn):
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+            cursor.execute(
+                """
+                SELECT id, type, metadata, location_data
+                FROM maps
+                WHERE id = %s
+                """,
+                (map_id,),
+            )
+            rec = cursor.fetchone()
+            if not rec:
+                cursor.close()
+                return {"status": "not_found"}
+
+            map_type = rec.get("type")
+            location_data = rec.get("location_data")
+            metadata = rec.get("metadata")
+
+            # Parse location_data which may be stored as JSON string.
+            if isinstance(location_data, str):
+                try:
+                    location_data = json.loads(location_data)
+                except Exception:
+                    location_data = None
+
+            if not isinstance(location_data, list):
+                cursor.close()
+                return {
+                    "status": "unsupported",
+                    "map_type": map_type,
+                    "reason": "location_data is not a JSON list",
+                }
+
+            changes = 0
+            sample_before_keys = sorted(
+                {k for item in location_data[:5] if isinstance(item, dict) for k in item.keys()}
+            )
+
+            # Repair rules
+            if map_type == "analysis_neighborhood":
+                # Viewer expects "neighborhood" key.
+                for item in location_data:
+                    if not isinstance(item, dict):
+                        continue
+                    if "neighborhood" not in item and "district" in item:
+                        item["neighborhood"] = item.get("district")
+                        changes += 1
+            elif map_type in ("supervisor_district", "police_district"):
+                # Viewer expects "district" key.
+                for item in location_data:
+                    if not isinstance(item, dict):
+                        continue
+                    if "district" not in item and "neighborhood" in item:
+                        item["district"] = item.get("neighborhood")
+                        changes += 1
+
+            if changes > 0:
+                cursor.execute(
+                    """
+                    UPDATE maps
+                    SET location_data = %s
+                    WHERE id = %s
+                    """,
+                    (json.dumps(location_data), map_id),
+                )
+                conn.commit()
+
+            sample_after_keys = sorted(
+                {k for item in location_data[:5] if isinstance(item, dict) for k in item.keys()}
+            )
+
+            cursor.close()
+            return {
+                "status": "success",
+                "map_id": map_id,
+                "map_type": map_type,
+                "changes": changes,
+                "sample_before_keys": sample_before_keys,
+                "sample_after_keys": sample_after_keys,
+                "has_metadata": bool(metadata),
+            }
+
+        db_result = execute_with_connection(_repair_operation)
+        if db_result["status"] == "error":
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": db_result["message"]},
+            )
+
+        result = db_result["result"]
+        if result.get("status") == "not_found":
+            return JSONResponse(
+                status_code=404,
+                content={"status": "error", "message": f"Map {map_id} not found"},
+            )
+
+        if result.get("status") == "unsupported":
+            return JSONResponse(status_code=400, content=result)
+
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logger.error(f"Error repairing map {map_id}: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"Error repairing map: {str(e)}"},
+        )
+
+
 @router.get("/api/anomalies/{metric_id}")
 async def get_anomalies_for_metric(metric_id: str, district: str = None, period_type: str = None, time_periods: str = None):
     """Get anomalies for a specific metric with optional filters."""

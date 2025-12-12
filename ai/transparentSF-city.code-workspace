@@ -5,6 +5,12 @@
 		},
 		{
 			"path": "../../../transparentcity-platform"
+		},
+		{
+			"path": "../../../UIfromGit"
+		},
+		{
+			"path": "../../../transparentcity-ui"
 		}
 	],
 	"settings": {}

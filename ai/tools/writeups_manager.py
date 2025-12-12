@@ -307,6 +307,7 @@ class WriteupsManager:
             # Get response from agent using async streaming
             response_content = ""
             session_id = None
+            agent_stopped = False
             
             async for chunk in agent.explain_change_streaming(writeup_prompt, metric_details={}):
                 # Process streaming chunks
@@ -319,11 +320,32 @@ class WriteupsManager:
                             response_content += data['content']
                         elif 'session_id' in data:
                             session_id = data['session_id']
-                        elif 'completion' in data:
+                        if data.get('agent_stopped'):
+                            agent_stopped = True
+                        if data.get('completed'):
                             # Stream completed
                             break
                     except json.JSONDecodeError:
                         continue
+            
+            # If the agent stopped early, fall back to sync invoke to force a full answer.
+            if agent_stopped:
+                logger.warning(
+                    f"Write-up agent stopped early for writeup {writeup_id}; retrying sync invoke"
+                )
+                retry_prompt = (
+                    writeup_prompt
+                    + "\n\nIMPORTANT: Provide the COMPLETE write-up now. "
+                    "Do not narrate your steps."
+                )
+                retry = agent.explain_change_sync(
+                    retry_prompt,
+                    metric_details={},
+                    session_id=session_id,
+                )
+                if retry.get("success") and retry.get("explanation"):
+                    response_content = str(retry.get("explanation"))
+                    session_id = retry.get("session_id") or session_id
             
             # Create result object similar to the sync version
             result = {

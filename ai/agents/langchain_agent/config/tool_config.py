@@ -15,6 +15,7 @@ class ToolGroup(Enum):
     VISUALIZATION = "visualization"
     DOCUMENTATION = "documentation"
     ANOMALY_DETECTION = "anomaly_detection"
+    WEB_SEARCH = "web_search"
 
 @dataclass
 class ToolDefinition:
@@ -293,6 +294,22 @@ class ToolConfig:
         
         # Anomaly detection tools (empty for now, but initialized to prevent validation errors)
         self.tool_groups[ToolGroup.ANOMALY_DETECTION] = []
+        
+        # Web search tools
+        self.tool_groups[ToolGroup.WEB_SEARCH] = [
+            ToolDefinition(
+                name="search_web",
+                function=None,
+                description="Search the web for real-time information and context using Perplexity AI. Use this to find current events, recent news, explanations, or additional context that might help explain data trends or anomalies.",
+                group=ToolGroup.WEB_SEARCH,
+                required_prompt_sections=["web_search", "workflow"],
+                examples=[
+                    "search_web(query='What are the recent trends in crime rates in San Francisco?')",
+                    "Use this to get real-time information and context about topics related to your analysis",
+                    "search_web(query='Why might police incident reports have increased in District 2?')"
+                ]
+            )
+        ]
     
     def _initialize_prompt_sections(self):
         """Initialize the prompt sections that correspond to tool groups."""
@@ -306,7 +323,8 @@ class ToolConfig:
             "core_tools": "Primary tools for data analysis and anomaly investigation",
             "set_dataset": "Instructions for querying DataSF datasets",
             "map_generation": "Comprehensive instructions for creating maps using the TransparentSF system",
-            "metrics_tools": "Tools for managing and querying metrics database"
+            "metrics_tools": "Tools for managing and querying metrics database",
+            "web_search": "Instructions for using web search to find real-time context and information"
         }
     
     def get_tools_for_groups(self, groups: List[ToolGroup]) -> List[ToolDefinition]:

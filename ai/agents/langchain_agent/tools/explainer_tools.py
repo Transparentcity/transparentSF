@@ -422,3 +422,138 @@ def get_charts_for_review_tool(
     except Exception as e:
         logger.exception("Error in get_charts_for_review_tool")
         return {'error': f'Error retrieving charts for review: {str(e)}'} 
+
+
+def search_web_tool(query: str, system_message: str = None) -> Dict[str, Any]:
+    """
+    Search the web for real-time information and context using Perplexity AI.
+    Use this to find current events, recent news, explanations, or additional 
+    context that might help explain data trends or anomalies.
+    
+    Args:
+        query: The search query describing what information you're looking for
+        system_message: Optional custom system message to guide the search (defaults to general research prompt)
+        
+    Returns:
+        Dictionary with status, context content, citations, and other metadata
+    """
+    logger.info("=== Starting search_web_tool ===")
+    logger.info(f"Query: {query}")
+    
+    try:
+        # Import required modules
+        import os
+        import requests
+        import json
+        
+        # Check if Perplexity API key is available
+        PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
+        if not PERPLEXITY_API_KEY:
+            logger.warning("No Perplexity API key available")
+            return {
+                'status': 'error',
+                'error': 'Perplexity API key not configured. Web search is not available.',
+                'error_type': 'configuration_error'
+            }
+        
+        # Default system message if not provided
+        if not system_message:
+            system_message = """You are a helpful research assistant. Provide accurate, 
+            up-to-date information based on web search results. Include relevant citations 
+            and focus on factual information that can help explain data trends and patterns."""
+        
+        # Make the API call to Perplexity
+        url = "https://api.perplexity.ai/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {PERPLEXITY_API_KEY}"
+        }
+        
+        payload = {
+            "model": "sonar",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_message
+                },
+                {
+                    "role": "user",
+                    "content": query
+                }
+            ]
+        }
+        
+        # Make the API request
+        logger.info(f"Sending request to Perplexity API")
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            logger.info("Successfully received response from Perplexity API")
+            result = response.json()
+            
+            # Extract the content from the response
+            context_content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            if not context_content:
+                logger.warning("Received empty content from Perplexity API")
+                return {
+                    'status': 'error',
+                    'error': 'Empty response from Perplexity API',
+                    'error_type': 'empty_response'
+                }
+            
+            # Extract citations and other metadata
+            perplexity_response = {}
+            
+            # Extract citations from the top level of the response
+            if "citations" in result:
+                perplexity_response["citations"] = result["citations"]
+                logger.info(f"Found top-level citations: {len(result['citations'])} citations")
+            else:
+                # Fallback: Check if citations are in the message
+                if "choices" in result and len(result["choices"]) > 0:
+                    message = result["choices"][0].get("message", {})
+                    if "citations" in message:
+                        perplexity_response["citations"] = message["citations"]
+                        logger.info(f"Found message-level citations: {len(message['citations'])} citations")
+            
+            # Store other relevant fields from the top level
+            for field in ["links", "search_queries", "attachments", "tool_calls"]:
+                if field in result:
+                    perplexity_response[field] = result[field]
+                    logger.info(f"Found top-level {field} in Perplexity response")
+            
+            logger.info(f"Web search completed successfully (content length: {len(context_content)})")
+            
+            return {
+                'status': 'success',
+                'content': context_content,
+                'citations': perplexity_response.get("citations", []),
+                'metadata': perplexity_response,
+                'query': query
+            }
+        else:
+            error_text = response.text
+            logger.error(f"Perplexity API error: {response.status_code} - {error_text}")
+            return {
+                'status': 'error',
+                'error': f'Perplexity API error: {response.status_code}',
+                'error_details': error_text,
+                'error_type': 'api_error'
+            }
+            
+    except requests.exceptions.Timeout:
+        logger.error("Perplexity API request timed out")
+        return {
+            'status': 'error',
+            'error': 'Request to Perplexity API timed out',
+            'error_type': 'timeout'
+        }
+    except Exception as e:
+        logger.exception("Error in search_web_tool")
+        return {
+            'status': 'error',
+            'error': f'Error searching web: {str(e)}',
+            'error_type': 'unexpected_error'
+        }

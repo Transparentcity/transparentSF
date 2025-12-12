@@ -1362,9 +1362,11 @@
             );
             
             // Calculate min/max values for proper color scaling
-            const values = mapData.locationData.map(item => item.value);
-            const minValue = Math.min(...values);
-            const maxValue = Math.max(...values);
+            const values = (mapData.locationData || [])
+                .map(item => Number(item.value))
+                .filter(v => Number.isFinite(v));
+            const minValue = values.length ? Math.min(...values) : 0;
+            const maxValue = values.length ? Math.max(...values) : 0;
             
             console.log('Map data:', mapData.locationData);
             console.log('Is delta map:', isDeltaMap);
@@ -1386,15 +1388,42 @@
                         
                         if (areaData) {
                             // Calculate the exact color for this area
-                            const ratio = (areaData.value - minValue) / (maxValue - minValue);
+                            const denom = (maxValue - minValue) || 1;
+                            const ratio = (Number(areaData.value) - minValue) / denom;
                             let calculatedColor;
                             
                             if (isDeltaMap) {
                                 // Delta map: color based on actual percent change value
                                 // 0% = white, negative = green, positive = red
-                                const percentChange = areaData.percent_change || 0;
+                                let percentChange = areaData.percent_change;
+                                const cur = Number(areaData.current_value);
+                                const prev = Number(areaData.previous_value);
+                                const delta = Number(areaData.delta);
+                                const val = Number(areaData.value);
+                                // Prefer explicit percent_change; otherwise derive it.
+                                if (!Number.isFinite(Number(percentChange))) {
+                                    if (Number.isFinite(cur) && Number.isFinite(prev)) {
+                                        if (prev !== 0) {
+                                            percentChange = (cur - prev) / prev;
+                                        } else {
+                                            percentChange = cur === 0 ? 0 : 1.0;
+                                        }
+                                    } else if (Number.isFinite(delta) && Number.isFinite(prev) && prev !== 0) {
+                                        percentChange = delta / prev;
+                                    } else if (Number.isFinite(val)) {
+                                        // Heuristic: some pipelines store percent points in `value` (-100..100)
+                                        percentChange = Math.abs(val) > 1.5 ? (val / 100) : val;
+                                    } else {
+                                        percentChange = null;
+                                    }
+                                } else {
+                                    percentChange = Number(percentChange);
+                                }
                                 
-                                if (percentChange === 0) {
+                                if (percentChange === null) {
+                                    // Missing/invalid delta data → treat as "no data" (light gray)
+                                    calculatedColor = '#f0f0f0';
+                                } else if (percentChange === 0) {
                                     // Exactly 0% change = white
                                     calculatedColor = '#ffffff';
                                 } else if (percentChange < 0) {
@@ -1445,13 +1474,13 @@
                                 properties: {
                                     ...feature.properties,
                                     [fieldName]: areaId,
-                                    value: areaData.value,
+                                    value: Number.isFinite(Number(areaData.value)) ? Number(areaData.value) : null,
                                     title: areaData.title,
                                     color: calculatedColor,
-                                    current_value: areaData.current_value,
-                                    previous_value: areaData.previous_value,
-                                    delta: areaData.delta,
-                                    percent_change: areaData.percent_change
+                                    current_value: Number.isFinite(Number(areaData.current_value)) ? Number(areaData.current_value) : null,
+                                    previous_value: Number.isFinite(Number(areaData.previous_value)) ? Number(areaData.previous_value) : null,
+                                    delta: Number.isFinite(Number(areaData.delta)) ? Number(areaData.delta) : null,
+                                    percent_change: (typeof percentChange === 'number' && Number.isFinite(percentChange)) ? percentChange : null
                                 }
                             };
                         } else {
@@ -1461,13 +1490,13 @@
                                 properties: {
                                     ...feature.properties,
                                     [fieldName]: areaId,
-                                    value: 0,
+                                    value: null,
                                     title: `${isNeighborhoodMap ? 'Neighborhood' : 'District'} ${areaId}`,
                                     color: '#f0f0f0',
-                                    current_value: 0,
-                                    previous_value: 0,
-                                    delta: 0,
-                                    percent_change: 0
+                                    current_value: null,
+                                    previous_value: null,
+                                    delta: null,
+                                    percent_change: null
                                 }
                             };
                         }
@@ -1558,10 +1587,15 @@
                         let popupContent = `<div style="font-size: 12px; line-height: 1.4; padding: 8px;"><strong>${properties.title || 'District ' + properties.district}</strong>`;
                         
                         // Check if this is a delta map (has current_value, previous_value, etc.)
-                        if (properties.current_value !== undefined && properties.previous_value !== undefined) {
-                            popupContent += `<br>Current: ${properties.current_value}<br>Previous: ${properties.previous_value}<br>Change: ${properties.delta || 0}<br>Percent: ${(properties.percent_change * 100).toFixed(1)}%`;
+                        const cur = Number(properties.current_value);
+                        const prev = Number(properties.previous_value);
+                        const pct = Number(properties.percent_change);
+                        if (Number.isFinite(cur) && Number.isFinite(prev)) {
+                            const delta = Number.isFinite(Number(properties.delta)) ? Number(properties.delta) : (cur - prev);
+                            const pctText = Number.isFinite(pct) ? `${(pct * 100).toFixed(1)}%` : 'N/A';
+                            popupContent += `<br>Current: ${cur}<br>Previous: ${prev}<br>Change: ${delta}<br>Percent: ${pctText}`;
                         } else {
-                            popupContent += `<br>Value: ${properties.value}`;
+                            popupContent += `<br>${properties.value === null || properties.value === undefined ? 'No data' : `Value: ${properties.value}`}`;
                         }
                         popupContent += `</div>`;
                         
@@ -1585,10 +1619,15 @@
                         let popupContent = `<div style="font-size: 12px; line-height: 1.4; padding: 8px;"><strong>${properties.title || 'District ' + properties.district}</strong>`;
                         
                         // Check if this is a delta map (has current_value, previous_value, etc.)
-                        if (properties.current_value !== undefined && properties.previous_value !== undefined) {
-                            popupContent += `<br>Current: ${properties.current_value}<br>Previous: ${properties.previous_value}<br>Change: ${properties.delta || 0}<br>Percent: ${(properties.percent_change * 100).toFixed(1)}%`;
+                        const cur = Number(properties.current_value);
+                        const prev = Number(properties.previous_value);
+                        const pct = Number(properties.percent_change);
+                        if (Number.isFinite(cur) && Number.isFinite(prev)) {
+                            const delta = Number.isFinite(Number(properties.delta)) ? Number(properties.delta) : (cur - prev);
+                            const pctText = Number.isFinite(pct) ? `${(pct * 100).toFixed(1)}%` : 'N/A';
+                            popupContent += `<br>Current: ${cur}<br>Previous: ${prev}<br>Change: ${delta}<br>Percent: ${pctText}`;
                         } else {
-                            popupContent += `<br>Value: ${properties.value}`;
+                            popupContent += `<br>${properties.value === null || properties.value === undefined ? 'No data' : `Value: ${properties.value}`}`;
                         }
                         popupContent += `</div>`;
                         

@@ -36,7 +36,8 @@ from .map_generation_tools import generate_map_tool, get_map_by_id_tool, get_rec
 from .explainer_tools import (
     set_dataset_tool, query_docs_tool,
     get_notes_tool, get_dashboard_metric_tool, query_anomalies_db_tool,
-    get_anomaly_details_tool, get_dataset_columns_tool, get_charts_for_review_tool
+    get_anomaly_details_tool, get_dataset_columns_tool, get_charts_for_review_tool,
+    search_web_tool
 )
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,9 @@ class ToolFactory:
             # Visualization tools
             "generate_map": generate_map_tool,
             "generate_map_with_query": generate_map_with_query_tool,
+            
+            # Web search tools
+            "search_web": search_web_tool,
         }
     
     def create_tools_for_groups(self, groups: List[ToolGroup]) -> List[Tool]:

@@ -2308,6 +2308,16 @@ async def query_anomalies_endpoint(
                         else:
                             formatted_date = period_date.strftime('%Y-%m-%d')
                     
+                    # Calculate sigma (standard deviations from mean) where possible
+                    std_dev_value = item.get("std_dev", 0)
+                    sigma = None
+                    if std_dev_value and std_dev_value > 0:
+                        try:
+                            sigma = abs(item.get("difference", 0)) / std_dev_value
+                        except Exception as e:
+                            logging.error(f"Error calculating sigma for anomaly {item.get('id')}: {e}")
+                            sigma = None
+
                     # Extract data from the result
                     anomaly_data = {
                         "id": item.get("id"),
@@ -2320,7 +2330,8 @@ async def query_anomalies_endpoint(
                         "comparison_mean": comparison_mean,
                         "difference": item.get("difference", 0),
                         "percent_change": percent_change,
-                        "std_dev": item.get("std_dev", 0),
+                        "std_dev": std_dev_value,
+                        "sigma": sigma,
                         "period_date": formatted_date,
                         "period_type": item_period_type,
                         "explanation": item.get("explanation", ""),
@@ -2380,22 +2391,47 @@ async def query_anomalies_endpoint(
                     logging.error(f"Error processing anomaly item: {item_error}")
                     logging.error(f"Problem item: {item}")
             
-            # Determine sort key based on query_type
-            sort_key = 'percent_change'
-            if query_type == 'by_anomaly_severity':
-                sort_key = 'difference'
-            
-            # Sort by absolute value of the key (highest impact first)
-            positive_anomalies = sorted(positive_anomalies, 
-                                      key=lambda x: abs(float(x.get(sort_key, 0) or 0)), 
-                                      reverse=True)[:limit]
-            
-            negative_anomalies = sorted(negative_anomalies, 
-                                      key=lambda x: abs(float(x.get(sort_key, 0) or 0)), 
-                                      reverse=True)[:limit]
-            
-            logging.info(f"Categorized anomalies: {len(positive_anomalies)} positive, {len(negative_anomalies)} negative")
-            
+            # ------------------------------------------------------------------
+            # Category-level and anomaly-level ordering
+            #
+            # We want to:
+            # 1) Determine which group_field_name ("category") is most explanatory
+            #    based on the maximum sigma (standard deviations from mean)
+            # 2) Order categories by that max sigma (descending)
+            # 3) Within each category, order anomalies by their own sigma (descending)
+            #
+            # The client then simply renders anomalies in the order provided by
+            # the API without doing its own ranking.
+            # ------------------------------------------------------------------
+
+            # Build category -> max sigma map across all anomalies
+            all_anomalies_for_ranking = positive_anomalies + negative_anomalies
+            category_max_sigma: Dict[str, float] = {}
+
+            for anomaly in all_anomalies_for_ranking:
+                sigma_value = anomaly.get("sigma")
+                if sigma_value is None:
+                    continue
+                category = anomaly.get("group_field_name") or "Unknown"
+                current_max = category_max_sigma.get(category)
+                if current_max is None or sigma_value > current_max:
+                    category_max_sigma[category] = sigma_value
+
+            def anomaly_sort_key(anomaly: Dict[str, Any]) -> tuple:
+                """Sort by category significance then anomaly significance."""
+                category = anomaly.get("group_field_name") or "Unknown"
+                category_score = category_max_sigma.get(category, 0.0)
+                sigma_value = anomaly.get("sigma") or 0.0
+                # Negative values to achieve descending sort
+                anomaly_id = anomaly.get("id") or 0
+                return (-category_score, -sigma_value, anomaly_id)
+
+            # Apply ordering to each list separately while using shared category scores
+            positive_anomalies.sort(key=anomaly_sort_key)
+            negative_anomalies.sort(key=anomaly_sort_key)
+
+            logging.info(f"Categorized anomalies (ordered): {len(positive_anomalies)} positive, {len(negative_anomalies)} negative")
+
             return {
                 "status": "success",
                 "count": len(positive_anomalies) + len(negative_anomalies),

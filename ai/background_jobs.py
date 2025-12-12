@@ -33,7 +33,8 @@ class BackgroundJob:
         self.job_id = job_id
         self.job_type = job_type
         self.description = description
-        self.status = "pending"  # pending, running, completed, failed
+        self.status = "pending"  # pending, running, completed, failed, cancelled
+        self.cancel_requested = False
         self.progress = 0
         self.result = None
         self.error = None
@@ -61,6 +62,17 @@ class BackgroundJob:
         self.error = error
         self.end_time = datetime.now()
         logger.error(f"Job {self.job_id} ({self.job_type}) failed: {error}")
+
+    def cancel(self, reason: str = "Cancelled"):
+        """Request cancellation and mark job as cancelled."""
+        self.cancel_requested = True
+        # If already finished, do not change terminal state
+        if self.status in ["completed", "failed", "cancelled"]:
+            return
+        self.status = "cancelled"
+        self.error = reason
+        self.end_time = datetime.now()
+        logger.warning(f"Job {self.job_id} ({self.job_type}) cancelled: {reason}")
         
     def update_progress(self, progress: int):
         """Update the job progress (0-100)."""
@@ -103,6 +115,7 @@ class BackgroundJobManager:
     
     def __init__(self):
         self.jobs: Dict[str, BackgroundJob] = {}
+        self._tasks: Dict[str, asyncio.Task] = {}
         self._lock = threading.Lock()
         
     def create_job(self, job_type: str, description: str) -> str:
@@ -120,6 +133,25 @@ class BackgroundJobManager:
         """Get a job by ID."""
         with self._lock:
             return self.jobs.get(job_id)
+
+    def register_task(self, job_id: str, task: asyncio.Task) -> None:
+        """Associate an asyncio Task with a job (for cooperative cancellation)."""
+        with self._lock:
+            self._tasks[job_id] = task
+
+    def cancel_job(self, job_id: str, reason: str = "Cancelled by user") -> bool:
+        """Cancel a running job if it exists."""
+        with self._lock:
+            job = self.jobs.get(job_id)
+            if not job:
+                return False
+            job.cancel(reason=reason)
+            task = self._tasks.get(job_id)
+
+        # Best-effort: if we have a task, cancel it too (will raise CancelledError inside)
+        if task and not task.done():
+            task.cancel()
+        return True
             
     def get_all_jobs(self) -> Dict[str, BackgroundJob]:
         """Get all jobs."""

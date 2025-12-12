@@ -54,20 +54,33 @@ def _calculate_delta_data(current_df: pd.DataFrame, previous_df: pd.DataFrame,
             suffixes=('_current', '_previous')
         )
         
-        delta_data = []
+        # Output key must match what the map viewer expects:
+        # - supervisor_district / police_district: "district"
+        # - analysis_neighborhood: "neighborhood"
+        output_key = "neighborhood" if group_field == "analysis_neighborhood" else "district"
+
+        delta_data: List[Dict[str, Any]] = []
         for _, row in merged_data.iterrows():
             if pd.isna(row[group_field]):
                 continue
                 
-            # Handle district values (convert to string)
-            district_value = row[group_field]
-            if pd.api.types.is_numeric_dtype(type(district_value)) or (isinstance(district_value, str) and district_value.replace('.', '', 1).isdigit()):
-                try:
-                    district = str(int(float(district_value)))
-                except:
-                    district = str(district_value)
+            # Normalize the key value based on map type.
+            # For districts, force an integer-like string ("1".."11") when possible.
+            # For neighborhoods, preserve the neighborhood name as-is.
+            raw_key_value = row[group_field]
+            if output_key == "district":
+                if pd.api.types.is_numeric_dtype(type(raw_key_value)) or (
+                    isinstance(raw_key_value, str)
+                    and raw_key_value.replace(".", "", 1).isdigit()
+                ):
+                    try:
+                        key_value = str(int(float(raw_key_value)))
+                    except Exception:
+                        key_value = str(raw_key_value)
+                else:
+                    key_value = str(raw_key_value)
             else:
-                district = str(district_value)
+                key_value = str(raw_key_value)
             
             current_value = row[f"{value_field}_current"]
             previous_value = row[f"{value_field}_previous"]
@@ -81,7 +94,7 @@ def _calculate_delta_data(current_df: pd.DataFrame, previous_df: pd.DataFrame,
             
             # Create enhanced data structure for delta maps
             delta_data.append({
-                "district": district,
+                output_key: key_value,
                 "current_value": current_value,
                 "previous_value": previous_value,
                 "delta": delta,
@@ -215,13 +228,17 @@ def _create_previous_period_query(query: str, period_type: str = "month") -> str
     
     # Check if query was actually modified
     if previous_query == query:
-        logger.error(f"⚠️  DELTA MAP ERROR: Query was NOT modified for previous period!")
+        logger.error("⚠️  DELTA MAP ERROR: Query was NOT modified for previous period!")
         logger.error(f"Original query: {query}")
-        logger.error(f"This will result in identical current/previous values (white map)")
-        logger.error(f"Query must contain one of these patterns:")
-        logger.error(f"  - date_trunc_ym(field) = date_trunc_ym(CURRENT_DATE)")
-        logger.error(f"  - field >= CURRENT_DATE")
-        logger.error(f"  - field >= 'YYYY-MM-DD' AND field <= 'YYYY-MM-DD'")
+        logger.error("This will result in identical current/previous values (often a white map)")
+        logger.error("Query must contain one of these patterns:")
+        logger.error("  - date_trunc_ym(field) = date_trunc_ym(CURRENT_DATE)")
+        logger.error("  - field >= CURRENT_DATE")
+        logger.error("  - field >= 'YYYY-MM-DD' AND field <= 'YYYY-MM-DD'")
+        raise ValueError(
+            "Delta map requires a query with a recognizable date filter so the "
+            "system can fetch the previous period automatically."
+        )
     else:
         logger.info(f"✅ Successfully created previous period query: {previous_query}")
     
@@ -578,7 +595,14 @@ def generate_map_with_query_tool(endpoint: str, query: str, map_title: str, map_
             
             # Create previous period query using explicit period_type
             period_type_to_use = period_type or "month"  # Default to month if not specified
-            previous_query = _create_previous_period_query(query, period_type_to_use)
+            try:
+                previous_query = _create_previous_period_query(query, period_type_to_use)
+            except ValueError as e:
+                return {
+                    "status": "error",
+                    "error": str(e),
+                    "queryURL": result.get("queryURL"),
+                }
             
             # Fetch previous period data
             previous_query_object = {'endpoint': endpoint, 'query': previous_query}

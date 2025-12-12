@@ -394,13 +394,17 @@
             const statsContent = document.getElementById('session-stats-content');
             
             // Session info
+            const derived = data.derived || {};
             const infoItems = [
                 ['Session ID', data.session_id || 'Unknown'],
+                ['Status', derived.derived_status || (data.end_time ? 'completed' : 'running')],
+                ['Looks Incomplete', (derived.looks_incomplete === true) ? 'Yes' : (derived.looks_incomplete === false ? 'No' : 'Unknown')],
                 ['Start Time', data.start_time ? new Date(data.start_time).toLocaleString() : 'Unknown'],
                 ['End Time', data.end_time ? new Date(data.end_time).toLocaleString() : 'Unknown'],
                 ['Model', data.model || 'Unknown'],
                 ['Tool Groups', data.tool_groups ? data.tool_groups.join(', ') : 'Unknown'],
-                ['Duration', data.total_execution_time_ms ? `${data.total_execution_time_ms}ms` : 'Unknown']
+                ['Duration', (data.total_execution_time_ms !== undefined && data.total_execution_time_ms !== null) ? `${data.total_execution_time_ms}ms` : 'Unknown'],
+                ['Last Event', derived.last_event_time ? new Date(derived.last_event_time).toLocaleString() : 'Unknown']
             ];
             
             infoContent.innerHTML = infoItems.map(([label, value]) => 
