@@ -17,6 +17,7 @@ Research Flow:
 import logging
 import json
 import uuid
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from enum import Enum
@@ -25,6 +26,37 @@ from pydantic import BaseModel, Field
 from tools.db_utils import execute_with_connection
 
 logger = logging.getLogger(__name__)
+
+
+def generate_slug(title: str, report_id: int) -> str:
+    """
+    Generate a URL-friendly slug from a title.
+    
+    Args:
+        title: The report title
+        report_id: The report ID (used as fallback)
+        
+    Returns:
+        A URL-friendly slug
+    """
+    # Convert to lowercase and replace spaces with hyphens
+    slug = title.lower()
+    # Remove special characters, keep only alphanumeric, spaces, and hyphens
+    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
+    # Replace multiple spaces/hyphens with single hyphen
+    slug = re.sub(r'[\s-]+', '-', slug)
+    # Remove leading/trailing hyphens
+    slug = slug.strip('-')
+    # Limit length
+    if len(slug) > 100:
+        slug = slug[:100].rstrip('-')
+    # If empty, use report ID
+    if not slug:
+        slug = f"research-{report_id}"
+    # Ensure uniqueness by appending report_id if slug is too short
+    if len(slug) < 5:
+        slug = f"{slug}-{report_id}"
+    return slug
 
 
 class ResearchStatus(str, Enum):
@@ -99,6 +131,11 @@ class ResearchReport(BaseModel):
     total_items: int = 0
     completed_items: int = 0
     progress_percent: int = 0
+    
+    # Public sharing
+    is_public: bool = Field(False, description="Whether the report is publicly accessible")
+    permalink_slug: Optional[str] = Field(None, description="Unique slug for permalink URL")
+    social_media_content: Optional[Dict[str, Any]] = Field(None, description="Social media content (title, text, visuals)")
 
     class Config:
         json_encoders = {
@@ -119,27 +156,9 @@ class ResearchManager:
             def create_tables(conn):
                 cursor = conn.cursor()
                 
-                # Check if table exists with wrong schema by checking column count
-                # The correct schema has exactly 18 columns
-                try:
-                    cursor.execute("""
-                        SELECT COUNT(*) FROM information_schema.columns 
-                        WHERE table_name = 'research_reports'
-                    """)
-                    col_count = cursor.fetchone()[0]
-                    
-                    # If table exists but has wrong number of columns, drop it
-                    # Expected: exactly 18 columns. Any deviation means wrong schema
-                    if col_count > 0 and col_count != 18:
-                        cursor.execute("DROP TABLE IF EXISTS research_items CASCADE")
-                        cursor.execute("DROP TABLE IF EXISTS research_reports CASCADE")
-                        conn.commit()
-                        logger.info(f"Dropped research tables with wrong column count ({col_count} != 18)")
-                except Exception as e:
-                    logger.debug(f"Schema check note: {e}")
-                    conn.rollback()
-                
                 # Create research_reports table
+                # Note: We use CREATE TABLE IF NOT EXISTS and ALTER TABLE ADD COLUMN IF NOT EXISTS
+                # to safely add new columns without dropping existing tables/data
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS research_reports (
                         id SERIAL PRIMARY KEY,
@@ -158,6 +177,9 @@ class ResearchManager:
                         completed_items INTEGER DEFAULT 0,
                         progress_percent INTEGER DEFAULT 0,
                         metadata JSONB DEFAULT '{}'::jsonb,
+                        is_public BOOLEAN DEFAULT FALSE,
+                        permalink_slug VARCHAR(255) UNIQUE,
+                        social_media_content JSONB,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         CONSTRAINT valid_research_status CHECK (
@@ -166,6 +188,34 @@ class ResearchManager:
                         )
                     )
                 """)
+                
+                # Add new columns if they don't exist (for existing databases)
+                try:
+                    cursor.execute("""
+                        ALTER TABLE research_reports 
+                        ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE
+                    """)
+                    cursor.execute("""
+                        ALTER TABLE research_reports 
+                        ADD COLUMN IF NOT EXISTS permalink_slug VARCHAR(255)
+                    """)
+                    cursor.execute("""
+                        ALTER TABLE research_reports 
+                        ADD COLUMN IF NOT EXISTS social_media_content JSONB
+                    """)
+                    # Create unique index on permalink_slug
+                    cursor.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS research_reports_permalink_slug_idx 
+                        ON research_reports (permalink_slug) 
+                        WHERE permalink_slug IS NOT NULL
+                    """)
+                    # Create index on is_public for filtering
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS research_reports_is_public_idx 
+                        ON research_reports (is_public)
+                    """)
+                except Exception as e:
+                    logger.debug(f"Note adding new columns (may already exist): {e}")
                 
                 # Create index on created_at for faster queries
                 cursor.execute("""
@@ -408,12 +458,13 @@ class ResearchManager:
                     'title', 'status', 'agenda', 'agenda_json', 
                     'final_report', 'final_report_html', 'model_key',
                     'session_id', 'error_message', 'total_items',
-                    'completed_items', 'progress_percent', 'metadata'
+                    'completed_items', 'progress_percent', 'metadata',
+                    'is_public', 'permalink_slug', 'social_media_content'
                 ]
                 
                 for field, value in kwargs.items():
                     if field in allowed_fields:
-                        if field in ['agenda', 'metadata']:
+                        if field in ['agenda', 'metadata', 'social_media_content']:
                             update_fields.append(f"{field} = %s")
                             params.append(json.dumps(value) if value else None)
                         else:

@@ -146,15 +146,20 @@ def _create_previous_period_query(query: str, period_type: str = "month") -> str
     
     # Handle hardcoded date ranges for month/year/quarter comparisons
     if period_type in ["month", "year", "quarter"]:
-        # Pattern to match hardcoded date ranges like "field >= '2025-09-01' AND field <= '2025-09-30'"
+        # Pattern to match hardcoded date ranges like:
+        # - field >= '2025-09-01' AND field <= '2025-09-30'
+        # - field >= '2025-11-01' AND field < '2025-12-01'
         def create_modified_range(match):
-            start_year = int(match.group(2))
-            start_month = int(match.group(3))
-            start_day = int(match.group(4))
-            field_name_end = match.group(5)  # Capture end field name
-            end_year = int(match.group(6))
-            end_month = int(match.group(7))
-            end_day = int(match.group(8))
+            field_name_start = match.group(1)
+            start_op = match.group(2)
+            start_year = int(match.group(3))
+            start_month = int(match.group(4))
+            start_day = int(match.group(5))
+            field_name_end = match.group(6)  # Capture end field name
+            end_op = match.group(7)
+            end_year = int(match.group(8))
+            end_month = int(match.group(9))
+            end_day = int(match.group(10))
             
             # Create datetime objects
             start_date = datetime(start_year, start_month, start_day)
@@ -187,9 +192,15 @@ def _create_previous_period_query(query: str, period_type: str = "month") -> str
             prev_start_str = prev_start_date.strftime("%Y-%m-%d")
             prev_end_str = prev_end_date.strftime("%Y-%m-%d")
             
-            return f"{match.group(1)} >= '{prev_start_str}' AND {field_name_end} <= '{prev_end_str}'"
+            return (
+                f"{field_name_start} {start_op} '{prev_start_str}' AND "
+                f"{field_name_end} {end_op} '{prev_end_str}'"
+            )
         
-        pattern = r"(\w+)\s*>=\s*'(\d{4})-(\d{2})-(\d{2})'\s*AND\s*(\w+)\s*<=\s*'(\d{4})-(\d{2})-(\d{2})'"
+        pattern = (
+            r"(\w+)\s*(>=|>)\s*'(\d{4})-(\d{2})-(\d{2})'\s*AND\s*"
+            r"(\w+)\s*(<=|<)\s*'(\d{4})-(\d{2})-(\d{2})'"
+        )
         
         previous_query = re.sub(pattern, create_modified_range, query, flags=re.IGNORECASE)
         
@@ -197,10 +208,12 @@ def _create_previous_period_query(query: str, period_type: str = "month") -> str
             logger.info(f"Created {period_type} previous period query: {previous_query}")
             return previous_query
     
-    # Handle custom period type - return original query (user handles manually)
+    # Handle custom period type - require explicit previous query
     if period_type == "custom":
-        logger.info("Custom period type - returning original query")
-        return query
+        raise ValueError(
+            "Custom delta maps require an explicit previous-period query. "
+            "Provide `previous_query` (or include it in map_metadata)."
+        )
     
     # Define period intervals for CURRENT_DATE modifications
     period_intervals = {
@@ -413,12 +426,18 @@ def get_recent_maps_tool(limit: int = 10, map_type: Optional[str] = None) -> Dic
             'error': f'Failed to retrieve recent maps: {str(e)}'
         }
 
-def generate_map_with_query_tool(endpoint: str, query: str, map_title: str, map_type: str, 
-                                 map_metadata: Optional[Dict[str, Any]] = None, 
-                                 series_field: Optional[str] = None, 
-                                 color_palette: Optional[str] = None,
-                                 metric_id: Optional[str] = None,
-                                 period_type: Optional[str] = None) -> Dict[str, Any]:
+def generate_map_with_query_tool(
+    endpoint: str,
+    query: str,
+    map_title: str,
+    map_type: str,
+    map_metadata: Optional[Dict[str, Any]] = None,
+    series_field: Optional[str] = None,
+    color_palette: Optional[str] = None,
+    metric_id: Optional[str] = None,
+    period_type: Optional[str] = None,
+    previous_query: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Generate a map by querying DataSF and creating a map visualization in one step.
     
@@ -595,17 +614,37 @@ def generate_map_with_query_tool(endpoint: str, query: str, map_title: str, map_
             
             # Create previous period query using explicit period_type
             period_type_to_use = period_type or "month"  # Default to month if not specified
-            try:
-                previous_query = _create_previous_period_query(query, period_type_to_use)
-            except ValueError as e:
-                return {
-                    "status": "error",
-                    "error": str(e),
-                    "queryURL": result.get("queryURL"),
-                }
+            # Allow providing a manual previous query for custom comparisons.
+            meta_prev_query = None
+            if isinstance(map_metadata, dict):
+                meta_prev_query = map_metadata.get("previous_query")
+
+            if period_type_to_use == "custom":
+                prev_q = previous_query or meta_prev_query
+                if not prev_q:
+                    return {
+                        "status": "error",
+                        "error": (
+                            "Delta map with period_type='custom' requires `previous_query` "
+                            "(or map_metadata.previous_query) so we can compute deltas."
+                        ),
+                        "queryURL": result.get("queryURL"),
+                    }
+                previous_query_to_use = prev_q
+            else:
+                try:
+                    previous_query_to_use = _create_previous_period_query(
+                        query, period_type_to_use
+                    )
+                except ValueError as e:
+                    return {
+                        "status": "error",
+                        "error": str(e),
+                        "queryURL": result.get("queryURL"),
+                    }
             
             # Fetch previous period data
-            previous_query_object = {'endpoint': endpoint, 'query': previous_query}
+            previous_query_object = {'endpoint': endpoint, 'query': previous_query_to_use}
             previous_result = fetch_data_from_api(previous_query_object)
             
             if previous_result and 'data' in previous_result and previous_result['data']:
