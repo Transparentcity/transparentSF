@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime
 from dataclasses import dataclass, asdict
 from dataclasses_json import dataclass_json
+import tiktoken
 
 
 # Add the parent directory to sys.path for absolute imports
@@ -28,7 +29,7 @@ from langchain.tools import Tool
 from langchain.schema import BaseMessage, HumanMessage, AIMessage
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage as CoreHumanMessage, AIMessage as CoreAIMessage, SystemMessage, BaseMessage as CoreBaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import Tool
 from langchain_core.callbacks import BaseCallbackHandler
@@ -929,6 +930,122 @@ class LangChainExplainerAgent:
             self.logger.error(f"Traceback: {traceback.format_exc()}")
             raise
 
+    def _count_tokens(self, text: str) -> int:
+        """
+        Count tokens in a text string using tiktoken.
+        
+        Args:
+            text: Text to count tokens for
+            
+        Returns:
+            Number of tokens
+        """
+        try:
+            # Use cl100k_base encoding (used by GPT-4, GPT-3.5-turbo, etc.)
+            encoding = tiktoken.get_encoding("cl100k_base")
+            return len(encoding.encode(str(text)))
+        except Exception as e:
+            self.logger.warning(f"Error counting tokens with tiktoken: {e}, using fallback")
+            # Fallback: rough estimate (1 token ≈ 4 characters)
+            return len(str(text)) // 4
+
+    def _count_message_tokens(self, message: Union[BaseMessage, CoreBaseMessage]) -> int:
+        """
+        Count tokens in a LangChain message.
+        
+        Args:
+            message: LangChain message object
+            
+        Returns:
+            Number of tokens
+        """
+        content = ""
+        if hasattr(message, 'content'):
+            content = str(message.content)
+        elif hasattr(message, 'text'):
+            content = str(message.text)
+        else:
+            content = str(message)
+        
+        return self._count_tokens(content)
+
+    def _truncate_chat_history(
+        self, 
+        chat_history: List[Union[BaseMessage, CoreBaseMessage]], 
+        max_tokens: int,
+        current_prompt_tokens: int = 0,
+        reserve_tokens: int = 10000
+    ) -> List[Union[BaseMessage, CoreBaseMessage]]:
+        """
+        Truncate chat history to fit within token limits.
+        
+        Keeps the most recent messages while ensuring total tokens don't exceed the limit.
+        Leaves room for the current prompt and response.
+        
+        Args:
+            chat_history: List of conversation messages
+            max_tokens: Maximum context window size (e.g., 128000 for GPT-4o)
+            current_prompt_tokens: Tokens in the current prompt
+            reserve_tokens: Tokens to reserve for response and overhead
+            
+        Returns:
+            Truncated chat history that fits within token limits
+        """
+        if not chat_history:
+            return chat_history
+        
+        # Calculate available tokens for chat history
+        # Reserve space for: current prompt + response + overhead
+        available_tokens = max_tokens - current_prompt_tokens - reserve_tokens
+        
+        if available_tokens <= 0:
+            self.logger.warning(
+                f"Available tokens ({available_tokens}) <= 0, returning empty history. "
+                f"max_tokens={max_tokens}, current_prompt_tokens={current_prompt_tokens}, "
+                f"reserve_tokens={reserve_tokens}"
+            )
+            return []
+        
+        # Count tokens for each message
+        message_tokens = []
+        total_tokens = 0
+        
+        for i, message in enumerate(chat_history):
+            tokens = self._count_message_tokens(message)
+            message_tokens.append((i, message, tokens))
+            total_tokens += tokens
+        
+        self.logger.info(
+            f"Chat history token analysis: {len(chat_history)} messages, "
+            f"{total_tokens} total tokens, {available_tokens} available"
+        )
+        
+        # If we're under the limit, return as-is
+        if total_tokens <= available_tokens:
+            return chat_history
+        
+        # Start from the most recent messages and work backwards
+        # Keep messages until we hit the token limit
+        kept_messages = []
+        kept_tokens = 0
+        
+        # Reverse iterate to keep most recent messages
+        for i, message, tokens in reversed(message_tokens):
+            if kept_tokens + tokens <= available_tokens:
+                kept_messages.insert(0, message)  # Insert at beginning to maintain order
+                kept_tokens += tokens
+            else:
+                # Can't fit this message, stop
+                break
+        
+        removed_count = len(chat_history) - len(kept_messages)
+        self.logger.warning(
+            f"Truncated chat history: kept {len(kept_messages)}/{len(chat_history)} messages "
+            f"({kept_tokens}/{total_tokens} tokens). Removed {removed_count} older messages."
+        )
+        
+        return kept_messages
+
     def add_message(self, role: str, content: str):
         """Add a message to the conversation history."""
         if role == "user":
@@ -1187,10 +1304,22 @@ class LangChainExplainerAgent:
             
             self.add_message("user", prompt)
 
+            # Get chat history and truncate if needed
+            chat_history = self.messages[:-1]  # Exclude current message
+            context_window = self.model_config.context_window
+            prompt_tokens = self._count_tokens(prompt)
+            chat_history = self._truncate_chat_history(
+                chat_history, 
+                max_tokens=context_window,
+                current_prompt_tokens=prompt_tokens,
+                reserve_tokens=10000  # Reserve for response and overhead
+            )
+            self.logger.info(f"After truncation: {len(chat_history)} messages for sync method")
+
             result = self.agent_executor.invoke(
                 {
                     "input": prompt,
-                    "chat_history": self.messages[:-1] # Exclude current message
+                    "chat_history": chat_history
                 },
                 config={"callbacks": [execution_callback]}
             )
@@ -1314,6 +1443,17 @@ class LangChainExplainerAgent:
                 memory_variables = self.memory.load_memory_variables({})
                 chat_history = memory_variables.get("chat_history", [])
                 self.logger.info(f"Loaded {len(chat_history)} messages from memory for Anthropic")
+                
+                # Truncate chat history to fit within token limits
+                context_window = self.model_config.context_window
+                prompt_tokens = self._count_tokens(prompt)
+                chat_history = self._truncate_chat_history(
+                    chat_history, 
+                    max_tokens=context_window,
+                    current_prompt_tokens=prompt_tokens,
+                    reserve_tokens=10000  # Reserve for response and overhead
+                )
+                self.logger.info(f"After truncation: {len(chat_history)} messages for Anthropic")
                 
                 # Use astream_events but with better handling for Anthropic
                 event_count = 0
@@ -1662,6 +1802,17 @@ class LangChainExplainerAgent:
             memory_variables = self.memory.load_memory_variables({})
             chat_history = memory_variables.get("chat_history", [])
             self.logger.info(f"Loaded {len(chat_history)} messages from memory")
+            
+            # Truncate chat history to fit within token limits
+            context_window = self.model_config.context_window
+            prompt_tokens = self._count_tokens(prompt)
+            chat_history = self._truncate_chat_history(
+                chat_history, 
+                max_tokens=context_window,
+                current_prompt_tokens=prompt_tokens,
+                reserve_tokens=10000  # Reserve for response and overhead
+            )
+            self.logger.info(f"After truncation: {len(chat_history)} messages")
             
             async for event in self.agent_executor.astream_events({
                 "input": prompt,

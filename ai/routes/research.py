@@ -188,6 +188,15 @@ async def list_research_reports(
                             report[key] = {}
                     elif not isinstance(value, dict):
                         report[key] = {}
+                # Ensure social_media_content is a dict if it's JSONB from PostgreSQL
+                if key == 'social_media_content' and value is not None:
+                    if isinstance(value, str):
+                        try:
+                            report[key] = json.loads(value)
+                        except:
+                            report[key] = None
+                    elif not isinstance(value, dict):
+                        report[key] = None
         
         return JSONResponse({
             "status": "success",
@@ -263,6 +272,44 @@ async def get_research_report(report_id: int):
         }, status_code=500)
 
 
+async def _generate_title_background(
+    report_id: int, prompt: str, model_key: Optional[str]
+) -> None:
+    """
+    Background task to generate a title for a research report and update it.
+    
+    This runs asynchronously after the report is created, allowing the UI
+    to respond immediately with a placeholder title.
+    """
+    try:
+        from tools.research_manager import get_research_manager
+        
+        manager = get_research_manager()
+        
+        # Generate the title using AI
+        generated_title = await _generate_research_title(prompt, model_key)
+        
+        # Update the report with the generated title
+        update_result = manager.update_report(report_id, title=generated_title)
+        
+        if update_result.get("status") == "success":
+            logger.info(
+                f"Updated research report {report_id} title: {generated_title}"
+            )
+        else:
+            logger.warning(
+                f"Failed to update title for report {report_id}: "
+                f"{update_result.get('message')}"
+            )
+            
+    except Exception as e:
+        logger.error(
+            f"Error generating title in background for report {report_id}: {e}",
+            exc_info=True
+        )
+        # Don't raise - this is a background task, we don't want to crash
+
+
 @router.post("/create")
 async def create_research_report(request: Request):
     """Create a new research report."""
@@ -286,15 +333,16 @@ async def create_research_report(request: Request):
         
         manager = get_research_manager()
         
-        # Generate title if not provided
-        if not title and generate_title:
-            title = await _generate_research_title(prompt, model_key)
-        elif not title:
+        # Use placeholder title immediately for optimistic UI
+        # If user provided a title, use it; otherwise use placeholder
+        # The placeholder will be replaced by background task if generate_title is True
+        if not title:
             title = f"Research: {prompt[:50]}..."
         
         # Store web search option in metadata
         metadata = {"enable_web_search": enable_web_search}
         
+        # Create report immediately with placeholder title
         result = manager.create_report(
             title=title,
             original_prompt=prompt,
@@ -311,7 +359,18 @@ async def create_research_report(request: Request):
         
         report_id = result.get("report_id")
         
-        logger.info(f"Created research report {report_id}: {title}")
+        logger.info(f"Created research report {report_id} with placeholder title")
+        
+        # If title generation is enabled and user didn't provide a title,
+        # generate it in the background
+        if generate_title and not body.get("title", "").strip():
+            # Spawn background task to generate and update title
+            asyncio.create_task(
+                _generate_title_background(report_id, prompt, model_key)
+            )
+            logger.info(
+                f"Spawned background task to generate title for report {report_id}"
+            )
         
         return JSONResponse({
             "status": "success",
@@ -825,6 +884,169 @@ async def get_research_items(report_id: int):
         
     except Exception as e:
         logger.error(f"Error getting research items: {e}", exc_info=True)
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
+
+
+@router.post("/{report_id}/items/{item_id}/regenerate")
+async def regenerate_research_item(report_id: int, item_id: str, request: Request):
+    """Regenerate a single research item by re-running it with a new model."""
+    try:
+        body = await request.json()
+        model_key = body.get("model_key")
+        
+        from tools.research_manager import get_research_manager
+        
+        manager = get_research_manager()
+        report = manager.get_report(report_id)
+        
+        if not report:
+            return JSONResponse({
+                "status": "error",
+                "message": "Research report not found"
+            }, status_code=404)
+        
+        # Get the item
+        items = manager.get_research_items(report_id)
+        item = next((it for it in items if it.get('item_id') == item_id), None)
+        
+        if not item:
+            return JSONResponse({
+                "status": "error",
+                "message": "Research item not found"
+            }, status_code=404)
+        
+        if item.get('status') not in ['completed', 'failed']:
+            return JSONResponse({
+                "status": "error",
+                "message": f"Cannot regenerate research item in status: {item.get('status')}"
+            }, status_code=400)
+        
+        # Reset item to pending status
+        md = item.get("metadata") or {}
+        if isinstance(md, str):
+            try:
+                md = json.loads(md)
+            except Exception:
+                md = {}
+        if not isinstance(md, dict):
+            md = {}
+        
+        # Clear iteration history but keep core metadata
+        md.pop("iterations", None)
+        md.pop("total_iterations", None)
+        
+        # Update item to pending
+        manager.update_research_item(
+            report_id,
+            item_id,
+            status="pending",
+            result=None,
+            error_message=None,
+            session_id=None,
+            started_at=None,
+            completed_at=None,
+            metadata=md
+        )
+        
+        # Use the provided model_key or fall back to report's model_key
+        final_model_key = model_key if model_key else report.get('model_key')
+        
+        logger.info(f"Reset research item {item_id} in report {report_id} for regeneration with model {final_model_key}")
+        
+        # If the report is not currently running, we need to start processing this item
+        # Otherwise, it will be picked up by the existing research execution
+        if report.get('status') not in ['running', 'synthesizing']:
+            # Create a background job to process just this item
+            job_id = job_manager.create_job(
+                "research_item_execution",
+                f"Regenerating research item: {item.get('research_question', 'Item')[:50]}"
+            )
+            
+            job = job_manager.get_job(job_id)
+            job.start()
+            
+            # Update report status to running
+            existing_metadata = report.get("metadata", {})
+            if isinstance(existing_metadata, str):
+                try:
+                    existing_metadata = json.loads(existing_metadata)
+                except Exception:
+                    existing_metadata = {}
+            elif not isinstance(existing_metadata, dict):
+                existing_metadata = {}
+            
+            existing_metadata["status_detail"] = f"Regenerating item: {item.get('research_question', 'Item')[:50]}"
+            existing_metadata["job_id"] = job_id
+            
+            manager.update_report(
+                report_id,
+                status="running",
+                metadata=existing_metadata,
+            )
+            
+            # Run the single item in background
+            task = asyncio.create_task(
+                _run_single_item_execution_job(
+                    job_id,
+                    report_id,
+                    item_id,
+                    final_model_key
+                )
+            )
+            job_manager.register_task(job_id, task)
+        else:
+            # Report is already running, the item will be picked up automatically
+            # Just ensure the report metadata includes the job_id
+            existing_metadata = report.get("metadata", {})
+            if isinstance(existing_metadata, str):
+                try:
+                    existing_metadata = json.loads(existing_metadata)
+                except Exception:
+                    existing_metadata = {}
+            elif not isinstance(existing_metadata, dict):
+                existing_metadata = {}
+            
+            if existing_metadata.get("job_id"):
+                # Item will be processed by existing job
+                pass
+            else:
+                # Need to create a job for this single item
+                job_id = job_manager.create_job(
+                    "research_item_execution",
+                    f"Regenerating research item: {item.get('research_question', 'Item')[:50]}"
+                )
+                job = job_manager.get_job(job_id)
+                job.start()
+                
+                existing_metadata["status_detail"] = f"Regenerating item: {item.get('research_question', 'Item')[:50]}"
+                existing_metadata["job_id"] = job_id
+                
+                manager.update_report(
+                    report_id,
+                    status="running",
+                    metadata=existing_metadata,
+                )
+                
+                task = asyncio.create_task(
+                    _run_single_item_execution_job(
+                        job_id,
+                        report_id,
+                        item_id,
+                        final_model_key
+                    )
+                )
+                job_manager.register_task(job_id, task)
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Research item regeneration started"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error regenerating research item: {e}", exc_info=True)
         return JSONResponse({
             "status": "error",
             "message": str(e)
@@ -1350,6 +1572,9 @@ async def _run_agenda_generation_job(
                 metric_name = metadata.get('object_name', a.get('group_value', 'Unknown'))
                 anomaly_context += f"- {metric_name}: {a.get('difference', 0):.1f} change (ID: {a.get('id')})\n"
         
+        # Get current date for context
+        current_date = datetime.now().strftime("%B %d, %Y")
+        
         # Generate agenda using AI - focused on clear success criteria and research-question iteration
         agenda_prompt = f"""You are creating a research agenda for investigating San Francisco public data. This agenda will drive a research process where each item is processed INDEPENDENTLY in parallel by different workers.
 
@@ -1357,6 +1582,7 @@ async def _run_agenda_generation_job(
 "{prompt}"
 
 ## CONTEXT
+Current Date: {current_date}
 District: {district if district != "0" else "Citywide"}
 {anomaly_context}
 
@@ -1651,8 +1877,12 @@ Respond with ONLY valid JSON, no additional text, no markdown code blocks, just 
                 # Fix common JSON errors
                 fixed_json = json_str
                 
-                # Fix: "priority": 2" -> "priority": 2
-                fixed_json = re.sub(r'"priority":\s*(\d+)"', r'"priority": \1', fixed_json)
+                # Fix: "priority": 2" -> "priority": 2 (extra quote after number)
+                # This handles cases like "priority": 2" or "priority": 2"
+                fixed_json = re.sub(r'"priority":\s*(\d+)"(\s*[,}])', r'"priority": \1\2', fixed_json)
+                
+                # Fix: Any field with extra quote after number: "field": 123" -> "field": 123
+                fixed_json = re.sub(r'":\s*(\d+)"(\s*[,}\n])', r'": \1\2', fixed_json)
                 
                 # Fix: Missing comma before closing brace in objects
                 fixed_json = re.sub(r'(\d+)"\s*\n\s*}', r'\1\n    }', fixed_json)
@@ -1660,11 +1890,18 @@ Respond with ONLY valid JSON, no additional text, no markdown code blocks, just 
                 # Fix: Trailing commas before closing braces/brackets
                 fixed_json = re.sub(r',(\s*[}\]])', r'\1', fixed_json)
                 
-                # Fix: Extra quotes around numbers
+                # Fix: Extra quotes around numbers (quoted numbers should be unquoted)
                 fixed_json = re.sub(r':\s*"(\d+)"', r': \1', fixed_json)
                 
                 # Fix: Missing comma between object properties
                 fixed_json = re.sub(r'"\s*\n\s*"', r'",\n        "', fixed_json)
+                
+                # Fix: Extra quotes at end of lines (common LLM error)
+                fixed_json = re.sub(r'(\d+)"\s*$', r'\1', fixed_json, flags=re.MULTILINE)
+                
+                # Log the fix attempt for debugging
+                if fixed_json != json_str:
+                    logger.debug(f"Applied JSON fixes. Original length: {len(json_str)}, Fixed length: {len(fixed_json)}")
                 
                 try:
                     agenda = json.loads(fixed_json)
@@ -1674,18 +1911,35 @@ Respond with ONLY valid JSON, no additional text, no markdown code blocks, just 
                     error_line = getattr(e2, 'lineno', 'unknown')
                     error_col = getattr(e2, 'colno', 'unknown')
                     lines = fixed_json.split('\n')
-                    problematic_line = lines[error_line - 1] if error_line <= len(lines) else "N/A"
+                    problematic_line = lines[error_line - 1] if isinstance(error_line, int) and error_line <= len(lines) else "N/A"
+                    
+                    # Show context around the error
+                    context_lines = []
+                    if isinstance(error_line, int) and error_line > 0:
+                        start = max(0, error_line - 3)
+                        end = min(len(lines), error_line + 2)
+                        context_lines = lines[start:end]
                     
                     error_message = (
                         f"Failed to parse agenda JSON after error recovery: {str(e2)}. "
                         f"Error at line {error_line}, column {error_col}. "
-                        f"Problematic line: {problematic_line[:100]}. "
-                        f"Response preview: {response[:1000]}"
+                        f"Problematic line: {problematic_line[:200]}. "
+                        f"Context:\n" + "\n".join(f"  {i+start+1}: {line}" for i, line in enumerate(context_lines)) +
+                        f"\n\nOriginal response preview: {response[:1500]}"
                     )
                     logger.error(error_message)
-                    job.fail(f"Failed to parse agenda: {str(e2)}")
-                    manager.update_report(report_id, status="failed", error_message=str(e2))
-                    return
+                    
+                    # Try one more aggressive fix: remove all trailing quotes after numbers
+                    try:
+                        aggressive_fix = re.sub(r'(\d+)"(\s*[,}\n\r])', r'\1\2', fixed_json)
+                        agenda = json.loads(aggressive_fix)
+                        logger.info("Successfully parsed JSON after aggressive fix")
+                    except json.JSONDecodeError:
+                        # Final attempt: try to extract just the items array if that's what failed
+                        logger.error("All JSON fix attempts failed")
+                        job.fail(f"Failed to parse agenda: {str(e2)}")
+                        manager.update_report(report_id, status="failed", error_message=str(e2))
+                        return
             else:
                 error_message = f"Failed to parse agenda JSON: {str(e)}. Response preview: {response[:500]}"
                 logger.error(error_message)
@@ -1806,6 +2060,7 @@ async def _run_research_execution_job(
 ):
     """Run the research execution as a background job."""
     try:
+        import re  # Ensure re is available in nested function closure
         from tools.research_manager import get_research_manager
         from agents.langchain_agent.explainer_agent import LangChainExplainerAgent
         from agents.langchain_agent.config.tool_config import ToolGroup
@@ -2004,64 +2259,112 @@ Focus on SPECIFIC DATA. Avoid vague statements. Include actual numbers, percenta
                     # Accumulate all content from the stream - the final response should be the complete answer
                     chunk_count = 0
                     agent_stopped = False
+                    received_completion = False
                     last_save_time = datetime.now()
+                    last_chunk_time = datetime.now()
                     save_interval_seconds = 60  # Save to Redis every 60 seconds during execution
+                    timeout_seconds = 600  # 10 minute timeout for streaming (research can be long)
+                    stream_start_time = datetime.now()
                     
-                    async for chunk in agent.explain_change_streaming(
-                        research_prompt,
-                        {"metric_id": metric_id} if metric_id else {},
-                        session_id=session_id  # Pass session_id so agent can track it
-                    ):
-                        if job and getattr(job, "cancel_requested", False):
-                            raise asyncio.CancelledError()
-                        chunk_count += 1
-                        
-                        # Periodically save session to Redis during long-running tasks
-                        # This prevents data loss if the process dies mid-execution
-                        current_time = datetime.now()
-                        time_since_last_save = (current_time - last_save_time).total_seconds()
-                        if time_since_last_save >= save_interval_seconds:
-                            try:
-                                if session_id or (hasattr(agent, 'current_session') and agent.current_session):
-                                    await save_agent_session_to_redis(agent, session_id)
-                                    last_save_time = current_time
-                                    logger.debug(f"Periodic save: Saved session to Redis during research item {item_id} execution")
-                            except Exception as save_error:
-                                logger.warning(f"Failed periodic save during execution: {save_error}")
-                        
-                        if chunk is None:
-                            continue
-                        if isinstance(chunk, dict):
-                            if chunk.get("type") == "token":
-                                content = chunk.get("content") or ""
-                                research_response += content
-                            elif chunk.get("type") == "session_id":
-                                session_id = chunk.get("session_id")
-                            elif chunk.get("agent_stopped"):
-                                agent_stopped = True
-                            elif chunk.get("completed"):
-                                logger.info(f"Received completion signal for item {item_id}")
-                                if chunk.get("session_id") and not session_id:
+                    try:
+                        async for chunk in agent.explain_change_streaming(
+                            research_prompt,
+                            {"metric_id": metric_id} if metric_id else {},
+                            session_id=session_id  # Pass session_id so agent can track it
+                        ):
+                            if job and getattr(job, "cancel_requested", False):
+                                raise asyncio.CancelledError()
+                            
+                            chunk_count += 1
+                            last_chunk_time = datetime.now()
+                            
+                            # Check for timeout - if we haven't received a chunk in a while, the stream may have died
+                            total_elapsed = (datetime.now() - stream_start_time).total_seconds()
+                            
+                            if total_elapsed > timeout_seconds:
+                                logger.error(
+                                    f"⚠️ Research item {item_id} streaming timeout after {total_elapsed:.1f} seconds. "
+                                    f"Received {chunk_count} chunks, response length: {len(research_response)}. "
+                                    f"This suggests the stream may have been cut off."
+                                )
+                                break  # Exit the loop - we'll validate the response below
+                            
+                            # Periodically save session to Redis during long-running tasks
+                            # This prevents data loss if the process dies mid-execution
+                            current_time = datetime.now()
+                            time_since_last_save = (current_time - last_save_time).total_seconds()
+                            if time_since_last_save >= save_interval_seconds:
+                                try:
+                                    if session_id or (hasattr(agent, 'current_session') and agent.current_session):
+                                        await save_agent_session_to_redis(agent, session_id)
+                                        last_save_time = current_time
+                                        logger.debug(f"Periodic save: Saved session to Redis during research item {item_id} execution")
+                                except Exception as save_error:
+                                    logger.warning(f"Failed periodic save during execution: {save_error}")
+                            
+                            if chunk is None:
+                                continue
+                            if isinstance(chunk, dict):
+                                if chunk.get("type") == "token":
+                                    content = chunk.get("content") or ""
+                                    research_response += content
+                                elif chunk.get("type") == "session_id":
                                     session_id = chunk.get("session_id")
-                            elif "content" in chunk:
-                                content = chunk.get("content") or ""
-                                research_response += content
-                        elif isinstance(chunk, str):
-                            # Check for completion signal
-                            if '"completed": true' in chunk.lower() or '"completed":true' in chunk.lower():
-                                logger.info(f"Received completion signal in SSE format for item {item_id}")
-                            sse = _parse_sse_json(chunk)
-                            if sse:
-                                if sse.get("session_id") and not session_id:
-                                    session_id = sse.get("session_id")
-                                if sse.get("agent_stopped"):
+                                elif chunk.get("agent_stopped"):
                                     agent_stopped = True
+                                elif chunk.get("completed"):
+                                    received_completion = True
+                                    logger.info(f"Received completion signal for item {item_id}")
+                                    if chunk.get("session_id") and not session_id:
+                                        session_id = chunk.get("session_id")
+                                elif "content" in chunk:
+                                    content = chunk.get("content") or ""
+                                    research_response += content
+                            elif isinstance(chunk, str):
+                                # Check for completion signal
+                                if '"completed": true' in chunk.lower() or '"completed":true' in chunk.lower():
+                                    received_completion = True
+                                    logger.info(f"Received completion signal in SSE format for item {item_id}")
+                                sse = _parse_sse_json(chunk)
+                                if sse:
+                                    if sse.get("session_id") and not session_id:
+                                        session_id = sse.get("session_id")
+                                    if sse.get("agent_stopped"):
+                                        agent_stopped = True
 
-                            content = _parse_sse_chunk(chunk)
-                            if content:
-                                research_response += content
+                                content = _parse_sse_chunk(chunk)
+                                if content:
+                                    research_response += content
+                    except asyncio.TimeoutError:
+                        logger.error(
+                            f"⚠️ Research item {item_id} streaming timed out. "
+                            f"Received {chunk_count} chunks, response length: {len(research_response)}. "
+                            f"This suggests the stream was cut off."
+                        )
+                    except Exception as stream_error:
+                        logger.error(
+                            f"⚠️ Research item {item_id} streaming error: {stream_error}. "
+                            f"Received {chunk_count} chunks, response length: {len(research_response)}. "
+                            f"This may indicate the stream was cut off."
+                        )
+                        # Continue to validation - we'll check if we have a complete response
                     
-                    logger.info(f"Research streaming completed for item {item_id}: {chunk_count} chunks processed, response length: {len(research_response)}")
+                    # Log completion status
+                    total_elapsed = (datetime.now() - stream_start_time).total_seconds()
+                    logger.info(
+                        f"Research streaming completed for item {item_id}: "
+                        f"{chunk_count} chunks processed, response length: {len(research_response)}, "
+                        f"completion signal received: {received_completion}, "
+                        f"agent stopped: {agent_stopped}, "
+                        f"elapsed time: {total_elapsed:.1f}s"
+                    )
+                    
+                    # If we didn't receive a completion signal and the response is short, it's likely incomplete
+                    if not received_completion and not agent_stopped and len(research_response) < 500:
+                        logger.warning(
+                            f"⚠️ Research item {item_id} may be incomplete: "
+                            f"No completion signal received, response length only {len(research_response)} chars"
+                        )
                     
                     # Save agent session to Redis for persistence
                     if session_id or (hasattr(agent, 'current_session') and agent.current_session):
@@ -2097,46 +2400,116 @@ Focus on SPECIFIC DATA. Avoid vague statements. Include actual numbers, percenta
                             # Save retry agent session to Redis
                             await save_agent_session_to_redis(retry_agent, session_id)
                     
-                    # If the response is very short (< 150 chars) and looks like just an acknowledgment,
-                    # log a warning (this shouldn't happen if the agent completed properly)
-                    if len(final_response) < 150:
-                        acknowledgment_patterns = [
-                            "sure, i'll", "sure i'll", "i'll look into", "i will look into",
-                            "i'll investigate", "i will investigate", "let me look", "let me check"
-                        ]
-                        response_lower = final_response.lower()
-                        if any(pattern in response_lower for pattern in acknowledgment_patterns):
-                            logger.error(f"⚠️ Research item {item_id} only returned an acknowledgment, not the actual answer!")
-                            logger.error(f"Acknowledgment text: {final_response[:200]}")
-                            logger.error(f"This suggests the agent may not have completed the research properly")
-                            logger.error(f"Total chunks received: {chunk_count}, Total response length: {len(final_response)}")
-                            # Fallback to sync invoke to force a full answer
-                            retry_prompt = (
-                                research_prompt
-                                + "\n\nIMPORTANT: Provide the COMPLETE final answer now. "
-                                "Do not narrate your steps. Use the required headings."
-                            )
-                            retry_agent = LangChainExplainerAgent(
-                                model_key=model_key,
-                                tool_groups=tool_groups,
-                                include_all_sections=False,
-                                enable_session_logging=True,
-                            )
-                            retry = retry_agent.explain_change_sync(
-                                retry_prompt,
-                                {"metric_id": metric_id} if metric_id else {},
-                                session_id=session_id,
-                            )
-                            if retry.get("success") and retry.get("explanation"):
-                                final_response = str(retry.get("explanation")).strip()
-                                session_id = retry.get("session_id") or session_id
-                                # Save retry agent session to Redis
-                                await save_agent_session_to_redis(retry_agent, session_id)
+                    # Check if response looks like an intermediate/acknowledgment response
+                    # This can happen if the stream was cut off or the agent stopped early
+                    acknowledgment_patterns = [
+                        "sure, i'll", "sure i'll", "i'll look into", "i will look into",
+                        "i'll investigate", "i will investigate", "let me look", "let me check",
+                        "now, let me check", "let me start by", "i'll start by", "i will start by"
+                    ]
+                    response_lower = final_response.lower()
+                    looks_like_intermediate = any(pattern in response_lower for pattern in acknowledgment_patterns)
+                    
+                    # Also check if response is very short - likely incomplete
+                    is_very_short = len(final_response) < 150
+                    
+                    # If response looks intermediate AND we didn't receive completion signal, retry
+                    if looks_like_intermediate and not received_completion and not agent_stopped:
+                        logger.warning(
+                            f"⚠️ Research item {item_id} response looks like intermediate/acknowledgment. "
+                            f"Response length: {len(final_response)}, completion signal: {received_completion}, "
+                            f"agent stopped: {agent_stopped}. Retrying with sync invoke."
+                        )
+                        logger.debug(f"Intermediate response text: {final_response[:300]}...")
+                        # Fallback to sync invoke to force a full answer
+                        retry_prompt = (
+                            research_prompt
+                            + "\n\nIMPORTANT: Provide the COMPLETE final answer now. "
+                            "Do not narrate your steps. Use the required headings."
+                        )
+                        retry_agent = LangChainExplainerAgent(
+                            model_key=model_key,
+                            tool_groups=tool_groups,
+                            include_all_sections=False,
+                            enable_session_logging=True,
+                        )
+                        retry = retry_agent.explain_change_sync(
+                            retry_prompt,
+                            {"metric_id": metric_id} if metric_id else {},
+                            session_id=session_id,
+                        )
+                        if retry.get("success") and retry.get("explanation"):
+                            final_response = str(retry.get("explanation")).strip()
+                            session_id = retry.get("session_id") or session_id
+                            received_completion = True  # Mark as completed after sync retry
+                            # Save retry agent session to Redis
+                            await save_agent_session_to_redis(retry_agent, session_id)
                     
                     # Log the response length for debugging
                     logger.info(f"Research item {item_id} completed with final response length: {len(final_response)}")
                     if len(final_response) > 0:
                         logger.info(f"First 200 chars of response: {final_response[:200]}...")
+                    
+                    # Validate that the response contains a proper Summary section
+                    # BUT only if we received a completion signal OR the response is clearly complete
+                    # Don't validate intermediate responses that may have been cut off
+                    has_summary_section = False
+                    if final_response:
+                        # Check for "### Summary" or "## Summary" section
+                        summary_patterns = [
+                            r'###\s*Summary\s*\n+',
+                            r'##\s*Summary\s*\n+',
+                            r'#\s*Summary\s*\n+'
+                        ]
+                        for pattern in summary_patterns:
+                            if re.search(pattern, final_response, re.IGNORECASE | re.MULTILINE):
+                                has_summary_section = True
+                                break
+                    
+                    # Only validate Summary section if we received completion signal OR response is clearly complete
+                    # If we didn't receive completion and response looks intermediate, don't fail - it may still be processing
+                    should_validate = received_completion or agent_stopped or (len(final_response) > 500 and not looks_like_intermediate)
+                    
+                    # If response doesn't have a proper Summary section AND we should validate, mark as failed
+                    if not has_summary_section and len(final_response) > 0 and should_validate:
+                        error_message = (
+                            "Research response incomplete: Missing required Summary section. "
+                            "The response appears to be cut off or incomplete. "
+                            f"Response length: {len(final_response)} characters. "
+                            f"First 200 chars: {final_response[:200]}..."
+                        )
+                        logger.error(f"⚠️ Research item {item_id} failed validation: {error_message}")
+                        
+                        # Save agent session to Redis for debugging
+                        if session_id or (hasattr(agent, 'current_session') and agent.current_session):
+                            await save_agent_session_to_redis(agent, session_id)
+                        
+                        # Mark as failed with clear error message
+                        merged_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+                        merged_metadata["research_question"] = research_question
+                        merged_metadata["session_id"] = session_id
+                        merged_metadata["incomplete_response"] = final_response  # Save partial response for debugging
+                        
+                        manager.update_research_item(
+                            report_id,
+                            item_id,
+                            status="failed",
+                            error_message=error_message,
+                            session_id=session_id,
+                            metadata=merged_metadata,
+                            completed_at=datetime.now()
+                        )
+                        
+                        # Update progress counter even on failure
+                        completed_count["count"] += 1
+                        progress = 10 + int((completed_count["count"] / total_items) * 70)
+                        job.update_progress(progress)
+                        
+                        return {
+                            "item_id": item_id,
+                            "question": research_question,
+                            "error": error_message
+                        }
                     
                     # Save agent session to Redis one final time before completing
                     # This ensures we have the latest state even if something fails after this
@@ -2563,7 +2936,8 @@ Respond with ONLY this format, no additional text."""
         
         # Research question-level evaluation loop
         # Evaluate whether we need NEW research items (not just repeating/deepening existing answers)
-        max_question_iterations = 3
+        # Limit to 2 additional questions per round as requested
+        max_question_iterations = 2
         question_iteration = 0
         all_research_items = items.copy()
         
@@ -2696,7 +3070,8 @@ REASON: [1-2 sentences explaining why new items are needed or why the research i
             logger.info(f"Adding {len(new_items)} new research items (iteration {question_iteration})")
             
             # Add new research items
-            for new_question in new_items[:3]:  # Limit to 3 new items per iteration
+            # Limit to 2 additional questions per round as requested
+            for new_question in new_items[:2]:  # Limit to 2 new items per iteration
                 if new_question and isinstance(new_question, str) and len(new_question.strip()) > 10:
                     # Store iteration number in metadata
                     item_metadata = {
@@ -3193,3 +3568,409 @@ Respond with ONLY valid JSON, no additional text."""
 
         manager = get_research_manager()
         manager.update_report(report_id, status="failed", error_message=str(e))
+
+
+async def _run_single_item_execution_job(
+    job_id: str,
+    report_id: int,
+    item_id: str,
+    model_key: str = None
+):
+    """Run research execution for a single item as a background job."""
+    try:
+        import re  # Ensure re is available
+        from tools.research_manager import get_research_manager
+        from agents.langchain_agent.explainer_agent import LangChainExplainerAgent
+        from agents.langchain_agent.config.tool_config import ToolGroup
+        
+        job = job_manager.get_job(job_id)
+        manager = get_research_manager()
+
+        if job and getattr(job, "cancel_requested", False):
+            raise asyncio.CancelledError()
+        
+        job.update_progress(5)
+        logger.info(f"Single item execution job {job_id} started for item {item_id} in report {report_id}")
+        
+        # Get report and item
+        report = manager.get_report(report_id)
+        if not report:
+            job.fail("Research report not found")
+            return
+        
+        items = manager.get_research_items(report_id)
+        item = next((it for it in items if it.get('item_id') == item_id), None)
+        
+        if not item:
+            job.fail("Research item not found")
+            return
+        
+        # Check if web search is enabled from report metadata
+        report_metadata = report.get('metadata') or {}
+        if isinstance(report_metadata, str):
+            try:
+                report_metadata = json.loads(report_metadata)
+            except:
+                report_metadata = {}
+        elif not isinstance(report_metadata, dict):
+            report_metadata = {}
+        
+        enable_web_search = bool(report_metadata.get('enable_web_search', False))
+        
+        job.update_progress(10)
+        
+        # Update item status
+        manager.update_research_item(
+            report_id,
+            item_id,
+            status="in_progress",
+            started_at=datetime.now()
+        )
+        
+        try:
+            if job and getattr(job, "cancel_requested", False):
+                raise asyncio.CancelledError()
+            
+            # Build research context
+            research_question = item.get('research_question') or ''
+            metric_name = item.get('metric_name', '') or ''
+            metric_id = item.get('metric_id')
+            anomaly_id = item.get('anomaly_id')
+            
+            # Get success criteria from metadata
+            metadata = item.get('metadata') or {}
+            if isinstance(metadata, str):
+                try:
+                    parsed = json.loads(metadata)
+                    metadata = parsed if isinstance(parsed, dict) else {}
+                except:
+                    metadata = {}
+            elif not isinstance(metadata, dict):
+                metadata = {}
+            
+            success_criteria = (metadata.get('success_criteria') or item.get('success_criteria') or '')
+            builds_toward = (metadata.get('builds_toward') or item.get('builds_toward') or '')
+            
+            context = ""
+            if metric_name:
+                context += f"Metric/Dataset: {metric_name}\n"
+            if metric_id:
+                context += f"Metric ID: {metric_id}\n"
+            if anomaly_id:
+                context += f"Anomaly ID: {anomaly_id}\n"
+            if builds_toward:
+                context += f"Purpose: {builds_toward}\n"
+            
+            # Build tool groups list
+            tool_groups = [
+                ToolGroup.CORE,
+                ToolGroup.DATA_ANALYSIS,
+                ToolGroup.ANALYSIS,
+                ToolGroup.METRICS,
+                ToolGroup.VISUALIZATION
+            ]
+            if enable_web_search:
+                tool_groups.append(ToolGroup.WEB_SEARCH)
+                logger.info(f"Web search enabled for research item {item_id}")
+            
+            # Create agent for research
+            agent = LangChainExplainerAgent(
+                model_key=model_key,
+                tool_groups=tool_groups,
+                include_all_sections=False,
+                enable_session_logging=True
+            )
+            
+            # Build research prompt (same as in main execution)
+            success_section = f"\n\n## SUCCESS CRITERIA\nThis question is answered when: {success_criteria}" if success_criteria else ""
+            
+            research_prompt = f"""## RESEARCH QUESTION
+{research_question}
+
+## CONTEXT
+{context}
+{success_section}
+
+## YOUR TASK
+Investigate this question thoroughly using available data tools. Query relevant datasets, analyze patterns, and provide a data-driven answer.
+
+## VISUAL AIDS
+You have access to visualization tools that can create helpful charts and maps. When appropriate, use these tools to enhance your findings:
+
+1. **Time Series Charts**: Use `generate_time_series_chart` or `create_chart` tools to visualize trends over time
+   - Format: `[CHART:time_series:{{metric_id}}:{{district}}:{{period_type}}]` or `[CHART:time_series_id:{{chart_id}}]`
+   - Use for: Showing trends, patterns, seasonal variations, year-over-year comparisons
+
+2. **Anomaly Charts**: Use `generate_anomaly_chart` or `create_anomaly_chart` tools to visualize detected anomalies
+   - Format: `[CHART:anomaly:{{anomaly_id}}]`
+   - Use for: Highlighting significant changes, outliers, or unusual patterns
+
+3. **Maps**: Use `generate_map` or `create_datawrapper_map` tools to show geographic patterns
+   - Format: `[CHART:map:{{map_id}}]`
+   - Use for: District comparisons, geographic distributions, spatial patterns
+
+**Important**: When you generate charts or maps, include the placeholder in your response where the visual should appear. The placeholder will be automatically replaced with the actual chart/map in the final report. Place placeholders immediately after the text they illustrate.
+
+## RESPONSE FORMAT
+Structure your response EXACTLY as follows:
+
+### Summary
+[1-2 sentence direct answer with specific numbers. This should stand alone as a complete answer.]
+
+### Key Findings
+[3-5 bullet points with the most important data-driven discoveries. Include chart placeholders here if visuals support the findings.]
+
+### Analysis
+[Detailed analysis with evidence, patterns, comparisons, and context. Include chart/map placeholders where visuals enhance understanding.]
+
+### Data Sources
+[List the specific datasets, queries, and tools you used]
+
+Focus on SPECIFIC DATA. Avoid vague statements. Include actual numbers, percentages, time periods, and comparisons. Use visual aids (charts, maps, anomaly visualizations) when they help communicate your findings."""
+            
+            job.update_progress(30)
+            
+            # Execute research
+            research_response = ""
+            session_id = None
+            chunk_count = 0
+            agent_stopped = False
+            received_completion = False
+            last_save_time = datetime.now()
+            stream_start_time = datetime.now()
+            timeout_seconds = 600  # 10 minute timeout
+            save_interval_seconds = 60
+            
+            try:
+                async for chunk in agent.explain_change_streaming(
+                    research_prompt,
+                    {"metric_id": metric_id} if metric_id else {},
+                    session_id=session_id
+                ):
+                    if job and getattr(job, "cancel_requested", False):
+                        raise asyncio.CancelledError()
+                    
+                    chunk_count += 1
+                    total_elapsed = (datetime.now() - stream_start_time).total_seconds()
+                    
+                    if total_elapsed > timeout_seconds:
+                        logger.error(f"Research item {item_id} streaming timeout after {total_elapsed:.1f} seconds")
+                        break
+                    
+                    # Periodic save to Redis
+                    current_time = datetime.now()
+                    time_since_last_save = (current_time - last_save_time).total_seconds()
+                    if time_since_last_save >= save_interval_seconds:
+                        try:
+                            if session_id or (hasattr(agent, 'current_session') and agent.current_session):
+                                await save_agent_session_to_redis(agent, session_id)
+                                last_save_time = current_time
+                        except Exception as save_error:
+                            logger.warning(f"Failed periodic save: {save_error}")
+                    
+                    if chunk is None:
+                        continue
+                    if isinstance(chunk, dict):
+                        if chunk.get("type") == "token":
+                            content = chunk.get("content") or ""
+                            research_response += content
+                        elif chunk.get("type") == "session_id":
+                            session_id = chunk.get("session_id")
+                        elif chunk.get("agent_stopped"):
+                            agent_stopped = True
+                        elif chunk.get("completed"):
+                            received_completion = True
+                            if chunk.get("session_id") and not session_id:
+                                session_id = chunk.get("session_id")
+                        elif "content" in chunk:
+                            content = chunk.get("content") or ""
+                            research_response += content
+                    elif isinstance(chunk, str):
+                        if '"completed": true' in chunk.lower() or '"completed":true' in chunk.lower():
+                            received_completion = True
+                        sse = _parse_sse_json(chunk)
+                        if sse:
+                            if sse.get("session_id") and not session_id:
+                                session_id = sse.get("session_id")
+                            if sse.get("agent_stopped"):
+                                agent_stopped = True
+                        content = _parse_sse_chunk(chunk)
+                        if content:
+                            research_response += content
+            except asyncio.TimeoutError:
+                logger.error(f"Research item {item_id} streaming timed out")
+            except Exception as stream_error:
+                logger.error(f"Research item {item_id} streaming error: {stream_error}")
+            
+            # Save agent session
+            if session_id or (hasattr(agent, 'current_session') and agent.current_session):
+                await save_agent_session_to_redis(agent, session_id)
+            
+            final_response = research_response.strip()
+            
+            # Check if response looks like an intermediate/acknowledgment response
+            acknowledgment_patterns = [
+                "sure, i'll", "sure i'll", "i'll look into", "i will look into",
+                "i'll investigate", "i will investigate", "let me look", "let me check",
+                "now, let me check", "let me start by", "i'll start by", "i will start by"
+            ]
+            response_lower = final_response.lower()
+            looks_like_intermediate = any(pattern in response_lower for pattern in acknowledgment_patterns)
+            
+            # If agent stopped early, retry with sync
+            if agent_stopped:
+                logger.warning(f"Agent stopped early for item {item_id}; retrying with sync invoke")
+                retry_prompt = research_prompt + "\n\nIMPORTANT: Provide the COMPLETE final answer now. Do not narrate your steps. Use the required headings."
+                retry_agent = LangChainExplainerAgent(
+                    model_key=model_key,
+                    tool_groups=tool_groups,
+                    include_all_sections=False,
+                    enable_session_logging=True,
+                )
+                retry = retry_agent.explain_change_sync(
+                    retry_prompt,
+                    {"metric_id": metric_id} if metric_id else {},
+                    session_id=session_id,
+                )
+                if retry.get("success") and retry.get("explanation"):
+                    final_response = str(retry.get("explanation")).strip()
+                    session_id = retry.get("session_id") or session_id
+                    received_completion = True  # Mark as completed after sync retry
+                    await save_agent_session_to_redis(retry_agent, session_id)
+            
+            # If response looks intermediate AND we didn't receive completion signal, retry
+            if looks_like_intermediate and not received_completion and not agent_stopped:
+                logger.warning(
+                    f"⚠️ Research item {item_id} response looks like intermediate/acknowledgment. "
+                    f"Response length: {len(final_response)}, completion signal: {received_completion}, "
+                    f"agent stopped: {agent_stopped}. Retrying with sync invoke."
+                )
+                logger.debug(f"Intermediate response text: {final_response[:300]}...")
+                retry_prompt = research_prompt + "\n\nIMPORTANT: Provide the COMPLETE final answer now. Do not narrate your steps. Use the required headings."
+                retry_agent = LangChainExplainerAgent(
+                    model_key=model_key,
+                    tool_groups=tool_groups,
+                    include_all_sections=False,
+                    enable_session_logging=True,
+                )
+                retry = retry_agent.explain_change_sync(
+                    retry_prompt,
+                    {"metric_id": metric_id} if metric_id else {},
+                    session_id=session_id,
+                )
+                if retry.get("success") and retry.get("explanation"):
+                    final_response = str(retry.get("explanation")).strip()
+                    session_id = retry.get("session_id") or session_id
+                    received_completion = True  # Mark as completed after sync retry
+                    await save_agent_session_to_redis(retry_agent, session_id)
+            
+            job.update_progress(70)
+            
+            # Validate response has Summary section
+            # BUT only if we received a completion signal OR the response is clearly complete
+            # Don't validate intermediate responses that may have been cut off
+            has_summary_section = False
+            if final_response:
+                summary_patterns = [
+                    r'###\s*Summary\s*\n+',
+                    r'##\s*Summary\s*\n+',
+                    r'#\s*Summary\s*\n+'
+                ]
+                for pattern in summary_patterns:
+                    if re.search(pattern, final_response, re.IGNORECASE | re.MULTILINE):
+                        has_summary_section = True
+                        break
+            
+            # Only validate Summary section if we received completion signal OR response is clearly complete
+            # If we didn't receive completion and response looks intermediate, don't fail - it may still be processing
+            should_validate = received_completion or agent_stopped or (len(final_response) > 500 and not looks_like_intermediate)
+            
+            if not has_summary_section and len(final_response) > 0 and should_validate:
+                error_message = "Research response incomplete: Missing required Summary section."
+                logger.error(f"Research item {item_id} failed validation: {error_message}")
+                
+                merged_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+                merged_metadata["research_question"] = research_question
+                merged_metadata["session_id"] = session_id
+                
+                manager.update_research_item(
+                    report_id,
+                    item_id,
+                    status="failed",
+                    error_message=error_message,
+                    session_id=session_id,
+                    metadata=merged_metadata,
+                    completed_at=datetime.now()
+                )
+                
+                job.fail(error_message)
+                return
+            
+            # Update item with result
+            merged_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+            merged_metadata["research_question"] = research_question
+            merged_metadata["session_id"] = session_id
+            
+            manager.update_research_item(
+                report_id,
+                item_id,
+                status="completed",
+                result=final_response,
+                session_id=session_id,
+                metadata=merged_metadata,
+                completed_at=datetime.now()
+            )
+            
+            job.update_progress(100)
+            job.complete()
+            
+            logger.info(f"Single item {item_id} completed successfully")
+            
+        except asyncio.CancelledError:
+            manager.update_research_item(
+                report_id,
+                item_id,
+                status="failed",
+                error_message="Cancelled by user",
+                completed_at=datetime.now(),
+            )
+            if job:
+                job.fail("Cancelled by user")
+            raise
+        except Exception as e:
+            logger.error(f"Error researching item {item_id}: {e}", exc_info=True)
+            
+            try:
+                if 'agent' in locals() and (session_id or (hasattr(agent, 'current_session') and agent.current_session)):
+                    await save_agent_session_to_redis(agent, session_id)
+            except Exception as save_error:
+                logger.warning(f"Failed to save session after error: {save_error}")
+            
+            manager.update_research_item(
+                report_id,
+                item_id,
+                status="failed",
+                error_message=str(e),
+                completed_at=datetime.now()
+            )
+            
+            if job:
+                job.fail(str(e))
+            
+    except Exception as e:
+        logger.error(f"Error in single item execution job: {e}", exc_info=True)
+        job = job_manager.get_job(job_id)
+        if job:
+            job.fail(str(e))
+        from tools.research_manager import get_research_manager
+        manager = get_research_manager()
+        try:
+            manager.update_research_item(
+                report_id,
+                item_id,
+                status="failed",
+                error_message=str(e),
+                completed_at=datetime.now()
+            )
+        except:
+            pass

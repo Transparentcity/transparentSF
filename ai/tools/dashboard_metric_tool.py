@@ -200,13 +200,35 @@ def get_dashboard_metric(context_variables, district_number=0, metric_id=None):
                     if OUTPUT_MANAGER_AVAILABLE:
                         try:
                             output_manager = get_output_manager()
-                            analysis_content_text = output_manager.retrieve_analysis_file('md', str(district_number), metric_id_number)
+                            # FIX: Use analysis_type instead of hardcoded 'md'
+                            analysis_content_text = output_manager.retrieve_analysis_file(analysis_type, str(district_number), metric_id_number)
                             if analysis_content_text:
-                                logger.info(f"Retrieved {analysis_type} analysis from GCS")
+                                # Validate that the retrieved file matches the requested metric_id and district
+                                # Check metadata header if present (format: ---\n...\nmetric_id: X\n...\n---)
+                                import re
+                                metadata_match = re.search(r'metric_id:\s*(\d+)', analysis_content_text)
+                                district_match = re.search(r'district:\s*(\d+)', analysis_content_text)
+                                
+                                if metadata_match and district_match:
+                                    file_metric_id = metadata_match.group(1)
+                                    file_district = district_match.group(1)
+                                    
+                                    if file_metric_id != str(metric_id_number) or file_district != str(district_number):
+                                        logger.warning(
+                                            f"Retrieved {analysis_type} analysis file has wrong metadata: "
+                                            f"expected metric_id={metric_id_number}, district={district_number}, "
+                                            f"but got metric_id={file_metric_id}, district={file_district}. "
+                                            f"Skipping this file."
+                                        )
+                                        analysis_content_text = None
+                                    else:
+                                        logger.info(f"Retrieved {analysis_type} analysis from GCS (validated)")
+                                else:
+                                    logger.info(f"Retrieved {analysis_type} analysis from GCS (no metadata to validate)")
                         except Exception as e:
                             logger.warning(f"Error retrieving {analysis_type} analysis from GCS: {e}")
                     
-                    # Fall back to local files if GCS didn't work
+                    # Fall back to local files if GCS didn't work or returned wrong file
                     if not analysis_content_text:
                         script_dir = Path(__file__).parent.parent
                         analysis_dir = script_dir / 'output' / analysis_type
@@ -218,11 +240,32 @@ def get_dashboard_metric(context_variables, district_number=0, metric_id=None):
                             try:
                                 with open(analysis_path, 'r', encoding='utf-8') as f:
                                     analysis_content_text = f.read()
-                                logger.info(f"Found {analysis_type} analysis file locally ({len(analysis_content_text)} chars)")
+                                
+                                # Validate local file metadata too
+                                import re
+                                metadata_match = re.search(r'metric_id:\s*(\d+)', analysis_content_text)
+                                district_match = re.search(r'district:\s*(\d+)', analysis_content_text)
+                                
+                                if metadata_match and district_match:
+                                    file_metric_id = metadata_match.group(1)
+                                    file_district = district_match.group(1)
+                                    
+                                    if file_metric_id != str(metric_id_number) or file_district != str(district_number):
+                                        logger.warning(
+                                            f"Local {analysis_type} analysis file has wrong metadata: "
+                                            f"expected metric_id={metric_id_number}, district={district_number}, "
+                                            f"but got metric_id={file_metric_id}, district={file_district}. "
+                                            f"Skipping this file."
+                                        )
+                                        analysis_content_text = None
+                                    else:
+                                        logger.info(f"Found {analysis_type} analysis file locally ({len(analysis_content_text)} chars, validated)")
+                                else:
+                                    logger.info(f"Found {analysis_type} analysis file locally ({len(analysis_content_text)} chars, no metadata to validate)")
                             except Exception as e:
                                 logger.error(f"Error reading {analysis_type} analysis: {str(e)}")
                     
-                    # Add to analysis content if found
+                    # Add to analysis content if found and validated
                     if analysis_content_text:
                         total_analysis_length += len(analysis_content_text.split())
                         analysis_content[f"{analysis_type}_analysis"] = analysis_content_text

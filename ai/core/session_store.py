@@ -23,9 +23,8 @@ from dataclasses_json import dataclass_json
 try:
     import redis
     from redis.exceptions import ConnectionError, RedisError
-    REDIS_AVAILABLE = True
 except ImportError:
-    REDIS_AVAILABLE = False
+    # Redis not available - will fallback to in-memory store
     redis = None  # type: ignore
     ConnectionError = Exception  # type: ignore
     RedisError = Exception  # type: ignore
@@ -153,7 +152,7 @@ class RedisSessionStore(SessionStore):
             socket_timeout: Socket timeout in seconds
             socket_connect_timeout: Connection timeout in seconds
         """
-        if not REDIS_AVAILABLE:
+        if redis is None:
             raise SessionError("Redis library not installed. Install with: pip install redis")
         
         self.redis_url = redis_url
@@ -556,11 +555,9 @@ def create_session_store(
     Returns:
         Configured session store instance
     """
-    if use_redis and redis_url and REDIS_AVAILABLE:
+    if use_redis and redis_url:
         try:
-            store = RedisSessionStore(redis_url=redis_url, **kwargs)
-            logger.info("Created Redis session store")
-            return store
+            return RedisSessionStore(redis_url=redis_url, **kwargs)
         except SessionError as e:
             logger.warning(f"Redis session store failed: {e}")
             if fallback_to_memory:
@@ -568,8 +565,6 @@ def create_session_store(
                 return InMemorySessionStore(**kwargs)
             else:
                 raise
-    elif use_redis and not REDIS_AVAILABLE:
-        logger.warning("Redis requested but redis library not installed, using in-memory store")
     
     # Use in-memory store
     logger.info("Using in-memory session store")

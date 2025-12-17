@@ -386,6 +386,18 @@
             color: var(--warm-coral);
         }
         
+        .model-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            white-space: nowrap;
+            background: rgba(173, 53, 250, 0.1);
+            color: var(--bright-purple);
+            border: 1px solid rgba(173, 53, 250, 0.2);
+        }
+        
         /* Regenerate Controls */
         .regenerate-controls {
             display: flex;
@@ -619,6 +631,17 @@
         .agenda-item-meta {
             font-size: 12px;
             color: var(--text-secondary);
+        }
+        
+        .original-question-display {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--text-primary);
+            border-left: 3px solid var(--bright-purple);
         }
         
         /* Button Actions */
@@ -1182,6 +1205,12 @@
                         <!-- Agenda Tab -->
                         <div class="tab-content" id="agendaTab">
                             <div class="report-content">
+                                <div class="agenda-section" id="originalQuestionSection" style="display: none;">
+                                    <h4>Original Research Question</h4>
+                                    <div id="originalQuestionDisplay" class="original-question-display">
+                                    </div>
+                                </div>
+                                
                                 <div class="agenda-section">
                                     <h4>Research Agenda (JSON)</h4>
                                     <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 12px;">
@@ -1260,6 +1289,9 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadAvailableModels();
             loadReports();
+            
+            // Periodically check if main model selector got cleared (safety net)
+            setInterval(ensureMainModelSelector, 2000);
 
             // Preferences: whether to show exploration (breadth-first scouting) items
             try {
@@ -1331,6 +1363,9 @@
                     console.warn('Model select element not found');
                     return;
                 }
+                
+                // Store current selection if any
+                const currentValue = modelSelect.value;
                 modelSelect.innerHTML = '';
                 
                 if (data.status === 'success' && data.models && data.models.length > 0) {
@@ -1363,6 +1398,11 @@
                         
                         modelSelect.appendChild(optgroup);
                     });
+                    
+                    // Restore previous selection if it still exists
+                    if (currentValue) {
+                        modelSelect.value = currentValue;
+                    }
                 } else {
                     // Fallback if no models returned
                     const defaultOption = document.createElement('option');
@@ -1376,6 +1416,21 @@
                 const modelSelect = document.getElementById('modelSelect');
                 if (modelSelect) {
                     modelSelect.innerHTML = '<option value="">Default Model</option>';
+                }
+            }
+        }
+        
+        // Monitor main model selector to ensure it doesn't get cleared unexpectedly
+        function ensureMainModelSelector() {
+            const modelSelect = document.getElementById('modelSelect');
+            if (modelSelect && modelSelect.options.length <= 1) {
+                // If only default option or empty, reload models
+                const onlyDefault = modelSelect.options.length === 1 && 
+                                   (modelSelect.options[0].value === '' || 
+                                    modelSelect.options[0].textContent.includes('Default'));
+                if (onlyDefault || modelSelect.options.length === 0) {
+                    console.log('Main model selector appears empty, reloading...');
+                    loadAvailableModels();
                 }
             }
         }
@@ -1524,6 +1579,7 @@
                                 <span>Working…</span>
                             </span>
                         ` : ''}
+                        ${formatModelName(report.model_key) ? `<span class="model-badge" title="Model used: ${escapeHtml(formatModelName(report.model_key))}">${escapeHtml(formatModelName(report.model_key))}</span>` : ''}
                         <span>${formatDate(report.created_at)}</span>
                     </div>
                     ${isRegenerating ? `
@@ -1643,6 +1699,18 @@
                     generateBtn.style.display = 'none';
                     runBtn.style.display = 'none';
                     if (stopBtn) stopBtn.style.display = (report.status === 'running' || report.status === 'synthesizing') ? 'inline-block' : 'none';
+                }
+            }
+            
+            // Display original question in agenda tab
+            const originalQuestionSection = document.getElementById('originalQuestionSection');
+            const originalQuestionDisplay = document.getElementById('originalQuestionDisplay');
+            if (originalQuestionSection && originalQuestionDisplay) {
+                if (report.original_prompt) {
+                    originalQuestionDisplay.textContent = report.original_prompt;
+                    originalQuestionSection.style.display = 'block';
+                } else {
+                    originalQuestionSection.style.display = 'none';
                 }
             }
             
@@ -1806,26 +1874,22 @@
         }
         
         // Extract summary from research result
+        // IMPORTANT: Only extract if there's a proper Summary section - no fallback to first line
         function extractSummary(result) {
             if (!result) return null;
             
-            // Try to find ## Summary section
-            const summaryMatch = result.match(/##\s*Summary\s*\n+([\s\S]*?)(?=\n##|$)/i);
+            // Try to find ## Summary or ### Summary section
+            const summaryMatch = result.match(/(?:##|###)\s*Summary\s*\n+([\s\S]*?)(?=\n(?:##|###)|$)/i);
             if (summaryMatch && summaryMatch[1]) {
-                return summaryMatch[1].trim();
-            }
-            
-            // Fallback: try to find first paragraph that looks like a summary
-            const lines = result.split('\n').filter(l => l.trim() && !l.startsWith('#'));
-            if (lines.length > 0) {
-                // Get first meaningful paragraph (up to 300 chars)
-                const firstPara = lines[0].trim();
-                if (firstPara.length > 300) {
-                    return firstPara.substring(0, 297) + '...';
+                const summaryText = summaryMatch[1].trim();
+                // Only return if we have actual content (not just whitespace)
+                if (summaryText.length > 0) {
+                    return summaryText;
                 }
-                return firstPara;
             }
             
+            // NO FALLBACK - if there's no proper Summary section, return null
+            // This allows the UI to show an error instead of misleading first-line text
             return null;
         }
         
@@ -2085,10 +2149,30 @@
                         </div>
                     `;
                 } else if (item.error_message) {
+                    const itemId = item.item_id;
+                    const reportId = (typeof currentReport !== 'undefined' && currentReport && currentReport.id) ? currentReport.id : null;
+                    const sessionId = item.session_id || item.metadata?.session_id;
+                    const sessionLink = buildConversationViewerLink(sessionId, "View session log");
+                    
+                    // Show regenerate controls for items with errors (failed, cancelled, etc.)
+                    // Allow regeneration even without session log
+                    const regenerateControls = reportId ? `
+                        <div class="item-regenerate-controls" style="display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+                            <select id="itemRegenerateModel_${itemId}" class="regenerate-model-select" style="min-width: 200px;">
+                                <option value="">Loading models...</option>
+                            </select>
+                            <button class="regenerate-btn" onclick="executeItemRegenerate('${reportId}', '${itemId}')" style="font-size: 12px; padding: 6px 12px;">
+                                🔄 Regenerate
+                            </button>
+                            ${sessionLink || ''}
+                        </div>
+                    ` : (sessionLink ? `<div style="margin-top: 12px;">${sessionLink}</div>` : '');
+                    
                     resultHtml = `
                         <div class="research-item-result" style="color: var(--warm-coral);">
                             <strong>Error:</strong> ${escapeHtml(item.error_message)}
                         </div>
+                        ${regenerateControls}
                     `;
                 } else if (item.result) {
                     const iterations = item.metadata?.iterations || [];
@@ -2096,14 +2180,62 @@
                     const sessionId = item.session_id || item.metadata?.session_id;
                     const sessionLink = buildConversationViewerLink(sessionId, "View session log");
                     
-                    resultHtml = `
-                        <div class="research-item-summary">
-                            <strong>Summary</strong>
-                            ${summary ? escapeHtml(summary) : 'Analysis complete - open session log for details'}
-                        </div>
-                        ${totalIterations > 1 ? `<div style="font-size: 12px; color: var(--bright-purple); margin-top: 8px;">🔄 ${totalIterations} research iterations</div>` : ''}
-                        ${sessionLink || `<div style="font-size: 12px; color: var(--text-tertiary); margin-top: 8px;">No session log available for this item.</div>`}
-                    `;
+                    // Check if we have a proper summary - if not, show error
+                    if (!summary) {
+                        // No proper Summary section found - this indicates an incomplete response
+                        const itemId = item.item_id;
+                        const reportId = (typeof currentReport !== 'undefined' && currentReport && currentReport.id) ? currentReport.id : null;
+                        
+                        // Show regenerate controls for incomplete responses too
+                        const regenerateControls = reportId ? `
+                            <div class="item-regenerate-controls" style="display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+                                <select id="itemRegenerateModel_${itemId}" class="regenerate-model-select" style="min-width: 200px;">
+                                    <option value="">Loading models...</option>
+                                </select>
+                                <button class="regenerate-btn" onclick="executeItemRegenerate('${reportId}', '${itemId}')" style="font-size: 12px; padding: 6px 12px;">
+                                    🔄 Regenerate
+                                </button>
+                                ${sessionLink || ''}
+                            </div>
+                        ` : (sessionLink ? `<div style="margin-top: 12px;">${sessionLink}</div>` : '');
+                        
+                        resultHtml = `
+                            <div class="research-item-result" style="color: var(--warm-coral);">
+                                <strong>⚠️ Incomplete Response:</strong> The research response is missing the required Summary section. 
+                                This indicates the session may have been cut off or timed out. 
+                                ${sessionLink ? `Check the session log for details.` : 'No session log available.'}
+                            </div>
+                            ${regenerateControls}
+                        `;
+                    } else {
+                        const itemId = item.item_id;
+                        const reportId = (typeof currentReport !== 'undefined' && currentReport && currentReport.id) ? currentReport.id : null;
+                        // Allow regeneration for completed, failed, and cancelled items
+                        // Also show controls even if there's no session log
+                        const canRegenerateItem = item.status === 'completed' || item.status === 'failed' || item.status === 'cancelled';
+                        
+                        // Regenerate controls for individual items - show even without session log
+                        const regenerateControls = canRegenerateItem && reportId ? `
+                            <div class="item-regenerate-controls" style="display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+                                <select id="itemRegenerateModel_${itemId}" class="regenerate-model-select" style="min-width: 200px;">
+                                    <option value="">Loading models...</option>
+                                </select>
+                                <button class="regenerate-btn" onclick="executeItemRegenerate('${reportId}', '${itemId}')" style="font-size: 12px; padding: 6px 12px;">
+                                    🔄 Regenerate
+                                </button>
+                                ${sessionLink || ''}
+                            </div>
+                        ` : (sessionLink ? `<div style="margin-top: 12px;">${sessionLink}</div>` : '');
+                        
+                        resultHtml = `
+                            <div class="research-item-summary">
+                                <strong>Summary</strong>
+                                ${escapeHtml(summary)}
+                            </div>
+                            ${totalIterations > 1 ? `<div style="font-size: 12px; color: var(--bright-purple); margin-top: 8px;">🔄 ${totalIterations} research iterations</div>` : ''}
+                            ${regenerateControls}
+                        `;
+                    }
                 }
                 
                 // Number each research set as iteration.item (e.g. 1.1, 1.2, 2.1)
@@ -2130,6 +2262,11 @@
                     </div>
                 `;
             }).join('');
+
+            // Populate model dropdowns for item regeneration after rendering
+            setTimeout(async () => {
+                await populateItemRegenerateModelDropdowns();
+            }, 150);
 
             // If we're running but all items are still pending, show a banner so it doesn't feel broken.
             if (reportIsRunning && allPending) {
@@ -2581,7 +2718,7 @@
         }
         
         // Show regenerate UI with model dropdown
-        function showRegenerateUI(reportId) {
+        async function showRegenerateUI(reportId) {
             // Close any open dropdown menus
             document.querySelectorAll('.session-menu-dropdown').forEach(d => d.classList.remove('show'));
             
@@ -2589,18 +2726,27 @@
             regeneratingReportIds.add(reportId);
             renderReportsList();
             
-            // Populate model dropdown after render
-            setTimeout(() => populateRegenerateModelDropdowns(), 50);
+            // Populate model dropdown after render - use requestAnimationFrame for better timing
+            requestAnimationFrame(() => {
+                setTimeout(async () => {
+                    await populateRegenerateModelDropdowns();
+                }, 100);
+            });
         }
 
         // Show re-synthesize UI (uses the same controls block)
-        function showResynthesizeUI(reportId) {
+        async function showResynthesizeUI(reportId) {
             // Close any open dropdown menus
             document.querySelectorAll('.session-menu-dropdown').forEach(d => d.classList.remove('show'));
             
             regeneratingReportIds.add(reportId);
             renderReportsList();
-            setTimeout(() => populateRegenerateModelDropdowns(), 50);
+            // Populate model dropdown after render - use requestAnimationFrame for better timing
+            requestAnimationFrame(() => {
+                setTimeout(async () => {
+                    await populateRegenerateModelDropdowns();
+                }, 100);
+            });
         }
         
         // Cancel regenerate UI
@@ -2610,15 +2756,77 @@
         }
         
         // Populate model dropdowns for regenerate
-        function populateRegenerateModelDropdowns() {
+        async function populateRegenerateModelDropdowns() {
             const modelSelects = document.querySelectorAll('[id^="regenerateModel_"]');
-            const mainModelSelect = document.getElementById('modelSelect');
             
-            modelSelects.forEach(select => {
-                if (mainModelSelect && mainModelSelect.innerHTML) {
-                    select.innerHTML = mainModelSelect.innerHTML;
-                }
-            });
+            if (modelSelects.length === 0) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/backend/available-models');
+                const data = await response.json();
+                
+                modelSelects.forEach(select => {
+                    // Only populate if the select still exists and hasn't been replaced
+                    if (!select.parentNode) return;
+                    
+                    // Store the current value if any
+                    const currentValue = select.value;
+                    select.innerHTML = '';
+                    
+                    if (data.status === 'success' && data.models && data.models.length > 0) {
+                        // Add default option
+                        const defaultOption = document.createElement('option');
+                        defaultOption.value = '';
+                        defaultOption.textContent = `Default (${data.default_model || 'gpt-4o'})`;
+                        select.appendChild(defaultOption);
+                        
+                        // Group models by provider
+                        const modelsByProvider = {};
+                        data.models.forEach(model => {
+                            if (!modelsByProvider[model.provider]) {
+                                modelsByProvider[model.provider] = [];
+                            }
+                            modelsByProvider[model.provider].push(model);
+                        });
+                        
+                        // Add models by provider
+                        Object.keys(modelsByProvider).forEach(provider => {
+                            const optgroup = document.createElement('optgroup');
+                            optgroup.label = provider;
+                            
+                            modelsByProvider[provider].forEach(model => {
+                                const option = document.createElement('option');
+                                option.value = model.key || model.name;
+                                option.textContent = model.display_name || model.name;
+                                optgroup.appendChild(option);
+                            });
+                            
+                            select.appendChild(optgroup);
+                        });
+                        
+                        // Restore previous selection if it still exists
+                        if (currentValue) {
+                            select.value = currentValue;
+                        }
+                    } else {
+                        // Fallback if no models returned
+                        const defaultOption = document.createElement('option');
+                        defaultOption.value = '';
+                        defaultOption.textContent = 'Default Model';
+                        select.appendChild(defaultOption);
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading models for regenerate dropdowns:', error);
+                // Fallback on error
+                modelSelects.forEach(select => {
+                    if (select.parentNode) {
+                        select.innerHTML = '<option value="">Default Model</option>';
+                    }
+                });
+            }
         }
         
         // Execute regeneration
@@ -2711,6 +2919,134 @@
                 alert('Error: ' + error.message);
                 await loadReports();
                 selectReport(reportId);
+            }
+        }
+        
+        // Populate model dropdowns for item regeneration
+        async function populateItemRegenerateModelDropdowns() {
+            const modelSelects = document.querySelectorAll('[id^="itemRegenerateModel_"]');
+            
+            if (modelSelects.length === 0) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/backend/available-models');
+                const data = await response.json();
+                
+                modelSelects.forEach(select => {
+                    // Only populate if the select still exists and hasn't been replaced
+                    if (!select.parentNode) return;
+                    
+                    // Store the current value if any
+                    const currentValue = select.value;
+                    select.innerHTML = '';
+                    
+                    if (data.status === 'success' && data.models && data.models.length > 0) {
+                        // Add default option
+                        const defaultOption = document.createElement('option');
+                        defaultOption.value = '';
+                        defaultOption.textContent = `Default (${data.default_model || 'gpt-4o'})`;
+                        select.appendChild(defaultOption);
+                        
+                        // Group models by provider
+                        const modelsByProvider = {};
+                        data.models.forEach(model => {
+                            if (!modelsByProvider[model.provider]) {
+                                modelsByProvider[model.provider] = [];
+                            }
+                            modelsByProvider[model.provider].push(model);
+                        });
+                        
+                        // Add models by provider
+                        Object.keys(modelsByProvider).forEach(provider => {
+                            const optgroup = document.createElement('optgroup');
+                            optgroup.label = provider;
+                            
+                            modelsByProvider[provider].forEach(model => {
+                                const option = document.createElement('option');
+                                option.value = model.key || model.name;
+                                option.textContent = model.display_name || model.name;
+                                optgroup.appendChild(option);
+                            });
+                            
+                            select.appendChild(optgroup);
+                        });
+                        
+                        // Restore previous selection if it still exists
+                        if (currentValue) {
+                            select.value = currentValue;
+                        }
+                    } else {
+                        // Fallback if no models returned
+                        const defaultOption = document.createElement('option');
+                        defaultOption.value = '';
+                        defaultOption.textContent = 'Default Model';
+                        select.appendChild(defaultOption);
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading models for item regenerate dropdowns:', error);
+                // Fallback on error
+                modelSelects.forEach(select => {
+                    if (select.parentNode) {
+                        select.innerHTML = '<option value="">Default Model</option>';
+                    }
+                });
+            }
+        }
+        
+        // Execute regeneration for a single research item
+        async function executeItemRegenerate(reportId, itemId) {
+            const modelSelect = document.getElementById(`itemRegenerateModel_${itemId}`);
+            const modelKey = modelSelect ? modelSelect.value : '';
+            
+            if (!confirm('Are you sure you want to regenerate this research item? This will re-run the question with the selected model.')) {
+                return;
+            }
+            
+            // Disable the button during regeneration
+            const button = modelSelect?.parentElement?.querySelector('.regenerate-btn');
+            if (button) {
+                button.disabled = true;
+                button.textContent = 'Regenerating...';
+            }
+            
+            try {
+                const response = await fetch(`/api/research/${reportId}/items/${itemId}/regenerate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_key: modelKey })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Reload the report to show updated status
+                    await loadReports();
+                    if (typeof currentReport !== 'undefined' && currentReport && currentReport.id === parseInt(reportId)) {
+                        await selectReport(parseInt(reportId));
+                    }
+                    
+                    // Start polling for updates if report is running
+                    const report = reports.get(parseInt(reportId));
+                    if (report && (report.status === 'running' || report.status === 'synthesizing')) {
+                        startPolling(parseInt(reportId));
+                    }
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to regenerate research item'));
+                    if (button) {
+                        button.disabled = false;
+                        button.textContent = '🔄 Regenerate';
+                    }
+                }
+            } catch (error) {
+                console.error('Error regenerating research item:', error);
+                alert('Error: ' + error.message);
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = '🔄 Regenerate';
+                }
             }
         }
         
@@ -2903,6 +3239,27 @@
             if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
             
             return date.toLocaleDateString();
+        }
+        
+        function formatModelName(modelKey) {
+            if (!modelKey) return null;
+            
+            // Convert common model keys to readable names
+            const modelMap = {
+                'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
+                'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
+                'claude-3-opus-20240229': 'Claude 3 Opus',
+                'claude-3-sonnet-20240229': 'Claude 3 Sonnet',
+                'claude-3-haiku-20240307': 'Claude 3 Haiku',
+                'gpt-4o': 'GPT-4o',
+                'gpt-4o-mini': 'GPT-4o Mini',
+                'gpt-4-turbo': 'GPT-4 Turbo',
+                'gpt-4': 'GPT-4',
+                'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+                'gpt-5': 'GPT-5'
+            };
+            
+            return modelMap[modelKey] || modelKey;
         }
     </script>
 </body>
