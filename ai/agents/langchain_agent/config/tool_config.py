@@ -72,6 +72,17 @@ class ToolConfig:
                     "get_dataset_columns(endpoint='wg3w-h783')",
                     "Use this to explore what columns are available in a specific dataset"
                 ]
+            ),
+            ToolDefinition(
+                name="get_city_structure",
+                function=None,
+                description="Get city structure configuration including district_field (e.g., 'supervisor_district' for SF, 'ward' for Chicago). Use this when creating metrics to determine if a dataset supports district-level analysis.",
+                group=ToolGroup.CORE,
+                required_prompt_sections=["core_tools", "metrics_tools"],
+                examples=[
+                    "get_city_structure(city_id=1)",
+                    "Use this to get the city's district_field before creating metrics to check if datasets support districts"
+                ]
             )
         ]
         

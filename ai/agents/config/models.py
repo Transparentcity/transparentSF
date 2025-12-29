@@ -162,12 +162,6 @@ MODEL_CONFIGS = {
         "temperature": 0.1
     }, context_window=200000, input_price_per_million=3.00, output_price_per_million=15.00),
     # Google Models (Latest versions - with specific config for tool calling)
-    "gemini-3-pro": ModelConfig(ModelProvider.GOOGLE, "gemini-3-pro-preview", {
-        "temperature": 0.1,
-        "top_p": 0.8,
-        "top_k": 40,
-        "max_output_tokens": 8192
-    }, context_window=1000000, input_price_per_million=2.00, output_price_per_million=12.00),
     "gemini-2.5-pro": ModelConfig(ModelProvider.GOOGLE, "gemini-2.5-pro", {
         "temperature": 0.1,
         "top_p": 0.8,

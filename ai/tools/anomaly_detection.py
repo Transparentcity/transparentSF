@@ -683,6 +683,7 @@ def anomaly_detection(
     group_field=None,
     filter_conditions=[],
     min_diff=2,
+    min_pct_change=None,
     recent_period=None,
     comparison_period=None,
     date_field=None,
@@ -787,7 +788,25 @@ def anomaly_detection(
         full_months = ['All']  # When date_field is not provided
 
     results = []
-    for group_value, data_points in grouped_data.items():
+        for group_value, data_points in grouped_data.items():
+            # Normalize label so downstream markdown never shows "None"
+            label = group_value
+            if group_field is None:
+                # Try to derive from district filter if present
+                district_val = None
+                for cond in filter_conditions or []:
+                    if cond.get('field', '').lower() in ['district', 'supervisor_district', 'police_district']:
+                        district_val = cond.get('value')
+                        break
+                if district_val is not None:
+                    try:
+                        label = f"District {int(float(district_val))}"
+                    except (TypeError, ValueError):
+                        label = f"District {district_val}"
+                else:
+                    label = "Citywide"
+            elif label is None:
+                label = "Citywide"
         # Add debug logging for each group
         logging.info(f"=== Processing group: {group_value} ===")
         logging.info(f"Data points keys: {list(data_points.keys())}")
@@ -888,25 +907,34 @@ def anomaly_detection(
                 recent_mean = float(recent_stats['mean'])
                 comparison_std_dev = float(comparison_stats['stdDev'])
                 min_diff = float(min_diff)
+                difference = recent_mean - comparison_mean
+                pct_change = (difference / comparison_mean) * 100.0 if comparison_mean else 0.0
             except ValueError:
                 logging.error(f"Error converting stats to float for group {group_value}")
                 continue
 
-            difference = recent_mean - comparison_mean
+            meets_std = comparison_std_dev > 0 and abs(difference) > comparison_std_dev * min_diff
+            meets_pct = min_pct_change is not None
+            if meets_pct:
+                try:
+                    meets_pct = abs(pct_change) >= float(min_pct_change)
+                except (TypeError, ValueError):
+                    meets_pct = False
 
-            if comparison_std_dev > 0:
+            if True:
                 out_of_bounds = (
-                    abs(difference) > comparison_std_dev * min_diff and
                     comparison_mean > 2 and
-                    recent_mean > 2
+                    recent_mean > 2 and
+                    (meets_std or meets_pct)
                 )
 
                 if True:
                     results.append({
-                        'group_value': group_value,
+                        'group_value': label,
                         'comparison_mean': comparison_mean,
                         'recent_mean': recent_mean,
                         'difference': difference,
+                        'pct_change': pct_change,
                         'stdDev': comparison_std_dev,
                         'dates': dates,
                         'counts': counts,

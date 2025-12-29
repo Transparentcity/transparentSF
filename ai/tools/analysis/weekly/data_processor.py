@@ -331,8 +331,11 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
             # Remove current_date references and replace with our recent_end
             where_part = re.sub(r'<=\s*current_date', f"<= '{recent_end}'", where_part)
             
-            # Keep the actual date instead of transforming to week
-            date_select = f"{date_field_match} as actual_date"
+            # Keep a day-level date to avoid per-second rows (smaller, faster)
+            base_date_expr = date_field_match
+            if isinstance(date_field_match, str) and 'date_trunc' not in date_field_match.lower():
+                base_date_expr = f"date_trunc_ymd({date_field_match})"
+            date_select = f"{base_date_expr} as actual_date"
             
             # Build the category fields part of the SELECT and GROUP BY
             category_select = ""
@@ -442,8 +445,11 @@ def transform_query_for_weekly(original_query, date_field, category_fields, rece
                 category_select += f", {field_name}"
                 category_fields_list.append(field_name)
         
-        # Keep the actual date instead of transforming to week
-        date_select = f"{date_field} as actual_date"
+        # Keep a day-level date to avoid per-second rows (smaller, faster)
+        base_date_expr = date_field
+        if isinstance(date_field, str) and 'date_trunc' not in str(date_field).lower():
+            base_date_expr = f"date_trunc_ymd({date_field})"
+        date_select = f"{base_date_expr} as actual_date"
 
         # Build the GROUP BY clause with category fields (if any)
         group_by = "GROUP BY actual_date"

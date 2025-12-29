@@ -557,3 +557,135 @@ def search_web_tool(query: str, system_message: str = None) -> Dict[str, Any]:
             'error': f'Error searching web: {str(e)}',
             'error_type': 'unexpected_error'
         }
+
+def get_city_structure_tool(city_id: int = 1) -> Dict[str, Any]:
+    """
+    Get city structure configuration including district_field for a city.
+    
+    This tool returns information about a city's geographic structures, including
+    the primary district field name (e.g., 'supervisor_district' for SF, 'ward' for Chicago).
+    Use this when creating metrics to determine if a dataset supports district-level analysis.
+    
+    Args:
+        city_id: City ID (default: 1 for San Francisco)
+        
+    Returns:
+        Dictionary with city structure information including:
+        - district_field: The primary district field name for this city
+        - geographic_structures: List of geographic structures (districts, wards, etc.)
+        - structure_status: Status of structure configuration
+    """
+    logger.info("=== Starting get_city_structure_tool ===")
+    logger.info(f"City ID: {city_id}")
+    
+    try:
+        from tools.db_utils import get_pooled_connection
+        
+        result = {}
+        
+        # Get connection from pool
+        with get_pooled_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get city info and district_field
+            cursor.execute("""
+                SELECT id, name, state, district_field
+                FROM cities
+                WHERE id = %s
+            """, (city_id,))
+            city_row = cursor.fetchone()
+            
+            if not city_row:
+                logger.error(f"City {city_id} not found")
+                return {
+                    'status': 'error',
+                    'error': f'City {city_id} not found',
+                    'error_type': 'not_found'
+                }
+            
+            result['city_id'] = city_row[0]
+            result['city_name'] = city_row[1]
+            result['state'] = city_row[2]
+            result['district_field'] = city_row[3]
+            
+            # Get geographic structures
+            cursor.execute("""
+                SELECT id, structure_type, structure_name, identifier_field,
+                       identifier_type, min_value, max_value
+                FROM city_geographic_structures
+                WHERE city_id = %s
+                ORDER BY 
+                    CASE 
+                        WHEN structure_type LIKE '%%district%%' THEN 1
+                        WHEN structure_type = 'ward' THEN 2
+                        WHEN structure_type = 'precinct' THEN 3
+                        ELSE 4
+                    END,
+                    id
+            """, (city_id,))
+            geo_rows = cursor.fetchall()
+            
+            geographic_structures = []
+            for row in geo_rows:
+                geographic_structures.append({
+                    'id': row[0],
+                    'structure_type': row[1],
+                    'structure_name': row[2],
+                    'identifier_field': row[3],
+                    'identifier_type': row[4],
+                    'min_value': row[5],
+                    'max_value': row[6]
+                })
+            
+            result['geographic_structures'] = geographic_structures
+            
+            # If district_field is not set in cities table, compute from geographic structures
+            if not result['district_field'] and geographic_structures:
+                # Prefer structures with 'district' in structure_type
+                district_structures = [
+                    gs for gs in geographic_structures
+                    if gs['identifier_field'] and (
+                        'district' in gs['structure_type'].lower() or
+                        gs['structure_type'].lower() == 'ward' or
+                        gs['structure_type'].lower() == 'precinct'
+                    )
+                ]
+                
+                if district_structures:
+                    result['district_field'] = district_structures[0]['identifier_field']
+                elif geographic_structures:
+                    # Fallback: use first geographic structure with identifier_field
+                    for gs in geographic_structures:
+                        if gs['identifier_field']:
+                            result['district_field'] = gs['identifier_field']
+                            break
+            
+            # Determine structure status
+            has_geo = len(geographic_structures) > 0
+            result['structure_status'] = 'complete' if has_geo else 'not_started'
+            result['has_complete_structure'] = has_geo
+            
+            cursor.close()
+        
+        logger.info(f"City structure retrieved successfully for city {city_id}")
+        logger.info(f"District field: {result.get('district_field')}")
+        
+        return {
+            'status': 'success',
+            'city_id': result.get('city_id'),
+            'city_name': result.get('city_name'),
+            'state': result.get('state'),
+            'district_field': result.get('district_field'),
+            'structure_status': result.get('structure_status'),
+            'has_complete_structure': result.get('has_complete_structure'),
+            'geographic_structures': result.get('geographic_structures', []),
+            'geographic_structures_count': len(result.get('geographic_structures', []))
+        }
+        
+    except Exception as e:
+        logger.exception("Error in get_city_structure_tool")
+        return {
+            'status': 'error',
+            'error': f'Error getting city structure: {str(e)}',
+            'error_type': 'unexpected_error'
+        }

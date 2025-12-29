@@ -37,7 +37,7 @@ from .explainer_tools import (
     set_dataset_tool, query_docs_tool,
     get_notes_tool, get_dashboard_metric_tool, query_anomalies_db_tool,
     get_anomaly_details_tool, get_dataset_columns_tool, get_charts_for_review_tool,
-    search_web_tool
+    search_web_tool, get_city_structure_tool
 )
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,9 @@ class ToolFactory:
             
             # Web search tools
             "search_web": search_web_tool,
+            
+            # City structure tools
+            "get_city_structure": get_city_structure_tool,
         }
     
     def create_tools_for_groups(self, groups: List[ToolGroup]) -> List[Tool]:

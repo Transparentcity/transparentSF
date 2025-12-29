@@ -452,7 +452,57 @@ def process_weekly_analysis(metric_info, process_districts=False):
                 all_html_contents.append(str(chart_result))
         else:
             logger.warning(f"No main chart result returned for {query_name}")
-            
+
+        # Run citywide anomaly detection (no group field) to surface overall shifts
+        try:
+            citywide_anomalies = anomaly_detection(
+                context_variables={'dataset': dataset},
+                group_field=None,
+                numeric_field=value_field,
+                date_field=time_field,
+                recent_period=recent_period,
+                comparison_period=comparison_period,
+                period_type='week',
+                agg_function=list(agg_functions.values())[0],
+                y_axis_label=query_name,
+                title=f"{query_name} - Citywide",
+                filter_conditions=[],  # citywide
+                object_type='weekly_analysis',
+                object_id=str(metric_info.get('metric_id', metric_info.get('id', 'unknown'))),
+                object_name=query_name,
+                min_diff=1.25,
+                min_pct_change=10.0
+            )
+
+            if citywide_anomalies:
+                markdown_content = "### Citywide Anomalies\n\n"
+                markdown_content += f"Recent Period: {recent_period['start']} to {recent_period['end']}\n\n"
+                markdown_content += f"Comparison Period: {comparison_period['start']} to {comparison_period['end']}\n\n"
+
+                if isinstance(citywide_anomalies, dict):
+                    if 'anomalies_markdown' in citywide_anomalies:
+                        markdown_content += citywide_anomalies['anomalies_markdown']
+                    elif 'anomalies' in citywide_anomalies and isinstance(citywide_anomalies['anomalies'], list):
+                        markdown_content += "| Metric | Recent | Comparison | Change | % Change | Anomaly |\n"
+                        markdown_content += "|" + "---|" * 6 + "\n"
+                        for anomaly in citywide_anomalies['anomalies']:
+                            markdown_content += (
+                                f"| {anomaly.get('group_value', 'Citywide')} | {anomaly.get('recent', 0):.1f} | "
+                                f"{anomaly.get('comparison', 0):.1f} | "
+                                f"{anomaly.get('abs_change', 0):.1f} | "
+                                f"{anomaly.get('pct_change', 0):.1f}% | "
+                                f"{'Yes' if anomaly.get('out_of_bounds') else 'No'} |\n"
+                            )
+                    else:
+                        markdown_content += str(citywide_anomalies)
+                else:
+                    markdown_content += str(citywide_anomalies)
+
+                all_html_contents.append(markdown_content)
+        except Exception as e:
+            logger.error(f"Error detecting citywide anomalies for {query_name}: {str(e)}")
+            logger.error(traceback.format_exc())
+
     except Exception as e:
         logger.error(f"Error generating main time series chart for {query_name}: {str(e)}")
         logger.error(traceback.format_exc())
@@ -535,7 +585,9 @@ def process_weekly_analysis(metric_info, process_districts=False):
                 filter_conditions=[],  # No district filter for citywide analysis
                 object_type='weekly_analysis',
                 object_id=str(metric_info.get('metric_id', metric_info.get('id', 'unknown'))),
-                object_name=query_name
+                object_name=query_name,
+                min_diff=1.25,
+                min_pct_change=10.0
             )
             
             # Add anomaly text to the content
@@ -750,7 +802,9 @@ def process_weekly_analysis(metric_info, process_districts=False):
                                     }],  # Pass district info for proper DB storage
                                     object_type='weekly_analysis',
                                     object_id=str(metric_info.get('metric_id', metric_info.get('id', 'unknown'))),
-                                    object_name=query_name
+                                object_name=query_name,
+                                min_diff=1.25,
+                                min_pct_change=10.0
                                 )
                                 
                                 # Add anomaly text to the district content
@@ -816,7 +870,9 @@ def process_weekly_analysis(metric_info, process_districts=False):
                                 }],  # Pass district info for proper DB storage
                                 object_type='weekly_analysis',
                                 object_id=str(metric_info.get('metric_id', metric_info.get('id', 'unknown'))),
-                                object_name=query_name
+                                object_name=query_name,
+                                min_diff=1.25,
+                                min_pct_change=10.0
                             )
                             
                             if district_anomalies:

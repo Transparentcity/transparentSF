@@ -709,6 +709,31 @@ CORE_TOOLS_INSTRUCTIONS = """TOOLS YOU SHOULD USE:
   ```
   get_dataset_columns(endpoint="g8m3-pdis")
   ```
+
+- get_city_structure: Get city structure configuration including district_field
+  USAGE: get_city_structure(city_id=1)
+  Use this to get the city's district_field (e.g., 'supervisor_district' for SF, 'ward' for Chicago) before creating metrics.
+  This tells you which field name to look for in datasets to determine if they support district-level analysis.
+  
+  **CRITICAL FOR METRIC CREATION:**
+  - ALWAYS use this tool before creating metrics to get the city's district_field
+  - Check if the dataset has the city's district_field using get_dataset_columns
+  - Only set supports_districts=True if the dataset has the city's district_field
+  - Use the exact district_field name from this tool in your queries (case-sensitive!)
+  
+  Parameter guidelines:
+  - city_id: City ID (default: 1 for San Francisco)
+  
+  IMPORTANT: Use this tool when creating metrics to check for district support:
+  
+  ```
+  get_city_structure(city_id=1)
+  # Returns: district_field: "supervisor_district" for San Francisco
+  
+  # Then check if dataset has this field:
+  get_dataset_columns(endpoint="wg3w-h783")
+  # If "supervisor_district" exists, set supports_districts=True
+  ```
 """
 
 # Analysis tools for anomaly investigation
@@ -954,27 +979,45 @@ When you are asked about metrics, you should follow this workflow:
   These variables are automatically replaced with actual date values when queries are executed, allowing for dynamic date ranges without hardcoding dates.
   
   DISTRICT-LEVEL DATA REQUIREMENTS:
-  When creating metrics that should have district-level data (broken down by supervisor district), you MUST include supervisor_district in both the metric_query and ytd_query:
+  **CRITICAL: Before creating metrics with district support, you MUST check the city's district field:**
   
-  1. For metric_query: Add ", supervisor_district" to the SELECT clause and "GROUP BY supervisor_district" at the end
-  2. For ytd_query: Add ", supervisor_district" to the SELECT clause and ", supervisor_district" to the GROUP BY clause
+  1. **ALWAYS use get_city_structure(city_id) first** to get the city's district_field
+     - For San Francisco (city_id=1): district_field is typically 'supervisor_district'
+     - For other cities: district_field may be 'ward', 'council_district', etc.
+     - The district_field tells you which field name to look for in datasets
   
-  CRITICAL: If you include supervisor_district in location_fields but don't include it in the queries, the metric will only generate citywide data (district 0) instead of district-level data for all 12 districts.
+  2. **Check if the dataset has the city's district_field** using set_dataset or get_dataset_columns
+     - Use get_dataset_columns(endpoint="...") to see all available columns
+     - Look for the exact field name from get_city_structure (case-sensitive!)
+     - Only set supports_districts=True if the dataset has the city's district_field
+  
+  3. **When creating district-level metrics**, use the city's district_field (not hardcoded 'supervisor_district'):
+     - For metric_query: Add ", {district_field}" to the SELECT clause and "GROUP BY {district_field}" at the end
+     - For ytd_query: Add ", {district_field}" to the SELECT clause and ", {district_field}" to the GROUP BY clause
+     - Replace {district_field} with the actual field name from get_city_structure
+  
+  CRITICAL: If you include a district field in location_fields but don't include it in the queries, the metric will only generate citywide data (district 0) instead of district-level data.
   
   MAP FIELD INTEGRATION:
-  - If a metric has district-level data, it should also include supervisor_district in the map_query
+  - If a metric has district-level data, it should also include the district_field in the map_query
   - Set supports_districts: true in map_config for metrics with district-level data
   - This enables both tabular district breakdowns and geographic district visualizations
   
-  Example of CORRECT district-level queries:
+  Example workflow for creating a district-level metric:
+  1. get_city_structure(city_id=1) → Returns district_field: "supervisor_district"
+  2. get_dataset_columns(endpoint="wg3w-h783") → Check if "supervisor_district" column exists
+  3. If column exists, create metric with supports_districts=True and include supervisor_district in queries
+  4. If column does NOT exist, create metric with supports_districts=False
+  
+  Example of CORRECT district-level queries (for SF with supervisor_district):
   - metric_query: "SELECT 'Metric Name' as label, COUNT(*) as this_year, supervisor_district GROUP BY supervisor_district"
   - ytd_query: "SELECT date_trunc_ymd(date_field) as date, COUNT(*) as value, supervisor_district WHERE date_field >= last_year_start GROUP BY date, supervisor_district ORDER BY date"
   
   Example of INCORRECT queries (will only generate citywide data):
-  - metric_query: "SELECT 'Metric Name' as label, COUNT(*) as this_year GROUP BY label"  ❌ Missing supervisor_district
-  - ytd_query: "SELECT date_trunc_ymd(date_field) as date, COUNT(*) as value WHERE date_field >= last_year_start GROUP BY date ORDER BY date"  ❌ Missing supervisor_district
+  - metric_query: "SELECT 'Metric Name' as label, COUNT(*) as this_year GROUP BY label"  ❌ Missing district field
+  - ytd_query: "SELECT date_trunc_ymd(date_field) as date, COUNT(*) as value WHERE date_field >= last_year_start GROUP BY date ORDER BY date"  ❌ Missing district field
   
-  The system checks for 'supervisor_district' in the query results to determine if district-level data is available. Without it in the queries, the system will log "Query has district data: False" and only create citywide metrics.
+  The system checks for the district field in the query results to determine if district-level data is available. Without it in the queries, the system will log "Query has district data: False" and only create citywide metrics.
   
 - edit_metric: Update an existing metric
   USAGE: edit_metric(context_variables, metric_identifier=1, updates={{{{summary": "Updated summary", "show_on_dash": False}}}})
