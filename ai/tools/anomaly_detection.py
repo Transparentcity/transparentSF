@@ -788,25 +788,25 @@ def anomaly_detection(
         full_months = ['All']  # When date_field is not provided
 
     results = []
-        for group_value, data_points in grouped_data.items():
-            # Normalize label so downstream markdown never shows "None"
-            label = group_value
-            if group_field is None:
-                # Try to derive from district filter if present
-                district_val = None
-                for cond in filter_conditions or []:
-                    if cond.get('field', '').lower() in ['district', 'supervisor_district', 'police_district']:
-                        district_val = cond.get('value')
-                        break
-                if district_val is not None:
-                    try:
-                        label = f"District {int(float(district_val))}"
-                    except (TypeError, ValueError):
-                        label = f"District {district_val}"
-                else:
-                    label = "Citywide"
-            elif label is None:
+    for group_value, data_points in grouped_data.items():
+        # Normalize label so downstream markdown never shows "None"
+        label = group_value
+        if group_field is None:
+            # Try to derive from district filter if present
+            district_val = None
+            for cond in filter_conditions or []:
+                if cond.get('field', '').lower() in ['district', 'supervisor_district', 'police_district']:
+                    district_val = cond.get('value')
+                    break
+            if district_val is not None:
+                try:
+                    label = f"District {int(float(district_val))}"
+                except (TypeError, ValueError):
+                    label = f"District {district_val}"
+            else:
                 label = "Citywide"
+        elif label is None:
+            label = "Citywide"
         # Add debug logging for each group
         logging.info(f"=== Processing group: {group_value} ===")
         logging.info(f"Data points keys: {list(data_points.keys())}")
