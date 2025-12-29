@@ -992,9 +992,9 @@ When you are asked about metrics, you should follow this workflow:
      - Only set supports_districts=True if the dataset has the city's district_field
   
   3. **When creating district-level metrics**, use the city's district_field (not hardcoded 'supervisor_district'):
-     - For metric_query: Add ", {district_field}" to the SELECT clause and "GROUP BY {district_field}" at the end
-     - For ytd_query: Add ", {district_field}" to the SELECT clause and ", {district_field}" to the GROUP BY clause
-     - Replace {district_field} with the actual field name from get_city_structure
+     - For metric_query: Add ", {{district_field}}" to the SELECT clause and "GROUP BY {{district_field}}" at the end
+     - For ytd_query: Add ", {{district_field}}" to the SELECT clause and ", {{district_field}}" to the GROUP BY clause
+     - Replace {{district_field}} with the actual field name from get_city_structure
   
   CRITICAL: If you include a district field in location_fields but don't include it in the queries, the metric will only generate citywide data (district 0) instead of district-level data.
   
