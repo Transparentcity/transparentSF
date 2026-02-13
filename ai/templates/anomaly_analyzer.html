@@ -1846,7 +1846,7 @@
                 <td class="${changeClass}">${formatPercentChange(metric.percent_change)}</td>
                 <td>
                     ${metric.analysis_session_id ? 
-                        `<button class="action-button" onclick="reviewAnalysis('${metric.analysis_session_id}', 'metric', '${metric.chart_id}')" title="Analysis completed on ${new Date(metric.analysis_date).toLocaleDateString()}">
+                        `<button class="action-button" data-testid="review-analysis-button" data-session-id="${metric.analysis_session_id}" data-item-type="metric" data-item-id="${metric.chart_id}" aria-label="Review Analysis" onclick="reviewAnalysis('${metric.analysis_session_id}', 'metric', '${metric.chart_id}')" title="Analysis completed on ${new Date(metric.analysis_date).toLocaleDateString()}">
                             <i class="fas fa-eye"></i> Review Analysis
                         </button>` :
                         `<button class="action-button" onclick="analyzeMetricFromRow('${rowId}')">
@@ -1977,7 +1977,7 @@
                 <td class="${changeClass}">${formatPercentChange(anomaly.percent_change)}</td>
                 <td>
                     ${anomaly.analysis_session_id ? 
-                        `<button class="action-button" onclick="reviewAnalysis('${anomaly.analysis_session_id}', 'anomaly', '${anomaly.id}')" title="Analysis completed on ${new Date(anomaly.analysis_date).toLocaleDateString()}">
+                        `<button class="action-button" data-testid="review-analysis-button" data-session-id="${anomaly.analysis_session_id}" data-item-type="anomaly" data-item-id="${anomaly.id}" aria-label="Review Analysis" onclick="reviewAnalysis('${anomaly.analysis_session_id}', 'anomaly', '${anomaly.id}')" title="Analysis completed on ${new Date(anomaly.analysis_date).toLocaleDateString()}">
                             <i class="fas fa-eye"></i> Review Analysis
                         </button>` :
                         `<button class="action-button" onclick="analyzeMetricChange(${JSON.stringify({
@@ -2760,7 +2760,7 @@ Can you help me understand:
                                     const reviewTitle = `Analysis completed on ${new Date().toLocaleDateString()}`;
                                     const reviewId = chartId || itemId || '';
                                     actionCell.innerHTML = `
-                                        <button class="action-button" onclick="reviewAnalysis('${sessionId}', 'metric', '${reviewId}')" title="${reviewTitle}">
+                                        <button class="action-button" data-testid="review-analysis-button" data-session-id="${sessionId}" data-item-type="metric" data-item-id="${reviewId}" aria-label="Review Analysis" onclick="reviewAnalysis('${sessionId}', 'metric', '${reviewId}')" title="${reviewTitle}">
                                             <i class="fas fa-eye"></i> Review Analysis
                                         </button>
                                     `;
@@ -2781,7 +2781,7 @@ Can you help me understand:
                                 if (actionCell) {
                                     const reviewTitle = `Analysis completed on ${new Date().toLocaleDateString()}`;
                                     actionCell.innerHTML = `
-                                        <button class="action-button" onclick="reviewAnalysis('${sessionId}', 'anomaly', '${anomalyData.id}')" title="${reviewTitle}">
+                                        <button class="action-button" data-testid="review-analysis-button" data-session-id="${sessionId}" data-item-type="anomaly" data-item-id="${anomalyData.id}" aria-label="Review Analysis" onclick="reviewAnalysis('${sessionId}', 'anomaly', '${anomalyData.id}')" title="${reviewTitle}">
                                             <i class="fas fa-eye"></i> Review Analysis
                                         </button>
                                     `;
