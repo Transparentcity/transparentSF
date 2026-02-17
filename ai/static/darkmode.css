@@ -9,10 +9,10 @@
     --soft-sand: #F6F1EA;
     --sky-tint: #B8D8E3;
     
-    /* Light Theme Backgrounds (Default) */
-    --bg-primary: #ffffff;
-    --bg-secondary: #f8f9fa;
-    --bg-tertiary: #ffffff;
+    /* Light Theme Backgrounds (Purple-leaning) */
+    --bg-primary: #faf5ff;   /* purple-50 */
+    --bg-secondary: #f3e8ff; /* purple-100 */
+    --bg-tertiary: #e9d5ff;  /* purple-200 */
     
     /* Light Theme Text (Default) */
     --text-primary: #222222;
