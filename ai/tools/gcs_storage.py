@@ -196,11 +196,21 @@ class GCSStorageManager:
             if self.gcs_enabled:
                 gcs_path = self._get_gcs_path(file_type, district, metric_id, filename)
                 blob = self.bucket.blob(gcs_path)
-                
+                # Reduce cache staleness for dynamic dashboard assets
+                if file_type in ["dashboard"]:
+                    blob.cache_control = "no-cache, no-store, must-revalidate, max-age=0"
+                # Ensure correct content type is set
                 blob.upload_from_string(
                     content_bytes,
                     content_type=content_type
                 )
+                # Persist cache-control metadata if set
+                try:
+                    if blob.cache_control:
+                        blob.patch()
+                except Exception:
+                    # Best effort; do not fail storing due to metadata update
+                    pass
                 
                 logger.info(f"Successfully stored file in GCS: {gcs_path}")
                 return True
